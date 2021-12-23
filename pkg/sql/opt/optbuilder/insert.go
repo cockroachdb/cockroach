@@ -610,10 +610,6 @@ func (mb *mutationBuilder) buildInputForInsert(
 		mb.addTargetTableColsForInsert(len(mb.outScope.cols))
 	}
 
-	if !isUpsert {
-		mb.outScope = mb.addAssignmentCasts(mb.outScope, desiredTypes)
-	}
-
 	// Loop over input columns and:
 	//   1. Type check each column
 	//   2. Check if the INSERT violates a GENERATED ALWAYS AS IDENTITY column.
@@ -648,6 +644,10 @@ func (mb *mutationBuilder) buildInputForInsert(
 		// into the corresponding target table column.
 		mb.insertColIDs[ord] = inCol.id
 	}
+
+	if !isUpsert {
+		mb.addAssignmentCasts(mb.insertColIDs)
+	}
 }
 
 // addSynthesizedColsForInsert wraps an Insert input expression with a Project
@@ -665,10 +665,13 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert(isUpsert bool) {
 		false, /* applyOnUpdate */
 	)
 
-	// Possibly round DECIMAL-related columns containing insertion values (whether
-	// synthesized or not).
 	if isUpsert {
+		// Possibly round DECIMAL-related columns containing insertion values (whether
+		// synthesized or not).
 		mb.roundDecimalValues(mb.insertColIDs, false /* roundComputedCols */)
+	} else {
+		// Add assignment casts for default column values.
+		mb.addAssignmentCasts(mb.insertColIDs)
 	}
 
 	// Now add all computed columns.
@@ -677,6 +680,9 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert(isUpsert bool) {
 	// Possibly round DECIMAL-related computed columns.
 	if isUpsert {
 		mb.roundDecimalValues(mb.insertColIDs, true /* roundComputedCols */)
+	} else {
+		// Add assignment casts for computed column values.
+		mb.addAssignmentCasts(mb.insertColIDs)
 	}
 }
 

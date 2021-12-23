@@ -322,6 +322,13 @@ func TestBestRebalanceTarget(t *testing.T) {
 
 	candidates := []rebalanceOptions{
 		{
+			existing: candidate{
+				store:          roachpb.StoreDescriptor{StoreID: 1},
+				valid:          true,
+				necessary:      true,
+				diversityScore: 0,
+				rangeCount:     1,
+			},
 			candidates: []candidate{
 				{
 					store:          roachpb.StoreDescriptor{StoreID: 11},
@@ -338,17 +345,15 @@ func TestBestRebalanceTarget(t *testing.T) {
 					rangeCount:     12,
 				},
 			},
-			existingCandidates: []candidate{
-				{
-					store:          roachpb.StoreDescriptor{StoreID: 1},
-					valid:          true,
-					necessary:      true,
-					diversityScore: 0,
-					rangeCount:     1,
-				},
-			},
 		},
 		{
+			existing: candidate{
+				store:          roachpb.StoreDescriptor{StoreID: 2},
+				valid:          true,
+				necessary:      false,
+				diversityScore: 0,
+				rangeCount:     2,
+			},
 			candidates: []candidate{
 				{
 					store:          roachpb.StoreDescriptor{StoreID: 13},
@@ -365,32 +370,42 @@ func TestBestRebalanceTarget(t *testing.T) {
 					rangeCount:     14,
 				},
 			},
-			existingCandidates: []candidate{
+		},
+		{
+			existing: candidate{
+				store:          roachpb.StoreDescriptor{StoreID: 3},
+				valid:          false,
+				necessary:      false,
+				diversityScore: 0,
+				rangeCount:     3,
+			},
+			candidates: []candidate{
 				{
-					store:          roachpb.StoreDescriptor{StoreID: 2},
+					store:          roachpb.StoreDescriptor{StoreID: 13},
 					valid:          true,
-					necessary:      false,
-					diversityScore: 0,
-					rangeCount:     2,
+					necessary:      true,
+					diversityScore: 1.0,
+					rangeCount:     13,
 				},
 				{
-					store:          roachpb.StoreDescriptor{StoreID: 3},
+					store:          roachpb.StoreDescriptor{StoreID: 14},
 					valid:          false,
 					necessary:      false,
-					diversityScore: 0,
-					rangeCount:     3,
+					diversityScore: 0.0,
+					rangeCount:     14,
 				},
 			},
 		},
 	}
 
-	expected := []roachpb.StoreID{13, 11, 12}
+	expectedTargets := []roachpb.StoreID{13, 13, 11, 12}
+	expectedExistingRepls := []roachpb.StoreID{3, 2, 1, 1}
 	allocRand := makeAllocatorRand(rand.NewSource(0))
 	var i int
 	for {
 		i++
 		target, existing := bestRebalanceTarget(allocRand, candidates)
-		if len(expected) == 0 {
+		if len(expectedTargets) == 0 {
 			if target == nil {
 				break
 			}
@@ -398,12 +413,13 @@ func TestBestRebalanceTarget(t *testing.T) {
 			continue
 		}
 		if target == nil {
-			t.Errorf("round %d: expected s%d, got nil", i, expected[0])
-		} else if target.store.StoreID != expected[0] {
-			t.Errorf("round %d: expected s%d, got target=%+v, existing=%+v",
-				i, expected[0], target, existing)
+			t.Errorf("round %d: expected s%d, got nil", i, expectedTargets[0])
+		} else if target.store.StoreID != expectedTargets[0] || existing.store.StoreID != expectedExistingRepls[0] {
+			t.Errorf("round %d: expected s%d to s%d, got target=%+v, existing=%+v",
+				i, expectedExistingRepls[0], expectedTargets[0], target, existing)
 		}
-		expected = expected[1:]
+		expectedTargets = expectedTargets[1:]
+		expectedExistingRepls = expectedExistingRepls[1:]
 	}
 }
 
@@ -1473,40 +1489,23 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 		candidateRanges: stat{mean: 1000},
 	}
 
-	sEmpty := roachpb.StoreCapacity{
-		Capacity:     1024 * 1024 * 1024,
-		Available:    1024 * 1024 * 1024,
-		LogicalBytes: 0,
-	}
-	sMean := roachpb.StoreCapacity{
-		Capacity:     1024 * 1024 * 1024,
-		Available:    512 * 1024 * 1024,
-		LogicalBytes: 512 * 1024 * 1024,
-		RangeCount:   1000,
-	}
-	sRangesOverfull := sMean
-	sRangesOverfull.RangeCount = 1500
-	sRangesUnderfull := sMean
-	sRangesUnderfull.RangeCount = 500
-	sRangesLessThanMean := sMean
-	sRangesLessThanMean.RangeCount = 900
-	sRangesMoreThanMean := sMean
-	sRangesMoreThanMean.RangeCount = 1099
-
 	testCases := []struct {
-		sc       roachpb.StoreCapacity
-		expected balanceStatus
+		RangeCount int32
+		expected   balanceStatus
 	}{
-		{sEmpty, underfull},
-		{sRangesLessThanMean, lessThanEqualToMean},
-		{sMean, lessThanEqualToMean},
-		{sRangesMoreThanMean, moreThanMean},
-		{sRangesOverfull, overfull},
-		{sRangesUnderfull, underfull},
+		{0, underfull},
+		{900, aroundTheMean},
+		{1000, aroundTheMean},
+		{1099, aroundTheMean},
+		{1100, overfull},
+		{2000, overfull},
 	}
 	for i, tc := range testCases {
-		if a, e := options.balanceScore(storeList, tc.sc), tc.expected; a != e {
-			t.Errorf("%d: balanceScore(storeList, %+v) got %d; want %d", i, tc.sc, a, e)
+		sc := roachpb.StoreCapacity{
+			RangeCount: tc.RangeCount,
+		}
+		if a, e := options.balanceScore(storeList, sc), tc.expected; a != e {
+			t.Errorf("%d: balanceScore(storeList, %+v) got %d; want %d", i, sc, a, e)
 		}
 	}
 }
@@ -1518,25 +1517,25 @@ func TestRebalanceBalanceScoreOnQPS(t *testing.T) {
 	storeList := StoreList{
 		candidateQueriesPerSecond: stat{mean: 1000},
 	}
+	options := qpsScorerOptions{
+		qpsRebalanceThreshold: 0.1,
+	}
 
 	testCases := []struct {
 		QPS             float64
 		expBalanceScore balanceStatus
 	}{
 		{0, underfull},
-		{900, lessThanEqualToMean},
-		{999, lessThanEqualToMean},
-		{1000, lessThanEqualToMean},
-		{1001, moreThanMean},
+		{899, underfull},
+		{900, aroundTheMean},
+		{1099, aroundTheMean},
+		{1100, overfull},
 		{2000, overfull},
 	}
 
 	for i, tc := range testCases {
 		sc := roachpb.StoreCapacity{
 			QueriesPerSecond: tc.QPS,
-		}
-		options := qpsScorerOptions{
-			qpsRebalanceThreshold: 0.1,
 		}
 		if a, e := options.balanceScore(storeList, sc), tc.expBalanceScore; a != e {
 			t.Errorf("%d: rebalanceToConvergesScore(storeList, %+v) got %d; want %d", i, sc, a, e)

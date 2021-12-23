@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -136,15 +136,16 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
 	runDeps := newSchemaChangerTxnRunDependencies(
-		p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.stmts,
+		p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
 	)
-	after, err := scrun.RunStatementPhase(
+	after, jobID, err := scrun.RunStatementPhase(
 		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
 	)
 	if err != nil {
 		return err
 	}
 	scs.state = after
+	scs.jobID = jobID
 	return nil
 }
 
@@ -154,6 +155,7 @@ func newSchemaChangerTxnRunDependencies(
 	txn *kv.Txn,
 	descriptors *descs.Collection,
 	evalContext *tree.EvalContext,
+	schemaChangerJobID jobspb.JobID,
 	stmts []string,
 ) scexec.Dependencies {
 	return scdeps.NewExecutorDependencies(
@@ -163,11 +165,15 @@ func newSchemaChangerTxnRunDependencies(
 		descriptors,
 		execCfg.JobRegistry,
 		execCfg.IndexBackfiller,
+		// Use a no-op tracker and flusher because while backfilling in a
+		// transaction because we know there's no existing progress and there's
+		// nothing to save because nobody will ever try to resume.
+		scdeps.NewNoOpBackfillTracker(execCfg.Codec),
+		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
-		scsqldeps.NewCCLCallbacks(execCfg.Settings, evalContext),
-		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
-			return LogEventForSchemaChanger(ctx, execCfg, txn, depth+1, descID, metadata, event)
-		},
+		scsqldeps.NewPartitioner(execCfg.Settings, evalContext),
+		NewSchemaChangerEventLogger(txn, execCfg, 1),
+		schemaChangerJobID,
 		stmts,
 	)
 }

@@ -27,6 +27,7 @@ import (
 )
 
 var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.concurrency.optimistic_eval_limited_scans.enabled",
 	"when true, limited scans are optimistically evaluated in the sense of not checking for "+
 		"conflicting latches or locks up front for the full key range of the scan, and instead "+
@@ -915,11 +916,11 @@ func (r *Replica) collectSpans(
 	// than the request timestamp, and may have to retry at a higher timestamp.
 	// This is still safe as we're only ever writing at timestamps higher than the
 	// timestamp any write latch would be declared at.
-	batcheval.DeclareKeysForBatch(desc, ba.Header, latchSpans)
+	batcheval.DeclareKeysForBatch(desc, &ba.Header, latchSpans)
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, ba.Header, inner, latchSpans, lockSpans)
+			cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans)
 			if considerOptEval {
 				switch inner.(type) {
 				case *roachpb.ScanRequest, *roachpb.ReverseScanRequest:

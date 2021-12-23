@@ -17,8 +17,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +35,7 @@ func registerLibPQ(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -96,16 +98,15 @@ func registerLibPQ(r registry.Registry) {
 
 		// List all the tests that start with Test or Example.
 		testListRegex := "^(Test|Example)"
-		buf, err := c.RunWithBuffer(
-			ctx,
-			t.L(),
+		result, err := c.RunWithDetailsSingleNode(
+			ctx, t.L(),
 			node,
 			fmt.Sprintf(`cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -list "%s"`, libPQPath, testListRegex),
 		)
 		require.NoError(t, err)
 
 		// Convert the output of go test -list into an list.
-		tests := strings.Fields(string(buf))
+		tests := strings.Fields(result.Stdout)
 		var allowedTests []string
 		testListR, err := regexp.Compile(testListRegex)
 		require.NoError(t, err)

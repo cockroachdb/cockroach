@@ -1,3 +1,4 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -19,16 +20,17 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/nstree",
-        "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/schemachanger/scexec/descriptorutils",
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sessiondata",
+        "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
@@ -36,8 +38,10 @@ go_test(
     name = "scexec_test",
     size = "small",
     srcs = [
+        "exec_backfill_test.go",
         "executor_external_test.go",
         "main_test.go",
+        ":mock_scexec",  # keep
     ],
     deps = [
         ":scexec",
@@ -54,11 +58,14 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdeps",
+        "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
+        "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
@@ -69,9 +76,31 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/randutil",
+        "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+gomock(
+    name = "mock_scexec",
+    out = "mocks_generated_test.go",
+    imports = {
+        "scexec": "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec",
+    },
+    interfaces = [
+        "Catalog",
+        "Dependencies",
+        "Backfiller",
+        "BackfillTracker",
+        "IndexSpanSplitter",
+        "PeriodicProgressFlusher",
+    ],
+    library = ":scexec",
+    package = "scexec_test",
 )

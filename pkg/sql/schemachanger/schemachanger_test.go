@@ -44,9 +44,9 @@ import (
 func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Run("wait for old-style schema changes", func(t *testing.T) {
-		// This test starts an old-style schema change job (job 1), and then starts
-		// another old-style schema change job (job 2) and a new-style schema change
+	t.Run("wait for legacy schema changes", func(t *testing.T) {
+		// This test starts an legacy schema change job (job 1), and then starts
+		// another legacy schema change job (job 2) and a declarative schema change
 		// job (job 3) while job 1 is backfilling. Job 1 is resumed after job 2
 		// has started running.
 		ctx := context.Background()
@@ -92,15 +92,16 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Assert that when job 3 is running, there are no mutations other
 					// than the ones associated with this schema change.
-					if p.Params.ExecutionPhase != scop.PostCommitPhase {
+					if p.Params.ExecutionPhase < scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
 						kvDB, keys.SystemSQLCodec, "db", "public", "t")
-					// There are 2 schema changes that should precede job 3. Note that the
-					// new-style schema change itself uses multiple mutation IDs.
+					// There are 2 schema changes that should precede job 3.
+					// The declarative schema changer uses the same mutation ID for all
+					// its mutations.
 					for _, m := range table.AllMutations() {
-						assert.Greater(t, int(m.MutationID()), 2)
+						assert.Equal(t, int(m.MutationID()), 3)
 					}
 					return nil
 				},
@@ -172,14 +173,14 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			[][]string{
 				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded), `CREATE INDEX idx ON db.public.t (a)`},
 				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded), `CREATE INDEX idx2 ON db.public.t (a)`},
-				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded), `Schema change job`},
+				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded), `schema change job`},
 			},
 		)
 	})
 
-	t.Run("wait for new-style schema changes", func(t *testing.T) {
-		// This test starts a new-style schema change job (job 1), and then starts
-		// another new-style schema change job (job 2) while job 1 is backfilling.
+	t.Run("wait for declarative schema changes", func(t *testing.T) {
+		// This test starts a declarative schema change job (job 1), and then starts
+		// another declarative schema change job (job 2) while job 1 is backfilling.
 		ctx := context.Background()
 
 		var job1Backfill sync.Once
@@ -201,7 +202,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 				BeforeStage: func(p scplan.Plan, idx int) error {
 					// Verify that we never queue mutations for job 2 before finishing job
 					// 1.
-					if p.Params.ExecutionPhase != scop.PostCommitPhase {
+					if p.Params.ExecutionPhase < scop.PostCommitPhase {
 						return nil
 					}
 					table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -217,27 +218,15 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 							idsSeen = append(idsSeen, m.MutationID())
 						}
 					}
-					// Each schema change involving an index backfill has 2 consecutive
-					// mutation IDs, so the first schema change is expected to have
-					// mutation IDs 1 and 2, and the second one 3 and 4.
-					lowestID, highestID := idsSeen[0], idsSeen[len(idsSeen)-1]
-					stmt := p.Initial.Statements[0].Statement
-					switch stmt {
-					case stmt1:
-						assert.Truef(t, highestID <= 2, "unexpected mutation IDs %v", idsSeen)
-					case stmt2:
-						assert.Truef(t, lowestID >= 3 && highestID <= 4, "unexpected mutation IDs %v", idsSeen)
-					default:
-						t.Errorf("unexpected statements %v", p.Initial.Statements)
-						return errors.Errorf("test failure")
-					}
-
+					highestID := idsSeen[len(idsSeen)-1]
+					assert.Truef(t, highestID <= 1, "unexpected mutation IDs %v", idsSeen)
 					// Block job 1 during the backfill.
-					s := p.StagesForCurrentPhase()[idx]
-					if stmt != stmt1 || s.Ops.Type() != scop.BackfillType {
+					s := p.Stages[idx]
+					stmt := p.Initial.Statements[0].Statement
+					if stmt != stmt1 || s.Type() != scop.BackfillType {
 						return nil
 					}
-					for _, op := range s.Ops.Slice() {
+					for _, op := range s.EdgeOps {
 						if backfillOp, ok := op.(*scop.BackfillIndex); ok && backfillOp.IndexID == descpb.IndexID(2) {
 							job1Backfill.Do(func() {
 								close(job1BackfillNotification)
@@ -337,7 +326,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 			BeforeStage: func(p scplan.Plan, idx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if p.Params.ExecutionPhase != scop.PostCommitPhase {
+				if p.Params.ExecutionPhase < scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -345,11 +334,11 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-				s := p.StagesForCurrentPhase()[idx]
-				if s.Ops.Type() != scop.BackfillType {
+				s := p.Stages[idx]
+				if s.Type() != scop.BackfillType {
 					return nil
 				}
-				for _, op := range s.Ops.Slice() {
+				for _, op := range s.EdgeOps {
 					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)
@@ -443,7 +432,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				// Verify that we never get a mutation ID not associated with the schema
 				// change that is running.
-				if p.Params.ExecutionPhase != scop.PostCommitPhase {
+				if p.Params.ExecutionPhase < scop.PostCommitPhase {
 					return nil
 				}
 				table := catalogkv.TestingGetTableDescriptorFromSchema(
@@ -451,11 +440,11 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
-				s := p.StagesForCurrentPhase()[stageIdx]
-				if s.Ops.Type() != scop.BackfillType {
+				s := p.Stages[stageIdx]
+				if s.Type() != scop.BackfillType {
 					return nil
 				}
-				for _, op := range s.Ops.Slice() {
+				for _, op := range s.EdgeOps {
 					if _, ok := op.(*scop.BackfillIndex); ok {
 						doOnce.Do(func() {
 							close(beforeBackfillNotification)

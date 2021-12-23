@@ -265,15 +265,16 @@ var validationMap = []struct {
 	{
 		obj: descpb.SchemaDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
-			"Name":             {status: iSolemnlySwearThisFieldIsValidated},
-			"ID":               {status: iSolemnlySwearThisFieldIsValidated},
-			"State":            {status: thisFieldReferencesNoObjects},
-			"OfflineReason":    {status: thisFieldReferencesNoObjects},
-			"ModificationTime": {status: thisFieldReferencesNoObjects},
-			"Version":          {status: thisFieldReferencesNoObjects},
-			"DrainingNames":    {status: thisFieldReferencesNoObjects},
-			"ParentID":         {status: iSolemnlySwearThisFieldIsValidated},
-			"Privileges":       {status: iSolemnlySwearThisFieldIsValidated},
+			"Name":              {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":                {status: iSolemnlySwearThisFieldIsValidated},
+			"State":             {status: thisFieldReferencesNoObjects},
+			"OfflineReason":     {status: thisFieldReferencesNoObjects},
+			"ModificationTime":  {status: thisFieldReferencesNoObjects},
+			"Version":           {status: thisFieldReferencesNoObjects},
+			"DrainingNames":     {status: thisFieldReferencesNoObjects},
+			"ParentID":          {status: iSolemnlySwearThisFieldIsValidated},
+			"Privileges":        {status: iSolemnlySwearThisFieldIsValidated},
+			"DefaultPrivileges": {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 }
@@ -1044,31 +1045,286 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`primary index column "v" cannot be virtual`,
+		{`index "sec" cannot store virtual column "c3"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
 				FormatVersion: descpb.InterleavedFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
-					{ID: 1, Name: "bar"},
-					{ID: 2, Name: "v", ComputeExpr: &computedExpr, Virtual: true},
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+					{ID: 3, Name: "c3", ComputeExpr: &computedExpr, Virtual: true},
 				},
 				PrimaryIndex: descpb.IndexDescriptor{
-					ID:             1,
-					Name:           "primary",
-					Unique:         true,
-					KeyColumnIDs:   []descpb.ColumnID{1, 2},
-					KeyColumnNames: []string{"bar", "v"},
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"c1"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
+						KeyColumnNames:      []string{"c2"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeySuffixColumnIDs:  []descpb.ColumnID{3},
+					},
 				},
 				Families: []descpb.ColumnFamilyDescriptor{
 					{ID: 0, Name: "primary",
-						ColumnIDs:   []descpb.ColumnID{1},
-						ColumnNames: []string{"bar"},
+						ColumnIDs:   []descpb.ColumnID{1, 2},
+						ColumnNames: []string{"c1", "c2"},
 					},
 				},
-				NextColumnID: 3,
+				NextColumnID: 4,
 				NextFamilyID: 1,
+				NextIndexID:  3,
+			}},
+		{"",
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+					{ID: 3, Name: "c3", ComputeExpr: &computedExpr, Virtual: true},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"c1"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
+						KeyColumnNames:      []string{"c2"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeySuffixColumnIDs:  []descpb.ColumnID{},
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1, 2},
+						ColumnNames: []string{"c1", "c2"},
+					},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{
+						Descriptor_: &descpb.DescriptorMutation_Index{
+							Index: &descpb.IndexDescriptor{
+								ID:                  3,
+								Name:                "new_primary_key",
+								Unique:              true,
+								KeyColumnIDs:        []descpb.ColumnID{3},
+								KeyColumnNames:      []string{"c3"},
+								KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+								Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+								EncodingType:        descpb.PrimaryIndexEncoding,
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+					{
+						Descriptor_: &descpb.DescriptorMutation_Index{
+							Index: &descpb.IndexDescriptor{
+								ID: 4, Name: "new_sec", KeyColumnIDs: []descpb.ColumnID{2},
+								KeyColumnNames:      []string{"c2"},
+								KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+								KeySuffixColumnIDs:  []descpb.ColumnID{3},
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+					{
+						Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{
+							PrimaryKeySwap: &descpb.PrimaryKeySwap{
+								OldPrimaryIndexId: 1,
+								NewPrimaryIndexId: 3,
+								NewIndexes:        []descpb.IndexID{4},
+								OldIndexes:        []descpb.IndexID{2},
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+				},
+				NextColumnID: 4,
+				NextFamilyID: 1,
+				NextIndexID:  5,
+				Privileges:   descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+			}},
+		{`index "sec" cannot store virtual column "c3"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+					{ID: 3, Name: "c3", ComputeExpr: &computedExpr, Virtual: true},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"c1"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
+						KeyColumnNames:      []string{"c2"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeySuffixColumnIDs:  []descpb.ColumnID{3},
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1, 2},
+						ColumnNames: []string{"c1", "c2"},
+					},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{
+						Descriptor_: &descpb.DescriptorMutation_Index{
+							Index: &descpb.IndexDescriptor{
+								ID:                  3,
+								Name:                "new_primary_key",
+								Unique:              true,
+								KeyColumnIDs:        []descpb.ColumnID{3},
+								KeyColumnNames:      []string{"c3"},
+								KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+								Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+								EncodingType:        descpb.PrimaryIndexEncoding,
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+					{
+						Descriptor_: &descpb.DescriptorMutation_Index{
+							Index: &descpb.IndexDescriptor{
+								ID: 4, Name: "new_sec", KeyColumnIDs: []descpb.ColumnID{2},
+								KeyColumnNames:      []string{"c2"},
+								KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+								KeySuffixColumnIDs:  []descpb.ColumnID{3},
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+					{
+						Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{
+							PrimaryKeySwap: &descpb.PrimaryKeySwap{
+								OldPrimaryIndexId: 1,
+								NewPrimaryIndexId: 3,
+								NewIndexes:        []descpb.IndexID{4},
+								OldIndexes:        []descpb.IndexID{2},
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+				},
+				NextColumnID: 4,
+				NextFamilyID: 1,
+				NextIndexID:  5,
+				Privileges:   descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+			}},
+		{`index "new_sec" cannot store virtual column "c3"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+					{ID: 3, Name: "c3", ComputeExpr: &computedExpr, Virtual: true},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1, 3},
+					KeyColumnNames:      []string{"c1", "c3"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
+						KeyColumnNames:      []string{"c2"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeySuffixColumnIDs:  []descpb.ColumnID{1, 3},
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1, 2},
+						ColumnNames: []string{"c1", "c2"},
+					},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{
+						Descriptor_: &descpb.DescriptorMutation_Index{
+							Index: &descpb.IndexDescriptor{
+								ID:                  3,
+								Name:                "new_primary_key",
+								Unique:              true,
+								KeyColumnIDs:        []descpb.ColumnID{1},
+								KeyColumnNames:      []string{"c1"},
+								KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+								Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+								EncodingType:        descpb.PrimaryIndexEncoding,
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+					{
+						Descriptor_: &descpb.DescriptorMutation_Index{
+							Index: &descpb.IndexDescriptor{
+								ID: 4, Name: "new_sec", KeyColumnIDs: []descpb.ColumnID{2},
+								KeyColumnNames:      []string{"c2"},
+								KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+								KeySuffixColumnIDs:  []descpb.ColumnID{1, 3},
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+					{
+						Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{
+							PrimaryKeySwap: &descpb.PrimaryKeySwap{
+								OldPrimaryIndexId: 1,
+								NewPrimaryIndexId: 3,
+								NewIndexes:        []descpb.IndexID{4},
+								OldIndexes:        []descpb.IndexID{2},
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_DELETE_ONLY,
+					},
+				},
+				NextColumnID: 4,
+				NextFamilyID: 1,
+				NextIndexID:  5,
+				Privileges:   descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			}},
 		{`index "sec" cannot store virtual column "v"`,
 			descpb.TableDescriptor{
@@ -1337,9 +1593,12 @@ func TestValidateTableDesc(t *testing.T) {
 		t.Run(d.err, func(t *testing.T) {
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
-			if err := catalog.ValidateSelf(desc); err == nil {
+			err := catalog.ValidateSelf(desc)
+			if d.err == "" && err != nil {
+				t.Errorf("%d: expected success, but found error: \"%+v\"", i, err)
+			} else if d.err != "" && err == nil {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, d.desc)
-			} else if expectedErr != err.Error() {
+			} else if d.err != "" && expectedErr != err.Error() {
 				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, expectedErr, err)
 			}
 		})

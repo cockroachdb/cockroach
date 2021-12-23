@@ -2,32 +2,25 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scplan",
-    srcs = [
-        "job_augmentation.go",
-        "plan.go",
-    ],
+    srcs = ["plan.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/security",
-        "//pkg/sql/catalog",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/deprules",
         "//pkg/sql/schemachanger/scplan/opgen",
         "//pkg/sql/schemachanger/scplan/scopt",
-        "//pkg/sql/schemachanger/screl",
-        "//pkg/util/iterutil",
+        "//pkg/sql/schemachanger/scplan/scstage",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "scplan_test",
+    size = "small",
     srcs = [
         "main_test.go",
         "plan_test.go",
@@ -48,6 +41,7 @@ go_test(
         "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan/scstage",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",

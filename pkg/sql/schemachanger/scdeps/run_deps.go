@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
@@ -29,45 +30,48 @@ func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
-	indexBackfiller scexec.IndexBackfiller,
-	logEventFn LogEventCallback,
+	backfiller scexec.Backfiller,
+	rangeCounter RangeCounter,
+	eventLoggerFactory EventLoggerFactory,
+	partitioner scmutationexec.Partitioner,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
-	cclCallbacks scexec.Partitioner,
 	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
-		collectionFactory: collectionFactory,
-		db:                db,
-		internalExecutor:  internalExecutor,
-		indexBackfiller:   indexBackfiller,
-		logEventFn:        logEventFn,
-		jobRegistry:       jobRegistry,
-		job:               job,
-		codec:             codec,
-		settings:          settings,
-		testingKnobs:      testingKnobs,
-		statements:        statements,
-		indexValidator:    indexValidator,
-		partitioner:       cclCallbacks,
+		collectionFactory:  collectionFactory,
+		db:                 db,
+		internalExecutor:   internalExecutor,
+		backfiller:         backfiller,
+		rangeCounter:       rangeCounter,
+		eventLoggerFactory: eventLoggerFactory,
+		partitioner:        partitioner,
+		jobRegistry:        jobRegistry,
+		job:                job,
+		codec:              codec,
+		settings:           settings,
+		testingKnobs:       testingKnobs,
+		statements:         statements,
+		indexValidator:     indexValidator,
 	}
 }
 
 type jobExecutionDeps struct {
-	collectionFactory *descs.CollectionFactory
-	db                *kv.DB
-	internalExecutor  sqlutil.InternalExecutor
-	indexBackfiller   scexec.IndexBackfiller
-	logEventFn        LogEventCallback
-	jobRegistry       *jobs.Registry
-	job               *jobs.Job
+	collectionFactory  *descs.CollectionFactory
+	db                 *kv.DB
+	internalExecutor   sqlutil.InternalExecutor
+	eventLoggerFactory func(txn *kv.Txn) scexec.EventLogger
+	partitioner        scmutationexec.Partitioner
+	backfiller         scexec.Backfiller
+	rangeCounter       RangeCounter
+	jobRegistry        *jobs.Registry
+	job                *jobs.Job
 
 	indexValidator scexec.IndexValidator
-	partitioner    scexec.Partitioner
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
@@ -87,19 +91,28 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
+		pl := d.job.Payload()
 		return fn(ctx, &execDeps{
 			txnDeps: txnDeps{
-				txn:             txn,
-				codec:           d.codec,
-				descsCollection: descriptors,
-				jobRegistry:     d.jobRegistry,
-				indexValidator:  d.indexValidator,
-				partitioner:     d.partitioner,
-				eventLogWriter:  newEventLogWriter(txn, d.logEventFn),
+				txn:                txn,
+				codec:              d.codec,
+				descsCollection:    descriptors,
+				jobRegistry:        d.jobRegistry,
+				indexValidator:     d.indexValidator,
+				eventLogger:        d.eventLoggerFactory(txn),
+				schemaChangerJobID: d.job.ID(),
 			},
-			indexBackfiller: d.indexBackfiller,
-			statements:      d.statements,
-			user:            d.job.Payload().UsernameProto.Decode(),
+			backfiller: d.backfiller,
+			backfillTracker: newBackfillTracker(d.codec,
+				newBackfillTrackerConfig(ctx, d.codec, d.db, d.rangeCounter, d.job),
+				convertFromJobBackfillProgress(
+					d.codec, pl.GetNewSchemaChange().BackfillProgress,
+				),
+			),
+			periodicProgressFlusher: newPeriodicProgressFlusher(d.settings),
+			statements:              d.statements,
+			partitioner:             d.partitioner,
+			user:                    d.job.Payload().UsernameProto.Decode(),
 		})
 	})
 	if err != nil {

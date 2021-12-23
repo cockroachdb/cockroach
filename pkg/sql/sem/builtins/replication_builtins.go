@@ -48,14 +48,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 
-				jobID := int(*args[0].(*tree.DInt))
+				streamID := streaming.StreamID(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, jobID, cutoverTimestamp)
+				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, streamID, cutoverTimestamp)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(jobID)), err
+				return tree.NewDInt(tree.DInt(streamID)), err
 			},
 			Info: "This function can be used to signal a running stream ingestion job to complete. " +
 				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
@@ -134,5 +134,35 @@ var replicationBuiltins = map[string]builtinDefinition{
 				"that indicates stream status (RUNNING, PAUSED, or STOPPED).",
 			Volatility: tree.VolatilityVolatile,
 		},
+	),
+	"crdb_internal.stream_partition": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: false,
+			Class:            tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"stream_id", types.Int},
+				{"partition_spec", types.Bytes},
+			},
+			types.MakeLabeledTuple(
+				[]*types.T{types.Bytes},
+				[]string{"stream_event"},
+			),
+			func(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+				mgr, err := streaming.GetReplicationStreamManager()
+				if err != nil {
+					return nil, err
+				}
+				return mgr.StreamPartition(
+					ctx,
+					streaming.StreamID(tree.MustBeDInt(args[0])),
+					[]byte(tree.MustBeDBytes(args[1])),
+				)
+			},
+			"Stream partition data",
+			tree.VolatilityVolatile,
+		),
 	),
 }

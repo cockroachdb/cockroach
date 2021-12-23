@@ -116,7 +116,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			upsertUntilBackpressure()
 			s, repl := getStoreAndReplica()
-			trace, _, err := s.ManuallyEnqueue(ctx, "gc", repl, false)
+			trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, false)
 			require.NoError(t, err)
 			if !processedRegexp.MatchString(trace.String()) {
 				return errors.Errorf("%q does not match %q", trace.String(), processedRegexp)
@@ -141,7 +141,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB())
 	startKey := getTableStartKey("foo")
 	ptsRec := ptpb.Record{
-		ID:        uuid.MakeV4(),
+		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: s0.Clock().Now(),
 		Mode:      ptpb.PROTECT_AFTER,
 		Spans: []roachpb.Span{
@@ -162,13 +162,13 @@ func TestProtectedTimestamps(t *testing.T) {
 	s, repl := getStoreAndReplica()
 	// The protectedts record will prevent us from aging the MVCC garbage bytes
 	// past the oldest record so shouldQueue should be false. Verify that.
-	trace, _, err := s.ManuallyEnqueue(ctx, "gc", repl, false /* skipShouldQueue */)
+	trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, false /* skipShouldQueue */)
 	require.NoError(t, err)
 	require.Regexp(t, "(?s)shouldQueue=false", trace.String())
 
 	// If we skipShouldQueue then gc will run but it should only run up to the
 	// timestamp of our record at the latest.
-	trace, _, err = s.ManuallyEnqueue(ctx, "gc", repl, true /* skipShouldQueue */)
+	trace, _, err = s.ManuallyEnqueue(ctx, "mvccGC", repl, true /* skipShouldQueue */)
 	require.NoError(t, err)
 	require.Regexp(t, "(?s)done with GC evaluation for 0 keys", trace.String())
 	thresh := thresholdFromTrace(trace)
@@ -176,37 +176,37 @@ func TestProtectedTimestamps(t *testing.T) {
 
 	// Verify that the record indeed did apply as far as the replica is concerned.
 	ptv := ptverifier.New(s0.DB(), pts)
-	require.NoError(t, ptv.Verify(ctx, ptsRec.ID))
-	ptsRecVerified, err := ptsWithDB.GetRecord(ctx, nil /* txn */, ptsRec.ID)
+	require.NoError(t, ptv.Verify(ctx, ptsRec.ID.GetUUID()))
+	ptsRecVerified, err := ptsWithDB.GetRecord(ctx, nil /* txn */, ptsRec.ID.GetUUID())
 	require.NoError(t, err)
 	require.True(t, ptsRecVerified.Verified)
 
 	// Make a new record that is doomed to fail.
 	failedRec := ptsRec
-	failedRec.ID = uuid.MakeV4()
+	failedRec.ID = uuid.MakeV4().GetBytes()
 	failedRec.Timestamp = beforeWrites
 	failedRec.Timestamp.Logical = 0
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &failedRec))
-	_, err = ptsWithDB.GetRecord(ctx, nil /* txn */, failedRec.ID)
+	_, err = ptsWithDB.GetRecord(ctx, nil /* txn */, failedRec.ID.GetUUID())
 	require.NoError(t, err)
 
 	// Verify that it indeed did fail.
-	verifyErr := ptv.Verify(ctx, failedRec.ID)
+	verifyErr := ptv.Verify(ctx, failedRec.ID.GetUUID())
 	require.Regexp(t, "failed to verify protection", verifyErr)
 
 	// Add a new record that is after the old record.
 	laterRec := ptsRec
-	laterRec.ID = uuid.MakeV4()
+	laterRec.ID = uuid.MakeV4().GetBytes()
 	laterRec.Timestamp = afterWrites
 	laterRec.Timestamp.Logical = 0
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &laterRec))
-	require.NoError(t, ptv.Verify(ctx, laterRec.ID))
+	require.NoError(t, ptv.Verify(ctx, laterRec.ID.GetUUID()))
 
 	// Release the record that had succeeded and ensure that GC eventually
 	// happens up to the protected timestamp of the new record.
-	require.NoError(t, ptsWithDB.Release(ctx, nil, ptsRec.ID))
+	require.NoError(t, ptsWithDB.Release(ctx, nil, ptsRec.ID.GetUUID()))
 	testutils.SucceedsSoon(t, func() error {
-		trace, _, err = s.ManuallyEnqueue(ctx, "gc", repl, false)
+		trace, _, err = s.ManuallyEnqueue(ctx, "mvccGC", repl, false)
 		require.NoError(t, err)
 		if !processedRegexp.MatchString(trace.String()) {
 			return errors.Errorf("%q does not match %q", trace.String(), processedRegexp)
@@ -220,8 +220,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	})
 
 	// Release the failed record.
-	require.NoError(t, ptsWithDB.Release(ctx, nil, failedRec.ID))
-	require.NoError(t, ptsWithDB.Release(ctx, nil, laterRec.ID))
+	require.NoError(t, ptsWithDB.Release(ctx, nil, failedRec.ID.GetUUID()))
+	require.NoError(t, ptsWithDB.Release(ctx, nil, laterRec.ID.GetUUID()))
 	state, err := ptsWithDB.GetState(ctx, nil)
 	require.NoError(t, err)
 	require.Len(t, state.Records, 0)

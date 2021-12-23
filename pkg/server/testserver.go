@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -473,6 +475,13 @@ func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 	return nil
 }
 
+// AmbientCtx implements serverutils.TestTenantInterface. This
+// retrieves the ambient context for this server. This is intended for
+// exclusive use by test code.
+func (ts *TestServer) AmbientCtx() log.AmbientContext {
+	return ts.Cfg.AmbientCtx
+}
+
 // TestingKnobs returns the TestingKnobs used by the TestServer.
 func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
 	if ts != nil {
@@ -558,6 +567,11 @@ func (t *TestTenant) ExecutorConfig() interface{} {
 	return *t.SQLServer.execCfg
 }
 
+// SystemIDChecker is part of TestTenantInterface.
+func (t *TestTenant) SystemIDChecker() interface{} {
+	return *t.SQLServer.execCfg.SystemIDChecker
+}
+
 // RangeFeedFactory is part of TestTenantInterface.
 func (t *TestTenant) RangeFeedFactory() interface{} {
 	return t.SQLServer.execCfg.RangeFeedFactory
@@ -578,6 +592,13 @@ func (t *TestTenant) Clock() *hlc.Clock {
 	return t.SQLServer.execCfg.Clock
 }
 
+// AmbientCtx implements serverutils.TestTenantInterface. This
+// retrieves the ambient context for this server. This is intended for
+// exclusive use by test code.
+func (t *TestTenant) AmbientCtx() log.AmbientContext {
+	return t.Cfg.AmbientCtx
+}
+
 // TestingKnobs is part TestTenantInterface.
 func (t *TestTenant) TestingKnobs() *base.TestingKnobs {
 	return &t.Cfg.TestingKnobs
@@ -588,14 +609,19 @@ func (t *TestTenant) SpanConfigKVAccessor() interface{} {
 	return t.SQLServer.tenantConnect
 }
 
+// SpanConfigReconciler is part TestTenantInterface.
+func (t *TestTenant) SpanConfigReconciler() interface{} {
+	return t.SQLServer.spanconfigMgr.Reconciler
+}
+
 // SpanConfigSQLTranslator is part TestTenantInterface.
 func (t *TestTenant) SpanConfigSQLTranslator() interface{} {
-	return t.SQLServer.spanconfigMgr.SQLTranslator
+	return t.SQLServer.spanconfigSQLTranslator
 }
 
 // SpanConfigSQLWatcher is part TestTenantInterface.
 func (t *TestTenant) SpanConfigSQLWatcher() interface{} {
-	return t.SQLServer.spanconfigMgr.SQLTranslator
+	return t.SQLServer.spanconfigSQLWatcher
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
@@ -703,13 +729,21 @@ func (ts *TestServer) StartTenant(
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
-	return ExpectedInitialRangeCount(ts.DB(), &ts.cfg.DefaultZoneConfig, &ts.cfg.DefaultSystemZoneConfig)
+	return ExpectedInitialRangeCount(
+		ts.DB(),
+		&ts.cfg.DefaultZoneConfig,
+		&ts.cfg.DefaultSystemZoneConfig,
+		ts.sqlServer.execCfg.SystemIDChecker,
+	)
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after bootstrap.
 func ExpectedInitialRangeCount(
-	db *kv.DB, defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
+	db *kv.DB,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	idChecker keys.SystemIDChecker,
 ) (int, error) {
 	descriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
 		context.Background(), db, keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig,
@@ -724,7 +758,7 @@ func ExpectedInitialRangeCount(
 	// the span does not have an associated descriptor.
 	maxSystemDescriptorID := descriptorIDs[0]
 	for _, descID := range descriptorIDs {
-		if descID > maxSystemDescriptorID && descID <= keys.MaxReservedDescID {
+		if descID > maxSystemDescriptorID && catalog.IsSystemID(idChecker, descID) {
 			maxSystemDescriptorID = descID
 		}
 	}
@@ -1043,24 +1077,28 @@ func (ts *TestServer) SpanConfigKVAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
 }
 
+// SpanConfigReconciler is part of TestServerInterface.
+func (ts *TestServer) SpanConfigReconciler() interface{} {
+	if ts.sqlServer.spanconfigMgr == nil {
+		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
+	}
+	return ts.sqlServer.spanconfigMgr.Reconciler
+}
+
 // SpanConfigSQLTranslator is part of TestServerInterface.
 func (ts *TestServer) SpanConfigSQLTranslator() interface{} {
-	if ts.sqlServer.spanconfigMgr == nil {
-		panic(
-			"span config manager uninitialized; see EnableSpanConfigs testing knob to use span configs",
-		)
+	if ts.sqlServer.spanconfigSQLTranslator == nil {
+		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
-	return ts.sqlServer.spanconfigMgr.SQLTranslator
+	return ts.sqlServer.spanconfigSQLTranslator
 }
 
 // SpanConfigSQLWatcher is part of TestServerInterface.
 func (ts *TestServer) SpanConfigSQLWatcher() interface{} {
-	if ts.sqlServer.spanconfigMgr == nil {
-		panic(
-			"span config manager uninitialized; see EnableSpanConfigs testing knob to use span configs",
-		)
+	if ts.sqlServer.spanconfigSQLWatcher == nil {
+		panic("uninitialized; see EnableSpanConfigs testing knob to use span configs")
 	}
-	return ts.sqlServer.spanconfigMgr.SQLWatcher
+	return ts.sqlServer.spanconfigSQLWatcher
 }
 
 // SQLServer is part of TestServerInterface.
@@ -1098,8 +1136,8 @@ func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, err
 	rs, _, err := kv.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
 		key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
-		return roachpb.RangeDescriptor{}, errors.Errorf(
-			"%q: lookup range unexpected error: %s", key, err)
+		return roachpb.RangeDescriptor{}, errors.Wrapf(
+			err, "%q: lookup range unexpected error", key)
 	}
 	return rs[0], nil
 }
@@ -1293,6 +1331,11 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
+// SystemIDChecker is part of the TestServerInterface.
+func (ts *TestServer) SystemIDChecker() interface{} {
+	return *ts.sqlServer.execCfg.SystemIDChecker
+}
+
 // TracerI is part of the TestServerInterface.
 func (ts *TestServer) TracerI() interface{} {
 	return ts.Tracer()
@@ -1399,6 +1442,11 @@ func (ts *TestServer) MetricsRecorder() *status.MetricsRecorder {
 // CollectionFactory is part of the TestServerInterface.
 func (ts *TestServer) CollectionFactory() interface{} {
 	return ts.sqlServer.execCfg.CollectionFactory
+}
+
+// SpanConfigKVSubscriber is part of the TestServerInterface.
+func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
+	return ts.node.storeCfg.SpanConfigSubscriber
 }
 
 type testServerFactoryImpl struct{}

@@ -573,8 +573,8 @@ func mergeCheckingTimestampCaches(
 	// Simulate a txn abort on the RHS from a node with a newer clock. Because
 	// the transaction record for the pushee was not yet written, this will bump
 	// the timestamp cache to record the abort.
-	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0)
-	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0)
+	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0, 0)
+	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0, 0)
 	ba = roachpb.BatchRequest{}
 	ba.Timestamp = readTS.Next()
 	ba.RangeID = rhsDesc.RangeID
@@ -694,7 +694,7 @@ func mergeCheckingTimestampCaches(
 			// Make sure the LHS range in uniquiesced so that it elects a new
 			// Raft leader after the partition is established.
 			for _, r := range lhsRepls {
-				r.UnquiesceAndWakeLeader()
+				r.MaybeUnquiesceAndWakeLeader()
 			}
 
 			// Issue an increment on the range. The leaseholder should evaluate
@@ -2670,6 +2670,8 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	// Wait for store2 to hear about the split.
 	testutils.SucceedsSoon(t, func() error {
 		if rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("store2 has not yet processed split. err: %v", err)
 		}
 		return nil
@@ -2754,7 +2756,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Now split the newly merged range splits back out at exactly the same key.
+	// Now split the newly merged range back out at exactly the same key.
 	// When the replica GC queue looks in meta2 it will find the new RHS range, of
 	// which store2 is a member. Note that store2 does not yet have an initialized
 	// replica for this range, since it would intersect with the old RHS replica.
@@ -2767,7 +2769,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 	tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
 
 	// Transfer the lease on the new RHS to store2 and wait for it to apply. This
-	// will force its replica to of the new RHS to become up to date, which
+	// will force its replica of the new RHS to become up to date, which
 	// indirectly tests that the replica GC queue cleans up both the LHS replica
 	// and the old RHS replica.
 	tc.TransferRangeLeaseOrFatal(t, *newRHSDesc, tc.Target(2))
@@ -4831,7 +4833,7 @@ func sendWithTxn(
 	args roachpb.Request,
 ) error {
 	txn := roachpb.MakeTransaction("test txn", desc.StartKey.AsRawKey(),
-		0, ts, maxOffset.Nanoseconds())
+		0, ts, maxOffset.Nanoseconds(), 0)
 	_, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: &txn}, args)
 	return pErr.GoError()
 }

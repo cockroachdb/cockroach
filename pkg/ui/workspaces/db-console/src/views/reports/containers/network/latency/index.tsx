@@ -11,7 +11,7 @@
 import { Divider, Tooltip } from "antd";
 import classNames from "classnames";
 import _ from "lodash";
-import { NanoToMilli } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 import { Chip } from "src/views/app/components/chip";
 import React from "react";
@@ -139,7 +139,7 @@ const renderMultipleHeaders = (
       } else if (nano.eq(0)) {
         row.push({ latency: -1, identityB });
       } else {
-        const latency = NanoToMilli(nano.toNumber());
+        const latency = util.NanoToMilli(nano.toNumber());
         row.push({ latency, identityB });
       }
     });

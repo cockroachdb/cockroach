@@ -299,7 +299,7 @@ func (v *replicationStatsVisitor) reset(ctx context.Context) {
 	// zones that have constraints. Otherwise, just iterating through the ranges
 	// wouldn't create entries for zones that don't apply to any ranges.
 	maxObjectID, err := v.cfg.GetLargestObjectID(
-		0 /* maxID - return the largest ID in the config */, keys.PseudoTableIDs,
+		nil /* systemIDChecker - return the largest ID in the config */, keys.PseudoTableIDs,
 	)
 	if err != nil {
 		log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
@@ -366,7 +366,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 			return false
 		})
 	if err != nil {
-		return errors.AssertionFailedf("unexpected error visiting zones for range %s: %s", r, err)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error visiting zones for range %s", r)
 	}
 	v.prevZoneKey = zKey
 	v.prevNumReplicas = numReplicas

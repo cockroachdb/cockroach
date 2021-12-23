@@ -2656,6 +2656,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 	case txnCommit:
 		if res.Err() != nil {
+			// See https://github.com/cockroachdb/errors/issues/86.
+			// nolint:errwrap
 			err := errorutil.UnexpectedWithIssueErrorf(
 				26687,
 				"programming error: non-error event %s generated even though res.Err() has been set to: %s",
@@ -2924,8 +2926,10 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ex.planner.txn,
 		&ex.extraTxnState.descCollection,
 		ex.planner.EvalContext(),
+		scs.jobID,
 		scs.stmts,
 	)
+
 	after, jobID, err := scrun.RunPreCommitPhase(
 		ctx, ex.server.cfg.DeclarativeSchemaChangerTestingKnobs, deps, scs.state,
 	)
@@ -2933,6 +2937,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		return err
 	}
 	scs.state = after
+	scs.jobID = jobID
 	if jobID != jobspb.InvalidJobID {
 		ex.extraTxnState.jobs = append(ex.extraTxnState.jobs, jobID)
 		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)

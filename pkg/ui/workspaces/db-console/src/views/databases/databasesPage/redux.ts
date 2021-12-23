@@ -10,6 +10,7 @@
 
 import _ from "lodash";
 import { createSelector } from "reselect";
+import { LocalSetting } from "src/redux/localsettings";
 import {
   DatabasesPageData,
   DatabasesPageDataDatabase,
@@ -41,6 +42,12 @@ const selectLoading = createSelector(
 const selectLoaded = createSelector(
   (state: AdminUIState) => state.cachedData.databases,
   databases => databases.valid,
+);
+
+const sortSettingLocalSetting = new LocalSetting(
+  "sortSetting/DatabasesPage",
+  (state: AdminUIState) => state.localSettings,
+  { ascending: true, columnTitle: "name" },
 );
 
 const selectDatabases = createSelector(
@@ -115,21 +122,28 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
   loading: selectLoading(state),
   loaded: selectLoaded(state),
   databases: selectDatabases(state),
+  sortSetting: sortSettingLocalSetting.selector(state),
   showNodeRegionsColumn: selectIsMoreThanOneNode(state),
 });
 
 export const mapDispatchToProps = {
   refreshDatabases,
-
   refreshDatabaseDetails: (database: string) => {
     return refreshDatabaseDetails(
       new DatabaseDetailsRequest({ database, include_stats: true }),
     );
   },
-
   refreshTableStats: (database: string, table: string) => {
     return refreshTableStats(new TableStatsRequest({ database, table }));
   },
-
   refreshNodes,
+  onSortingChange: (
+    _tableName: string,
+    columnName: string,
+    ascending: boolean,
+  ) =>
+    sortSettingLocalSetting.set({
+      ascending: ascending,
+      columnTitle: columnName,
+    }),
 };

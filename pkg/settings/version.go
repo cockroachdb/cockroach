@@ -121,12 +121,12 @@ func (v *VersionSetting) String(sv *Values) string {
 	return cv.String()
 }
 
-// Encoded is part of the WritableSetting interface.
+// Encoded is part of the NonMaskedSetting interface.
 func (v *VersionSetting) Encoded(sv *Values) string {
 	return v.Get(sv)
 }
 
-// EncodedDefault is part of the WritableSetting interface.
+// EncodedDefault is part of the NonMaskedSetting interface.
 func (v *VersionSetting) EncodedDefault() string {
 	return "unsupported"
 }
@@ -165,14 +165,6 @@ func (v *VersionSetting) setToDefault(ctx context.Context, sv *Values) {}
 
 // RegisterVersionSetting adds the provided version setting to the global
 // registry.
-func RegisterVersionSetting(key, desc string, setting *VersionSetting) {
-	register(key, desc, setting)
-}
-
-// TestingRegisterVersionSetting is like RegisterVersionSetting,
-// but it takes a VersionSettingImpl.
-func TestingRegisterVersionSetting(key, desc string, impl VersionSettingImpl) *VersionSetting {
-	setting := MakeVersionSetting(impl)
-	register(key, desc, &setting)
-	return &setting
+func RegisterVersionSetting(class Class, key, desc string, setting *VersionSetting) {
+	register(class, key, desc, setting)
 }

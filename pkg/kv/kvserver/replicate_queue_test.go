@@ -76,9 +76,9 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	const newRanges = 10
 	trackedRanges := map[roachpb.RangeID]struct{}{}
-	for i := 0; i < newRanges; i++ {
-		tableID := keys.MinUserDescID + i
-		splitKey := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
+	for i := uint32(0); i < newRanges; i++ {
+		tableID := keys.TestingUserDescID(i)
+		splitKey := keys.SystemSQLCodec.TablePrefix(tableID)
 		// Retry the splits on descriptor errors which are likely as the replicate
 		// queue is already hard at work.
 		testutils.SucceedsSoon(t, func() error {
@@ -117,7 +117,12 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		return counts
 	}
 
-	initialRanges, err := server.ExpectedInitialRangeCount(tc.Servers[0].DB(), zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	initialRanges, err := server.ExpectedInitialRangeCount(
+		tc.Servers[0].DB(),
+		zonepb.DefaultZoneConfigRef(),
+		zonepb.DefaultSystemZoneConfigRef(),
+		tc.Servers[0].SystemIDChecker().(keys.SystemIDChecker),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -917,7 +922,7 @@ func queryRangeLog(
 			}
 			var info kvserverpb.RangeLogEvent_Info
 			if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
-				return errors.Errorf("error unmarshaling info string %q: %s", infoStr, err)
+				return errors.Wrapf(err, "error unmarshaling info string %q", infoStr)
 			}
 			events = append(events, info)
 		}

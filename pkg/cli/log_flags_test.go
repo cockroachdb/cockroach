@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/datadriven"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSetupLogging checks the behavior of logging flags.
@@ -140,6 +141,14 @@ func TestSetupLogging(t *testing.T) {
 			t.Fatal(err)
 		}
 		log.TestingResetActive()
+		if isServerCmd(cmd) {
+			// Since server commands copy store options into server configs in PersistentPreRunE,
+			// we need to invoke those functions manually because logging relies on paths for the
+			// first declared store.
+			// The expectation here is that extraStoreFlagInit will be called in PersistentPreRunE
+			// which is called before PreRunE where logging is normally initialized.
+			require.NoError(t, extraStoreFlagInit(cmd))
+		}
 		if err := setupLogging(ctx, cmd, isServerCmd(cmd), false /* applyConfig */); err != nil {
 			return "error: " + err.Error()
 		}

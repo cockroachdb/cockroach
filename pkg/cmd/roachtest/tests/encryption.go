@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,7 +29,9 @@ func registerEncryption(r registry.Registry) {
 	runEncryption := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		nodes := c.Spec().NodeCount
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes), option.StartArgs("--encrypt"))
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.EncryptedStores = true
+		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		// Check that /_status/stores/local endpoint has encryption status.
 		adminAddrs, err := c.InternalAdminUIAddr(ctx, c.Range(1, nodes))
@@ -48,12 +51,12 @@ func registerEncryption(r registry.Registry) {
 		}
 
 		// Restart node with encryption turned on to verify old key works.
-		c.Start(ctx, c.Range(1, nodes), option.StartArgs("--encrypt"))
+		c.Start(ctx, startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
 		testCLIGenKey := func(size int) error {
 			// Generate encryption store key through `./cockroach gen encryption-key -s=size aes-size.key`.
 			if err := c.RunE(ctx, c.Node(nodes), fmt.Sprintf("./cockroach gen encryption-key -s=%[1]d aes-%[1]d.key", size)); err != nil {
-				return errors.Errorf("failed to generate aes key with size %d through CLI, got err %s", size, err)
+				return errors.Wrapf(err, "failed to generate AES key with size %d through CLI", size)
 			}
 
 			// Check the size of generated aes key has expected size.

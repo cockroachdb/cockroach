@@ -43,6 +43,7 @@ import (
 // ReporterInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
 var ReporterInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.replication_reports.interval",
 	"the frequency for generating the replication_constraint_stats, replication_stats_report and "+
 		"replication_critical_localities reports (set to 0 to disable)",
@@ -610,7 +611,7 @@ func visitRanges(
 			if err != nil {
 				// Sanity check - v.failed() should return an error now (the same as err above).
 				if !v.failed() {
-					return errors.AssertionFailedf("expected visitor %T to have failed() after error: %s", v, err)
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected visitor %T to have failed() after error", v)
 				}
 				// Remove this visitor; it shouldn't be called any more.
 				visitors = append(visitors[:i], visitors[i+1:]...)

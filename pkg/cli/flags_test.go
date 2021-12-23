@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
@@ -65,6 +66,7 @@ func TestNoLinkForbidden(t *testing.T) {
 			"testing",  // defines flags
 			"go/build", // probably not something we want in the main binary
 			"github.com/cockroachdb/cockroach/pkg/security/securitytest", // contains certificates
+			"github.com/cockroachdb/cockroach/pkg/sql/randgen",           // meant for testing code only
 		},
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
@@ -1226,6 +1228,28 @@ Use "cockroach [command] --help" for more information about a command.
 			got := strings.Join(final, "\n")
 
 			assert.Equal(t, test.expected, got)
+		})
+	}
+}
+
+func TestSQLPodStorageDefaults(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer initCLIDefaults()
+
+	for _, td := range []struct {
+		args      []string
+		storePath string
+	}{{[]string{"mt", "start-sql", "--tenant-id", "9"}, "cockroach-data-tenant-9"},
+		{[]string{"mt", "start-sql", "--tenant-id", "9", "--store", "/tmp/data"}, "/tmp/data"},
+	} {
+		t.Run(strings.Join(td.args, ","), func(t *testing.T) {
+			initCLIDefaults()
+			f := mtStartSQLCmd.Flags()
+			require.NoError(t, f.Parse(td.args))
+			require.NoError(t, mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args))
+			assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
 		})
 	}
 }

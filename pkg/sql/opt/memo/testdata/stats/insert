@@ -39,64 +39,52 @@ FROM [INSERT INTO xyz (x, y, z) SELECT b, a, c FROM abc WHERE b='foo' RETURNING 
 WHERE z > 1.0
 ----
 with &1
- ├── columns: x:15(string!null) y:16(int!null) z:17(float!null)
+ ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
  ├── volatile, mutations
- ├── stats: [rows=66.6666667, distinct(17)=43.4214373, null(17)=0]
- ├── fd: ()-->(15)
+ ├── stats: [rows=66.5105818, distinct(14)=43.4214373, null(14)=0]
+ ├── fd: ()-->(12), (13)-->(14)
  ├── insert xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
  │    ├── insert-mapping:
- │    │    ├── b:12 => xyz.x:1
- │    │    ├── a:13 => xyz.y:2
- │    │    └── c:14 => xyz.z:3
+ │    │    ├── b:7 => xyz.x:1
+ │    │    ├── a:6 => xyz.y:2
+ │    │    └── c:8 => xyz.z:3
  │    ├── volatile, mutations
- │    ├── stats: [rows=200, distinct(1)=1, null(1)=0, distinct(2)=200, null(2)=0, distinct(3)=130.264312, null(3)=0]
- │    ├── fd: ()-->(1)
+ │    ├── stats: [rows=200, distinct(1)=1, null(1)=0, distinct(2)=200, null(2)=0, distinct(3)=130.264312, null(3)=2]
+ │    ├── fd: ()-->(1), (2)-->(3)
  │    └── project
- │         ├── columns: b:12(string!null) a:13(int!null) c:14(float)
- │         ├── immutable
- │         ├── stats: [rows=200, distinct(12)=1, null(12)=0, distinct(13)=200, null(13)=0, distinct(14)=130.264312, null(14)=0]
- │         ├── fd: ()-->(12)
- │         ├── project
- │         │    ├── columns: abc.a:6(int!null) abc.b:7(string!null) abc.c:8(float)
- │         │    ├── stats: [rows=200, distinct(6)=200, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=130.264312, null(8)=2]
- │         │    ├── fd: ()-->(7), (6)-->(8)
- │         │    └── select
- │         │         ├── columns: abc.a:6(int!null) abc.b:7(string!null) abc.c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
- │         │         ├── stats: [rows=200, distinct(6)=200, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=130.264312, null(8)=2]
- │         │         ├── key: (9)
- │         │         ├── fd: ()-->(7), (9)-->(6,8,10,11), (6)-->(8)
- │         │         ├── scan abc
- │         │         │    ├── columns: abc.a:6(int!null) abc.b:7(string) abc.c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
- │         │         │    ├── computed column expressions
- │         │         │    │    └── abc.c:8
- │         │         │    │         └── abc.a:6::FLOAT8 [type=float]
- │         │         │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=200, null(8)=20, distinct(9)=2000, null(9)=0]
- │         │         │    ├── key: (9)
- │         │         │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
- │         │         └── filters
- │         │              └── abc.b:7 = 'foo' [type=bool, outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
- │         └── projections
- │              ├── assignment-cast: STRING [as=b:12, type=string, outer=(7), immutable]
- │              │    └── abc.b:7 [type=string]
- │              ├── assignment-cast: INT8 [as=a:13, type=int, outer=(6), immutable]
- │              │    └── abc.a:6 [type=int]
- │              └── assignment-cast: FLOAT8 [as=c:14, type=float, outer=(8), immutable]
- │                   └── abc.c:8 [type=float]
+ │         ├── columns: a:6(int!null) b:7(string!null) c:8(float)
+ │         ├── stats: [rows=200, distinct(6)=200, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=130.264312, null(8)=2]
+ │         ├── fd: ()-->(7), (6)-->(8)
+ │         └── select
+ │              ├── columns: a:6(int!null) b:7(string!null) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+ │              ├── stats: [rows=200, distinct(6)=200, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=130.264312, null(8)=2]
+ │              ├── key: (9)
+ │              ├── fd: ()-->(7), (9)-->(6,8,10,11), (6)-->(8)
+ │              ├── scan abc
+ │              │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+ │              │    ├── computed column expressions
+ │              │    │    └── c:8
+ │              │    │         └── a:6::FLOAT8 [type=float]
+ │              │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=200, null(8)=20, distinct(9)=2000, null(9)=0]
+ │              │    ├── key: (9)
+ │              │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
+ │              └── filters
+ │                   └── b:7 = 'foo' [type=bool, outer=(7), constraints=(/7: [/'foo' - /'foo']; tight), fd=()-->(7)]
  └── select
-      ├── columns: x:15(string!null) y:16(int!null) z:17(float!null)
-      ├── stats: [rows=66.6666667, distinct(17)=43.4214373, null(17)=0]
-      ├── fd: ()-->(15)
+      ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
+      ├── stats: [rows=66.5105818, distinct(14)=43.4214373, null(14)=0]
+      ├── fd: ()-->(12), (13)-->(14)
       ├── with-scan &1
-      │    ├── columns: x:15(string!null) y:16(int!null) z:17(float)
+      │    ├── columns: x:12(string!null) y:13(int!null) z:14(float)
       │    ├── mapping:
-      │    │    ├──  xyz.x:1(string) => x:15(string)
-      │    │    ├──  xyz.y:2(int) => y:16(int)
-      │    │    └──  xyz.z:3(float) => z:17(float)
-      │    ├── stats: [rows=200, distinct(15)=1, null(15)=0, distinct(16)=200, null(16)=0, distinct(17)=130.264312, null(17)=0]
-      │    └── fd: ()-->(15)
+      │    │    ├──  xyz.x:1(string) => x:12(string)
+      │    │    ├──  xyz.y:2(int) => y:13(int)
+      │    │    └──  xyz.z:3(float) => z:14(float)
+      │    ├── stats: [rows=200, distinct(12)=1, null(12)=0, distinct(13)=200, null(13)=0, distinct(14)=130.264312, null(14)=2]
+      │    └── fd: ()-->(12), (13)-->(14)
       └── filters
-           └── z:17 > 1.0 [type=bool, outer=(17), constraints=(/17: [/1.0000000000000002 - ]; tight)]
+           └── z:14 > 1.0 [type=bool, outer=(14), constraints=(/14: [/1.0000000000000002 - ]; tight)]
 
 # Cardinality is zero.
 build
@@ -105,42 +93,31 @@ INSERT INTO xyz (x, y, z) SELECT b, a, c FROM abc WHERE False RETURNING *
 insert xyz
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  ├── insert-mapping:
- │    ├── b:12 => x:1
- │    ├── a:13 => y:2
- │    └── c:14 => z:3
+ │    ├── b:7 => x:1
+ │    ├── a:6 => y:2
+ │    └── c:8 => z:3
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
+ ├── fd: (2)-->(3)
  └── project
-      ├── columns: b:12(string) a:13(int!null) c:14(float)
+      ├── columns: a:6(int!null) b:7(string) c:8(float)
       ├── cardinality: [0 - 0]
-      ├── immutable
       ├── stats: [rows=0]
-      ├── project
-      │    ├── columns: abc.a:6(int!null) abc.b:7(string) abc.c:8(float)
-      │    ├── cardinality: [0 - 0]
-      │    ├── stats: [rows=0]
-      │    ├── fd: (6)-->(8)
-      │    └── select
-      │         ├── columns: abc.a:6(int!null) abc.b:7(string) abc.c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
-      │         ├── cardinality: [0 - 0]
-      │         ├── stats: [rows=0]
-      │         ├── key: (9)
-      │         ├── fd: (9)-->(6-8,10,11), (6)-->(8)
-      │         ├── scan abc
-      │         │    ├── columns: abc.a:6(int!null) abc.b:7(string) abc.c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
-      │         │    ├── computed column expressions
-      │         │    │    └── abc.c:8
-      │         │    │         └── abc.a:6::FLOAT8 [type=float]
-      │         │    ├── stats: [rows=2000]
-      │         │    ├── key: (9)
-      │         │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
-      │         └── filters
-      │              └── false [type=bool, constraints=(contradiction; tight)]
-      └── projections
-           ├── assignment-cast: STRING [as=b:12, type=string, outer=(7), immutable]
-           │    └── abc.b:7 [type=string]
-           ├── assignment-cast: INT8 [as=a:13, type=int, outer=(6), immutable]
-           │    └── abc.a:6 [type=int]
-           └── assignment-cast: FLOAT8 [as=c:14, type=float, outer=(8), immutable]
-                └── abc.c:8 [type=float]
+      ├── fd: (6)-->(8)
+      └── select
+           ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+           ├── cardinality: [0 - 0]
+           ├── stats: [rows=0]
+           ├── key: (9)
+           ├── fd: (9)-->(6-8,10,11), (6)-->(8)
+           ├── scan abc
+           │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
+           │    ├── computed column expressions
+           │    │    └── c:8
+           │    │         └── a:6::FLOAT8 [type=float]
+           │    ├── stats: [rows=2000]
+           │    ├── key: (9)
+           │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
+           └── filters
+                └── false [type=bool, constraints=(contradiction; tight)]

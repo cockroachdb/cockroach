@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -32,12 +33,12 @@ func init() {
 		),
 		drop(
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PostCommitPhase),
+				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.ColumnName) scop.Op {
 					return &scop.SetColumnName{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
-						Name:     this.Name,
+						Name:     tabledesc.ColumnNamePlaceholder(this.ColumnID),
 					}
 				}),
 			),

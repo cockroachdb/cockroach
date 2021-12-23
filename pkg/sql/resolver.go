@@ -326,6 +326,13 @@ func (p *planner) HasPrivilege(
 		return true, nil
 	}
 
+	if kind == privilege.RULE {
+		// RULE was only added for compatibility with Postgres, and Postgres
+		// never allows RULE to be granted, even if the user has ALL privileges.
+		// See https://www.postgresql.org/docs/8.1/sql-grant.html
+		// and https://www.postgresql.org/docs/release/8.2.0/.
+		return false, nil
+	}
 	hasPrivilege, err := hasPrivilegeFunc(privilege.ALL)
 	if err != nil {
 		return false, err

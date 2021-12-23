@@ -558,8 +558,10 @@ message LogFileRequest {
 }
 
 enum StacksType {
+  // GOROUTINE_STACKS corresponds to GOROUTINE_STACKS_DEBUG_2.
   GOROUTINE_STACKS = 0;
   reserved 1;
+  GOROUTINE_STACKS_DEBUG_1 = 2;
 }
 
 message StacksRequest {
@@ -1276,6 +1278,18 @@ message CreateStatementDiagnosticsReportResponse {
   StatementDiagnosticsReport report = 1;
 }
 
+message CancelStatementDiagnosticsReportRequest {
+  string statement_fingerprint = 1;
+}
+
+message CancelStatementDiagnosticsReportResponse {
+  // canceled indicates whether the request for the given fingerprint was
+  // actually canceled.
+  bool canceled = 1;
+  // error is set only if canceled is false.
+  string error = 2;
+}
+
 message StatementDiagnosticsReportsRequest {}
 
 message StatementDiagnosticsReportsResponse {
@@ -1709,6 +1723,12 @@ service Status {
   rpc CreateStatementDiagnosticsReport(CreateStatementDiagnosticsReportRequest) returns (CreateStatementDiagnosticsReportResponse) {
     option (google.api.http) = {
       post: "/_status/stmtdiagreports"
+      body: "*"
+    };
+  }
+  rpc CancelStatementDiagnosticsReport(CancelStatementDiagnosticsReportRequest) returns (CancelStatementDiagnosticsReportResponse) {
+    option (google.api.http) = {
+      post: "/_status/stmtdiagreports/cancel"
       body: "*"
     };
   }

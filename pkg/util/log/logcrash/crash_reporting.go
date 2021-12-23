@@ -13,6 +13,7 @@ package logcrash
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -51,6 +52,7 @@ var (
 	// Doing this, rather than just using a default of `true`, means that a node
 	// will not errantly send a report using a default before loading settings.
 	DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
+		settings.TenantWritable,
 		"diagnostics.reporting.enabled",
 		"enable reporting diagnostic metrics to cockroach labs",
 		false,
@@ -58,6 +60,7 @@ var (
 
 	// CrashReports wraps "diagnostics.reporting.send_crash_reports".
 	CrashReports = settings.RegisterBoolSetting(
+		settings.TenantWritable,
 		"diagnostics.reporting.send_crash_reports",
 		"send crash and panic reports",
 		true,
@@ -65,6 +68,7 @@ var (
 
 	// PanicOnAssertions wraps "debug.panic_on_failed_assertions"
 	PanicOnAssertions = settings.RegisterBoolSetting(
+		settings.TenantWritable,
 		"debug.panic_on_failed_assertions",
 		"panic when an assertion fails rather than reporting",
 		false,
@@ -79,7 +83,37 @@ var (
 	// This should not be used by anyone unwilling to share the whole cluster
 	// data with Cockroach Labs and various cloud services.
 	ReportSensitiveDetails = envutil.EnvOrDefaultBool("COCKROACH_REPORT_SENSITIVE_DETAILS", false)
+
+	// globalSettings stores a global reference to a *setting.Values container;
+	// used for code paths where the container is not available.
+	globalSettings atomic.Value
 )
+
+// SetGlobalSettings sets the *settings.Values container that will be refreshed
+// at runtime -- ideally we should have no other *Values containers floating
+// around, as they will be stale / lies.
+func SetGlobalSettings(v *settings.Values) {
+	globalSettings.Store(v)
+}
+
+func getGlobalSettings() *settings.Values {
+	if ptr := globalSettings.Load(); ptr != nil {
+		return ptr.(*settings.Values)
+	}
+	return nil
+}
+
+// ReportPanicWithGlobalSettings is a variant of ReportPanic that uses the
+// *settings.Values that was set using SetGlobalSettings(). Does nothing if that
+// function was not called.
+//
+// Should be used only when strictly necessary; use ReportPanic whenever we have
+// access to the settings.
+func ReportPanicWithGlobalSettings(ctx context.Context, r interface{}, depth int) {
+	if sv := getGlobalSettings(); sv != nil {
+		ReportPanic(ctx, sv, r, depth+1)
+	}
+}
 
 // RecoverAndReportPanic can be invoked on goroutines that run with
 // stderr redirected to logs to ensure the user gets informed on the
@@ -371,9 +405,8 @@ func RegisterTagFn(key string, value func(context.Context) string) {
 }
 
 func maybeSendCrashReport(ctx context.Context, err error) {
-	// We load the ReportingSettings from the a global singleton in this
-	// call path. See the singleton's comment for a rationale.
-	if sv := settings.TODO(); sv != nil {
+	// We load the ReportingSettings from global singleton in this call path.
+	if sv := getGlobalSettings(); sv != nil {
 		sendCrashReport(ctx, sv, err, ReportTypeLogFatal)
 	}
 }

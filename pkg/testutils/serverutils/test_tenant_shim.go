@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -66,6 +67,10 @@ type TestTenantInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
+	// ExecutorConfig returns a copy of the tenant's SystemIDChecker.
+	// The real return type is keys.SystemIDChecker.
+	SystemIDChecker() interface{}
+
 	// RangeFeedFactory returns the range feed factory used by the tenant.
 	// The real return type is *rangefeed.Factory.
 	RangeFeedFactory() interface{}
@@ -84,6 +89,10 @@ type TestTenantInterface interface {
 	// interface{}.
 	SpanConfigKVAccessor() interface{}
 
+	// SpanConfigReconciler returns the underlying spanconfig.Reconciler as an
+	// interface{}.
+	SpanConfigReconciler() interface{}
+
 	// SpanConfigSQLTranslator returns the underlying spanconfig.SQLTranslator as
 	// an interface{}.
 	SpanConfigSQLTranslator() interface{}
@@ -94,6 +103,12 @@ type TestTenantInterface interface {
 
 	// TestingKnobs returns the TestingKnobs in use by the test server.
 	TestingKnobs() *base.TestingKnobs
+
+	// AmbientCtx retrieves the AmbientContext for this server,
+	// so that a test can instantiate additional one-off components
+	// using the same context details as the server. This should not
+	// be used in non-test code.
+	AmbientCtx() log.AmbientContext
 
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing

@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -71,7 +69,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	resetCaptured()
 	Errorf(context.Background(), "test3e %v end",
 		errors.AssertionFailedf("hello %v",
-			errors.Newf("error-in-error %s", "world")))
+			errors.Newf("error-in-error %s", "world"))) // nolint:errwrap
 	if !contains(redactableIndicator+" [-] 4  test3e", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
@@ -89,39 +87,6 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 	if !contains("test4 "+startRedactable+"x"+escapeMark+"hello"+escapeMark+"y"+endRedactable+" end", t) {
 		t.Errorf("expected escape mark, got %q", contents())
-	}
-}
-
-func quote(s string) string {
-	return startRedactable + s + endRedactable
-}
-
-// TestRedactTags ensure that context tags can be redacted.
-func TestRedactTags(t *testing.T) {
-	baseCtx := context.Background()
-
-	testData := []struct {
-		ctx      context.Context
-		expected string
-	}{
-		{baseCtx, ""},
-		{logtags.AddTag(baseCtx, "k", nil), "k"},
-		{logtags.AddTag(baseCtx, "k", redact.Unsafe(123)), "k" + quote("123") + ""},
-		{logtags.AddTag(baseCtx, "k", 123), "k123"},
-		{logtags.AddTag(baseCtx, "k", redact.Safe(123)), "k123"},
-		{logtags.AddTag(baseCtx, "k", startRedactable), "k" + quote(escapeMark) + ""},
-		{logtags.AddTag(baseCtx, "kg", redact.Unsafe(123)), "kg=" + quote("123") + ""},
-		{logtags.AddTag(baseCtx, "kg", 123), "kg=123"},
-		{logtags.AddTag(baseCtx, "kg", redact.Safe(123)), "kg=123"},
-		{logtags.AddTag(logtags.AddTag(baseCtx, "k", nil), "n", redact.Unsafe(55)), "k,n" + quote("55") + ""},
-		{logtags.AddTag(logtags.AddTag(baseCtx, "k", nil), "n", 55), "k,n55"},
-		{logtags.AddTag(logtags.AddTag(baseCtx, "k", nil), "n", redact.Safe(55)), "k,n55"},
-	}
-
-	for _, tc := range testData {
-		tags := logtags.FromContext(tc.ctx)
-		actual := renderTagsAsRedactable(tags)
-		assert.Equal(t, tc.expected, string(actual))
 	}
 }
 
@@ -154,17 +119,14 @@ func TestRedactedDecodeFile(t *testing.T) {
 			Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
 
 			// Retrieve the log writer and log location for this test.
-			info, ok := debugLog.getFileSink().mu.file.(*syncBuffer)
-			if !ok {
-				t.Fatalf("buffer wasn't created")
-			}
+			debugSink := debugLog.getFileSink()
+			fileName := debugSink.getFileName(t)
+
 			// Ensure our log message above made it to the file.
-			if err := info.Flush(); err != nil {
-				t.Fatal(err)
-			}
+			debugSink.lockAndFlushAndMaybeSync(false)
 
 			// Prepare reading the entries from the file.
-			infoName := filepath.Base(info.file.Name())
+			infoName := filepath.Base(fileName)
 			reader, err := GetLogReader(infoName)
 			if err != nil {
 				t.Fatal(err)

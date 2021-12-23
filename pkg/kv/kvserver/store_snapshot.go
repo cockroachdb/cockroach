@@ -407,10 +407,27 @@ func (s *Store) reserveSnapshot(
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
 	if header.RangeSize != 0 {
+		queueCtx := ctx
+		if deadline, ok := queueCtx.Deadline(); ok {
+			// Enforce a more strict timeout for acquiring the snapshot reservation to
+			// ensure that if the reservation is acquired, the snapshot has sufficient
+			// time to complete. See the comment on snapshotReservationQueueTimeoutFraction
+			// and TestReserveSnapshotQueueTimeout.
+			timeoutFrac := snapshotReservationQueueTimeoutFraction.Get(&s.ClusterSettings().SV)
+			timeout := time.Duration(timeoutFrac * float64(timeutil.Until(deadline)))
+			var cancel func()
+			queueCtx, cancel = context.WithTimeout(queueCtx, timeout) // nolint:context
+			defer cancel()
+		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
-		case <-ctx.Done():
-			return nil, ctx.Err()
+		case <-queueCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return nil, errors.Wrap(err, "acquiring snapshot reservation")
+			}
+			return nil, errors.Wrapf(queueCtx.Err(),
+				"giving up during snapshot reservation due to %q",
+				snapshotReservationQueueTimeoutFraction.Key())
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")
 		}
@@ -506,7 +523,8 @@ func (s *Store) canAcceptSnapshotLocked(
 
 // checkSnapshotOverlapLocked returns an error if the snapshot overlaps an
 // existing replica or placeholder. Any replicas that do overlap have a good
-// chance of being abandoned, so they're proactively handed to the GC queue .
+// chance of being abandoned, so they're proactively handed to the replica GC
+// queue.
 func (s *Store) checkSnapshotOverlapLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) error {
@@ -542,16 +560,16 @@ func (s *Store) checkSnapshotOverlapLocked(
 				// stops sending this replica heartbeats.
 				return !r.CurrentLeaseStatus(ctx).IsValid()
 			}
-			// We unconditionally send this replica through the GC queue. It's
-			// reasonably likely that the GC queue will do nothing because the replica
-			// needs to split instead, but better to err on the side of queueing too
-			// frequently. Blocking Raft snapshots for too long can wedge a cluster,
-			// and if the replica does need to be GC'd, this might be the only code
-			// path that notices in a timely fashion.
+			// We unconditionally send this replica through the replica GC queue. It's
+			// reasonably likely that the replica GC queue will do nothing because the
+			// replica needs to split instead, but better to err on the side of
+			// queueing too frequently. Blocking Raft snapshots for too long can wedge
+			// a cluster, and if the replica does need to be GC'd, this might be the
+			// only code path that notices in a timely fashion.
 			//
-			// We're careful to avoid starving out other replicas in the GC queue by
-			// queueing at a low priority unless we can prove that the range is
-			// inactive and thus unlikely to be about to process a split.
+			// We're careful to avoid starving out other replicas in the replica GC
+			// queue by queueing at a low priority unless we can prove that the range
+			// is inactive and thus unlikely to be about to process a split.
 			gcPriority := replicaGCPriorityDefault
 			if inactive(exReplica) {
 				gcPriority = replicaGCPrioritySuspect
@@ -684,25 +702,18 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, why string, toStoreID roachpb.StoreID)
 }
 
-// validatePositive is a function to validate that a settings value is positive.
-func validatePositive(v int64) error {
-	if v <= 0 {
-		return errors.Errorf("%d is not positive", v)
-	}
-	return nil
-}
-
 // rebalanceSnapshotRate is the rate at which snapshots can be sent in the
 // context of up-replication or rebalancing (i.e. any snapshot that was not
 // requested by raft itself, to which `kv.snapshot_recovery.max_rate` applies).
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
 	32<<20, // 32mb/s
-	validatePositive,
-).WithPublic().WithSystemOnly()
+	settings.PositiveInt,
+).WithPublic()
 
-// recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
+// recoverySnapshotRate is the rate at which Raft-initiated snapshot can be
 // sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
 // replicas to start out as learners or via splits, and to never be cut off from
 // the log. However, it has proved unfeasible to completely get rid of them.
@@ -712,31 +723,138 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 // to a semaphore at the receiver, and so the slower one ultimately determines
 // the pace at which things can move along.
 var recoverySnapshotRate = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	32<<20, // 32mb/s
-	validatePositive,
-).WithPublic().WithSystemOnly()
+	settings.PositiveInt,
+).WithPublic()
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
 // grow to during Range snapshots before being sent to the receiver. This limit
 // places an upper-bound on the memory footprint of the sender of a Range
 // snapshot. It is also the granularity of rate limiting.
 var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
 	"kv.snapshot_sender.batch_size",
 	"size of key-value batches sent over the network during snapshots",
 	256<<10, // 256 KB
-	validatePositive,
+	settings.PositiveInt,
+)
+
+// snapshotReservationQueueTimeoutFraction is the maximum fraction of a Range
+// snapshot's total timeout that it is allowed to spend queued on the receiver
+// waiting for a reservation.
+//
+// Enforcement of this snapshotApplySem-scoped timeout is intended to prevent
+// starvation of snapshots in cases where a queue of snapshots waiting for
+// reservations builds and no single snapshot acquires the semaphore with
+// sufficient time to complete, but each holds the semaphore long enough to
+// ensure that later snapshots in the queue encounter this same situation. This
+// is a case of FIFO queuing + timeouts leading to starvation. By rejecting
+// snapshot attempts earlier, we ensure that those that do acquire the semaphore
+// have sufficient time to complete.
+//
+// Consider the following motivating example:
+//
+// With a 60s timeout set by the snapshotQueue/replicateQueue for each snapshot,
+// 45s needed to actually stream the data, and a willingness to wait for as long
+// as it takes to get the reservation (i.e. this fraction = 1.0) there can be
+// starvation. Each snapshot spends so much time waiting for the reservation
+// that it will itself fail during sending, while the next snapshot wastes
+// enough time waiting for us that it will itself fail, ad infinitum:
+//
+//  t   | snap1 snap2 snap3 snap4 snap5 ...
+//  ----+------------------------------------
+//  0   | send
+//  15  |       queue queue
+//  30  |                   queue
+//  45  | ok    send
+//  60  |                         queue
+//  75  |       fail  fail  send
+//  90  |                   fail  send
+//  105 |
+//  120 |                         fail
+//  135 |
+//
+// If we limit the amount of time we are willing to wait for a reservation to
+// something that is small enough to, on success, give us enough time to
+// actually stream the data, no starvation can occur. For example, with a 60s
+// timeout, 45s needed to stream the data, we can wait at most 15s for a
+// reservation and still avoid starvation:
+//
+//  t   | snap1 snap2 snap3 snap4 snap5 ...
+//  ----+------------------------------------
+//  0   | send
+//  15  |       queue queue
+//  30  |       fail  fail  send
+//  45  |
+//  60  | ok                      queue
+//  75  |                   ok    send
+//  90  |
+//  105 |
+//  120 |                         ok
+//  135 |
+//
+// In practice, the snapshot reservation logic (reserveSnapshot) doesn't know
+// how long sending the snapshot will actually take. But it knows the timeout it
+// has been given by the snapshotQueue/replicateQueue, which serves as an upper
+// bound, under the assumption that snapshots can make progress in the absence
+// of starvation.
+//
+// Without the reservation timeout fraction, if the product of the number of
+// concurrent snapshots and the average streaming time exceeded this timeout,
+// the starvation scenario could occur, since the average queuing time would
+// exceed the timeout. With the reservation limit, progress will be made as long
+// as the average streaming time is less than the guaranteed processing time for
+// any snapshot that succeeds in acquiring a reservation:
+//
+//  guaranteed_processing_time = (1 - reservation_queue_timeout_fraction) x timeout
+//
+// The timeout for the snapshot and replicate queues bottoms out at 60s (by
+// default, see kv.queue.process.guaranteed_time_budget). Given a default
+// reservation queue timeout fraction of 0.4, this translates to a guaranteed
+// processing time of 36s for any snapshot attempt that manages to acquire a
+// reservation. This means that a 512MiB snapshot will succeed if sent at a rate
+// of 14MiB/s or above.
+//
+// Lower configured snapshot rate limits quickly lead to a much higher timeout
+// since we apply a liberal multiplier (permittedRangeScanSlowdown). Concretely,
+// we move past the 1-minute timeout once the rate limit is set to anything less
+// than 10*range_size/guaranteed_budget(in MiB/s), which comes out to ~85MiB/s
+// for a 512MiB range and the default 1m budget. In other words, the queue uses
+// sumptuous timeouts, and so we'll also be excessively lenient with how long
+// we're willing to wait for a reservation (but not to the point of allowing the
+// starvation scenario). As long as the nodes between the cluster can transfer
+// at around ~14MiB/s, even a misconfiguration of the rate limit won't cause
+// issues and where it does, the setting can be set to 1.0, effectively
+// reverting to the old behavior.
+var snapshotReservationQueueTimeoutFraction = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.snapshot_receiver.reservation_queue_timeout_fraction",
+	"the fraction of a snapshot's total timeout that it is allowed to spend "+
+		"queued on the receiver waiting for a reservation",
+	0.4,
+	func(v float64) error {
+		const min, max = 0.25, 1.0
+		if v < min {
+			return errors.Errorf("cannot set to a value less than %f: %f", min, v)
+		} else if v > max {
+			return errors.Errorf("cannot set to a value greater than %f: %f", max, v)
+		}
+		return nil
+	},
 )
 
 // snapshotSSTWriteSyncRate is the size of chunks to write before fsync-ing.
 // The default of 2 MiB was chosen to be in line with the behavior in bulk-io.
 // See sstWriteSyncRate.
 var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
 	bulkIOWriteBurst,
-	validatePositive,
+	settings.PositiveInt,
 )
 
 func snapshotRateLimit(

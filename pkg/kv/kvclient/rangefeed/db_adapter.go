@@ -39,6 +39,7 @@ type dbAdapter struct {
 var _ kvDB = (*dbAdapter)(nil)
 
 var maxScanParallelism = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.rangefeed.max_scan_parallelism",
 	"maximum number of concurrent scan requests that can be issued during initial scan",
 	64,
@@ -194,13 +195,15 @@ func (dbc *dbAdapter) scanSpan(
 			}
 			if res.ResumeSpan == nil {
 				if onScanDone != nil {
-					onScanDone(ctx, sp)
+					return onScanDone(ctx, sp)
 				}
 				return nil
 			}
 
 			if onScanDone != nil {
-				onScanDone(ctx, roachpb.Span{Key: sp.Key, EndKey: res.ResumeSpan.Key})
+				if err := onScanDone(ctx, roachpb.Span{Key: sp.Key, EndKey: res.ResumeSpan.Key}); err != nil {
+					return err
+				}
 			}
 
 			sp = res.ResumeSpanAsValue()

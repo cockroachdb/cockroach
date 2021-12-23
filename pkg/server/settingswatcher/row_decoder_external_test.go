@@ -76,24 +76,24 @@ func TestRowDecoder(t *testing.T) {
 			Value: *row.Value,
 		}
 
-		k, val, valType, tombstone, err := dec.DecodeRow(kv)
+		k, val, tombstone, err := dec.DecodeRow(kv)
 		require.NoError(t, err)
 		require.False(t, tombstone)
 		if exp, ok := toSet[k]; ok {
-			require.Equal(t, exp.expStr, val)
-			require.Equal(t, exp.expValType, valType)
+			require.Equal(t, exp.expStr, val.Value)
+			require.Equal(t, exp.expValType, val.Type)
 			delete(toSet, k)
 		}
 
 		// Test the tombstone logic while we're here.
 		{
 			kv.Value.Reset()
-			tombstoneK, val, valType, tombstone, err := dec.DecodeRow(kv)
+			tombstoneK, val, tombstone, err := dec.DecodeRow(kv)
 			require.NoError(t, err)
 			require.True(t, tombstone)
 			require.Equal(t, k, tombstoneK)
-			require.Zero(t, val)
-			require.Zero(t, valType)
+			require.Zero(t, val.Value)
+			require.Zero(t, val.Type)
 		}
 	}
 	require.Len(t, toSet, 0)

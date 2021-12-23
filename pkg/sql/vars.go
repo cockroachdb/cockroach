@@ -165,6 +165,25 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
 
+	// CockroachDB extension.
+	`avoid_buffering`: {
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AvoidBuffering), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("avoid_buffering"),
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`avoid_buffering`, s)
+			if err != nil {
+				return err
+			}
+			m.SetAvoidBuffering(b)
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "false"
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	// and https://www.postgresql.org/docs/10/static/datatype-binary.html
 	`bytea_output`: {
@@ -478,6 +497,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`index_recommendations_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`index_recommendations_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("index_recommendations_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetIndexRecommendationsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().IndexRecommendationsEnabled), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`distsql`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.DistSQLExecModeFromString(s)
@@ -550,9 +586,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().PartiallyDistributedPlansDisabled), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(false)
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -650,9 +684,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().TestingVectorizeInjectPanics), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(false)
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -954,10 +986,8 @@ var varGen = map[string]sessionVar{
 		GetFromSessionData: func(sd *sessiondata.SessionData) string {
 			return formatBoolAsPostgresSetting(sd.IsSuperuser)
 		},
-		GetStringVal: makePostgresBoolGetStringValFn("is_superuser"),
-		GlobalDefault: func(sv *settings.Values) string {
-			return "off"
-		},
+		GetStringVal:  makePostgresBoolGetStringValFn("is_superuser"),
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -1476,9 +1506,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(true), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(true)
-		},
+		GlobalDefault: globalTrue,
 	},
 
 	// CockroachDB extension.
@@ -1648,9 +1676,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().NullOrderedLast), nil
 		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(false)
-		},
+		GlobalDefault: globalFalse,
 	},
 
 	`propagate_input_ordering`: {
@@ -1911,6 +1937,7 @@ func displayPgBool(val bool) func(_ *settings.Values) string {
 }
 
 var globalFalse = displayPgBool(false)
+var globalTrue = displayPgBool(true)
 
 // sessionDataTimeZoneFormat returns the appropriate timezone format
 // to output when the `timezone` is required output.

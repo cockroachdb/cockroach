@@ -50,7 +50,7 @@ type updater struct {
 // wrapped atomic settings values as we go and note which settings were updated,
 // then set the rest to default in ResetRemaining().
 type Updater interface {
-	Set(ctx context.Context, k, rawValue, valType string) error
+	Set(ctx context.Context, key, rawValue, valType string) error
 	ResetRemaining(ctx context.Context)
 }
 
@@ -58,7 +58,7 @@ type Updater interface {
 type NoopUpdater struct{}
 
 // Set implements Updater. It is a no-op.
-func (u NoopUpdater) Set(ctx context.Context, k, rawValue, valType string) error { return nil }
+func (u NoopUpdater) Set(ctx context.Context, key, rawValue, valType string) error { return nil }
 
 // ResetRemaining implements Updater. It is a no-op.
 func (u NoopUpdater) ResetRemaining(context.Context) {}
@@ -98,7 +98,7 @@ func (u updater) Set(ctx context.Context, key, rawValue string, vt string) error
 		}
 		setting.set(ctx, u.sv, b)
 		return nil
-	case numericSetting: // includes *EnumSetting
+	case numericSetting:
 		i, err := strconv.Atoi(rawValue)
 		if err != nil {
 			return err

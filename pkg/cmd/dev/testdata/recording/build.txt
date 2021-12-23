@@ -234,6 +234,7 @@ bazel query pkg/foo/... --output=label_kind
 ----
 go_binary rule //pkg/foo:bar
 go_test rule //pkg/foo:baz
+go_proto_library rule //pkg/foo:bar_proto_library
 ----
 ----
 

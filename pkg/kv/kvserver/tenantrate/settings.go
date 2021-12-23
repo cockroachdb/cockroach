@@ -64,6 +64,7 @@ var (
 	// per CPU, or roughly 20% of the machine (by design 1 RU roughly maps to 1
 	// CPU-millisecond).
 	kvcuRateLimit = settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"kv.tenant_rate_limiter.rate_limit",
 		"per-tenant rate limit in KV Compute Units per second if positive, "+
 			"or KV Compute Units per second per CPU if negative",
@@ -77,6 +78,7 @@ var (
 	)
 
 	kvcuBurstLimitSeconds = settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"kv.tenant_rate_limiter.burst_limit_seconds",
 		"per-tenant burst limit as a multiplier of the rate",
 		10,
@@ -84,6 +86,7 @@ var (
 	)
 
 	readRequestCost = settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"kv.tenant_rate_limiter.read_request_cost",
 		"base cost of a read request in KV Compute Units",
 		0.7,
@@ -91,6 +94,7 @@ var (
 	)
 
 	readCostPerMB = settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"kv.tenant_rate_limiter.read_cost_per_megabyte",
 		"cost of a read in KV Compute Units per MB",
 		10.0,
@@ -98,6 +102,7 @@ var (
 	)
 
 	writeRequestCost = settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"kv.tenant_rate_limiter.write_request_cost",
 		"base cost of a write request in KV Compute Units",
 		1.0,
@@ -105,6 +110,7 @@ var (
 	)
 
 	writeCostPerMB = settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"kv.tenant_rate_limiter.write_cost_per_megabyte",
 		"cost of a write in KV Compute Units per MB",
 		400.0,
@@ -112,7 +118,7 @@ var (
 	)
 
 	// List of config settings, used to set up "on change" notifiers.
-	configSettings = [...]settings.WritableSetting{
+	configSettings = [...]settings.NonMaskedSetting{
 		kvcuRateLimit,
 		kvcuBurstLimitSeconds,
 		readRequestCost,

@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -35,6 +36,7 @@ const (
 // on the coordinator during the lifetime of a transaction. Refresh spans
 // are used for SERIALIZABLE transactions to avoid client restarts.
 var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.transaction.max_refresh_spans_bytes",
 	"maximum number of bytes used to track refresh spans in serializable transactions",
 	256*1000,
@@ -309,9 +311,10 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	refreshTxn.Refresh(refreshTS)
 	log.VEventf(ctx, 2, "trying to refresh to %s because of %s", refreshTxn.ReadTimestamp, pErr)
 
-	// Try updating the txn spans so we can retry.
-	if ok := sr.tryUpdatingTxnSpans(ctx, refreshTxn); !ok {
+	// Try refreshing the txn spans so we can retry.
+	if refreshErr := sr.tryRefreshTxnSpans(ctx, refreshTxn); refreshErr != nil {
 		log.Eventf(ctx, "refresh failed; propagating original retry error")
+		// TODO(lidor): we should add refreshErr info to the returned error. See issue #41057.
 		return nil, pErr
 	}
 
@@ -440,7 +443,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 		return ba, nil
 	}
 
-	// If true, tryUpdatingTxnSpans will trivially succeed.
+	// If true, tryRefreshTxnSpans will trivially succeed.
 	refreshFree := ba.CanForwardReadTimestamp
 
 	// If true, this batch is guaranteed to fail without a refresh.
@@ -455,7 +458,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	// If the transaction cannot change its read timestamp, no refresh is
 	// possible.
 	if !sr.canForwardReadTimestamp(ba.Txn) {
-		return ba, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
+		return ba, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, nil)
 	}
 
 	refreshTxn := ba.Txn.Clone()
@@ -463,10 +466,10 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	log.VEventf(ctx, 2, "preemptively refreshing to timestamp %s before issuing %s",
 		refreshTxn.ReadTimestamp, ba)
 
-	// Try updating the txn spans at a timestamp that will allow us to commit.
-	if ok := sr.tryUpdatingTxnSpans(ctx, refreshTxn); !ok {
+	// Try refreshing the txn spans at a timestamp that will allow us to commit.
+	if refreshErr := sr.tryRefreshTxnSpans(ctx, refreshTxn); refreshErr != nil {
 		log.Eventf(ctx, "preemptive refresh failed; propagating retry error")
-		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
+		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn, refreshErr)
 	}
 
 	log.Eventf(ctx, "preemptive refresh succeeded")
@@ -474,16 +477,26 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptivelyLocked(
 	return ba, nil
 }
 
-func newRetryErrorOnFailedPreemptiveRefresh(txn *roachpb.Transaction) *roachpb.Error {
+func newRetryErrorOnFailedPreemptiveRefresh(
+	txn *roachpb.Transaction, refreshErr *roachpb.Error,
+) *roachpb.Error {
 	reason := roachpb.RETRY_SERIALIZABLE
 	if txn.WriteTooOld {
 		reason = roachpb.RETRY_WRITE_TOO_OLD
 	}
-	err := roachpb.NewTransactionRetryError(reason, "failed preemptive refresh")
-	return roachpb.NewErrorWithTxn(err, txn)
+	msg := "failed preemptive refresh"
+	if refreshErr != nil {
+		if refreshErr, ok := refreshErr.GetDetail().(*roachpb.RefreshFailedError); ok {
+			msg = fmt.Sprintf("%s due to a conflict: %s on key %s", msg, refreshErr.FailureReason(), refreshErr.Key)
+		} else {
+			msg = fmt.Sprintf("%s - unknown error: %s", msg, refreshErr)
+		}
+	}
+	retryErr := roachpb.NewTransactionRetryError(reason, msg)
+	return roachpb.NewErrorWithTxn(retryErr, txn)
 }
 
-// tryUpdatingTxnSpans sends Refresh and RefreshRange commands to all spans read
+// tryRefreshTxnSpans sends Refresh and RefreshRange commands to all spans read
 // during the transaction to ensure that no writes were written more recently
 // than sr.refreshedTimestamp. All implicated timestamp caches are updated with
 // the final transaction timestamp. Returns whether the refresh was successful
@@ -491,12 +504,12 @@ func newRetryErrorOnFailedPreemptiveRefresh(txn *roachpb.Transaction) *roachpb.E
 //
 // The provided transaction should be a Clone() of the original transaction with
 // its ReadTimestamp adjusted by the Refresh() method.
-func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
+func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
-) (ok bool) {
+) (err *roachpb.Error) {
 	// Track the result of the refresh in metrics.
 	defer func() {
-		if ok {
+		if err == nil {
 			sr.refreshSuccess.Inc(1)
 		} else {
 			sr.refreshFail.Inc(1)
@@ -508,11 +521,11 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
-		return false
+		return roachpb.NewError(errors.AssertionFailedf("can't refresh txn spans; not valid"))
 	} else if sr.refreshFootprint.empty() {
 		log.VEvent(ctx, 2, "there are no txn spans to refresh")
 		sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
-		return true
+		return nil
 	}
 
 	// Refresh all spans (merge first).
@@ -554,11 +567,11 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	if _, batchErr := sr.wrapped.SendLocked(ctx, refreshSpanBa); batchErr != nil {
 		log.VEventf(ctx, 2, "failed to refresh txn spans (%s)", batchErr)
-		return false
+		return batchErr
 	}
 
 	sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
-	return true
+	return nil
 }
 
 // appendRefreshSpans appends refresh spans from the supplied batch request,

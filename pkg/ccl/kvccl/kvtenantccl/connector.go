@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -140,7 +141,8 @@ func (connectorFactory) NewConnector(
 // cluster's ID and set Connector.rpcContext.ClusterID.
 func (c *Connector) Start(ctx context.Context) error {
 	startupC := c.startupC
-	if err := c.rpcContext.Stopper.RunAsyncTask(context.Background(), "connector", func(ctx context.Context) {
+	bgCtx := c.AnnotateCtx(context.Background())
+	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector", func(ctx context.Context) {
 		ctx = c.AnnotateCtx(ctx)
 		ctx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
@@ -451,6 +453,11 @@ func (c *Connector) UpdateSpanConfigEntries(
 		})
 		return err
 	})
+}
+
+// WithTxn implements the spanconfig.KVAccessor interface.
+func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
+	panic("not applicable")
 }
 
 // withClient is a convenience wrapper that executes the given closure while

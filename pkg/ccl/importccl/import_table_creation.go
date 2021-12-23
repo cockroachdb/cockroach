@@ -37,14 +37,6 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-const (
-	// We need to choose arbitrary database and table IDs. These aren't important,
-	// but they do match what would happen when creating a new database and
-	// table on an empty cluster.
-	defaultCSVParentID descpb.ID = keys.MinNonPredefinedUserDescID
-	defaultCSVTableID  descpb.ID = defaultCSVParentID + 2
-)
-
 type fkHandler struct {
 	allowed  bool
 	skip     bool

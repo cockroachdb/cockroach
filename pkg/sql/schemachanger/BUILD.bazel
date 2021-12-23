@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "schemachanger_test",
+    size = "small",
     srcs = [
         "end_to_end_test.go",
         "main_test.go",
@@ -28,6 +29,8 @@ go_test(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

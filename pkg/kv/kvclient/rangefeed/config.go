@@ -34,6 +34,7 @@ type config struct {
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	onFrontierAdvance    OnFrontierAdvance
+	extraPProfLabels     []string
 }
 
 type scanConfig struct {
@@ -51,6 +52,9 @@ type scanConfig struct {
 
 	// callback to invoke when initial scan of a span completed.
 	onSpanDone OnScanCompleted
+
+	// configures retry behavior
+	retryBehavior ScanRetryBehavior
 }
 
 type optionFunc func(*config)
@@ -177,13 +181,40 @@ func WithMemoryMonitor(mon *mon.BytesMonitor) Option {
 }
 
 // OnScanCompleted is called when the rangefeed initial scan completes scanning
-// the span.
-type OnScanCompleted func(ctx context.Context, sp roachpb.Span)
+// the span.  An error returned from this function is handled based on the WithOnInitialScanError
+// option.  If the error handler is not set, the scan is retried based on the
+// WithSAcanRetryBehavior option.
+type OnScanCompleted func(ctx context.Context, sp roachpb.Span) error
 
 // WithOnScanCompleted sets up a callback which is invoked when a span (or part of the span)
 // have been completed when performing an initial scan.
 func WithOnScanCompleted(fn OnScanCompleted) Option {
 	return optionFunc(func(c *config) {
 		c.onSpanDone = fn
+	})
+}
+
+// ScanRetryBehavior specifies how rangefeed should handle errors during initial scan.
+type ScanRetryBehavior int
+
+const (
+	// ScanRetryAll will retry all spans if any error occurred during initial scan.
+	ScanRetryAll ScanRetryBehavior = iota
+	// ScanRetryRemaining will retry remaining spans, including the one that failed.
+	ScanRetryRemaining
+)
+
+// WithScanRetryBehavior configures range feed to retry initial scan as per specified behavior.
+func WithScanRetryBehavior(b ScanRetryBehavior) Option {
+	return optionFunc(func(c *config) {
+		c.retryBehavior = b
+	})
+}
+
+// WithPProfLabel configures rangefeed to annotate go routines started by range feed
+// with the specified key=value label.
+func WithPProfLabel(key, value string) Option {
+	return optionFunc(func(c *config) {
+		c.extraPProfLabels = append(c.extraPProfLabels, key, value)
 	})
 }

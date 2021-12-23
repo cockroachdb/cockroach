@@ -47,6 +47,7 @@ const (
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
 // Google Cloud Storage.
 var gcsChunkingEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"cloudstorage.gs.chunking.enabled",
 	"enable chunking of file upload to Google Cloud Storage",
 	true, /* default */
@@ -196,9 +197,10 @@ func (g *gcsStorage) ReadFileAt(
 			// if file does not exist.  Regardless why we couldn't open the stream
 			// (whether its invalid bucket or file doesn't exist),
 			// return our internal ErrFileDoesNotExist.
-			err = errors.WithMessagef(
+			// nolint:errwrap
+			err = errors.Wrapf(
 				errors.Wrap(cloud.ErrFileDoesNotExist, "gcs object does not exist"),
-				"%s",
+				"%v",
 				err.Error(),
 			)
 		}

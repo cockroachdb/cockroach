@@ -20,7 +20,7 @@ type BoolSetting struct {
 	defaultValue bool
 }
 
-var _ extendedSetting = &BoolSetting{}
+var _ internalSetting = &BoolSetting{}
 
 // Get retrieves the bool value in the setting.
 func (b *BoolSetting) Get(sv *Values) bool {
@@ -92,15 +92,9 @@ func (b *BoolSetting) WithPublic() *BoolSetting {
 	return b
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (b *BoolSetting) WithSystemOnly() *BoolSetting {
-	b.common.systemOnly = true
-	return b
-}
-
 // RegisterBoolSetting defines a new setting with type bool.
-func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
+func RegisterBoolSetting(class Class, key, desc string, defaultValue bool) *BoolSetting {
 	setting := &BoolSetting{defaultValue: defaultValue}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }

@@ -81,6 +81,7 @@ const (
 var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
 var disableSyncRaftLog = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.raft_log.disable_synchronization_unsafe",
 	"set to true to disable synchronization on Raft log writes to persistent storage. "+
 		"Setting to true risks data loss or data corruption on server crashes. "+
@@ -99,6 +100,7 @@ const (
 
 // MaxCommandSize wraps "kv.raft.command.max_size".
 var MaxCommandSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"kv.raft.command.max_size",
 	"maximum size of a raft command",
 	MaxCommandSizeDefault,
@@ -114,6 +116,7 @@ var MaxCommandSize = settings.RegisterByteSizeSetting(
 // threshold and the current GC TTL (true) or just based on the GC threshold
 // (false).
 var StrictGCEnforcement = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.gc_ttl.strict_enforcement.enabled",
 	"if true, fail to serve requests at timestamps below the TTL even if the data still exists",
 	true,
@@ -196,6 +199,7 @@ type Replica struct {
 	log.AmbientContext
 
 	RangeID roachpb.RangeID // Only set by the constructor
+
 	// The start key of a Range remains constant throughout its lifetime (it does
 	// not change through splits or merges). This field carries a copy of
 	// r.mu.state.Desc.StartKey (and nil if the replica is not initialized). The
@@ -213,14 +217,27 @@ type Replica struct {
 	// The writes to this key happen in Replica.setStartKeyLocked.
 	startKey roachpb.RKey
 
+	// creationTime is the time that the Replica struct was initially constructed.
+	creationTime time.Time
+
 	store     *Store
 	abortSpan *abortspan.AbortSpan // Avoids anomalous reads after abort
 
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
 	leaseholderStats *replicaStats
-	// writeStats tracks the number of keys written by applied raft commands
-	// in order to aid in replica rebalancing decisions.
+	// writeStats tracks the number of mutations (as counted by the pebble batch
+	// to be applied to the state machine), and additionally, the number of keys
+	// added to MVCCStats, which notably may be approximate in the case of an
+	// AddSSTable. In other words, writeStats should loosely track the write
+	// activity on the replica on a per-key basis, though in an inconsistent way
+	// that in particular may overcount by a factor of roughly two.
+	//
+	// Note that while writeStats were originally introduced to aid in rebalancing
+	// decisions in [1], at the time of writing they are not used for that
+	// purpose.
+	//
+	// [1]: https://github.com/cockroachdb/cockroach/pull/16664
 	writeStats *replicaStats
 
 	// creatingReplica is set when a replica is created as uninitialized
@@ -307,6 +324,16 @@ type Replica struct {
 		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
+		//
+		// Replica objects always begin life in a quiescent state, as the field is
+		// set to true in the Replica constructor newUnloadedReplica. They unquiesce
+		// and set the field to false in either maybeUnquiesceAndWakeLeaderLocked or
+		// maybeUnquiesceWithOptionsLocked, which are called in response to Raft
+		// traffic.
+		//
+		// Only initialized replicas that have a non-nil internalRaftGroup are
+		// allowed to unquiesce and be Tick()'d. See canUnquiesceRLocked for an
+		// explanation of these conditions.
 		quiescent bool
 		// laggingFollowersOnQuiesce is the set of dead replicas that are not
 		// up-to-date with the rest of the quiescent Raft group. Nil if !quiescent.
@@ -976,7 +1003,7 @@ func (r *Replica) isSystemRange() bool {
 
 func (r *Replica) isSystemRangeRLocked() bool {
 	rem, _, err := keys.DecodeTenantPrefix(r.mu.state.Desc.StartKey.AsRawKey())
-	return err == nil && roachpb.Key(rem).Compare(keys.UserTableDataMin) < 0
+	return err == nil && roachpb.Key(rem).Compare(r.store.systemRangeStartUpperBound) < 0
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
@@ -1693,7 +1720,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// orphaned followers would fail to queue themselves for GC.) Unquiesce the
 	// range in case it managed to quiesce between when the Subsume request
 	// arrived and now, which is rare but entirely legal.
-	r.unquiesceLocked()
+	r.maybeUnquiesceLocked()
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
@@ -1831,11 +1858,13 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 // facilitates quick command application (requests generally need to make it to
 // both the lease holder and the raft leader before being applied by other
 // replicas).
-func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Context) {
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
+	ctx context.Context, now hlc.ClockTimestamp,
+) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
-	status := r.leaseStatusAtRLocked(ctx, r.Clock().NowAsClockTimestamp())
+	status := r.leaseStatusAtRLocked(ctx, now)
 	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
 		return
 	}

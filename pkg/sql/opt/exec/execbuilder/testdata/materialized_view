@@ -38,7 +38,3 @@ vectorized: true
       missing stats
       table: v@i
       spans: [/3 - /3]
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX v@i; CREATE INDEX ON v (y) STORING (x);

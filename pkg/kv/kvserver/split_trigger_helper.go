@@ -13,42 +13,47 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-const maxDelaySplitTriggerTicks = 100
+const maxDelaySplitTriggerDur = 20 * time.Second
 
 type replicaMsgAppDropper Replica
 
-func (rd *replicaMsgAppDropper) Args() (initialized bool, ticks int) {
+func (rd *replicaMsgAppDropper) Args() (initialized bool, age time.Duration) {
 	r := (*Replica)(rd)
 	r.mu.RLock()
 	initialized = r.isInitializedRLocked()
-	ticks = r.mu.ticks
+	creationTime := r.creationTime
 	r.mu.RUnlock()
-	return initialized, ticks
+	age = timeutil.Since(creationTime)
+	return initialized, age
 }
 
-func (rd *replicaMsgAppDropper) ShouldDrop(startKey roachpb.RKey) (fmt.Stringer, bool) {
+func (rd *replicaMsgAppDropper) ShouldDrop(
+	ctx context.Context, startKey roachpb.RKey,
+) (fmt.Stringer, bool) {
 	lhsRepl := (*Replica)(rd).store.LookupReplica(startKey)
 	if lhsRepl == nil {
 		return nil, false
 	}
-	lhsRepl.store.gcQueue.AddAsync(context.Background(), lhsRepl, replicaGCPriorityDefault)
+	lhsRepl.store.replicaGCQueue.AddAsync(ctx, lhsRepl, replicaGCPriorityDefault)
 	return lhsRepl, true
 }
 
 type msgAppDropper interface {
-	Args() (initialized bool, ticks int)
-	ShouldDrop(key roachpb.RKey) (fmt.Stringer, bool)
+	Args() (initialized bool, age time.Duration)
+	ShouldDrop(ctx context.Context, key roachpb.RKey) (fmt.Stringer, bool)
 }
 
 // maybeDropMsgApp returns true if the incoming Raft message should be dropped.
 // It does so if the recipient replica is uninitialized (i.e. has no state) and
-// is waiting for a split trigger to apply,in which case  delivering the message
+// is waiting for a split trigger to apply,in which case delivering the message
 // in this situation would result in an unnecessary Raft snapshot: the MsgApp
 // would be rejected and the rejection would prompt the leader to send a
 // snapshot, while the split trigger would likely populate the replica "for
@@ -69,7 +74,7 @@ func maybeDropMsgApp(
 	// message via msg.Context. Check if this replica might be waiting for a
 	// split trigger. The first condition for that is not knowing the key
 	// bounds, i.e. not being initialized.
-	initialized, ticks := r.Args()
+	initialized, age := r.Args()
 
 	if initialized {
 		return false
@@ -125,7 +130,7 @@ func maybeDropMsgApp(
 
 	// NB: the caller is likely holding r.raftMu, but that's OK according to
 	// the lock order. We're not allowed to hold r.mu, but we don't.
-	lhsRepl, drop := r.ShouldDrop(startKey)
+	lhsRepl, drop := r.ShouldDrop(ctx, startKey)
 	if !drop {
 		return false
 	}
@@ -133,7 +138,7 @@ func maybeDropMsgApp(
 	if verbose {
 		log.Infof(ctx, "start key is contained in replica %v", lhsRepl)
 	}
-	if ticks > maxDelaySplitTriggerTicks {
+	if age > maxDelaySplitTriggerDur {
 		// This is an escape hatch in case there are other scenarios (missed in
 		// the above analysis) in which a split trigger just isn't coming. If
 		// there are, the idea is that we notice this log message and improve
@@ -141,8 +146,8 @@ func maybeDropMsgApp(
 		log.Warningf(
 			ctx,
 			"would have dropped incoming MsgApp to wait for split trigger, "+
-				"but allowing due to %d (>%d) ticks",
-			ticks, maxDelaySplitTriggerTicks)
+				"but allowing because uninitialized replica was created %s (>%s) ago",
+			age, maxDelaySplitTriggerDur)
 		return false
 	}
 	if verbose {

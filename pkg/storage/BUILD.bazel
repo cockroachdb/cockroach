@@ -27,6 +27,7 @@ go_library(
         "pebble_iterator.go",
         "pebble_merge.go",
         "pebble_mvcc_scanner.go",
+        "replicas_storage.go",
         "resource_limiter.go",
         "row_counter.go",
         "slice.go",
@@ -82,6 +83,7 @@ go_library(
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_elastic_gosigar//:gosigar",
         "@com_github_gogo_protobuf//proto",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
 

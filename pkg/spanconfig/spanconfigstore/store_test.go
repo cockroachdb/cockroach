@@ -181,9 +181,9 @@ func TestRandomized(t *testing.T) {
 		sp, conf, op := genRandomSpan(), getRandomConf(), getRandomOp()
 		switch op {
 		case "set":
-			return spanconfig.Update{Span: sp, Config: conf}
+			return spanconfig.Addition(sp, conf)
 		case "del":
-			return spanconfig.Update{Span: sp}
+			return spanconfig.Deletion(sp)
 		default:
 		}
 		t.Fatalf("unexpected op: %s", op)
@@ -318,18 +318,9 @@ func TestStoreClone(t *testing.T) {
 
 	everything := spanconfigtestutils.ParseSpan(t, "[a, z)")
 	updates := []spanconfig.Update{
-		{
-			Span:   spanconfigtestutils.ParseSpan(t, "[a, b)"),
-			Config: spanconfigtestutils.ParseConfig(t, "A"),
-		},
-		{
-			Span:   spanconfigtestutils.ParseSpan(t, "[c, d)"),
-			Config: spanconfigtestutils.ParseConfig(t, "C"),
-		},
-		{
-			Span:   spanconfigtestutils.ParseSpan(t, "[e, f)"),
-			Config: spanconfigtestutils.ParseConfig(t, "E"),
-		},
+		spanconfig.Addition(spanconfigtestutils.ParseSpan(t, "[a, b)"), spanconfigtestutils.ParseConfig(t, "A")),
+		spanconfig.Addition(spanconfigtestutils.ParseSpan(t, "[c, d)"), spanconfigtestutils.ParseConfig(t, "C")),
+		spanconfig.Addition(spanconfigtestutils.ParseSpan(t, "[e, f)"), spanconfigtestutils.ParseConfig(t, "E")),
 	}
 
 	original := New(roachpb.TestingDefaultSpanConfig())

@@ -8,11 +8,10 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-PreCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
+PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -20,12 +19,23 @@ PreCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
     [UserPrivileges:{DescID: 54, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 54, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
     *scop.DrainDescriptorName
       TableID: 54
-PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
@@ -43,6 +53,12 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
         Username: root
     *scop.CreateGcJobForTable
       TableID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
 
 create-table
 CREATE TABLE defaultdb.blog_posts (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
@@ -58,11 +74,10 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
-PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
+PreCommitPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
@@ -70,6 +85,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
     [UserPrivileges:{DescID: 54, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 54, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
     [DefaultExpression:{DescID: 55, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
@@ -95,7 +111,23 @@ PreCommitPhase non-revertible stage 1 of 1 with 8 MutationType ops
       TableID: 56
     *scop.UpdateRelationDeps
       TableID: 56
-PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
   ops:
@@ -113,40 +145,56 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
         Username: root
     *scop.CreateGcJobForTable
       TableID: 54
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
 
 
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 - from: [Namespace:{DescID: 54, Name: sq1}, ABSENT]
-  to:   [Sequence:{DescID: 54}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
-- from: [Owner:{DescID: 54}, ABSENT]
-  to:   [Sequence:{DescID: 54}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-  to:   [Sequence:{DescID: 54}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT]
-  to:   [Sequence:{DescID: 54}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [Sequence:{DescID: 54}, ABSENT]
-  to:   [Namespace:{DescID: 54, Name: sq1}, ABSENT]
-  kind: HappensAfter
+  to:   [Sequence:{DescID: 54}, ABSENT]
+  kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [UserPrivileges:{DescID: 54, Username: admin}, ABSENT]
-  to:   [Sequence:{DescID: 54}, DROPPED]
-  kind: HappensAfter
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [Locality:{DescID: 54}, ABSENT]
+  kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 54, Username: public}, ABSENT]
-  to:   [Sequence:{DescID: 54}, DROPPED]
-  kind: HappensAfter
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [Namespace:{DescID: 54, Name: sq1}, ABSENT]
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [Owner:{DescID: 54}, ABSENT]
+  kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 54, Username: root}, ABSENT]
-  to:   [Sequence:{DescID: 54}, DROPPED]
-  kind: HappensAfter
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [UserPrivileges:{DescID: 54, Username: admin}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [UserPrivileges:{DescID: 54, Username: public}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [Sequence:{DescID: 54}, DROPPED]
+  to:   [UserPrivileges:{DescID: 54, Username: root}, ABSENT]
+  kind: Precedence
   rule: table deps removal happens after table marked as dropped

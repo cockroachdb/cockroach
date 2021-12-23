@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
@@ -354,7 +353,6 @@ var _ catalog.TypeDescriptorResolver = (*TestState)(nil)
 func (s *TestState) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-
 	desc, err := s.mustReadImmutableDescriptor(id)
 	if err != nil {
 		return tree.TypeName{}, nil, err
@@ -459,59 +457,6 @@ func (s *TestState) AddSyntheticDescriptor(desc catalog.Descriptor) {
 // RemoveSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
 func (s *TestState) RemoveSyntheticDescriptor(id descpb.ID) {
 	s.syntheticDescriptors.Remove(id)
-}
-
-// AddPartitioning implements the scmutationexec.CatalogReader interface.
-func (s *TestState) AddPartitioning(
-	tableDesc *tabledesc.Mutable,
-	_ *descpb.IndexDescriptor,
-	partitionFields []string,
-	listPartition []*scpb.ListPartition,
-	rangePartition []*scpb.RangePartitions,
-	_ []tree.Name,
-	_ bool,
-) error {
-	// Deserialize back into tree based types.
-	partitionBy := &tree.PartitionBy{}
-	partitionBy.List = make([]tree.ListPartition, 0, len(listPartition))
-	partitionBy.Range = make([]tree.RangePartition, 0, len(rangePartition))
-	for _, partition := range listPartition {
-		exprs, err := parser.ParseExprs(partition.Expr)
-		if err != nil {
-			return err
-		}
-		partitionBy.List = append(partitionBy.List,
-			tree.ListPartition{
-				Name:  tree.UnrestrictedName(partition.Name),
-				Exprs: exprs,
-			})
-	}
-	for _, partition := range rangePartition {
-		toExpr, err := parser.ParseExprs(partition.To)
-		if err != nil {
-			return err
-		}
-		fromExpr, err := parser.ParseExprs(partition.From)
-		if err != nil {
-			return err
-		}
-		partitionBy.Range = append(partitionBy.Range,
-			tree.RangePartition{
-				Name: tree.UnrestrictedName(partition.Name),
-				To:   toExpr,
-				From: fromExpr,
-			})
-	}
-	partitionBy.Fields = make(tree.NameList, 0, len(partitionFields))
-	for _, field := range partitionFields {
-		partitionBy.Fields = append(partitionBy.Fields, tree.Name(field))
-	}
-	// For the purpose of testing we will only track
-	// these values.
-	s.partitioningInfo[tableDesc.GetID()] = &testPartitionInfo{
-		PartitionBy: *partitionBy,
-	}
-	return nil
 }
 
 var _ scexec.Catalog = (*TestState)(nil)
@@ -654,7 +599,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		b.s.descriptors.Upsert(desc)
 	}
 	for _, deletedID := range b.descriptorsToDelete.Ordered() {
-		b.s.LogSideEffectf("deleted descriptor #%d", deletedID)
+		b.s.LogSideEffectf("delete descriptor #%d", deletedID)
 		b.s.descriptors.Remove(deletedID)
 	}
 	return catalog.Validate(ctx, b.s, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...).CombinedError()
@@ -684,75 +629,51 @@ func (s *TestState) GetNamespaceEntry(
 	return s.namespace[nameInfo], nil
 }
 
-// IndexBackfiller implements the scexec.Dependencies interface.
-func (s *TestState) IndexBackfiller() scexec.IndexBackfiller {
+// Partitioner implements the scexec.Dependencies interface.
+func (s *TestState) Partitioner() scmutationexec.Partitioner {
 	return s
 }
 
-var _ scexec.IndexBackfiller = (*TestState)(nil)
-
-// BackfillIndex implements the scexec.IndexBackfiller interface.
-func (s *TestState) BackfillIndex(
+// AddPartitioning implements the scmutationexec.Partitioner interface.
+func (s *TestState) AddPartitioning(
 	_ context.Context,
-	_ scexec.JobProgressTracker,
-	_ catalog.TableDescriptor,
-	_ descpb.IndexID,
-	_ ...descpb.IndexID,
+	tbl *tabledesc.Mutable,
+	index catalog.Index,
+	_ []string,
+	_ []*scpb.ListPartition,
+	_ []*scpb.RangePartitions,
+	_ []tree.Name,
+	_ bool,
 ) error {
+	s.LogSideEffectf("skip partitioning index #%d in table #%d", index.GetID(), tbl.GetID())
 	return nil
 }
+
+var _ scmutationexec.Partitioner = (*TestState)(nil)
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.
 func (s *TestState) IndexSpanSplitter() scexec.IndexSpanSplitter {
+	return s.indexSpanSplitter
+}
+
+// IndexBackfiller implements the scexec.Dependencies interface.
+func (s *TestState) IndexBackfiller() scexec.Backfiller {
+	return s.backfiller
+}
+
+// PeriodicProgressFlusher implements the scexec.Dependencies interface.
+func (s *TestState) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
+	return scdeps.NewNoopPeriodicProgressFlusher()
+}
+
+// TransactionalJobRegistry implements the scexec.Dependencies interface.
+func (s *TestState) TransactionalJobRegistry() scexec.TransactionalJobRegistry {
 	return s
 }
 
-var _ scexec.IndexSpanSplitter = (*TestState)(nil)
+var _ scexec.TransactionalJobRegistry = (*TestState)(nil)
 
-// MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
-func (s *TestState) MaybeSplitIndexSpans(
-	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index,
-) error {
-	return nil
-}
-
-// JobProgressTracker implements the scexec.Dependencies interface.
-func (s *TestState) JobProgressTracker() scexec.JobProgressTracker {
-	return s
-}
-
-var _ scexec.JobProgressTracker = (*TestState)(nil)
-
-// GetResumeSpans implements the scexec.JobProgressTracker interface.
-func (s *TestState) GetResumeSpans(
-	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
-) ([]roachpb.Span, error) {
-	desc, err := s.mustReadImmutableDescriptor(tableID)
-	if err != nil {
-		return nil, err
-	}
-	table, err := catalog.AsTableDescriptor(desc)
-	if err != nil {
-		return nil, err
-	}
-	return []roachpb.Span{table.IndexSpan(s.Codec(), indexID)}, nil
-}
-
-// SetResumeSpans implements the scexec.JobProgressTracker interface.
-func (s *TestState) SetResumeSpans(
-	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span,
-) error {
-	panic("implement me")
-}
-
-// TransactionalJobCreator implements the scexec.Dependencies interface.
-func (s *TestState) TransactionalJobCreator() scexec.TransactionalJobCreator {
-	return s
-}
-
-var _ scexec.TransactionalJobCreator = (*TestState)(nil)
-
-// CreateJob implements the scexec.TransactionalJobCreator interface.
+// CreateJob implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 	if record.JobID == 0 {
 		return errors.New("invalid 0 job ID")
@@ -767,9 +688,9 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 	return nil
 }
 
-// UpdateSchemaChangeJob implements the scexec.TransactionalJobCreator interface.
+// UpdateSchemaChangeJob implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) UpdateSchemaChangeJob(
-	ctx context.Context, id jobspb.JobID, fn scexec.JobProgressUpdateFunc,
+	ctx context.Context, id jobspb.JobID, fn scexec.JobUpdateCallback,
 ) error {
 	var scJob *jobs.Record
 	for i, job := range s.jobs {
@@ -798,27 +719,43 @@ func (s *TestState) UpdateSchemaChangeJob(
 		ResumeErrors:                 nil,
 		CleanupErrors:                nil,
 		FinalResumeError:             nil,
-		Noncancelable:                false,
+		Noncancelable:                scJob.NonCancelable,
 		Details:                      jobspb.WrapPayloadDetails(scJob.Details),
 		PauseReason:                  "",
 		RetriableExecutionFailureLog: nil,
 	}
-	return fn(jobs.JobMetadata{
+	updateProgress := func(progress *jobspb.Progress) {
+		scJob.Progress = *progress.GetNewSchemaChange()
+		s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
+	}
+	setNonCancelable := func() {
+		scJob.NonCancelable = true
+		s.LogSideEffectf("set schema change job #%d to non-cancellable", scJob.JobID)
+	}
+	md := jobs.JobMetadata{
 		ID:       scJob.JobID,
 		Status:   jobs.StatusRunning,
 		Payload:  &payload,
 		Progress: &progress,
 		RunStats: nil,
-	}, func(progress *jobspb.Progress) {
-		scJob.Progress = *progress.GetNewSchemaChange()
-		s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
-	})
+	}
+	return fn(md, updateProgress, setNonCancelable)
 }
 
-// MakeJobID implements the scexec.TransactionalJobCreator interface.
+// MakeJobID implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) MakeJobID() jobspb.JobID {
+	if s.jobCounter == 0 {
+		// Reserve 1 for the schema changer job.
+		s.jobCounter = 1
+	}
 	s.jobCounter++
 	return jobspb.JobID(s.jobCounter)
+}
+
+// SchemaChangerJobID implements the scexec.TransactionalJobRegistry
+// interface.
+func (s *TestState) SchemaChangerJobID() jobspb.JobID {
+	return 1
 }
 
 // TestingKnobs exposes the testing knobs.
@@ -846,24 +783,31 @@ func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err 
 
 // ValidateForwardIndexes implements the index validator interface.
 func (s *TestState) ValidateForwardIndexes(
-	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
+	_ context.Context,
+	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	withFirstMutationPublic bool,
-	gatherAllInvalid bool,
-	override sessiondata.InternalExecutorOverride,
+	_ sessiondata.InternalExecutorOverride,
 ) error {
+	ids := make([]descpb.IndexID, len(indexes))
+	for i, idx := range indexes {
+		ids[i] = idx.GetID()
+	}
+	s.LogSideEffectf("validate forward indexes %v in table #%d", ids, tbl.GetID())
 	return nil
 }
 
 // ValidateInvertedIndexes implements the index validator interface.
 func (s *TestState) ValidateInvertedIndexes(
-	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
+	_ context.Context,
+	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	gatherAllInvalid bool,
-	override sessiondata.InternalExecutorOverride,
+	_ sessiondata.InternalExecutorOverride,
 ) error {
+	ids := make([]descpb.IndexID, len(indexes))
+	for i, idx := range indexes {
+		ids[i] = idx.GetID()
+	}
+	s.LogSideEffectf("validate inverted indexes %v in table #%d", ids, tbl.GetID())
 	return nil
 }
 
@@ -872,15 +816,12 @@ func (s *TestState) IndexValidator() scexec.IndexValidator {
 	return s
 }
 
-// EnqueueEvent implements scexec.EventLogger
-func (s *TestState) EnqueueEvent(
-	_ context.Context, descID descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
+// LogEvent implements scexec.EventLogger
+func (s *TestState) LogEvent(
+	_ context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
 ) error {
-	return nil
-}
-
-// ProcessAndSubmitEvents implements scexec.EventLogger
-func (s *TestState) ProcessAndSubmitEvents(ctx context.Context) error {
+	s.LogSideEffectf("write %T to event log for descriptor #%d: %s",
+		event, descID, metadata.Statement)
 	return nil
 }
 

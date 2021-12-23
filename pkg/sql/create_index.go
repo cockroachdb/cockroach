@@ -88,27 +88,13 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	return &createIndexNode{tableDesc: tableDesc, n: n}, nil
 }
 
-// setupFamilyAndConstraintForShard adds a newly-created shard column into its appropriate
-// family (see comment above GetColumnFamilyForShard) and adds a check constraint ensuring
-// that the shard column's value is within [0..ShardBuckets-1]. This method is called when
-// a `CREATE INDEX` statement is issued for the creation of a sharded index that *does
-// not* re-use a pre-existing shard column.
-func (p *planner) setupFamilyAndConstraintForShard(
-	ctx context.Context,
-	tableDesc *tabledesc.Mutable,
-	shardCol catalog.Column,
-	idxColumns []string,
-	buckets int32,
+// setupConstraintForShard adds a check constraint ensuring that the shard
+// column's value is within [0..ShardBuckets-1]. This method is called when a
+// `CREATE INDEX`/`ALTER PRIMARY KEY` statement is issued for the creation of a
+// sharded index that *does not* re-use a pre-existing shard column.
+func (p *planner) setupConstraintForShard(
+	ctx context.Context, tableDesc *tabledesc.Mutable, shardCol catalog.Column, buckets int32,
 ) error {
-	family := tabledesc.GetColumnFamilyForShard(tableDesc, idxColumns)
-	if family == "" {
-		return errors.AssertionFailedf("could not find column family for the first column in the index column set")
-	}
-	// Assign shard column to the family of the first column in its index set, and do it
-	// before `AllocateIDs()` assigns it to the primary column family.
-	if err := tableDesc.AddColumnToFamilyMaybeCreate(shardCol.GetName(), family, false, false); err != nil {
-		return err
-	}
 	// Assign an ID to the newly-added shard column, which is needed for the creation
 	// of a valid check constraint.
 	if err := tableDesc.AllocateIDs(ctx); err != nil {
@@ -147,11 +133,11 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	return nil
 }
 
-// MakeIndexDescriptor creates an index descriptor from a CreateIndex node and optionally
+// makeIndexDescriptor creates an index descriptor from a CreateIndex node and optionally
 // adds a hidden computed shard column (along with its check constraint) in case the index
 // is hash sharded. Note that `tableDesc` will be modified when this method is called for
 // a hash sharded index.
-func MakeIndexDescriptor(
+func makeIndexDescriptor(
 	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
 	// Ensure that the columns we want to index are accessible before trying to
@@ -255,8 +241,7 @@ func MakeIndexDescriptor(
 		}
 		columns = newColumns
 		if newColumn {
-			if err := params.p.setupFamilyAndConstraintForShard(params.ctx, tableDesc, shardCol,
-				indexDesc.Sharded.ColumnNames, indexDesc.Sharded.ShardBuckets); err != nil {
+			if err := params.p.setupConstraintForShard(params.ctx, tableDesc, shardCol, indexDesc.Sharded.ShardBuckets); err != nil {
 				return nil, err
 			}
 		}
@@ -581,12 +566,6 @@ func maybeCreateAndAddShardCol(
 		} else {
 			desc.AddColumnMutation(shardColDesc, descpb.DescriptorMutation_ADD)
 		}
-		if !shardColDesc.Virtual {
-			primaryIndex := desc.GetPrimaryIndex().IndexDescDeepCopy()
-			primaryIndex.StoreColumnIDs = append(primaryIndex.StoreColumnIDs, shardColDesc.ID)
-			primaryIndex.StoreColumnNames = append(primaryIndex.StoreColumnNames, shardColDesc.Name)
-			desc.SetPrimaryIndex(primaryIndex)
-		}
 		created = true
 	}
 	shardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
@@ -629,7 +608,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
-	indexDesc, err := MakeIndexDescriptor(params, *n.n, n.tableDesc)
+	indexDesc, err := makeIndexDescriptor(params, *n.n, n.tableDesc)
 	if err != nil {
 		return err
 	}

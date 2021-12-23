@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -53,10 +52,11 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	}
 
 	return &changePrivilegesNode{
-		isGrant:      true,
-		targets:      n.Targets,
-		grantees:     grantees,
-		desiredprivs: n.Privileges,
+		isGrant:         true,
+		withGrantOption: n.WithGrantOption,
+		targets:         n.Targets,
+		grantees:        grantees,
+		desiredprivs:    n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Grant(grantee, privileges, n.WithGrantOption)
 		},
@@ -83,10 +83,11 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 	return &changePrivilegesNode{
-		isGrant:      false,
-		targets:      n.Targets,
-		grantees:     grantees,
-		desiredprivs: n.Privileges,
+		isGrant:         false,
+		withGrantOption: n.GrantOptionFor,
+		targets:         n.Targets,
+		grantees:        grantees,
+		desiredprivs:    n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
 		},
@@ -97,6 +98,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 
 type changePrivilegesNode struct {
 	isGrant         bool
+	withGrantOption bool
 	targets         tree.TargetList
 	grantees        []security.SQLUsername
 	desiredprivs    privilege.List
@@ -120,6 +122,18 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
 		return err
+	}
+	// The public role is not allowed to have grant options.
+	if n.isGrant && n.withGrantOption {
+		for _, grantee := range n.grantees {
+			if grantee.IsPublicRole() {
+				return pgerror.Newf(
+					pgcode.InvalidGrantOperation,
+					"grant options cannot be granted to %q role",
+					security.PublicRoleName(),
+				)
+			}
+		}
 	}
 
 	var err error
@@ -163,12 +177,16 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		if n.isGrant {
 			op = "GRANT"
 		}
-		if descriptor.GetID() < keys.MinUserDescID {
+		if catalog.IsSystemDescriptor(descriptor) {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", op)
 		}
 
-		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
-			return err
+		// The check for GRANT is only needed before the v22.1 upgrade is finalized.
+		// Otherwise, we check grant options later in this function.
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+			if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
+				return err
+			}
 		}
 
 		if len(n.desiredprivs) > 0 {
@@ -182,7 +200,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			privileges := descriptor.GetPrivileges()
 
 			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				err := p.CheckGrantOption(ctx, descriptor, n.desiredprivs, n.isGrant)
+				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, n.isGrant)
 				if err != nil {
 					return err
 				}

@@ -26,7 +26,7 @@ import (
 // ValidateForwardIndexesFn callback function for validating forward indexes.
 type ValidateForwardIndexesFn func(
 	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
+	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
@@ -38,9 +38,10 @@ type ValidateForwardIndexesFn func(
 type ValidateInvertedIndexesFn func(
 	ctx context.Context,
 	codec keys.SQLCodec,
-	tableDesc catalog.TableDescriptor,
+	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
 ) error
@@ -62,10 +63,8 @@ type indexValidator struct {
 // ValidateForwardIndexes checks that the indexes have entries for all the rows.
 func (iv indexValidator) ValidateForwardIndexes(
 	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
+	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	withFirstMutationPublic bool,
-	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	// Set up a new transaction with the current timestamp.
@@ -77,15 +76,16 @@ func (iv indexValidator) ValidateForwardIndexes(
 		}
 		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
 	}
-	return iv.validateForwardIndexes(ctx, tableDesc, indexes, txnRunner, withFirstMutationPublic, gatherAllInvalid, override)
+	const withFirstMutationPublic = true
+	const gatherAllInvalid = false
+	return iv.validateForwardIndexes(ctx, tbl, indexes, txnRunner, withFirstMutationPublic, gatherAllInvalid, override)
 }
 
 // ValidateInvertedIndexes checks that the indexes have entries for all the rows.
 func (iv indexValidator) ValidateInvertedIndexes(
 	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
+	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	// Set up a new transaction with the current timestamp.
@@ -97,7 +97,9 @@ func (iv indexValidator) ValidateInvertedIndexes(
 		}
 		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
 	}
-	return iv.validateInvertedIndexes(ctx, iv.codec, tableDesc, indexes, txnRunner, gatherAllInvalid, override)
+	const withFirstMutationPublic = true
+	const gatherAllInvalid = false
+	return iv.validateInvertedIndexes(ctx, iv.codec, tbl, indexes, txnRunner, withFirstMutationPublic, gatherAllInvalid, override)
 }
 
 // NewIndexValidator creates a IndexValidator interface

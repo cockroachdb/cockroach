@@ -8,6 +8,9 @@ toolchain(
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
+    target_settings = [
+        ":cross",
+    ],
     toolchain = "@toolchain_cross_x86_64-unknown-linux-gnu//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
@@ -29,6 +32,9 @@ toolchain(
     target_compatible_with = [
         "@platforms//os:windows",
         "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":cross",
     ],
     toolchain = "@toolchain_cross_x86_64-w64-mingw32//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
@@ -52,6 +58,9 @@ toolchain(
         "@platforms//os:macos",
         "@platforms//cpu:x86_64",
     ],
+    target_settings = [
+        ":cross",
+    ],
     toolchain = "@toolchain_cross_x86_64-apple-darwin19//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
@@ -74,6 +83,9 @@ toolchain(
         "@platforms//os:linux",
         "@platforms//cpu:arm64",
     ],
+    target_settings = [
+        ":cross",
+    ],
     toolchain = "@toolchain_cross_aarch64-unknown-linux-gnu//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
@@ -83,6 +95,31 @@ platform(
     constraint_values = [
         "@platforms//os:linux",
         "@platforms//cpu:arm64",
+    ],
+)
+
+toolchain(
+    name = "dev_darwin_x86_64_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+    target_settings = [
+        ":dev",
+    ],
+    toolchain = "@toolchain_dev_darwin_x86-64//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "darwin_x86_64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
     ],
 )
 
@@ -110,6 +147,13 @@ config_setting(
     name = "dev",
     define_values = {
         "cockroach_bazel_dev": "y",
+    },
+)
+
+config_setting(
+    name = "cross",
+    define_values = {
+        "cockroach_cross": "y",
     },
 )
 

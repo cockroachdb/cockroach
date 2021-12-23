@@ -453,6 +453,8 @@ type flowCreatorHelper interface {
 	// addFlowCoordinator adds the FlowCoordinator to the flow. This is only
 	// done on the gateway node.
 	addFlowCoordinator(coordinator *FlowCoordinator)
+	// getCtxDone returns done channel of the context of this flow.
+	getFlowCtxDone() <-chan struct{}
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -471,8 +473,13 @@ type remoteComponentCreator interface {
 		typs []*types.T,
 		getStats func() []*execinfrapb.ComponentStats,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
-		admissionOpts admissionOptions) (*colrpc.Inbox, error)
+	newInbox(
+		allocator *colmem.Allocator,
+		typs []*types.T,
+		streamID execinfrapb.StreamID,
+		flowCtxDone <-chan struct{},
+		admissionOpts admissionOptions,
+	) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -490,10 +497,13 @@ func (vectorizedRemoteComponentCreator) newInbox(
 	allocator *colmem.Allocator,
 	typs []*types.T,
 	streamID execinfrapb.StreamID,
+	flowCtxDone <-chan struct{},
 	admissionOpts admissionOptions,
 ) (*colrpc.Inbox, error) {
 	return colrpc.NewInboxWithAdmissionControl(
-		allocator, typs, streamID, admissionOpts.admissionQ, admissionOpts.admissionInfo)
+		allocator, typs, streamID, flowCtxDone,
+		admissionOpts.admissionQ, admissionOpts.admissionInfo,
+	)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -527,10 +537,6 @@ type vectorizedFlowCreator struct {
 	// numOutboxes counts how many colrpc.Outbox'es have been set up on this
 	// node. It must be accessed atomically.
 	numOutboxes int32
-	// numOutboxesExited is an atomic that keeps track of how many outboxes have
-	// exited. When numOutboxesExited equals numOutboxes, the cancellation
-	// function for the flow is called on the non-gateway nodes.
-	numOutboxesExited int32
 	// numOutboxesDrained is an atomic that keeps track of how many outboxes
 	// have been drained. When numOutboxesDrained equals numOutboxes, flow-level
 	// metadata is added to a flow-level span on the non-gateway nodes.
@@ -686,17 +692,6 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			flowCtxCancel,
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
 		)
-		// When the last Outbox on this node exits, we want to make sure that
-		// everything is shutdown; namely, we need to call cancelFn if:
-		// - it is the last Outbox
-		// - the node is not the gateway (there is a flow coordinator on the
-		// gateway that will take care of the cancellation itself)
-		// - cancelFn is non-nil (it can be nil in tests).
-		// Calling cancelFn will cancel the context that all infrastructure on this
-		// node is listening on, so it will shut everything down.
-		if atomic.AddInt32(&s.numOutboxesExited, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode && flowCtxCancel != nil {
-			flowCtxCancel()
-		}
 	}
 	s.accumulateAsyncComponent(run)
 	return outbox, nil
@@ -845,6 +840,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 				input.ColumnTypes,
 				inputStream.StreamID,
+				s.flowCreatorHelper.getFlowCtxDone(),
 				admissionOptions{
 					admissionQ:    flowCtx.Cfg.SQLSQLResponseAdmissionQ,
 					admissionInfo: s.admissionInfo,
@@ -1212,9 +1208,9 @@ func (s vectorizedInboundStreamHandler) Run(
 	ctx context.Context,
 	stream execinfrapb.DistSQL_FlowStreamServer,
 	_ *execinfrapb.ProducerMessage,
-	f *flowinfra.FlowBase,
+	_ *flowinfra.FlowBase,
 ) error {
-	return s.RunWithStream(ctx, stream, f.GetCtxDone())
+	return s.RunWithStream(ctx, stream)
 }
 
 // Timeout is part of the flowinfra.InboundStreamHandler interface.
@@ -1278,6 +1274,10 @@ func (r *vectorizedFlowCreatorHelper) addFlowCoordinator(f *FlowCoordinator) {
 	r.f.SetProcessors(r.processors)
 }
 
+func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
+	return r.f.GetCtxDone()
+}
+
 func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return r.f.GetCancelFlowFn()
 }
@@ -1332,6 +1332,10 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
 func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
+
+func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
+	return nil
+}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil

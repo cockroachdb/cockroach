@@ -169,6 +169,8 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 	// In CockroachDB, root is our substitute for the postgres user.
 	publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 	// By default, everyone has USAGE and CREATE on the public schema.
+	// Once https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
+	// the public role will no longer have CREATE privileges.
 	publicSchemaPrivileges.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false)
 	publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   dbID,
@@ -354,6 +356,7 @@ const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
 
 // DefaultPrimaryRegion is a cluster setting that contains the default primary region.
 var DefaultPrimaryRegion = settings.RegisterStringSetting(
+	settings.TenantWritable,
 	DefaultPrimaryRegionClusterSettingName,
 	`if not empty, all databases created without a PRIMARY REGION will `+
 		`implicitly have the given PRIMARY REGION`,

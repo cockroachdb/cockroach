@@ -152,6 +152,12 @@ var charts = []sectionDescription{
 				Percentiles: false,
 				Metrics:     []string{"node-id"},
 			},
+			{
+				Title:       "License TTL",
+				Downsampler: DescribeAggregator_MIN,
+				Percentiles: false,
+				Metrics:     []string{"seconds_until_enterprise_license_expiry"},
+			},
 		},
 	},
 	{
@@ -421,6 +427,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.err.notleaseholdererrtype",
 					"distsender.rpc.err.oprequirestxnerrtype",
 					"distsender.rpc.err.optimisticevalconflictserrtype",
+					"distsender.rpc.err.refreshfailederrtype",
 					"distsender.rpc.err.raftgroupdeletederrtype",
 					"distsender.rpc.err.rangefeedretryerrtype",
 					"distsender.rpc.err.rangekeymismatcherrtype",
@@ -717,7 +724,7 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Organization: [][]string{{KVTransactionLayer, "MVCC Garbage Collection (GC)", "Keys"}},
 		Charts: []chartDescription{
 			{
 				Title: "AbortSpan",
@@ -1586,6 +1593,7 @@ var charts = []sectionDescription{
 				Title: "Count",
 				Metrics: []string{
 					"replicas.quiescent",
+					"replicas.uninitialized",
 					"replicas",
 					"replicas.reserved",
 				},
@@ -2443,6 +2451,7 @@ var charts = []sectionDescription{
 					"addsstable.copies",
 					"addsstable.applications",
 					"addsstable.proposals",
+					"addsstable.aswrites",
 				},
 			},
 			{

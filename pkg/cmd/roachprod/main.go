@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -124,7 +125,7 @@ Local Clusters
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		createVMOpts.ClusterName = args[0]
-		return roachprod.Create(username, numNodes, createVMOpts, providerOptsContainer)
+		return roachprod.Create(context.Background(), username, numNodes, createVMOpts, providerOptsContainer)
 	}),
 }
 
@@ -143,7 +144,7 @@ if the user would like to update the keys on the remote hosts.
 
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-		return roachprod.SetupSSH(args[0])
+		return roachprod.SetupSSH(context.Background(), args[0])
 	}),
 }
 
@@ -395,7 +396,7 @@ cluster setting will be set to its value.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
-		return roachprod.Start(args[0], startOpts, clusterSettingsOpts...)
+		return roachprod.Start(context.Background(), args[0], startOpts, clusterSettingsOpts...)
 	}),
 }
 
@@ -424,7 +425,8 @@ signals.
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		return roachprod.Stop(args[0], tag, sig, wait)
+		stopOpts := roachprod.StopOpts{Wait: wait, ProcessTag: tag, Sig: sig}
+		return roachprod.Stop(context.Background(), args[0], stopOpts)
 	}),
 }
 
@@ -467,7 +469,7 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
-		return roachprod.StartTenant(tenantCluster, hostCluster, startOpts, clusterSettingsOpts...)
+		return roachprod.StartTenant(context.Background(), tenantCluster, hostCluster, startOpts, clusterSettingsOpts...)
 	}),
 }
 
@@ -482,7 +484,7 @@ default cluster settings. It's intended to be used in conjunction with
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Init(args[0])
+		return roachprod.Init(context.Background(), args[0])
 	}),
 }
 
@@ -502,7 +504,7 @@ The "status" command outputs the binary and PID for the specified nodes:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Status(args[0], tag)
+		return roachprod.Status(context.Background(), args[0], tag)
 	}),
 }
 
@@ -550,7 +552,21 @@ of nodes, outputting a line whenever a change is detected:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Monitor(args[0], monitorOpts)
+		messages, err := roachprod.Monitor(context.Background(), args[0], monitorOpts)
+		if err != nil {
+			return err
+		}
+		for msg := range messages {
+			if msg.Err != nil {
+				msg.Msg += "error: " + msg.Err.Error()
+			}
+			thisError := errors.Newf("%d: %s", msg.Node, msg.Msg)
+			if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
+				err = errors.CombineErrors(err, thisError)
+			}
+			fmt.Println(thisError.Error())
+		}
+		return err
 	}),
 }
 
@@ -565,7 +581,7 @@ nodes.
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Wipe(args[0], wipePreserveCerts)
+		return roachprod.Wipe(context.Background(), args[0], wipePreserveCerts)
 	}),
 }
 
@@ -595,7 +611,7 @@ the 'zfs rollback' command:
 
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Reformat(args[0], args[1])
+		return roachprod.Reformat(context.Background(), args[0], args[1])
 	}),
 }
 
@@ -607,7 +623,7 @@ var runCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
-		return roachprod.Run(args[0], extraSSHOptions, tag, secure, args[1:])
+		return roachprod.Run(context.Background(), args[0], extraSSHOptions, tag, secure, os.Stdout, os.Stderr, args[1:])
 	}),
 }
 
@@ -631,7 +647,7 @@ var installCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Install(args[0], args[1:])
+		return roachprod.Install(context.Background(), args[0], args[1:])
 	}),
 }
 
@@ -646,7 +662,7 @@ var downloadCmd = &cobra.Command{
 		if len(args) == 4 {
 			dest = args[3]
 		}
-		return roachprod.Download(args[0], src, sha, dest)
+		return roachprod.Download(context.Background(), args[0], src, sha, dest)
 	}),
 }
 
@@ -707,7 +723,7 @@ Some examples of usage:
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		return roachprod.Stage(args[0], stageOS, stageDir, args[1], versionArg)
+		return roachprod.Stage(context.Background(), args[0], stageOS, stageDir, args[1], versionArg)
 	}),
 }
 
@@ -721,7 +737,7 @@ start."
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.DistributeCerts(args[0])
+		return roachprod.DistributeCerts(context.Background(), args[0])
 	}),
 }
 
@@ -737,7 +753,7 @@ var putCmd = &cobra.Command{
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return roachprod.Put(args[0], src, dest, useTreeDist)
+		return roachprod.Put(context.Background(), args[0], src, dest, useTreeDist)
 	}),
 }
 
@@ -764,7 +780,7 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.SQL(args[0], secure, args[1:])
+		return roachprod.SQL(context.Background(), args[0], secure, args[1:])
 	}),
 }
 
@@ -775,7 +791,7 @@ var pgurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		urls, err := roachprod.PgURL(args[0], pgurlCertsDir, external, secure)
+		urls, err := roachprod.PgURL(context.Background(), args[0], pgurlCertsDir, external, secure)
 		if err != nil {
 			return err
 		}
@@ -836,7 +852,7 @@ var ipCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		ips, err := roachprod.IP(args[0], external)
+		ips, err := roachprod.IP(context.Background(), args[0], external)
 		if err != nil {
 			return err
 		}
@@ -856,8 +872,20 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var getProvidersCmd = &cobra.Command{
+	Use:   `get-providers`,
+	Short: `print providers state (active/inactive)`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		providers := roachprod.InitProviders()
+		for provider, state := range providers {
+			fmt.Printf("%s: %s\n", provider, state)
+		}
+		return nil
+	},
+}
+
 func main() {
-	roachprod.InitProviders()
+	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
 	// The commands are displayed in the order they are added to rootCmd. Note
 	// that gcCmd and adminurlCmd contain a trailing \n in their Short help in
@@ -897,6 +925,7 @@ func main() {
 		pprofCmd,
 		cachedHostsCmd,
 		versionCmd,
+		getProvidersCmd,
 	)
 	setBashCompletionFunction()
 

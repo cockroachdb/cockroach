@@ -115,7 +115,6 @@ func TestDataDriven(t *testing.T) {
 		ts := tc.Server(0)
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-		tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_kvaccessor.enabled = true`)
 		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 		const dummyTableName = "dummy_span_configurations"

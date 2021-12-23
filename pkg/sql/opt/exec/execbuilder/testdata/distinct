@@ -37,10 +37,6 @@ vectorized: true
       missing stats
       table: xyz@foo
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (z) STORING (y);
 
 query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
@@ -59,10 +55,6 @@ vectorized: true
           missing stats
           table: xyz@foo
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (y) STORING (z);
 
 query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
@@ -81,10 +73,6 @@ vectorized: true
           missing stats
           table: xyz@foo
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (y, z);
 
 query T
 EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
@@ -120,10 +108,6 @@ vectorized: true
       missing stats
       table: xyz@foo
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (z) STORING (y);
 
 query T
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
@@ -141,10 +125,6 @@ vectorized: true
           missing stats
           table: xyz@xyz_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (y);
 
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT x FROM xyz
@@ -199,10 +179,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: xyz@foo
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (y) STORING (z);
 
 statement ok
 CREATE TABLE abcd (

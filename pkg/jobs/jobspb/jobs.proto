@@ -88,7 +88,10 @@ message StreamIngestionDetails {
   // The job will ingest events from StartTime onwards.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
   
-  uint64 tenant_id = 5 [(gogoproto.customname) = "TenantID"];
+  reserved 5;
+  roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+
+  // NEXT ID: 7.
 }
 
 message StreamIngestionProgress {
@@ -218,8 +221,9 @@ message BackupDetails {
   repeated string incremental_from = 14;
   bool full_cluster = 15;
 
+  reserved 16;
   // SpecificTenantIds if set indicates the IDs of explicit tenant targets.
-  repeated uint64 specific_tenant_ids = 16;
+  repeated roachpb.TenantID specific_tenant_ids = 19 [(gogoproto.nullable) = false];
   // ResolvedTargets contains all descriptors resolved from any explicit targets
   // (and is empty for full-cluster backups, which have no explicit targets).
   repeated sqlbase.Descriptor resolved_targets = 17 [(gogoproto.nullable) = false];
@@ -229,7 +233,7 @@ message BackupDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
-  // NEXT ID: 19;
+  // NEXT ID: 20;
 }
 
 message BackupProgress {
@@ -308,7 +312,7 @@ message RestoreDetails {
   BackupEncryptionOptions encryption = 12;
 
   message RevalidateIndex {
-     uint32 id = 1 [
+    uint32 id = 1 [
       (gogoproto.customname) = "TableID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
     ];
@@ -490,7 +494,48 @@ message TypeSchemaChangeProgress {
 // TypeSchemaChangeDetails is the job detail information for the new schema change job.
 message NewSchemaChangeDetails {
   repeated cockroach.sql.schemachanger.scpb.Target targets = 1;
+
+  // BackfillProgress stores the progress for index backfills which may
+  // be ongoing.
+  repeated BackfillProgress backfill_progress = 4 [(gogoproto.nullable) = false];
 }
+
+// BackfillProgress is used to track backfill progress in the declarative
+// schema changer.
+message BackfillProgress {
+
+  // ID is the ID of the descriptor to which this checkpoint corresponds.
+  uint32 id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+
+  // SourceIndexID is the ID of the source index for the backfill.
+  // This could be a primary index or it could be a temporary index for
+  // a merge.
+  uint32 source_index_id = 2 [
+    (gogoproto.customname) = "SourceIndexID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+  ];
+
+  // DestIndexIDs is the set of IDs which are being backfilled from the
+  // SourceIndexID.
+  repeated uint32 dest_index_ids = 3 [
+    (gogoproto.customname) = "DestIndexIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+  ];
+
+  // MinimumWriteTimestamp is the timestamp at which a backfill may want to
+  // write, e.g. a time that has been identified via a scan as safe for
+  // writing.
+  util.hlc.Timestamp write_timestamp = 4 [(gogoproto.nullable) = false];
+
+  // CompletedSpans are the set of spans of the source index which have been
+  // backfilled into the destination indexes. Note that this will never contain
+  // tenant prefixes even if the data corresponds to a secondary tenant.
+  repeated roachpb.Span completed_spans = 5 [(gogoproto.nullable) = false];
+}
+
 
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {

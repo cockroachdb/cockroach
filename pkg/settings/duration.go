@@ -32,9 +32,9 @@ type DurationSettingWithExplicitUnit struct {
 	DurationSetting
 }
 
-var _ extendedSetting = &DurationSetting{}
+var _ internalSetting = &DurationSetting{}
 
-var _ extendedSetting = &DurationSettingWithExplicitUnit{}
+var _ internalSetting = &DurationSettingWithExplicitUnit{}
 
 // ErrorHint returns a hint message to be displayed on error to the user.
 func (d *DurationSettingWithExplicitUnit) ErrorHint() (bool, string) {
@@ -120,18 +120,12 @@ func (d *DurationSetting) WithPublic() *DurationSetting {
 	return d
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (d *DurationSetting) WithSystemOnly() *DurationSetting {
-	d.common.systemOnly = true
-	return d
-}
-
-// Defeat the linter.
-var _ = (*DurationSetting).WithSystemOnly
-
 // RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(
-	key, desc string, defaultValue time.Duration, validateFns ...func(time.Duration) error,
+	class Class,
+	key, desc string,
+	defaultValue time.Duration,
+	validateFns ...func(time.Duration) error,
 ) *DurationSetting {
 	var validateFn func(time.Duration) error
 	if len(validateFns) > 0 {
@@ -154,7 +148,7 @@ func RegisterDurationSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }
 
@@ -162,7 +156,7 @@ func RegisterDurationSetting(
 // public setting with type duration which requires an explicit unit when being
 // set.
 func RegisterPublicDurationSettingWithExplicitUnit(
-	key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
+	class Class, key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
 ) *DurationSettingWithExplicitUnit {
 	var fn func(time.Duration) error
 
@@ -179,7 +173,7 @@ func RegisterPublicDurationSettingWithExplicitUnit(
 		},
 	}
 	setting.SetVisibility(Public)
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }
 

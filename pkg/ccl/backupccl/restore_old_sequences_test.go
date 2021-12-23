@@ -62,7 +62,7 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
 		const numAccounts = 1000
-		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))

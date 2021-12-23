@@ -190,10 +190,6 @@ vectorized: true
           row 0, expr 0: 1
           row 1, expr 0: 10
           row 2, expr 0: 5
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX t_idx@t_idx_v_idx; CREATE INDEX ON t_idx (v) STORING (b);
 
 subtest Insert
 
@@ -1424,10 +1420,6 @@ vectorized: true
       estimated row count: 60 (missing stats)
       table: checks@checks_v_b_idx
       spans: /0/10-/0/16 /1/10-/1/16 /2/10-/2/16 /3/10-/3/16
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON checks (b);
 
 subtest InvertedIndexes
 

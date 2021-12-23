@@ -343,10 +343,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: a@a_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON a (y);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
@@ -702,10 +698,6 @@ vectorized: true
   estimated row count: 333 (missing stats)
   table: c@str
   spans: -/"moo"/PrefixEnd
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON c (str);
 
 statement ok
 DROP TABLE c
@@ -1378,10 +1370,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: abcd@abcd_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (b) STORING (c);
 
 
 query T
@@ -1521,10 +1509,6 @@ vectorized: true
       table: xyz@xyz_x_y_z_idx
       spans: LIMITED SCAN
       limit: 10
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x, z) STORING (y);
 
 # ------------------------------------------------------
 # Verify that multi-span point lookups are parallelized.
@@ -1637,10 +1621,6 @@ vectorized: true
       missing stats
       table: a@p
       spans: [/5.000000000000001 - /9.999999999999998] [/20.000000000000004 - /39.99999999999999]
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX a@p; CREATE INDEX ON a (price) STORING (item);
 
 query T
 EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
@@ -1736,10 +1716,6 @@ vectorized: true
   missing stats
   table: b@b_d_key
   spans: [/10 - /10] [/1 - /NULL)
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON b (d);
 
 statement ok
 CREATE UNIQUE INDEX ON b(c, d)
@@ -1837,12 +1813,6 @@ vectorized: true
               missing stats
               table: s@s_pkey
               spans: FULL SCAN
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON e (y) STORING (z);
-2. type: index creation
-   SQL command: CREATE INDEX ON s (y) STORING (z);
 
 # Check that we have a sane row count estimate when there are a lot of null
 # values.
@@ -1892,10 +1862,6 @@ vectorized: true
       estimated row count: 11,110,000 (100% of the table; stats collected <hidden> ago)
       table: nulls@nulls_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON nulls (x) STORING (y);
 
 # Test resolution of @primary index hint.
 statement ok

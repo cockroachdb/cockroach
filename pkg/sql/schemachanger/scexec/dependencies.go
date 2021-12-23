@@ -19,21 +19,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 // Dependencies contains all the dependencies required by the executor.
 type Dependencies interface {
 	Catalog() Catalog
-	TransactionalJobCreator() TransactionalJobCreator
-	IndexBackfiller() IndexBackfiller
+	Partitioner() scmutationexec.Partitioner
+	TransactionalJobRegistry() TransactionalJobRegistry
+	IndexBackfiller() Backfiller
+	BackfillProgressTracker() BackfillTracker
+	PeriodicProgressFlusher() PeriodicProgressFlusher
 	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
-	JobProgressTracker() JobProgressTracker
 	EventLogger() EventLogger
 
 	// Statements returns the statements behind this schema change.
@@ -57,11 +59,10 @@ type Catalog interface {
 	NewCatalogChangeBatcher() CatalogChangeBatcher
 }
 
-// EventLogger encapsulates the operations for collecting
-// and emitting event log entries.
+// EventLogger encapsulates the operations for emitting event log entries.
 type EventLogger interface {
-	scmutationexec.EventLogWriter
-	ProcessAndSubmitEvents(ctx context.Context) error
+	// LogEvent writes to the eventlog.
+	LogEvent(ctx context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error
 }
 
 // CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor
@@ -82,68 +83,75 @@ type CatalogChangeBatcher interface {
 	ValidateAndRun(ctx context.Context) error
 }
 
-// TransactionalJobCreator creates a job in the current transaction.
-type TransactionalJobCreator interface {
+// TransactionalJobRegistry creates and updates jobs in the current transaction.
+type TransactionalJobRegistry interface {
 
 	// UpdateSchemaChangeJob triggers the update of the current schema change job
 	// via the supplied callback.
-	UpdateSchemaChangeJob(ctx context.Context, id jobspb.JobID, fn JobProgressUpdateFunc) error
+	UpdateSchemaChangeJob(ctx context.Context, id jobspb.JobID, fn JobUpdateCallback) error
 
 	// MakeJobID is used to make a JobID.
 	MakeJobID() jobspb.JobID
 
+	// SchemaChangerJobID returns the schema changer job ID, creating one if it
+	// doesn't yet exist.
+	SchemaChangerJobID() jobspb.JobID
+
 	// CreateJob creates a job in the current transaction and returns the
 	// id which was assigned to that job, or an error otherwise.
 	CreateJob(ctx context.Context, record jobs.Record) error
+
+	// TODO(ajwerner): Deal with setting the running status to indicate
+	// validating, backfilling, or generally performing metadata changes
+	// and waiting for lease draining.
 }
 
-// JobProgressUpdateFunc is for updating the progress of a job.
-type JobProgressUpdateFunc = func(md jobs.JobMetadata, updateProgress func(*jobspb.Progress)) error
+// JobUpdateCallback is for updating a job.
+type JobUpdateCallback = func(
+	md jobs.JobMetadata,
+	updateProgress func(*jobspb.Progress),
+	setNonCancelable func(),
+) error
 
-// IndexBackfiller is an abstract index backfiller that performs index backfills
+// Backfiller is an abstract index backfiller that performs index backfills
 // when provided with a specification of tables and indexes and a way to track
 // job progress.
-type IndexBackfiller interface {
-	BackfillIndex(
-		ctx context.Context,
-		_ JobProgressTracker,
-		_ catalog.TableDescriptor,
-		source descpb.IndexID,
-		destinations ...descpb.IndexID,
-	) error
-}
+type Backfiller interface {
 
-// Partitioner provides an interface that implements CCL exclusive
-// callbacks.
-type Partitioner interface {
-	AddPartitioning(
-		ctx context.Context,
-		tableDesc *tabledesc.Mutable,
-		indexDesc *descpb.IndexDescriptor,
-		partitionFields []string,
-		listPartition []*scpb.ListPartition,
-		rangePartition []*scpb.RangePartitions,
-		allowedNewColumnNames []tree.Name,
-		allowImplicitPartitioning bool,
-	) (err error)
+	// MaybePrepareDestIndexesForBackfill will choose a MinimumWriteTimestamp
+	// for the backfill if one does not exist. It will scan all destination
+	// indexes at that timestamp to ensure that no subsequent writes from
+	// other transactions will occur below that timestamp.
+	MaybePrepareDestIndexesForBackfill(
+		context.Context, BackfillProgress, catalog.TableDescriptor,
+	) (BackfillProgress, error)
+
+	// BackfillIndex will backfill the specified indexes on in the table with
+	// the specified source and destination indexes. Note that the
+	// MinimumWriteTimestamp on the progress must be non-zero. Use
+	// MaybePrepareDestIndexesForBackfill to construct a properly initialized
+	// progress.
+	BackfillIndex(
+		context.Context,
+		BackfillProgress,
+		BackfillProgressWriter,
+		catalog.TableDescriptor,
+	) error
 }
 
 // IndexValidator provides interfaces that allow indexes to be validated.
 type IndexValidator interface {
 	ValidateForwardIndexes(
 		ctx context.Context,
-		tableDesc catalog.TableDescriptor,
+		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
-		withFirstMutationPublic bool,
-		gatherAllInvalid bool,
 		override sessiondata.InternalExecutorOverride,
 	) error
 
 	ValidateInvertedIndexes(
 		ctx context.Context,
-		tableDesc catalog.TableDescriptor,
+		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
-		gatherAllInvalid bool,
 		override sessiondata.InternalExecutorOverride,
 	) error
 }
@@ -156,29 +164,74 @@ type IndexSpanSplitter interface {
 	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
 }
 
-// JobProgressTracker abstracts the infrastructure to read and write backfill
-// progress to job state.
-type JobProgressTracker interface {
+// BackfillProgress tracks the progress for a Backfill.
+type BackfillProgress struct {
+	Backfill
 
-	// This interface is implicitly implying that there is only one stage of
-	// index backfills for a given table in a schema change. It implies that
-	// because it assumes that it's safe and reasonable to just store one set of
-	// resume spans per table on the job.
-	//
-	// Potentially something close to interface could still work if there were
-	// multiple stages of backfills for a table if we tracked which stage this
-	// were somehow. Maybe we could do something like increment a stage counter
-	// per table after finishing the backfills.
-	//
-	// It definitely is possible that there are multiple index backfills on a
-	// table in the context of a single schema change that changes the set of
-	// columns (primary index) and adds secondary indexes.
-	//
-	// Really this complexity arises in the computation of the fraction completed.
-	// We'll want to know whether there are more index backfills to come.
-	//
-	// One idea is to index secondarily on the source index.
+	// MinimumWriteTimestamp is a timestamp above which all
+	// reads and writes of the backfill should be performed.
+	// The timestamp corresponds to a timestamp at or before
+	// which the destination indexes have been scanned and thus
+	// all subsequent writes due to other transactions will occur.
+	MinimumWriteTimestamp hlc.Timestamp
 
-	GetResumeSpans(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID) ([]roachpb.Span, error)
-	SetResumeSpans(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span) error
+	// CompletedSpans contains the spans of the source index which have been
+	// backfilled into the destination indexes. The spans are expected to
+	// contain any tenant prefix.
+	CompletedSpans []roachpb.Span
+}
+
+// Backfill corresponds to a definition of a backfill from a source
+// index into multiple destination indexes.
+type Backfill struct {
+	TableID       descpb.ID
+	SourceIndexID descpb.IndexID
+	DestIndexIDs  []descpb.IndexID
+}
+
+// BackfillTracker abstracts the infrastructure to read and write backfill
+// progress to job state. Implementations should support multiple concurrent
+// writers.
+type BackfillTracker interface {
+	BackfillProgressReader
+	BackfillProgressWriter
+	BackfillProgressFlusher
+}
+
+// PeriodicProgressFlusher is used to write updates to backfill progress
+// periodically.
+type PeriodicProgressFlusher interface {
+	StartPeriodicUpdates(ctx context.Context, tracker BackfillProgressFlusher) (stop func() error)
+}
+
+// BackfillProgressReader is used by the backfill execution layer to read
+// backfill progress.
+type BackfillProgressReader interface {
+	// GetBackfillProgress reads the backfill progress for the specified backfill.
+	// If no such backfill has been stored previously, this call will return a
+	// new BackfillProgress without the CompletedSpans or MinimumWriteTimestamp
+	// populated.
+	GetBackfillProgress(ctx context.Context, b Backfill) (BackfillProgress, error)
+}
+
+// BackfillProgressWriter is used by the backfiller to write out progress
+// updates.
+type BackfillProgressWriter interface {
+	// SetBackfillProgress updates the progress for a single backfill. Multiple
+	// backfills may be concurrently tracked. Setting the progress may not make
+	// that progress durable; the concrete implementation of the backfill tracker
+	// may defer writing until later.
+	SetBackfillProgress(ctx context.Context, progress BackfillProgress) error
+}
+
+// BackfillProgressFlusher is used to flush backfill progress state to
+// the underlying store.
+type BackfillProgressFlusher interface {
+
+	// FlushCheckpoint writes out a checkpoint containing any data which has
+	// been previously set via SetBackfillProgress.
+	FlushCheckpoint(ctx context.Context) error
+
+	// FlushFractionCompleted writes out the fraction completed.
+	FlushFractionCompleted(ctx context.Context) error
 }

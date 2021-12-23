@@ -788,6 +788,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				roachpb.UserPriority(0),
 				now.ToTimestamp(),
 				clock.MaxOffset().Nanoseconds(),
+				0, /* coordinatorNodeID */
 			)
 			// TODO(andrei): I've monkeyed with the priorities on this initial
 			// Transaction to keep the test happy from a previous version in which the
@@ -2701,10 +2702,12 @@ func TestTxnManualRefresh(t *testing.T) {
 					_, ok := r.ba.GetArg(roachpb.Refresh)
 					require.True(t, ok)
 					// Rejects the refresh due to a conflicting write.
-					pErr := roachpb.NewErrorf("encountered recently written key")
+					pErr := roachpb.NewError(roachpb.NewRefreshFailedError(
+						roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
 					r.respCh <- resp{pErr: pErr}
 				}
-				require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`, <-errCh)
+				require.Regexp(t, "TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive "+
+					"refresh due to a conflict: committed value on key \"a\"\\)", <-errCh)
 			},
 		},
 	}

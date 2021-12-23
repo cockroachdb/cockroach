@@ -137,10 +137,6 @@ vectorized: true
       table: abcd@b
       spans: LIMITED SCAN
       limit: 5
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX abcd@b; CREATE INDEX ON abcd (b) STORING (c, d);
 
 # Force index b, reverse scan.
 query T
@@ -157,10 +153,6 @@ vectorized: true
       table: abcd@b
       spans: LIMITED SCAN
       limit: 5
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX abcd@b; CREATE INDEX ON abcd (b) STORING (c, d);
 
 
 # Force index b, forward scan.
@@ -181,10 +173,6 @@ vectorized: true
           missing stats
           table: abcd@b
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX abcd@b; CREATE INDEX ON abcd (b) STORING (c, d);
 
 # Force index cd
 query T
@@ -251,10 +239,6 @@ vectorized: true
           missing stats
           table: abcd@b
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (c) STORING (b);
 
 # No hint, should be using index cd
 query T
@@ -267,10 +251,6 @@ vectorized: true
   missing stats
   table: abcd@cd
   spans: [/20 - /39]
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (c) STORING (d);
 
 # Force primary index
 query T
@@ -304,10 +284,6 @@ vectorized: true
           missing stats
           table: abcd@b
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (c) STORING (d);
 
 query T
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
@@ -339,10 +315,6 @@ vectorized: true
       missing stats
       table: abcd@cd
       spans: [/10 - /10]
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (c) STORING (b, d);
 
 query T
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
@@ -357,10 +329,6 @@ vectorized: true
       missing stats
       table: abcd@abcd_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (c) STORING (b, d);
 
 query T
 EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd} WHERE c = 10

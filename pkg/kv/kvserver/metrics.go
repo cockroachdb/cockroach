@@ -68,6 +68,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaUninitializedCount = metric.Metadata{
+		Name:        "replicas.uninitialized",
+		Help:        "Number of uninitialized replicas, this does not include uninitialized replicas that can lie dormant in a persistent state.",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Range metrics.
 	metaRangeCount = metric.Metadata{
@@ -744,27 +750,27 @@ difficult to meaningfully interpret this metric.`,
 	}
 
 	// Replica queue metrics.
-	metaGCQueueSuccesses = metric.Metadata{
+	metaMVCCGCQueueSuccesses = metric.Metadata{
 		Name:        "queue.gc.process.success",
-		Help:        "Number of replicas successfully processed by the GC queue",
+		Help:        "Number of replicas successfully processed by the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueueFailures = metric.Metadata{
+	metaMVCCGCQueueFailures = metric.Metadata{
 		Name:        "queue.gc.process.failure",
-		Help:        "Number of replicas which failed processing in the GC queue",
+		Help:        "Number of replicas which failed processing in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueuePending = metric.Metadata{
+	metaMVCCGCQueuePending = metric.Metadata{
 		Name:        "queue.gc.pending",
-		Help:        "Number of pending replicas in the GC queue",
+		Help:        "Number of pending replicas in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueueProcessingNanos = metric.Metadata{
+	metaMVCCGCQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.gc.processingnanos",
-		Help:        "Nanoseconds spent processing replicas in the GC queue",
+		Help:        "Nanoseconds spent processing replicas in the MVCC GC queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -1155,6 +1161,18 @@ not occurring.
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAddSSTableAsWrites = metric.Metadata{
+		Name: "addsstable.aswrites",
+		Help: `Number of SSTables ingested as normal writes.
+
+These AddSSTable requests do not count towards the addsstable metrics
+'proposals', 'applications', or 'copies', as they are not ingested as AddSSTable
+Raft commands, but rather normal write commands. However, if these requests get
+throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
+`,
+		Measurement: "Ingestions",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaAddSSTableEvalTotalDelay = metric.Metadata{
 		Name:        "addsstable.delay.total",
 		Help:        "Amount by which evaluation of AddSSTable requests was delayed",
@@ -1241,6 +1259,7 @@ type StoreMetrics struct {
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
+	UninitializedCount            *metric.Gauge
 
 	// Range metrics.
 	RangeCount                *metric.Gauge
@@ -1345,10 +1364,10 @@ type StoreMetrics struct {
 	RaftCoalescedHeartbeatsPending *metric.Gauge
 
 	// Replica queue metrics.
-	GCQueueSuccesses                          *metric.Counter
-	GCQueueFailures                           *metric.Counter
-	GCQueuePending                            *metric.Gauge
-	GCQueueProcessingNanos                    *metric.Counter
+	MVCCGCQueueSuccesses                      *metric.Counter
+	MVCCGCQueueFailures                       *metric.Counter
+	MVCCGCQueuePending                        *metric.Gauge
+	MVCCGCQueueProcessingNanos                *metric.Counter
 	MergeQueueSuccesses                       *metric.Counter
 	MergeQueueFailures                        *metric.Counter
 	MergeQueuePending                         *metric.Gauge
@@ -1418,6 +1437,7 @@ type StoreMetrics struct {
 	AddSSTableProposals           *metric.Counter
 	AddSSTableApplications        *metric.Counter
 	AddSSTableApplicationCopies   *metric.Counter
+	AddSSTableAsWrites            *metric.Counter
 	AddSSTableProposalTotalDelay  *metric.Counter
 	AddSSTableProposalEngineDelay *metric.Counter
 
@@ -1672,6 +1692,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
+		UninitializedCount:            metric.NewGauge(metaUninitializedCount),
 
 		// Range metrics.
 		RangeCount:                metric.NewGauge(metaRangeCount),
@@ -1784,10 +1805,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftCoalescedHeartbeatsPending: metric.NewGauge(metaRaftCoalescedHeartbeatsPending),
 
 		// Replica queue metrics.
-		GCQueueSuccesses:                          metric.NewCounter(metaGCQueueSuccesses),
-		GCQueueFailures:                           metric.NewCounter(metaGCQueueFailures),
-		GCQueuePending:                            metric.NewGauge(metaGCQueuePending),
-		GCQueueProcessingNanos:                    metric.NewCounter(metaGCQueueProcessingNanos),
+		MVCCGCQueueSuccesses:                      metric.NewCounter(metaMVCCGCQueueSuccesses),
+		MVCCGCQueueFailures:                       metric.NewCounter(metaMVCCGCQueueFailures),
+		MVCCGCQueuePending:                        metric.NewGauge(metaMVCCGCQueuePending),
+		MVCCGCQueueProcessingNanos:                metric.NewCounter(metaMVCCGCQueueProcessingNanos),
 		MergeQueueSuccesses:                       metric.NewCounter(metaMergeQueueSuccesses),
 		MergeQueueFailures:                        metric.NewCounter(metaMergeQueueFailures),
 		MergeQueuePending:                         metric.NewGauge(metaMergeQueuePending),
@@ -1853,6 +1874,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// AddSSTable proposal + applications counters.
 		AddSSTableProposals:           metric.NewCounter(metaAddSSTableProposals),
 		AddSSTableApplications:        metric.NewCounter(metaAddSSTableApplications),
+		AddSSTableAsWrites:            metric.NewCounter(metaAddSSTableAsWrites),
 		AddSSTableApplicationCopies:   metric.NewCounter(metaAddSSTableApplicationCopies),
 		AddSSTableProposalTotalDelay:  metric.NewCounter(metaAddSSTableEvalTotalDelay),
 		AddSSTableProposalEngineDelay: metric.NewCounter(metaAddSSTableEvalEngineDelay),
@@ -1968,6 +1990,9 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 	metric.ResolveAbort = 0
 	sm.ResolvePoisonCount.Inc(int64(metric.ResolvePoison))
 	metric.ResolvePoison = 0
+
+	sm.AddSSTableAsWrites.Inc(int64(metric.AddSSTableAsWrites))
+	metric.AddSSTableAsWrites = 0
 
 	if metric != (result.Metrics{}) {
 		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)

@@ -90,9 +90,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				sqlDB.Exec(t, "ALTER TABLE my_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 				sqlDB.Exec(t, "ALTER TABLE my_other_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 			}
-			myDBID := descpb.ID(keys.MinUserDescID + 2)
-			myTableID := descpb.ID(keys.MinUserDescID + 3)
-			myOtherTableID := descpb.ID(keys.MinUserDescID + 4)
+			myDBID := descpb.ID(keys.TestingUserDescID(2))
+			myTableID := descpb.ID(keys.TestingUserDescID(3))
+			myOtherTableID := descpb.ID(keys.TestingUserDescID(4))
 
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
@@ -359,9 +359,7 @@ func TestGCResumer(t *testing.T) {
 		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
-		st, err := job.CurrentStatus(ctx, nil /* txn */)
-		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, st)
+		require.Equal(t, jobs.StatusSucceeded, job.Status())
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
@@ -389,9 +387,7 @@ func TestGCResumer(t *testing.T) {
 
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
-		st, err := job.CurrentStatus(ctx, nil /* txn */)
-		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, st)
+		require.Equal(t, jobs.StatusSucceeded, job.Status())
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()

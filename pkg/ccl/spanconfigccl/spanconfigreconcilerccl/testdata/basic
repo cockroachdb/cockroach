@@ -1,0 +1,195 @@
+# Create a database with some tables, types (ignored), and schemas (ignored);
+# set some zone configs. Check that the mutations, if starting from a fresh
+# slate, are as we'd expect.
+
+reconcile
+----
+
+mutations
+----
+upsert /{Min-System/NodeLiveness}          ttl_seconds=3600 num_replicas=5
+upsert /System/NodeLiveness{-Max}          ttl_seconds=600 num_replicas=5
+upsert /System/{NodeLivenessMax-tsd}       range system
+upsert /System{/tsd-tse}                   range default
+upsert /System{tse-/Max}                   range system
+upsert /Table/{SystemConfigSpan/Start-4}   range system
+upsert /Table/{4-5}                        range system
+upsert /Table/{5-6}                        range system
+upsert /Table/{6-7}                        range system
+upsert /Table/{8-9}                        range system
+upsert /Table/1{1-2}                       range system
+upsert /Table/1{2-3}                       range system
+upsert /Table/1{3-4}                       range system
+upsert /Table/1{4-5}                       range system
+upsert /Table/1{5-6}                       range system
+upsert /Table/{19-20}                      range system
+upsert /Table/2{0-1}                       range system
+upsert /Table/2{1-2}                       range system
+upsert /Table/2{3-4}                       range system
+upsert /Table/2{4-5}                       range system
+upsert /Table/2{5-6}                       ttl_seconds=600 num_replicas=5
+upsert /Table/2{6-7}                       range system
+upsert /Table/2{7-8}                       ttl_seconds=600 num_replicas=5
+upsert /Table/2{8-9}                       range system
+upsert /NamespaceTable/{30-Max}            range system
+upsert /{NamespaceTable/Max-Table/32}      range system
+upsert /Table/3{2-3}                       range system
+upsert /Table/3{3-4}                       range system
+upsert /Table/3{4-5}                       range system
+upsert /Table/3{5-6}                       range system
+upsert /Table/3{6-7}                       range system
+upsert /Table/3{7-8}                       range system
+upsert /Table/{39-40}                      range system
+upsert /Table/4{0-1}                       range system
+upsert /Table/4{1-2}                       range system
+upsert /Table/4{2-3}                       range system
+upsert /Table/4{3-4}                       range system
+upsert /Table/4{4-5}                       range system
+upsert /Table/4{5-6}                       ttl_seconds=7200 num_replicas=5
+upsert /Table/4{6-7}                       range system
+upsert /Table/4{7-8}                       range system
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+CREATE SCHEMA db.sc;
+CREATE TYPE typ AS ENUM();
+----
+
+mutations
+----
+upsert /Table/5{6-7}                       range default
+upsert /Table/5{7-8}                       range default
+
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
+ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters = 5;
+----
+
+mutations
+----
+delete /Table/5{6-7}
+upsert /Table/5{6-7}                       num_replicas=7 num_voters=5
+delete /Table/5{7-8}
+upsert /Table/5{7-8}                       num_replicas=7
+
+state offset=41
+----
+...
+/Table/5{6-7}                              num_replicas=7 num_voters=5
+/Table/5{7-8}                              num_replicas=7
+
+exec-sql
+ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 100;
+----
+
+mutations
+----
+delete /Table/{SystemConfigSpan/Start-4}
+upsert /Table/{SystemConfigSpan/Start-4}   ttl_seconds=100 num_replicas=5
+delete /Table/{4-5}
+upsert /Table/{4-5}                        ttl_seconds=100 num_replicas=5
+delete /Table/{5-6}
+upsert /Table/{5-6}                        ttl_seconds=100 num_replicas=5
+delete /Table/{6-7}
+upsert /Table/{6-7}                        ttl_seconds=100 num_replicas=5
+delete /Table/{8-9}
+upsert /Table/{8-9}                        ttl_seconds=100 num_replicas=5
+delete /Table/1{1-2}
+upsert /Table/1{1-2}                       ttl_seconds=100 num_replicas=5
+delete /Table/1{2-3}
+upsert /Table/1{2-3}                       ttl_seconds=100 num_replicas=5
+delete /Table/1{3-4}
+upsert /Table/1{3-4}                       ttl_seconds=100 num_replicas=5
+delete /Table/1{4-5}
+upsert /Table/1{4-5}                       ttl_seconds=100 num_replicas=5
+delete /Table/1{5-6}
+upsert /Table/1{5-6}                       ttl_seconds=100 num_replicas=5
+delete /Table/{19-20}
+upsert /Table/{19-20}                      ttl_seconds=100 num_replicas=5
+delete /Table/2{0-1}
+upsert /Table/2{0-1}                       ttl_seconds=100 num_replicas=5
+delete /Table/2{1-2}
+upsert /Table/2{1-2}                       ttl_seconds=100 num_replicas=5
+delete /Table/2{3-4}
+upsert /Table/2{3-4}                       ttl_seconds=100 num_replicas=5
+delete /Table/2{4-5}
+upsert /Table/2{4-5}                       ttl_seconds=100 num_replicas=5
+delete /Table/2{6-7}
+upsert /Table/2{6-7}                       ttl_seconds=100 num_replicas=5
+delete /Table/2{8-9}
+upsert /Table/2{8-9}                       ttl_seconds=100 num_replicas=5
+delete /NamespaceTable/{30-Max}
+upsert /NamespaceTable/{30-Max}            ttl_seconds=100 num_replicas=5
+delete /{NamespaceTable/Max-Table/32}
+upsert /{NamespaceTable/Max-Table/32}      ttl_seconds=100 num_replicas=5
+delete /Table/3{2-3}
+upsert /Table/3{2-3}                       ttl_seconds=100 num_replicas=5
+delete /Table/3{3-4}
+upsert /Table/3{3-4}                       ttl_seconds=100 num_replicas=5
+delete /Table/3{4-5}
+upsert /Table/3{4-5}                       ttl_seconds=100 num_replicas=5
+delete /Table/3{5-6}
+upsert /Table/3{5-6}                       ttl_seconds=100 num_replicas=5
+delete /Table/3{6-7}
+upsert /Table/3{6-7}                       ttl_seconds=100 num_replicas=5
+delete /Table/3{7-8}
+upsert /Table/3{7-8}                       ttl_seconds=100 num_replicas=5
+delete /Table/{39-40}
+upsert /Table/{39-40}                      ttl_seconds=100 num_replicas=5
+delete /Table/4{0-1}
+upsert /Table/4{0-1}                       ttl_seconds=100 num_replicas=5
+delete /Table/4{1-2}
+upsert /Table/4{1-2}                       ttl_seconds=100 num_replicas=5
+delete /Table/4{2-3}
+upsert /Table/4{2-3}                       ttl_seconds=100 num_replicas=5
+delete /Table/4{3-4}
+upsert /Table/4{3-4}                       ttl_seconds=100 num_replicas=5
+delete /Table/4{4-5}
+upsert /Table/4{4-5}                       ttl_seconds=100 num_replicas=5
+delete /Table/4{6-7}
+upsert /Table/4{6-7}                       ttl_seconds=100 num_replicas=5
+delete /Table/4{7-8}
+upsert /Table/4{7-8}                       ttl_seconds=100 num_replicas=5
+
+state offset=5 limit=36
+----
+...
+/Table/{SystemConfigSpan/Start-4}          ttl_seconds=100 num_replicas=5
+/Table/{4-5}                               ttl_seconds=100 num_replicas=5
+/Table/{5-6}                               ttl_seconds=100 num_replicas=5
+/Table/{6-7}                               ttl_seconds=100 num_replicas=5
+/Table/{8-9}                               ttl_seconds=100 num_replicas=5
+/Table/1{1-2}                              ttl_seconds=100 num_replicas=5
+/Table/1{2-3}                              ttl_seconds=100 num_replicas=5
+/Table/1{3-4}                              ttl_seconds=100 num_replicas=5
+/Table/1{4-5}                              ttl_seconds=100 num_replicas=5
+/Table/1{5-6}                              ttl_seconds=100 num_replicas=5
+/Table/{19-20}                             ttl_seconds=100 num_replicas=5
+/Table/2{0-1}                              ttl_seconds=100 num_replicas=5
+/Table/2{1-2}                              ttl_seconds=100 num_replicas=5
+/Table/2{3-4}                              ttl_seconds=100 num_replicas=5
+/Table/2{4-5}                              ttl_seconds=100 num_replicas=5
+/Table/2{5-6}                              ttl_seconds=600 num_replicas=5
+/Table/2{6-7}                              ttl_seconds=100 num_replicas=5
+/Table/2{7-8}                              ttl_seconds=600 num_replicas=5
+/Table/2{8-9}                              ttl_seconds=100 num_replicas=5
+/NamespaceTable/{30-Max}                   ttl_seconds=100 num_replicas=5
+/{NamespaceTable/Max-Table/32}             ttl_seconds=100 num_replicas=5
+/Table/3{2-3}                              ttl_seconds=100 num_replicas=5
+/Table/3{3-4}                              ttl_seconds=100 num_replicas=5
+/Table/3{4-5}                              ttl_seconds=100 num_replicas=5
+/Table/3{5-6}                              ttl_seconds=100 num_replicas=5
+/Table/3{6-7}                              ttl_seconds=100 num_replicas=5
+/Table/3{7-8}                              ttl_seconds=100 num_replicas=5
+/Table/{39-40}                             ttl_seconds=100 num_replicas=5
+/Table/4{0-1}                              ttl_seconds=100 num_replicas=5
+/Table/4{1-2}                              ttl_seconds=100 num_replicas=5
+/Table/4{2-3}                              ttl_seconds=100 num_replicas=5
+/Table/4{3-4}                              ttl_seconds=100 num_replicas=5
+/Table/4{4-5}                              ttl_seconds=100 num_replicas=5
+/Table/4{5-6}                              ttl_seconds=7200 num_replicas=5
+/Table/4{6-7}                              ttl_seconds=100 num_replicas=5
+/Table/4{7-8}                              ttl_seconds=100 num_replicas=5
+...

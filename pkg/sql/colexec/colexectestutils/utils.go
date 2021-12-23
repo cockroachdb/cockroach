@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -33,9 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -760,7 +763,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			decimalVal, _, err := apd.NewFromString(fmt.Sprintf("%f", floatVal))
 			if err != nil {
 				colexecerror.InternalError(
-					errors.AssertionFailedf("unable to set decimal %f: %v", floatVal, err))
+					errors.NewAssertionErrorWithWrappedErrf(err, "unable to set decimal %f", floatVal))
 			}
 			// .Set is used here instead of assignment to ensure the pointer address
 			// of the underlying storage for apd.Decimal remains the same. This can
@@ -777,7 +780,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			j, err = json.ParseJSON(s)
 			if err != nil {
 				colexecerror.InternalError(
-					errors.AssertionFailedf("unable to set json %s: %v", s, err))
+					errors.NewAssertionErrorWithWrappedErrf(err, "unable to set json %s", s))
 			}
 		}
 		vec.JSON().Set(idx, j)
@@ -991,7 +994,7 @@ func (s *opTestInput) Next() coldata.Batch {
 						d := apd.Decimal{}
 						_, err := d.SetFloat64(rng.Float64())
 						if err != nil {
-							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+							colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "error setting float"))
 						}
 						col.Index(outputIdx).Set(reflect.ValueOf(d))
 					case types.BytesFamily:
@@ -1003,7 +1006,7 @@ func (s *opTestInput) Next() coldata.Batch {
 					case types.JsonFamily:
 						j, err := json.Random(20, rng)
 						if err != nil {
-							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+							colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "error creating json"))
 						}
 						setColVal(vec, outputIdx, j, s.evalCtx)
 					case types.TimestampTZFamily:
@@ -1477,7 +1480,7 @@ func makeError(expected Tuples, actual Tuples) error {
 	}
 	text, err := difflib.GetUnifiedDiffString(diff)
 	if err != nil {
-		return errors.Errorf("expected didn't match actual, failed to make diff %s", err)
+		return errors.Wrap(err, "expected didn't match actual, failed to make diff")
 	}
 	return errors.Errorf("expected didn't match actual. diff:\n%s", text)
 }
@@ -1724,4 +1727,43 @@ type CallbackMetadataSource struct {
 // DrainMeta is part of the colexecop.MetadataSource interface.
 func (s CallbackMetadataSource) DrainMeta() []execinfrapb.ProducerMetadata {
 	return s.DrainMetaCb()
+}
+
+// MakeRandWindowFrameRangeOffset returns a valid offset of the given type for
+// use in testing window functions in RANGE mode with offsets.
+func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) tree.Datum {
+	isNegative := func(val tree.Datum) bool {
+		switch datumTyp := val.(type) {
+		case *tree.DInt:
+			return int64(*datumTyp) < 0
+		case *tree.DFloat:
+			return float64(*datumTyp) < 0
+		case *tree.DDecimal:
+			return datumTyp.Negative
+		case *tree.DInterval:
+			return false
+		default:
+			t.Errorf("unexpected error: %v", errors.AssertionFailedf("unsupported datum: %v", datumTyp))
+			return false
+		}
+	}
+
+	for {
+		val := randgen.RandDatumSimple(rng, typ)
+		if isNegative(val) {
+			// Offsets must be non-null and non-negative.
+			continue
+		}
+		return val
+	}
+}
+
+// EncodeWindowFrameOffset returns the given datum offset encoded as bytes, for
+// use in testing window functions in RANGE mode with offsets.
+func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
+	var encoded, scratch []byte
+	encoded, err := rowenc.EncodeTableValue(
+		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
+	require.NoError(t, err)
+	return encoded
 }

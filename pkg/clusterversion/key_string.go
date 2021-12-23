@@ -51,17 +51,20 @@ func _() {
 	_ = x[AlterSystemTableStatisticsAddAvgSizeCol-40]
 	_ = x[AlterSystemStmtDiagReqs-41]
 	_ = x[MVCCAddSSTable-42]
-	_ = x[PublicSchemasWithDescriptors-43]
+	_ = x[InsertPublicSchemaNamespaceEntryOnRestore-43]
 	_ = x[UnsplitRangesInAsyncGCJobs-44]
 	_ = x[ValidateGrantOption-45]
 	_ = x[PebbleFormatBlockPropertyCollector-46]
 	_ = x[ProbeRequest-47]
 	_ = x[SelectRPCsTakeTracingInfoInband-48]
+	_ = x[PreSeedTenantSpanConfigs-49]
+	_ = x[SeedTenantSpanConfigs-50]
+	_ = x[PublicSchemasWithDescriptors-51]
 }
 
-const _Key_name = "V21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessDateAndIntervalStylePebbleFormatVersionedMarkerDataKeysRegistryPebbleSetWithDeleteTenantUsageSingleConsumptionColumnSQLStatsTablesSQLStatsCompactionScheduledJobV21_2Start22_1TargetBytesAvoidExcessAvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTablePublicSchemasWithDescriptorsUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInband"
+const _Key_name = "V21_1Start21_1PLUSStart21_2JoinTokensTableAcquisitionTypeInLeaseHistorySerializeViewUDTsExpressionIndexesDeleteDeprecatedNamespaceTableDescriptorMigrationFixDescriptorsDatabaseRoleSettingsTenantUsageTableSQLInstancesTableNewRetryableRangefeedErrorsAlterSystemWebSessionsCreateIndexesSeparatedIntentsMigrationPostSeparatedIntentsMigrationRetryJobsWithExponentialBackoffRecordsBasedRegistryAutoSpanConfigReconciliationJobDefaultPrivilegesZonesTableForSecondaryTenantsUseKeyEncodeForHashShardedIndexesDatabasePlacementPolicyGeneratedAsIdentityOnUpdateExpressionsSpanConfigurationsTableBoundedStalenessDateAndIntervalStylePebbleFormatVersionedMarkerDataKeysRegistryPebbleSetWithDeleteTenantUsageSingleConsumptionColumnSQLStatsTablesSQLStatsCompactionScheduledJobV21_2Start22_1TargetBytesAvoidExcessAvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptors"
 
-var _Key_index = [...]uint16{0, 5, 18, 27, 42, 71, 88, 105, 154, 168, 188, 204, 221, 248, 283, 308, 337, 368, 388, 419, 436, 465, 498, 521, 540, 559, 582, 598, 618, 639, 661, 680, 714, 728, 758, 763, 772, 794, 812, 834, 871, 910, 933, 947, 975, 1001, 1020, 1054, 1066, 1097}
+var _Key_index = [...]uint16{0, 5, 18, 27, 42, 71, 88, 105, 154, 168, 188, 204, 221, 248, 283, 308, 337, 368, 388, 419, 436, 465, 498, 521, 540, 559, 582, 598, 618, 639, 661, 680, 714, 728, 758, 763, 772, 794, 812, 834, 871, 910, 933, 947, 988, 1014, 1033, 1067, 1079, 1110, 1134, 1155, 1183}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

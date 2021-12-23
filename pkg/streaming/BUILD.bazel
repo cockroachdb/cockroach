@@ -2,7 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "streaming",
-    srcs = ["utils.go"],
+    srcs = ["api.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/streaming",
     visibility = ["//visibility:public"],
     deps = [

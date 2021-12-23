@@ -466,9 +466,11 @@ SELECT id
 	// The upgrade should not be done.
 	select {
 	case err := <-upgrade1Err:
-		t.Fatalf("did not expect the first upgrade to finish: %v", err)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "paused before it completed")
 	case err := <-upgrade2Err:
-		t.Fatalf("did not expect the second upgrade to finish: %v", err)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "paused before it completed")
 	case <-ch:
 		t.Fatalf("did not expect the job to run again")
 	case <-time.After(10 * time.Millisecond):
@@ -482,8 +484,8 @@ SELECT id
 	tdb.Exec(t, "RESUME JOB $1", id)
 	ev = <-ch
 	close(ev.unblock)
-	require.NoError(t, <-upgrade1Err)
-	require.NoError(t, <-upgrade2Err)
+	_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING version = $1`, endCV.String())
+	require.NoError(t, err)
 }
 
 // Test that the precondition prevents migrations from being run.

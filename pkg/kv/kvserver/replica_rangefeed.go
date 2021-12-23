@@ -34,12 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
 // RangefeedEnabled is a cluster setting that enables rangefeed requests.
 var RangefeedEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
 	false,
@@ -48,6 +50,7 @@ var RangefeedEnabled = settings.RegisterBoolSetting(
 // RangeFeedRefreshInterval controls the frequency with which we deliver closed
 // timestamp updates to rangefeeds.
 var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.rangefeed.closed_timestamp_refresh_interval",
 	"the interval at which closed-timestamp updates"+
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
@@ -57,6 +60,7 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 
 // RangefeedTBIEnabled controls whether or not we use a TBI during catch-up scan.
 var RangefeedTBIEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
 	"if true, rangefeeds will use time-bound iterators for catchup-scans when possible",
 	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", true),
@@ -656,10 +660,12 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 		// Ignore the result of DoChan since, to keep this all async, it always
 		// returns nil and any errors are logged by the closure passed to the
 		// `DoChan` call.
-		_, _ = m.RangeFeedSlowClosedTimestampNudge.DoChan(key, func() (interface{}, error) {
+		taskCtx, sp := tracing.EnsureForkSpan(ctx, r.AmbientContext.Tracer, key)
+		_, leader := m.RangeFeedSlowClosedTimestampNudge.DoChan(key, func() (interface{}, error) {
+			defer sp.Finish()
 			// Also ignore the result of RunTask, since it only returns errors when
 			// the task didn't start because we're shutting down.
-			_ = r.store.stopper.RunTask(ctx, key, func(context.Context) {
+			_ = r.store.stopper.RunTask(taskCtx, key, func(ctx context.Context) {
 				// Limit the amount of work this can suddenly spin up. In particular,
 				// this is to protect against the case of a system-wide slowdown on
 				// closed timestamps, which would otherwise potentially launch a huge
@@ -677,6 +683,11 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 			})
 			return nil, nil
 		})
+		if !leader {
+			// In the leader case, we've passed ownership of sp to the task. If the
+			// task was not triggered, though, it's up to us to Finish() it.
+			sp.Finish()
+		}
 	}
 
 	// If the closed timestamp is not empty, inform the Processor.

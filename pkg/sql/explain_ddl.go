@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
@@ -65,7 +66,10 @@ func (n *explainDDLNode) startExec(params runParams) error {
 			return explainNotPossibleError
 		}
 	}
-	sc, err := scplan.MakePlan(scNodes.plannedState, scplan.Params{ExecutionPhase: scop.StatementPhase})
+	sc, err := scplan.MakePlan(scNodes.plannedState, scplan.Params{
+		ExecutionPhase:             scop.StatementPhase,
+		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
+	})
 	if err != nil {
 		return errors.WithAssertionFailure(err)
 	}

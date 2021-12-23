@@ -544,7 +544,7 @@ func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 		now := s.Clock().Now()
 		maxOffset := s.Clock().MaxOffset().Nanoseconds()
 		require.NotZero(t, maxOffset)
-		txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset)
+		txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset, int32(s.SQLInstanceID()))
 		require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 		require.Len(t, txn.ObservedTimestamps, 0)
 
@@ -641,7 +641,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	now := clocks[1].Now()
 	maxOffset := clocks[1].MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	txn := roachpb.MakeTransaction("test", keyB, 1, now, maxOffset)
+	txn := roachpb.MakeTransaction("test", keyB, 1, now, maxOffset, int32(tc.Servers[1].SQLInstanceID()))
 	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 	require.Len(t, txn.ObservedTimestamps, 0)
 
@@ -1374,7 +1374,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	}
 
 	// Start a transaction using node2 as a gateway.
-	txn := roachpb.MakeTransaction("test", keyA, 1, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */)
+	txn := roachpb.MakeTransaction("test", keyA, 1 /* userPriority */, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */, int32(tc.Servers[1].SQLInstanceID()))
 	// Simulate a read to another range on node2 by setting the observed timestamp.
 	txn.UpdateObservedTimestamp(2, tc.Servers[1].Clock().NowAsClockTimestamp())
 
@@ -2650,7 +2650,7 @@ func TestReplicaTombstone(t *testing.T) {
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		testutils.SucceedsSoon(t, func() error {
-			repl.UnquiesceAndWakeLeader()
+			repl.MaybeUnquiesceAndWakeLeader()
 			if len(sawTooOld) == 0 {
 				return errors.New("still haven't seen ReplicaTooOldError")
 			}
@@ -3373,7 +3373,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		tableSpan     = roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 		mkRecord      = func() ptpb.Record {
 			return ptpb.Record{
-				ID:        uuid.MakeV4(),
+				ID:        uuid.MakeV4().GetBytes(),
 				Timestamp: tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
 				Spans:     []roachpb.Span{tableSpan},
 			}
@@ -3521,7 +3521,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}))
 		assertScanRejected(t)
 
-		require.NoError(t, ptp.Verify(ctx, rec.ID))
+		require.NoError(t, ptp.Verify(ctx, rec.ID.GetUUID()))
 		assertScanOk(t)
 
 		// Transfer the lease and demonstrate that the query succeeds because we're
@@ -3822,7 +3822,7 @@ func TestTenantID(t *testing.T) {
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
-			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.UserTableDataMin)
+			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.TestingUserTableDataMin())
 			ri := repl.State(ctx)
 			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
 		}
@@ -3899,6 +3899,85 @@ func TestTenantID(t *testing.T) {
 		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
 	})
 
+}
+
+// TestUninitializedMetric ensures that uninitialized replicas are reflected in the UninitializedCount store metric.
+func TestUninitializedMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      base.TestServerArgs{Insecure: true},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	_, repl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
+	sawSnapshot := make(chan struct{}, 1)
+	blockSnapshot := make(chan struct{})
+	tc.AddAndStartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				BeforeSnapshotSSTIngestion: func(
+					snapshot kvserver.IncomingSnapshot,
+					_ kvserver.SnapshotRequest_Type,
+					_ []string,
+				) error {
+					if snapshot.Desc.RangeID == repl.RangeID {
+						select {
+						case sawSnapshot <- struct{}{}:
+						default:
+						}
+						<-blockSnapshot
+					}
+					return nil
+				},
+			},
+		},
+	})
+
+	// We're going to block the snapshot. We need to retry adding the replica
+	// to the second node as under stressrace, failures can occur due to
+	// networking handshake timeouts.
+	addReplicaErr := make(chan error)
+	addReplica := func() {
+		_, err := tc.AddVoters(scratchKey, tc.Target(1))
+		addReplicaErr <- err
+	}
+	go addReplica()
+	if err := retry.ForDuration(3*time.Minute, func() error {
+		select {
+		case <-sawSnapshot:
+			return nil
+		case err := <-addReplicaErr:
+			go addReplica()
+			return err
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	targetStore := tc.GetFirstStoreFromServer(t, 1)
+
+	// Force the store to compute the replica metrics
+	require.NoError(t, targetStore.ComputeMetrics(ctx, 0))
+
+	// Blocked snapshot on the second server (1) should realize 1 uninitialized replica.
+	require.Equal(t, int64(1), targetStore.Metrics().UninitializedCount.Value())
+
+	// Unblock snapshot on the second server (1), this should initialize replica.
+	close(blockSnapshot)
+	require.NoError(t, <-addReplicaErr)
+
+	// Again force the store to compute metrics, increment tick counter 0 -> 1
+	require.NoError(t, targetStore.ComputeMetrics(ctx, 1))
+
+	// There should now be no uninitialized replicas in the recorded metrics
+	require.Equal(t, int64(0), targetStore.Metrics().UninitializedCount.Value())
 }
 
 // TestRangeMigration tests the below-raft migration infrastructure. It checks

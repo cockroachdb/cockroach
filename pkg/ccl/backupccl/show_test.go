@@ -40,9 +40,9 @@ func TestShowBackup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 11
-	_, tc, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	kvDB := tc.Server(0).DB()
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 	sqlDB.Exec(t, `
@@ -206,7 +206,7 @@ ORDER BY object_type, object_name`, full)
 		// Create tables with the same ID as data.tableA to ensure that comments
 		// from different tables in the restoring cluster don't appear.
 		tableA := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "data", "tablea")
-		for i := keys.MinUserDescID; i < int(tableA.GetID()); i++ {
+		for i := keys.TestingUserDescID(0); i < uint32(tableA.GetID()); i++ {
 			tableName := fmt.Sprintf("foo%d", i)
 			sqlDBRestore.Exec(t, fmt.Sprintf("CREATE TABLE %s ();", tableName))
 			sqlDBRestore.Exec(t, fmt.Sprintf("COMMENT ON TABLE %s IS 'table comment'", tableName))
@@ -407,12 +407,13 @@ func TestShowBackups(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 11
-	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
 	const full = LocalFoo + "/full"
+	const remoteInc = LocalFoo + "/inc"
 
 	// Make an initial backup.
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
@@ -427,6 +428,9 @@ func TestShowBackups(t *testing.T) {
 	// Make a third full backup, add changes to it.
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	// Make 2 remote incremental backups, chaining to the third full backup
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_storage = $2`, full, remoteInc)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_storage = $2`, full, remoteInc)
 
 	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
 
@@ -443,6 +447,12 @@ func TestShowBackups(t *testing.T) {
 		sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[2][0], full),
 		sqlDBRestore.QueryStr(t, `SHOW BACKUP LATEST IN $1`, full),
 	)
+
+	// check that full and remote incremental backups appear
+	b3 := sqlDBRestore.QueryStr(t,
+		`SELECT * FROM [SHOW BACKUP LATEST IN $1 WITH incremental_storage= 'nodelocal://0/foo/inc'] WHERE object_type='table'`, full)
+	require.Equal(t, 3, len(b3))
+
 }
 
 func TestShowBackupTenants(t *testing.T) {
@@ -450,7 +460,7 @@ func TestShowBackupTenants(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
-	_, tc, systemDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	srv := tc.Server(0)
 
@@ -564,7 +574,7 @@ func showUpgradedForeignKeysTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
 		const numAccounts = 1000
-		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
@@ -608,7 +618,7 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 
 	const numAccounts = 11
 	// Create test database with bank table
-	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	// add 1 type, 1 schema, and 2 tables to the database
@@ -670,7 +680,7 @@ func TestShowBackupPathIsCollectionRoot(t *testing.T) {
 	const numAccounts = 11
 
 	// Create test database with bank table.
-	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	// Make an initial backup.

@@ -68,6 +68,7 @@ var buildTargetMapping = map[string]string{
 	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
 	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
 	"cockroach":        "//pkg/cmd/cockroach:cockroach",
+	"cockroach-sql":    "//pkg/cmd/cockroach-sql:cockroach-sql",
 	"cockroach-oss":    "//pkg/cmd/cockroach-oss:cockroach-oss",
 	"cockroach-short":  "//pkg/cmd/cockroach-short:cockroach-short",
 	"crlfmt":           "@com_github_cockroachdb_crlfmt//:crlfmt",
@@ -339,6 +340,13 @@ func (d *dev) getBasicBuildArgs(
 				fields := strings.Fields(line)
 				fullTargetName := fields[len(fields)-1]
 				typ := fields[0]
+				if typ != "go_binary" && typ != "go_library" && typ != "go_test" {
+					// Skip all targets besides go_binary targets, go_library
+					// targets, and go_test targets. Notably this does not
+					// include go_proto_library targets which at this point
+					// cannot be built standalone.
+					continue
+				}
 				args = append(args, fullTargetName)
 				buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, isGoBinary: typ == "go_binary"})
 				if typ == "go_test" {

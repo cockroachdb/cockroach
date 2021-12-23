@@ -1392,7 +1392,7 @@
     minimist "^1.2.0"
 
 "@cockroachlabs/cluster-ui@link:workspaces/cluster-ui":
-  version "22.1.0-prerelease-1"
+  version "22.1.0-prerelease-3"
   dependencies:
     "@babel/runtime" "^7.12.13"
 
@@ -1402,6 +1402,11 @@
 "@cockroachlabs/crdb-protobuf-client@link:workspaces/db-console/src/js":
   version "0.0.0"
   uid ""
+
+"@cockroachlabs/design-tokens@0.4.5":
+  version "0.4.5"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/design-tokens/-/design-tokens-0.4.5.tgz#e3792263000c82020a98ed51a912e9c0e397c935"
+  integrity sha512-az2aIuGjnD0UBN5igLmaKvVWnZJ9r7v2jQ9C4fNR6bxxiF5DkOcD1DXf8EXHIbgwJtorpB74zaic7MQhhMY45w==
 
 "@cockroachlabs/eslint-config@^0.1.11":
   version "0.1.11"

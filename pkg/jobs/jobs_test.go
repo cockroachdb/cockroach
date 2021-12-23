@@ -349,7 +349,7 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 		if expectedStatus == "" {
 			return nil
 		}
-		st, err := rts.job.CurrentStatus(rts.ctx, nil /* txn */)
+		st, err := rts.job.TestingCurrentStatus(rts.ctx, nil /* txn */)
 		if err != nil {
 			return err
 		}
@@ -2587,7 +2587,7 @@ func TestStartableJob(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, txn.Commit(ctx))
 		require.NoError(t, sj.Cancel(ctx))
-		status, err := sj.CurrentStatus(ctx, nil /* txn */)
+		status, err := sj.TestingCurrentStatus(ctx, nil /* txn */)
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusCancelRequested, status)
 		// Start should fail since we have already called cancel on the job.
@@ -2661,7 +2661,7 @@ func TestStartableJob(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			loaded, err := jr.LoadJob(ctx, sj.ID())
 			require.NoError(t, err)
-			st, err := loaded.CurrentStatus(ctx, nil /* txn */)
+			st, err := loaded.TestingCurrentStatus(ctx, nil /* txn */)
 			require.NoError(t, err)
 			if st != jobs.StatusSucceeded {
 				return errors.Errorf("expected %s, got %s", jobs.StatusSucceeded, st)
@@ -3349,4 +3349,66 @@ func TestJobsRetry(t *testing.T) {
 		close(rts.failOrCancelCheckCh)
 		rts.check(t, jobs.StatusFailed)
 	})
+}
+
+func TestPausepoints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	registry := s.JobRegistry().(*jobs.Registry)
+	defer s.Stopper().Stop(ctx)
+
+	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				if err := registry.CheckPausepoint("test_pause_foo"); err != nil {
+					return err
+				}
+				return nil
+			},
+		}
+	})
+
+	rec := jobs.Record{
+		DescriptorIDs: []descpb.ID{1},
+		Details:       jobspb.ImportDetails{},
+		Progress:      jobspb.ImportProgress{},
+	}
+
+	for _, tc := range []struct {
+		name     string
+		points   string
+		expected jobs.Status
+	}{
+		{"none", "", jobs.StatusSucceeded},
+		{"pausepoint-only", "test_pause_foo", jobs.StatusPaused},
+		{"other-var-only", "test_pause_bar", jobs.StatusSucceeded},
+		{"pausepoint-and-other", "test_pause_bar,test_pause_foo,test_pause_baz", jobs.StatusPaused},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := sqlDB.Exec("SET CLUSTER SETTING jobs.debug.pausepoints = $1", tc.points)
+			require.NoError(t, err)
+
+			jobID := registry.MakeJobID()
+			var sj *jobs.StartableJob
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				return registry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, rec)
+			}))
+			require.NoError(t, sj.Start(ctx))
+			require.NoError(t, sj.AwaitCompletion(ctx))
+			status, err := sj.TestingCurrentStatus(ctx, nil)
+			// Map pause-requested to paused to avoid races.
+			if status == jobs.StatusPauseRequested {
+				status = jobs.StatusPaused
+			}
+			require.Equal(t, tc.expected, status)
+			require.NoError(t, err)
+		})
+	}
 }

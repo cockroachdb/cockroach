@@ -62,6 +62,7 @@ var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_
 // MaxSyncDuration is the threshold above which an observed engine sync duration
 // triggers either a warning or a fatal error.
 var MaxSyncDuration = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"storage.max_sync_duration",
 	"maximum duration for disk operations; any operations that take longer"+
 		" than this setting trigger a warning log entry or process crash",
@@ -71,6 +72,7 @@ var MaxSyncDuration = settings.RegisterDurationSetting(
 // MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
 // MaxSyncDuration fatal the Cockroach process. Defaults to true.
 var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"storage.max_sync_duration.fatal.enabled",
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	maxSyncDurationFatalOnExceededDefault,

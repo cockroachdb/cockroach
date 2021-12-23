@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -63,14 +64,15 @@ func (ti testInfra) newExecDeps(
 		txn,
 		security.RootUserName(),
 		descsCollection,
-		noopJobRegistry{},    /* jobRegistry */
-		noopBackfiller{},     /* indexBackfiller */
+		noopJobRegistry{}, /* jobRegistry */
+		noopBackfiller{},  /* backfiller */
+		scdeps.NewNoOpBackfillTracker(ti.lm.Codec()),
+		scdeps.NewNoopPeriodicProgressFlusher(),
 		noopIndexValidator{}, /* indexValidator */
-		noopCCLCallbacks{},   /* noopCCLCallbacks */
-		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
-			return nil
-		},
-		nil, /* statements */
+		noopPartitioner{},    /* partitioner */
+		noopEventLogger{},    /* eventLogger */
+		1,                    /* schemaChangerJobID */
+		nil,                  /* statements */
 	)
 }
 
@@ -100,7 +102,7 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 	type testCase struct {
 		name      string
 		orig, exp func() catalog.TableDescriptor
-		ops       func() scop.Ops
+		ops       func() []scop.Op
 	}
 	var table *tabledesc.Mutable
 	makeTable := func(f func(mutable *tabledesc.Mutable)) func() catalog.TableDescriptor {
@@ -165,7 +167,7 @@ CREATE TABLE db.t (
 
 	indexToAdd := descpb.IndexDescriptor{
 		ID:                2,
-		Name:              "foo",
+		Name:              tabledesc.IndexNamePlaceholder(2),
 		Version:           descpb.LatestNonPrimaryIndexDescriptorVersion,
 		CreatedExplicitly: true,
 		KeyColumnIDs:      []descpb.ColumnID{1},
@@ -188,21 +190,20 @@ CREATE TABLE db.t (
 					},
 					State:      descpb.DescriptorMutation_DELETE_ONLY,
 					Direction:  descpb.DescriptorMutation_ADD,
-					MutationID: mutable.NextMutationID,
+					MutationID: 1,
 				})
-				mutable.NextMutationID++
+				mutable.NextMutationID = 1
 			}),
-			ops: func() scop.Ops {
-				return scop.MakeOps(
+			ops: func() []scop.Op {
+				return []scop.Op{
 					&scop.MakeAddedIndexDeleteOnly{
 						TableID:             table.ID,
 						IndexID:             indexToAdd.ID,
-						IndexName:           indexToAdd.Name,
 						KeyColumnIDs:        indexToAdd.KeyColumnIDs,
 						KeyColumnDirections: indexToAdd.KeyColumnDirections,
 						SecondaryIndex:      true,
 					},
-				)
+				}
 			},
 		},
 		{
@@ -219,8 +220,8 @@ CREATE TABLE db.t (
 					Hidden:              false,
 				})
 			}),
-			ops: func() scop.Ops {
-				return scop.MakeOps(
+			ops: func() []scop.Op {
+				return []scop.Op{
 					&scop.AddCheckConstraint{
 						TableID:     table.GetID(),
 						Name:        "check_foo",
@@ -229,7 +230,7 @@ CREATE TABLE db.t (
 						Unvalidated: false,
 						Hidden:      false,
 					},
-				)
+				}
 			},
 		},
 	} {
@@ -355,7 +356,7 @@ func TestSchemaChanger(t *testing.T) {
 				stages := sc.StagesForCurrentPhase()
 				for _, s := range stages {
 					exDeps := ti.newExecDeps(txn, descriptors)
-					require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
+					require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
 					ts = s.After
 				}
 			}
@@ -366,9 +367,9 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
-			for _, s := range sc.StagesForCurrentPhase() {
+			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
+				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
 				after = s.After
 			}
 			return nil
@@ -431,7 +432,7 @@ func TestSchemaChanger(t *testing.T) {
 					sc := sctestutils.MakePlan(t, outputNodes, phase)
 					for _, s := range sc.StagesForCurrentPhase() {
 						exDeps := ti.newExecDeps(txn, descriptors)
-						require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
+						require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
 						ts = s.After
 					}
 				}
@@ -442,9 +443,9 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
-			for _, s := range sc.StagesForCurrentPhase() {
+			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops), sc))
+				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
 			}
 			return nil
 		}))
@@ -474,12 +475,19 @@ func (n noopJobRegistry) CreateJobWithTxn(
 
 type noopBackfiller struct{}
 
+var _ scexec.Backfiller = (*noopBackfiller)(nil)
+
+func (n noopBackfiller) MaybePrepareDestIndexesForBackfill(
+	ctx context.Context, progress scexec.BackfillProgress, descriptor catalog.TableDescriptor,
+) (scexec.BackfillProgress, error) {
+	return progress, nil
+}
+
 func (n noopBackfiller) BackfillIndex(
 	ctx context.Context,
-	_ scexec.JobProgressTracker,
-	_ catalog.TableDescriptor,
-	source descpb.IndexID,
-	destinations ...descpb.IndexID,
+	progress scexec.BackfillProgress,
+	writer scexec.BackfillProgressWriter,
+	descriptor catalog.TableDescriptor,
 ) error {
 	return nil
 }
@@ -490,8 +498,6 @@ func (noopIndexValidator) ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	withFirstMutationPublic bool,
-	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return nil
@@ -501,19 +507,17 @@ func (noopIndexValidator) ValidateInvertedIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
-	gatherAllInvalid bool,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return nil
 }
 
-type noopCCLCallbacks struct {
-}
+type noopPartitioner struct{}
 
-func (noopCCLCallbacks) AddPartitioning(
+func (noopPartitioner) AddPartitioning(
 	ctx context.Context,
-	tableDesc *tabledesc.Mutable,
-	indexDesc *descpb.IndexDescriptor,
+	tbl *tabledesc.Mutable,
+	index catalog.Index,
 	partitionFields []string,
 	listPartition []*scpb.ListPartition,
 	rangePartition []*scpb.RangePartitions,
@@ -523,6 +527,15 @@ func (noopCCLCallbacks) AddPartitioning(
 	return nil
 }
 
-var _ scexec.IndexBackfiller = noopBackfiller{}
+type noopEventLogger struct{}
+
+func (noopEventLogger) LogEvent(
+	ctx context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
+) error {
+	return nil
+}
+
+var _ scexec.Backfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
-var _ scexec.Partitioner = noopCCLCallbacks{}
+var _ scmutationexec.Partitioner = noopPartitioner{}
+var _ scexec.EventLogger = noopEventLogger{}

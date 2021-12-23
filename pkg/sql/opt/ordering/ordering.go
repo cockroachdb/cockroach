@@ -176,7 +176,7 @@ func init() {
 	}
 	funcMap[opt.TopKOp] = funcs{
 		canProvideOrdering:    topKCanProvideOrdering,
-		buildChildReqOrdering: noChildReqOrdering,
+		buildChildReqOrdering: topKBuildChildReqOrdering,
 		buildProvidedOrdering: topKBuildProvided,
 	}
 	funcMap[opt.ScalarGroupByOp] = funcs{

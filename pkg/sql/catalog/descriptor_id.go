@@ -26,7 +26,9 @@ type SystemIDChecker struct {
 	keys.SystemIDChecker
 }
 
+var _ keys.SystemIDChecker = SystemIDChecker{}
+
 // IsSystemID returns true if the ID is part of the system database.
-func (s SystemIDChecker) IsSystemID(id descpb.ID) bool {
-	return IsSystemID(s.SystemIDChecker, id)
+func (s SystemIDChecker) IsSystemID(id uint32) bool {
+	return s.SystemIDChecker.IsSystemID(id)
 }

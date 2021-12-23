@@ -558,62 +558,53 @@ insert xyz
  ├── columns: <none>
  ├── arbiter indexes: xyz_pkey xyz_y_z_key xyz_z_y_key
  ├── insert-mapping:
- │    ├── column1:9 => x:1
- │    ├── column2:10 => y:2
- │    └── column3:11 => z:3
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
  └── upsert-distinct-on
-      ├── columns: column1:9!null column2:10!null column3:11!null
-      ├── grouping columns: column2:10!null column3:11!null
+      ├── columns: column1:6!null column2:7!null column3:8!null
+      ├── grouping columns: column2:7!null column3:8!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    ├── grouping columns: column2:10!null column3:11!null
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── grouping columns: column2:7!null column3:8!null
       │    ├── upsert-distinct-on
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    ├── grouping columns: column1:9!null
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column1:6!null
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    ├── anti-join (hash)
-      │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    │    ├── anti-join (hash)
-      │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    │    │    │    │    ├── (1, 2, 3)
-      │    │    │    │    │    │    │    └── (4, 5, 6)
-      │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
-      │    │    │    │    │    │         │    └── column1:6
-      │    │    │    │    │    │         ├── assignment-cast: INT8 [as=column2:10]
-      │    │    │    │    │    │         │    └── column2:7
-      │    │    │    │    │    │         └── assignment-cast: INT8 [as=column3:11]
-      │    │    │    │    │    │              └── column3:8
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    ├── (1, 2, 3)
+      │    │    │    │    │    │    └── (4, 5, 6)
       │    │    │    │    │    ├── scan xyz
-      │    │    │    │    │    │    └── columns: x:12!null y:13 z:14
+      │    │    │    │    │    │    └── columns: x:9!null y:10 z:11
       │    │    │    │    │    └── filters
-      │    │    │    │    │         └── column1:9 = x:12
+      │    │    │    │    │         └── column1:6 = x:9
       │    │    │    │    ├── scan xyz
-      │    │    │    │    │    └── columns: x:17!null y:18 z:19
+      │    │    │    │    │    └── columns: x:14!null y:15 z:16
       │    │    │    │    └── filters
-      │    │    │    │         ├── column2:10 = y:18
-      │    │    │    │         └── column3:11 = z:19
+      │    │    │    │         ├── column2:7 = y:15
+      │    │    │    │         └── column3:8 = z:16
       │    │    │    ├── scan xyz
-      │    │    │    │    └── columns: x:22!null y:23 z:24
+      │    │    │    │    └── columns: x:19!null y:20 z:21
       │    │    │    └── filters
-      │    │    │         ├── column2:10 = y:23
-      │    │    │         └── column3:11 = z:24
+      │    │    │         ├── column2:7 = y:20
+      │    │    │         └── column3:8 = z:21
       │    │    └── aggregations
-      │    │         ├── first-agg [as=column2:10]
-      │    │         │    └── column2:10
-      │    │         └── first-agg [as=column3:11]
-      │    │              └── column3:11
+      │    │         ├── first-agg [as=column2:7]
+      │    │         │    └── column2:7
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
       │    └── aggregations
-      │         └── first-agg [as=column1:9]
-      │              └── column1:9
+      │         └── first-agg [as=column1:6]
+      │              └── column1:6
       └── aggregations
-           └── first-agg [as=column1:9]
-                └── column1:9
+           └── first-agg [as=column1:6]
+                └── column1:6
 
 # Conflict columns are explicitly specified.
 build
@@ -625,35 +616,26 @@ insert xyz
  ├── columns: <none>
  ├── arbiter indexes: xyz_y_z_key
  ├── insert-mapping:
- │    ├── column1:9 => x:1
- │    ├── column2:10 => y:2
- │    └── column3:11 => z:3
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
  └── upsert-distinct-on
-      ├── columns: column1:9!null column2:10!null column3:11!null
-      ├── grouping columns: column2:10!null column3:11!null
+      ├── columns: column1:6!null column2:7!null column3:8!null
+      ├── grouping columns: column2:7!null column3:8!null
       ├── anti-join (hash)
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    ├── project
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    ├── values
-      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    ├── (1, 2, 3)
-      │    │    │    └── (4, 5, 6)
-      │    │    └── projections
-      │    │         ├── assignment-cast: INT8 [as=column1:9]
-      │    │         │    └── column1:6
-      │    │         ├── assignment-cast: INT8 [as=column2:10]
-      │    │         │    └── column2:7
-      │    │         └── assignment-cast: INT8 [as=column3:11]
-      │    │              └── column3:8
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── (1, 2, 3)
+      │    │    └── (4, 5, 6)
       │    ├── scan xyz
-      │    │    └── columns: x:12!null y:13 z:14
+      │    │    └── columns: x:9!null y:10 z:11
       │    └── filters
-      │         ├── column2:10 = y:13
-      │         └── column3:11 = z:14
+      │         ├── column2:7 = y:10
+      │         └── column3:8 = z:11
       └── aggregations
-           └── first-agg [as=column1:9]
-                └── column1:9
+           └── first-agg [as=column1:6]
+                └── column1:6
 
 build
 INSERT INTO uniq VALUES ('x2', 'y1', 'z2'), ('x2', 'y2', 'z2'), ('x2', 'y2', 'z2')
@@ -663,65 +645,56 @@ insert uniq
  ├── columns: <none>
  ├── arbiter indexes: uniq_pkey uniq_y_key uniq_z_key
  ├── insert-mapping:
- │    ├── column1:9 => x:1
- │    ├── column2:10 => y:2
- │    └── column3:11 => z:3
+ │    ├── column1:6 => x:1
+ │    ├── column2:7 => y:2
+ │    └── column3:8 => z:3
  └── upsert-distinct-on
-      ├── columns: column1:9!null column2:10!null column3:11!null
-      ├── grouping columns: column3:11!null
+      ├── columns: column1:6!null column2:7!null column3:8!null
+      ├── grouping columns: column3:8!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    ├── grouping columns: column2:10!null
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    ├── grouping columns: column2:7!null
       │    ├── upsert-distinct-on
-      │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    ├── grouping columns: column1:9!null
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    ├── grouping columns: column1:6!null
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    ├── anti-join (hash)
-      │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    │    ├── anti-join (hash)
-      │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
-      │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
-      │    │    │    │    │    │    │    ├── ('x2', 'y1', 'z2')
-      │    │    │    │    │    │    │    ├── ('x2', 'y2', 'z2')
-      │    │    │    │    │    │    │    └── ('x2', 'y2', 'z2')
-      │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         ├── assignment-cast: STRING [as=column1:9]
-      │    │    │    │    │    │         │    └── column1:6
-      │    │    │    │    │    │         ├── assignment-cast: STRING [as=column2:10]
-      │    │    │    │    │    │         │    └── column2:7
-      │    │    │    │    │    │         └── assignment-cast: STRING [as=column3:11]
-      │    │    │    │    │    │              └── column3:8
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    │    │    │    ├── ('x2', 'y1', 'z2')
+      │    │    │    │    │    │    ├── ('x2', 'y2', 'z2')
+      │    │    │    │    │    │    └── ('x2', 'y2', 'z2')
       │    │    │    │    │    ├── scan uniq
-      │    │    │    │    │    │    └── columns: x:12!null y:13 z:14
+      │    │    │    │    │    │    └── columns: x:9!null y:10 z:11
       │    │    │    │    │    └── filters
-      │    │    │    │    │         └── column1:9 = x:12
+      │    │    │    │    │         └── column1:6 = x:9
       │    │    │    │    ├── scan uniq
-      │    │    │    │    │    └── columns: x:17!null y:18 z:19
+      │    │    │    │    │    └── columns: x:14!null y:15 z:16
       │    │    │    │    └── filters
-      │    │    │    │         └── column2:10 = y:18
+      │    │    │    │         └── column2:7 = y:15
       │    │    │    ├── scan uniq
-      │    │    │    │    └── columns: x:22!null y:23 z:24
+      │    │    │    │    └── columns: x:19!null y:20 z:21
       │    │    │    └── filters
-      │    │    │         └── column3:11 = z:24
+      │    │    │         └── column3:8 = z:21
       │    │    └── aggregations
-      │    │         ├── first-agg [as=column2:10]
-      │    │         │    └── column2:10
-      │    │         └── first-agg [as=column3:11]
-      │    │              └── column3:11
+      │    │         ├── first-agg [as=column2:7]
+      │    │         │    └── column2:7
+      │    │         └── first-agg [as=column3:8]
+      │    │              └── column3:8
       │    └── aggregations
-      │         ├── first-agg [as=column1:9]
-      │         │    └── column1:9
-      │         └── first-agg [as=column3:11]
-      │              └── column3:11
+      │         ├── first-agg [as=column1:6]
+      │         │    └── column1:6
+      │         └── first-agg [as=column3:8]
+      │              └── column3:8
       └── aggregations
-           ├── first-agg [as=column1:9]
-           │    └── column1:9
-           └── first-agg [as=column2:10]
-                └── column2:10
+           ├── first-agg [as=column1:6]
+           │    └── column1:6
+           └── first-agg [as=column2:7]
+                └── column2:7
 
 # ------------------------------------------------------------------------------
 # Test excluded columns.
@@ -1478,55 +1451,48 @@ insert checks
  ├── columns: <none>
  ├── arbiter indexes: checks_pkey
  ├── insert-mapping:
- │    ├── column1:9 => a:1
- │    ├── column2:10 => b:2
- │    ├── c_default:11 => c:3
- │    └── d_comp:12 => d:4
- ├── check columns: check1:19 check2:20
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── d_comp:10 => d:4
+ ├── check columns: check1:17 check2:18
  └── project
-      ├── columns: check1:19 check2:20!null column1:9!null column2:10!null c_default:11 d_comp:12
+      ├── columns: check1:17 check2:18!null column1:7!null column2:8!null c_default:9 d_comp:10
       ├── upsert-distinct-on
-      │    ├── columns: column1:9!null column2:10!null c_default:11 d_comp:12
-      │    ├── grouping columns: column1:9!null
+      │    ├── columns: column1:7!null column2:8!null c_default:9 d_comp:10
+      │    ├── grouping columns: column1:7!null
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:9!null column2:10!null c_default:11 d_comp:12
+      │    │    ├── columns: column1:7!null column2:8!null c_default:9 d_comp:10
       │    │    ├── project
-      │    │    │    ├── columns: d_comp:12 column1:9!null column2:10!null c_default:11
+      │    │    │    ├── columns: d_comp:10 column1:7!null column2:8!null c_default:9
       │    │    │    ├── project
-      │    │    │    │    ├── columns: c_default:11 column1:9!null column2:10!null
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column1:9!null column2:10!null
-      │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null
-      │    │    │    │    │    │    └── (1, 2)
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         ├── assignment-cast: INT8 [as=column1:9]
-      │    │    │    │    │         │    └── column1:7
-      │    │    │    │    │         └── assignment-cast: INT8 [as=column2:10]
-      │    │    │    │    │              └── column2:8
+      │    │    │    │    ├── columns: c_default:9 column1:7!null column2:8!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:7!null column2:8!null
+      │    │    │    │    │    └── (1, 2)
       │    │    │    │    └── projections
-      │    │    │    │         └── NULL::INT8 [as=c_default:11]
+      │    │    │    │         └── NULL::INT8 [as=c_default:9]
       │    │    │    └── projections
-      │    │    │         └── c_default:11 + 1 [as=d_comp:12]
+      │    │    │         └── c_default:9 + 1 [as=d_comp:10]
       │    │    ├── scan checks
-      │    │    │    ├── columns: a:13!null b:14 c:15 d:16
+      │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    ├── check constraint expressions
-      │    │    │    │    └── a:13 > 0
+      │    │    │    │    └── a:11 > 0
       │    │    │    └── computed column expressions
-      │    │    │         └── d:16
-      │    │    │              └── c:15 + 1
+      │    │    │         └── d:14
+      │    │    │              └── c:13 + 1
       │    │    └── filters
-      │    │         └── column1:9 = a:13
+      │    │         └── column1:7 = a:11
       │    └── aggregations
-      │         ├── first-agg [as=column2:10]
-      │         │    └── column2:10
-      │         ├── first-agg [as=c_default:11]
-      │         │    └── c_default:11
-      │         └── first-agg [as=d_comp:12]
-      │              └── d_comp:12
+      │         ├── first-agg [as=column2:8]
+      │         │    └── column2:8
+      │         ├── first-agg [as=c_default:9]
+      │         │    └── c_default:9
+      │         └── first-agg [as=d_comp:10]
+      │              └── d_comp:10
       └── projections
-           ├── column2:10 < d_comp:12 [as=check1:19]
-           └── column1:9 > 0 [as=check2:20]
+           ├── column2:8 < d_comp:10 [as=check1:17]
+           └── column1:7 > 0 [as=check2:18]
 
 # UPSERT
 build
@@ -1771,13 +1737,13 @@ upsert decimals
       │    │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8
       │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
+      │    │    │    │    │    │    │    │         └── 1.23 [as=c_default:9]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:7, 0) [as=a:10]
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:8, 1) [as=b:11]
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── (a:10 + c_default:12::DECIMAL)::DECIMAL(10,1) [as=d_comp:13]
+      │    │    │    │    │    │         └── a:10 + c_default:12 [as=d_comp:13]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
       │    │    │    │    └── aggregations
@@ -1791,11 +1757,11 @@ upsert decimals
       │    │    │    │    ├── columns: decimals.a:15!null decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d:18
-      │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
+      │    │    │    │              └── decimals.a:15::DECIMAL + c:17::DECIMAL
       │    │    │    └── filters
       │    │    │         └── a:10 = decimals.a:15
       │    │    └── projections
-      │    │         └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1) [as=d_comp:21]
+      │    │         └── decimals.a:15::DECIMAL + c:17::DECIMAL [as=d_comp:21]
       │    └── projections
       │         ├── CASE WHEN decimals.a:15 IS NULL THEN a:10 ELSE decimals.a:15 END [as=upsert_a:22]
       │         ├── CASE WHEN decimals.a:15 IS NULL THEN c_default:12 ELSE c:17 END [as=upsert_c:23]
@@ -1843,13 +1809,13 @@ upsert decimals
       │    │    │    │    │    │    │    │    │    └── (1.1,)
       │    │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │    │         ├── NULL::DECIMAL(5,1)[] [as=b_default:8]
-      │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
+      │    │    │    │    │    │    │    │         └── 1.23 [as=c_default:9]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:7, 0) [as=a:10]
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(b_default:8, 1) [as=b_default:11]
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── (a:10 + c_default:12::DECIMAL)::DECIMAL(10,1) [as=d_comp:13]
+      │    │    │    │    │    │         └── a:10 + c_default:12 [as=d_comp:13]
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
       │    │    │    │    └── aggregations
@@ -1863,11 +1829,11 @@ upsert decimals
       │    │    │    │    ├── columns: decimals.a:15!null b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d:18
-      │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
+      │    │    │    │              └── decimals.a:15::DECIMAL + c:17::DECIMAL
       │    │    │    └── filters
       │    │    │         └── a:10 = decimals.a:15
       │    │    └── projections
-      │    │         └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1) [as=d_comp:21]
+      │    │         └── decimals.a:15::DECIMAL + c:17::DECIMAL [as=d_comp:21]
       │    └── projections
       │         ├── CASE WHEN decimals.a:15 IS NULL THEN a:10 ELSE decimals.a:15 END [as=upsert_a:22]
       │         ├── CASE WHEN decimals.a:15 IS NULL THEN b_default:11 ELSE b:16 END [as=upsert_b:23]
@@ -1923,13 +1889,13 @@ upsert decimals
       │    │    │    │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8
       │    │    │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │    │         └── 1.23::DECIMAL(10,1) [as=c_default:9]
+      │    │    │    │    │    │    │    │    │    │         └── 1.23 [as=c_default:9]
       │    │    │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:7, 0) [as=a:10]
       │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:8, 1) [as=b:11]
       │    │    │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:9, 1) [as=c_default:12]
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── (a:10 + c_default:12::DECIMAL)::DECIMAL(10,1) [as=d_comp:13]
+      │    │    │    │    │    │    │    │         └── a:10 + c_default:12 [as=d_comp:13]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:13, 1) [as=d_comp:14]
       │    │    │    │    │    │    └── aggregations
@@ -1943,7 +1909,7 @@ upsert decimals
       │    │    │    │    │    │    ├── columns: decimals.a:15!null decimals.b:16 c:17 d:18 crdb_internal_mvcc_timestamp:19 tableoid:20
       │    │    │    │    │    │    └── computed column expressions
       │    │    │    │    │    │         └── d:18
-      │    │    │    │    │    │              └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1)
+      │    │    │    │    │    │              └── decimals.a:15::DECIMAL + c:17::DECIMAL
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a:10 = decimals.a:15
       │    │    │    │    └── projections
@@ -1951,7 +1917,7 @@ upsert decimals
       │    │    │    └── projections
       │    │    │         └── crdb_internal.round_decimal_values(b_new:21, 1) [as=b_new:22]
       │    │    └── projections
-      │    │         └── (decimals.a:15::DECIMAL + c:17::DECIMAL)::DECIMAL(10,1) [as=d_comp:23]
+      │    │         └── decimals.a:15::DECIMAL + c:17::DECIMAL [as=d_comp:23]
       │    └── projections
       │         ├── CASE WHEN decimals.a:15 IS NULL THEN a:10 ELSE decimals.a:15 END [as=upsert_a:24]
       │         ├── CASE WHEN decimals.a:15 IS NULL THEN b:11 ELSE b_new:22 END [as=upsert_b:25]
@@ -2007,6 +1973,24 @@ upsert on_update_bare
  └── values
       ├── columns: column1:5!null column2:6!null
       └── (1, 2)
+
+# If there are no explicit target columns, UPSERT sets all columns to their
+# DEFAULT value. Therefore, the ON UPDATE value is not used. See #73984.
+build
+UPSERT INTO on_update_bare VALUES (1)
+----
+upsert on_update_bare
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:5 => a:1
+ │    └── v_default:6 => v:2
+ └── project
+      ├── columns: v_default:6 column1:5!null
+      ├── values
+      │    ├── columns: column1:5!null
+      │    └── (1,)
+      └── projections
+           └── NULL::INT8 [as=v_default:6]
 
 build
 UPSERT INTO on_update_bare (a) VALUES (1)

@@ -1313,7 +1313,7 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			// implies that any previous config changes are durably known to be
 			// committed. That is, a commit index is persisted (and synced) that
 			// encompasses any earlier config changes before a new config change is
-			// appended.
+			// appended[1].
 			//
 			// Together, these invariants ensure that a follower that is behind by
 			// multiple configuration changes will be using one of the two most recent
@@ -1334,6 +1334,19 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 			// that it will apply all the way up to and including the second most
 			// recent configuration change, which is compatible with the most recent
 			// one.
+			//
+			// [1]: this rests on shaky and, in particular, untested foundations in
+			// etcd/raft and our syncing behavior. The argument goes as follows:
+			// because the leader will have at most one config change in flight at a
+			// given time, it will definitely wait until the previous config change is
+			// committed until accepting the next one. `etcd/raft` will always attach
+			// the optimal commit index to appends to followers, so each config change
+			// will mark the previous one as committed upon receipt, since we sync on
+			// append (as we have to) we make that HardState.Commit durable. Finally,
+			// when a follower is catching up on larger chunks of the historical log,
+			// it will receive batches of entries together with a committed index
+			// encompassing the entire batch, again making sure that these batches are
+			// durably committed upon receipt.
 			rn.ApplyConfChange(cmd.confChange.ConfChangeI)
 			return true, nil
 		})

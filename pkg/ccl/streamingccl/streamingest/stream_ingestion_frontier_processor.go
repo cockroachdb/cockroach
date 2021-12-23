@@ -33,6 +33,7 @@ import (
 
 // PartitionProgressFrequency controls the frequency of partition progress checkopints.
 var PartitionProgressFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"streaming.partition_progress_frequency",
 	"controls the frequency with which partitions update their progress; if 0, disabled.",
 	10*time.Second,

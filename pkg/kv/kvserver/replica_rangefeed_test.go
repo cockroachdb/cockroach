@@ -672,6 +672,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				return nil
 			}
 			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1))
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("not raft follower: %+v, transferred lease: %v", raftStatus, err)
 		})
 
@@ -739,7 +741,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}
 		// Split the range so that the RHS is not a system range and thus will
 		// respect the rangefeed_enabled cluster setting.
-		startKey := keys.UserTableDataMin
+		startKey := keys.TestingUserTableDataMin()
 		tc.SplitRangeOrFatal(t, startKey)
 
 		rightRangeID := store.LookupReplica(roachpb.RKey(startKey)).RangeID

@@ -104,12 +104,12 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
 
 	// Install Jepsen's prereqs on the controller.
-	if out, err := c.RunWithBuffer(
+	if result, err := c.RunWithDetailsSingleNode(
 		ctx, t.L(), controller, "sh", "-c",
 		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
 	); err != nil {
-		if strings.Contains(string(out), "exit status 100") {
-			t.Skip("apt-get failure (#31944)", string(out))
+		if result.RemoteExitStatus == "100" {
+			t.Skip("apt-get failure (#31944)", result.Stdout+result.Stderr)
 		}
 		t.Fatal(err)
 	}
@@ -121,7 +121,11 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
+	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -m pem -N ''"`)
+	// Convert OpenSSH private key to old format that jsch used by jepsen understands.
+	// This is needed if key already existed or inherited so that we can continue.
+	c.Run(ctx, controller, "sh", "-c", `"ssh-keygen -p -f .ssh/id_rsa -m pem -P '' -N ''"`)
+
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
 	if err := c.Get(ctx, t.L(), ".ssh/id_rsa.pub", pubSSHKey, controller); err != nil {
 		t.Fatal(err)
@@ -264,7 +268,6 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			`grep -E "(Oh jeez, I'm sorry, Jepsen broke. Here's why|Caused by)" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 | grep `+
 				`-e BrokenBarrierException `+
 				`-e InterruptedException `+
-				`-e com.jcraft.jsch.JSchException `+
 				`-e ArrayIndexOutOfBoundsException `+
 				`-e NullPointerException `+
 				// And one more ssh failure we've seen, apparently encountered when
@@ -280,14 +283,14 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			ignoreErr = true
 		}
 
-		if output, err := c.RunWithBuffer(
+		if result, err := c.RunWithDetailsSingleNode(
 			ctx, t.L(), controller,
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
 			"tar -chj --ignore-failed-read -C /mnt/data1/jepsen/cockroachdb -f- store/latest invoke.log",
 		); err != nil {
 			t.L().Printf("failed to retrieve jepsen artifacts and invoke.log: %s", err)
-		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
+		} else if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), []byte(result.Stdout), 0666); err != nil {
 			t.Fatal(err)
 		} else {
 			t.L().Printf("downloaded jepsen logs in failure-logs.tbz")

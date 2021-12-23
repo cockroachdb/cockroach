@@ -107,7 +107,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 ) error {
 	if tableDesc.NewSchemaChangeJobID != 0 {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"cannot perform a schema change on table %q while it is undergoing a new-style schema change",
+			"cannot perform a schema change on table %q while it is undergoing a declarative schema change",
 			// We use the cluster version because the table may have been renamed.
 			// This is a bit of a hack.
 			tableDesc.ClusterVersion.GetName(),
@@ -284,7 +284,7 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	if err := catalog.ValidateSelf(tableDesc); err != nil {
-		return errors.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "table descriptor is not valid\n%v\n", tableDesc)
 	}
 
 	return p.Descriptors().WriteDescToBatch(

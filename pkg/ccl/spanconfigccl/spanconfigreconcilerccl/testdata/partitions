@@ -1,0 +1,187 @@
+# Test behavior of span configs in the presence of partitions (we care about zone
+# config inheritance from database -> table -> indexes -> partitions, with and
+# without ancestor nodes with explicit configs).
+#
+# TODO(irfansharif): Would be worth capturing partitions on a secondary index.
+
+reconcile
+----
+
+mutations discard
+----
+
+state offset=41
+----
+...
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+  PARTITION one_two VALUES IN (1, 2),
+  PARTITION three_four VALUES IN (3, 4),
+  PARTITION default VALUES IN (default)
+);
+----
+
+# With no explicit zone configs, we should only observe a single span for the
+# entire table.
+mutations
+----
+upsert /Table/5{6-7}                       range default
+
+state offset=41
+----
+...
+/Table/5{6-7}                              range default
+
+# All parent schema zone config changes cascade to the entire table's span.
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
+ALTER TABLE db.t CONFIGURE ZONE USING num_voters = 5;
+----
+
+mutations
+----
+delete /Table/5{6-7}
+upsert /Table/5{6-7}                       num_replicas=7 num_voters=5
+
+state offset=41
+----
+...
+/Table/5{6-7}                              num_replicas=7 num_voters=5
+
+# Apply a zone configuration on one of the partitions, `one_two`, which
+# encompasses two (adjacent) spans -- both with global reads set to true. The
+# table's spans before and after the partitions span continue to have the
+# table's zone configuration.
+exec-sql
+ALTER PARTITION one_two OF TABLE db.t CONFIGURE ZONE USING global_reads = true
+----
+
+mutations
+----
+delete /Table/5{6-7}
+upsert /Table/56{-/1/1}                    num_replicas=7 num_voters=5
+upsert /Table/56/1/{1-2}                   global_reads=true num_replicas=7 num_voters=5
+upsert /Table/56/1/{2-3}                   global_reads=true num_replicas=7 num_voters=5
+upsert /Table/5{6/1/3-7}                   num_replicas=7 num_voters=5
+
+state offset=41
+----
+...
+/Table/56{-/1/1}                           num_replicas=7 num_voters=5
+/Table/56/1/{1-2}                          global_reads=true num_replicas=7 num_voters=5
+/Table/56/1/{2-3}                          global_reads=true num_replicas=7 num_voters=5
+/Table/5{6/1/3-7}                          num_replicas=7 num_voters=5
+
+# Apply a zone config on the second partition; we should expect two more
+# adjacent spans with ttl_seconds = 5.
+exec-sql
+ALTER PARTITION three_four OF TABLE db.t CONFIGURE ZONE USING gc.ttlseconds = 5
+----
+
+mutations
+----
+delete /Table/5{6/1/3-7}
+upsert /Table/56/1/{3-4}                   ttl_seconds=5 num_replicas=7 num_voters=5
+upsert /Table/56/1/{4-5}                   ttl_seconds=5 num_replicas=7 num_voters=5
+upsert /Table/5{6/1/5-7}                   num_replicas=7 num_voters=5
+
+state offset=41
+----
+...
+/Table/56{-/1/1}                           num_replicas=7 num_voters=5
+/Table/56/1/{1-2}                          global_reads=true num_replicas=7 num_voters=5
+/Table/56/1/{2-3}                          global_reads=true num_replicas=7 num_voters=5
+/Table/56/1/{3-4}                          ttl_seconds=5 num_replicas=7 num_voters=5
+/Table/56/1/{4-5}                          ttl_seconds=5 num_replicas=7 num_voters=5
+/Table/5{6/1/5-7}                          num_replicas=7 num_voters=5
+
+# Set a zone config for the default partition for the primary index. We should
+# expect:
+# - the (empty) span before the primary index to have inherit from the
+#   table's config (num_voters = 5);
+# - each partition of the primary index with an explicit zone config set to
+#   have the specified attributes (num_voters = 5);
+# - the keyspace starting after the primary index's last partition with an
+#   explicit config, and ending before the secondary index, to have the new
+#   partition default config (num_voters = 6);
+# - the keyspace starting at the first key of the primary index, and ending
+#   before the primary index's first partition with an explicit config, to have
+#   the new partition default config (num_voters = 6).
+exec-sql
+ALTER PARTITION default OF TABLE db.t CONFIGURE ZONE USING num_voters = 6
+----
+
+mutations
+----
+delete /Table/56{-/1/1}
+upsert /Table/56{-/1}                      num_replicas=7 num_voters=5
+upsert /Table/56/1{-/1}                    num_replicas=7 num_voters=6
+delete /Table/5{6/1/5-7}
+upsert /Table/56/{1/5-2}                   num_replicas=7 num_voters=6
+upsert /Table/5{6/2-7}                     num_replicas=7 num_voters=5
+
+state offset=41
+----
+...
+/Table/56{-/1}                             num_replicas=7 num_voters=5
+/Table/56/1{-/1}                           num_replicas=7 num_voters=6
+/Table/56/1/{1-2}                          global_reads=true num_replicas=7 num_voters=5
+/Table/56/1/{2-3}                          global_reads=true num_replicas=7 num_voters=5
+/Table/56/1/{3-4}                          ttl_seconds=5 num_replicas=7 num_voters=5
+/Table/56/1/{4-5}                          ttl_seconds=5 num_replicas=7 num_voters=5
+/Table/56/{1/5-2}                          num_replicas=7 num_voters=6
+/Table/5{6/2-7}                            num_replicas=7 num_voters=5
+
+# Discard the table's zone configuration, dropping all the num_voters = 5
+# overrides.
+exec-sql
+ALTER TABLE db.t CONFIGURE ZONE DISCARD
+----
+
+mutations
+----
+delete /Table/56{-/1}
+upsert /Table/56{-/1}                      num_replicas=7
+delete /Table/56/1/{1-2}
+upsert /Table/56/1/{1-2}                   global_reads=true num_replicas=7
+delete /Table/56/1/{2-3}
+upsert /Table/56/1/{2-3}                   global_reads=true num_replicas=7
+delete /Table/56/1/{3-4}
+upsert /Table/56/1/{3-4}                   ttl_seconds=5 num_replicas=7
+delete /Table/56/1/{4-5}
+upsert /Table/56/1/{4-5}                   ttl_seconds=5 num_replicas=7
+delete /Table/5{6/2-7}
+upsert /Table/5{6/2-7}                     num_replicas=7
+
+state offset=41
+----
+...
+/Table/56{-/1}                             num_replicas=7
+/Table/56/1{-/1}                           num_replicas=7 num_voters=6
+/Table/56/1/{1-2}                          global_reads=true num_replicas=7
+/Table/56/1/{2-3}                          global_reads=true num_replicas=7
+/Table/56/1/{3-4}                          ttl_seconds=5 num_replicas=7
+/Table/56/1/{4-5}                          ttl_seconds=5 num_replicas=7
+/Table/56/{1/5-2}                          num_replicas=7 num_voters=6
+/Table/5{6/2-7}                            num_replicas=7
+
+exec-sql
+DROP TABLE db.t
+----
+
+mutations
+----
+delete /Table/56{-/1}
+delete /Table/56/1{-/1}
+delete /Table/56/1/{1-2}
+delete /Table/56/1/{2-3}
+delete /Table/56/1/{3-4}
+delete /Table/56/1/{4-5}
+delete /Table/56/{1/5-2}
+delete /Table/5{6/2-7}
+
+state offset=41
+----
+...

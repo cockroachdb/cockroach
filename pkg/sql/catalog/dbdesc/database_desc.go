@@ -461,7 +461,7 @@ func (desc *Mutable) HasPostDeserializationChanges() bool {
 func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
 	if defaultPrivilegeDescriptor == nil {
-		defaultPrivilegeDescriptor = catprivilege.MakeNewDefaultPrivilegeDescriptor()
+		defaultPrivilegeDescriptor = catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
 	}
 	return catprivilege.MakeDefaultPrivileges(defaultPrivilegeDescriptor)
 }
@@ -470,7 +470,7 @@ func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeD
 func (desc *Mutable) GetMutableDefaultPrivilegeDescriptor() *catprivilege.Mutable {
 	defaultPrivilegeDescriptor := desc.GetDefaultPrivileges()
 	if defaultPrivilegeDescriptor == nil {
-		defaultPrivilegeDescriptor = catprivilege.MakeNewDefaultPrivilegeDescriptor()
+		defaultPrivilegeDescriptor = catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
 	}
 	return catprivilege.NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 }
@@ -481,6 +481,20 @@ func (desc *Mutable) SetDefaultPrivilegeDescriptor(
 	defaultPrivilegeDescriptor *descpb.DefaultPrivilegeDescriptor,
 ) {
 	desc.DefaultPrivileges = defaultPrivilegeDescriptor
+}
+
+// AddSchemaToDatabase adds a schemaName and schemaInfo entry into the
+// database's Schemas map. If the map is nil, then we create a map before
+// adding the entry.
+// If there is an existing entry in the map with schemaName as the key,
+// it will be overridden.
+func (desc *Mutable) AddSchemaToDatabase(
+	schemaName string, schemaInfo descpb.DatabaseDescriptor_SchemaInfo,
+) {
+	if desc.Schemas == nil {
+		desc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+	}
+	desc.Schemas[schemaName] = schemaInfo
 }
 
 // maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the

@@ -59,6 +59,7 @@ var MinLeaseTransferStatsDuration = 30 * time.Second
 // via the new heuristic based on request load and latency or via the simpler
 // approach that purely seeks to balance the number of leases per node evenly.
 var enableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.allocator.load_based_lease_rebalancing.enabled",
 	"set to enable rebalancing of range leases based on load and latency",
 	true,
@@ -73,6 +74,7 @@ var enableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
 // Setting this to 0 effectively disables load-based lease rebalancing, and
 // settings less than 0 are disallowed.
 var leaseRebalancingAggressiveness = settings.RegisterFloatSetting(
+	settings.TenantWritable,
 	"kv.allocator.lease_rebalancing_aggressiveness",
 	"set greater than 1.0 to rebalance leases toward load more aggressively, "+
 		"or between 0 and 1.0 to be more conservative about rebalancing leases",
@@ -1077,13 +1079,12 @@ func (a Allocator) rebalanceTarget(
 		return zero, zero, "", false
 	}
 	// Keep looping until we either run out of options or find a target that we're
-	// pretty sure we won't want to remove immediately after adding it.
-	// If we would, we don't want to actually rebalance to that target.
-	var target *candidate
+	// pretty sure we won't want to remove immediately after adding it. If we
+	// would, we don't want to actually rebalance to that target.
+	var target, existingCandidate *candidate
 	var removeReplica roachpb.ReplicaDescriptor
-	var existingCandidates candidateList
 	for {
-		target, existingCandidates = bestRebalanceTarget(a.randGen, results)
+		target, existingCandidate = bestRebalanceTarget(a.randGen, results)
 		if target == nil {
 			return zero, zero, "", false
 		}
@@ -1146,7 +1147,7 @@ func (a Allocator) rebalanceTarget(
 	// debugging/auditability purposes.
 	dDetails := decisionDetails{
 		Target:   target.compactString(),
-		Existing: existingCandidates.compactString(options),
+		Existing: existingCandidate.compactString(),
 	}
 	detailsBytes, err := json.Marshal(dDetails)
 	if err != nil {

@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime"
 	"runtime/pprof"
 	"sort"
 	"strconv"
@@ -79,9 +78,6 @@ import (
 const (
 	// Default Maximum number of log entries returned.
 	defaultMaxLogEntries = 1000
-
-	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
-	stackTraceApproxSize = 1024
 
 	// statusPrefix is the root of the cluster statistics and metrics API.
 	statusPrefix = "/_status/"
@@ -420,10 +416,14 @@ type StmtDiagnosticsRequester interface {
 	// stay active.
 	InsertRequest(
 		ctx context.Context,
-		fprint string,
+		stmtFingerprint string,
 		minExecutionLatency time.Duration,
 		expiresAfter time.Duration,
 	) error
+	// CancelRequest updates an entry in system.statement_diagnostics_requests
+	// for tracing a query with the given fingerprint to be expired (thus,
+	// canceling any new tracing for it).
+	CancelRequest(ctx context.Context, stmtFingerprint string) error
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -952,7 +952,7 @@ func (s *statusServer) GetFiles(
 
 	var dir string
 	switch req.Type {
-	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
+	// TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
 	// instead of reading individual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
 		dir = s.admin.server.cfg.HeapProfileDirName
@@ -1206,9 +1206,6 @@ func (s *statusServer) Logs(
 	return &serverpb.LogEntriesResponse{Entries: entries}, nil
 }
 
-// TODO(tschottdorf): significant overlap with /debug/pprof/goroutine, except
-// that this one allows querying by NodeID.
-//
 // Stacks returns goroutine or thread stack traces.
 func (s *statusServer) Stacks(
 	ctx context.Context, req *serverpb.StacksRequest,
@@ -1233,23 +1230,21 @@ func (s *statusServer) Stacks(
 		return status.Stacks(ctx, req)
 	}
 
+	var debug int
 	switch req.Type {
 	case serverpb.StacksType_GOROUTINE_STACKS:
-		bufSize := runtime.NumGoroutine() * stackTraceApproxSize
-		for {
-			buf := make([]byte, bufSize)
-			length := runtime.Stack(buf, true)
-			// If this wasn't large enough to accommodate the full set of
-			// stack traces, increase by 2 and try again.
-			if length == bufSize {
-				bufSize = bufSize * 2
-				continue
-			}
-			return &serverpb.JSONResponse{Data: buf[:length]}, nil
-		}
+		debug = 2
+	case serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1:
+		debug = 1
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}
+
+	var buf bytes.Buffer
+	if err := pprof.Lookup("goroutine").WriteTo(&buf, debug); err != nil {
+		return nil, status.Errorf(codes.Unknown, "failed to write goroutine stack: %s", err)
+	}
+	return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 }
 
 // TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
@@ -1643,7 +1638,7 @@ func (s *statusServer) nodeStatus(
 
 	var nodeStatus statuspb.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
-		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
+		err = errors.Wrapf(err, "could not unmarshal NodeStatus from %s", key)
 		log.Errorf(ctx, "%v", err)
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
@@ -1802,29 +1797,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	h.appendLicenseExpiryMetric(ctx, w)
 	telemetry.Inc(telemetryPrometheusVars)
-}
-
-// appendLicenseExpiryMetric computes the seconds until the enterprise licence
-// expires on this clusters. the license expiry metric is computed on-demand
-// since it's not regularly computed as part of running the cluster unless
-// enterprise features are accessed.
-func (h varsHandler) appendLicenseExpiryMetric(ctx context.Context, w io.Writer) {
-	durationToExpiry, err := base.TimeToEnterpriseLicenseExpiry(ctx, h.st, timeutil.Now())
-	if err != nil {
-		log.Errorf(ctx, "unable to generate time to license expiry: %v", err)
-		return
-	}
-
-	secondsToExpiry := int64(durationToExpiry / time.Second)
-
-	_, err = w.Write([]byte(
-		fmt.Sprintf("seconds_until_enterprise_license_expiry %d\n", secondsToExpiry),
-	))
-	if err != nil {
-		log.Errorf(ctx, "problem writing license expiry metric: %v", err)
-	}
 }
 
 func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
@@ -2749,7 +2722,7 @@ func marshalToJSON(value interface{}) ([]byte, error) {
 	}
 	body, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		return nil, errors.Errorf("unable to marshal %+v to json: %s", value, err)
+		return nil, errors.Wrapf(err, "unable to marshal %+v to json", value)
 	}
 	return body, nil
 }

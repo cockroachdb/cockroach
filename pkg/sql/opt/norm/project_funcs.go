@@ -425,7 +425,7 @@ func (c *CustomFuncs) UnnestJSONFromValues(
 		tupleVals := make(memo.ScalarListExpr, len(newCols))
 		iter, err := firstJSON.ObjectIter()
 		if err != nil {
-			panic(errors.AssertionFailedf("failed to retrieve ObjectIter: %v", err))
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to retrieve ObjectIter"))
 		}
 		// Iterate through the keys of the first row and use them to get the values
 		// from the current row. Add these values to the new Values rows.
@@ -433,7 +433,7 @@ func (c *CustomFuncs) UnnestJSONFromValues(
 		for iter.Next() {
 			jsonVal, err := rowExpr.(*memo.ConstExpr).Value.(*tree.DJSON).FetchValKey(iter.Key())
 			if err != nil {
-				panic(errors.AssertionFailedf("FetchValKey failed: %v", err))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "FetchValKey failed"))
 			}
 			dJSON := tree.NewDJSON(jsonVal)
 			tupleVals[idx] = c.f.ConstructConstVal(dJSON, types.Jsonb)
@@ -470,7 +470,7 @@ func (c *CustomFuncs) FoldJSONFieldAccess(
 	firstJSON := oldValues.Rows[0].(*memo.TupleExpr).Elems[0].(*memo.ConstExpr).Value.(*tree.DJSON)
 	iter, err := firstJSON.ObjectIter()
 	if err != nil {
-		panic(errors.AssertionFailedf("failed to retrieve ObjectIter: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to retrieve ObjectIter"))
 	}
 	idx := 0
 	for iter.Next() {
@@ -518,7 +518,7 @@ func (c *CustomFuncs) MakeColsForUnnestJSON(
 	// Create a new column for each JSON key found in dJSON.
 	iter, err := dJSON.ObjectIter()
 	if err != nil {
-		panic(errors.AssertionFailedf("failed to retrieve ObjectIter: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to retrieve ObjectIter"))
 	}
 	newColIDs := make(opt.ColList, 0, dJSON.Len())
 	for iter.Next() {

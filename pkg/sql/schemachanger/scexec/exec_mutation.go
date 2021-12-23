@@ -13,6 +13,7 @@ package scexec
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -24,13 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs, deps.EventLogger())
+	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs, deps.Partitioner())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err
@@ -83,8 +86,8 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 				return sb.String()
 			}
 			record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-			record.JobID = deps.TransactionalJobCreator().MakeJobID()
-			if err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
+			record.JobID = deps.TransactionalJobRegistry().MakeJobID()
+			if err := deps.TransactionalJobRegistry().CreateJob(ctx, record); err != nil {
 				return err
 			}
 		}
@@ -107,19 +110,32 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		}
 
 		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-		record.JobID = deps.TransactionalJobCreator().MakeJobID()
-		if err := deps.TransactionalJobCreator().CreateJob(ctx, record); err != nil {
+		record.JobID = deps.TransactionalJobRegistry().MakeJobID()
+		if err := deps.TransactionalJobRegistry().CreateJob(ctx, record); err != nil {
 			return err
 		}
 	}
 	if mvs.schemaChangerJob != nil {
-		if err := deps.TransactionalJobCreator().CreateJob(ctx, *mvs.schemaChangerJob); err != nil {
+		if err := deps.TransactionalJobRegistry().CreateJob(ctx, *mvs.schemaChangerJob); err != nil {
 			return err
 		}
 	}
 
-	if err := deps.EventLogger().ProcessAndSubmitEvents(ctx); err != nil {
-		return err
+	statementIDs := make([]uint32, 0, len(mvs.eventsByStatement))
+	for statementID := range mvs.eventsByStatement {
+		statementIDs = append(statementIDs, statementID)
+	}
+	sort.Slice(statementIDs, func(i, j int) bool {
+		return statementIDs[i] < statementIDs[j]
+	})
+	for _, statementID := range statementIDs {
+		entries := eventLogEntriesForStatement(mvs.eventsByStatement[statementID])
+		for _, e := range entries {
+			// TODO(postamar): batch these
+			if err := deps.EventLogger().LogEvent(ctx, e.id, *e.metadata, e.event); err != nil {
+				return err
+			}
+		}
 	}
 
 	for _, id := range mvs.descriptorsToDelete.Ordered() {
@@ -127,13 +143,16 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			return err
 		}
 	}
-	for id, update := range mvs.schemaChangerStatusUpdates {
-		if err := deps.TransactionalJobCreator().UpdateSchemaChangeJob(ctx, id, func(
-			md jobs.JobMetadata, updateProgress func(*jobspb.Progress),
+	for id, update := range mvs.schemaChangerJobUpdates {
+		if err := deps.TransactionalJobRegistry().UpdateSchemaChangeJob(ctx, id, func(
+			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
 		) error {
 			progress := *md.Progress
-			progress.GetNewSchemaChange().States = update
+			progress.GetNewSchemaChange().States = update.progress
 			updateProgress(&progress)
+			if !md.Payload.Noncancelable && update.isNonCancelable {
+				setNonCancelable()
+			}
 			return nil
 		}); err != nil {
 			return err
@@ -142,36 +161,127 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	return b.ValidateAndRun(ctx)
 }
 
-type mutationVisitorState struct {
-	c                          Catalog
-	checkedOutDescriptors      nstree.Map
-	drainedNames               map[descpb.ID][]descpb.NameInfo
-	descriptorsToDelete        catalog.DescriptorIDSet
-	dbGCJobs                   catalog.DescriptorIDSet
-	descriptorGCJobs           map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
-	indexGCJobs                map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
-	schemaChangerJob           *jobs.Record
-	schemaChangerStatusUpdates map[jobspb.JobID][]scpb.Status
+func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []eventPayload) {
+	// A dependent event is one which is generated because of a
+	// dependency getting modified from the source object. An example
+	// of this is a DROP TABLE will be the source event, which will track
+	// any dependent views dropped.
+	var dependentEvents = make(map[uint32][]eventPayload)
+	var sourceEvents = make(map[uint32]eventPayload)
+	// First separate out events, where the first event generated will always
+	// be the source and everything else before will be dependencies if they have
+	// the same subtask ID.
+	for _, event := range statementEvents {
+		dependentEvents[event.metadata.SubWorkID] = append(dependentEvents[event.metadata.SubWorkID], event)
+	}
+	// Split of the source events.
+	orderedSubWorkID := make([]uint32, 0, len(dependentEvents))
+	for subWorkID := range dependentEvents {
+		elems := dependentEvents[subWorkID]
+		sort.SliceStable(elems, func(i, j int) bool {
+			return elems[i].metadata.SourceElementID < elems[j].metadata.SourceElementID
+		})
+		sourceEvents[subWorkID] = elems[0]
+		dependentEvents[subWorkID] = elems[1:]
+		orderedSubWorkID = append(orderedSubWorkID, subWorkID)
+	}
+	// Store an ordered list of sub-work IDs for deterministic
+	// event order.
+	sort.SliceStable(orderedSubWorkID, func(i, j int) bool {
+		return orderedSubWorkID[i] < orderedSubWorkID[j]
+	})
+	// Collect the dependent objects for each
+	// source event, and generate an event log entry.
+	for _, subWorkID := range orderedSubWorkID {
+		// Determine which objects we should collect.
+		collectDependentViewNames := false
+		collectDependentSchemaNames := false
+		sourceEvent := sourceEvents[subWorkID]
+		switch sourceEvent.event.(type) {
+		case *eventpb.DropDatabase:
+			// Drop database only reports dependent schemas.
+			collectDependentSchemaNames = true
+		case *eventpb.DropView, *eventpb.DropTable:
+			// Drop view and drop tables only cares about
+			// dependent views
+			collectDependentViewNames = true
+		}
+		var dependentObjects []string
+		for _, dependentEvent := range dependentEvents[subWorkID] {
+			switch ev := dependentEvent.event.(type) {
+			case *eventpb.DropView:
+				if collectDependentViewNames {
+					dependentObjects = append(dependentObjects, ev.ViewName)
+				}
+			case *eventpb.DropSchema:
+				if collectDependentSchemaNames {
+					dependentObjects = append(dependentObjects, ev.SchemaName)
+				}
+			}
+		}
+		// Add anything that we determined based
+		// on the dependencies.
+		switch ev := sourceEvent.event.(type) {
+		case *eventpb.DropTable:
+			ev.CascadeDroppedViews = dependentObjects
+		case *eventpb.DropView:
+			ev.CascadeDroppedViews = dependentObjects
+		case *eventpb.DropDatabase:
+			ev.DroppedSchemaObjects = dependentObjects
+		}
+		// Generate event log entries for the source event only. The dependent
+		// events will be ignored.
+		logEntries = append(logEntries, sourceEvent)
+	}
+	return logEntries
 }
 
-func (mvs *mutationVisitorState) UpdateSchemaChangerJobProgress(
-	jobID jobspb.JobID, statuses []scpb.Status,
+type mutationVisitorState struct {
+	c                       Catalog
+	checkedOutDescriptors   nstree.Map
+	drainedNames            map[descpb.ID][]descpb.NameInfo
+	descriptorsToDelete     catalog.DescriptorIDSet
+	dbGCJobs                catalog.DescriptorIDSet
+	descriptorGCJobs        map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
+	indexGCJobs             map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
+	schemaChangerJob        *jobs.Record
+	schemaChangerJobUpdates map[jobspb.JobID]schemaChangerJobUpdate
+	eventsByStatement       map[uint32][]eventPayload
+}
+
+type eventPayload struct {
+	id       descpb.ID
+	metadata *scpb.ElementMetadata
+	event    eventpb.EventPayload
+}
+
+type schemaChangerJobUpdate struct {
+	progress        []scpb.Status
+	isNonCancelable bool
+}
+
+func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
+	jobID jobspb.JobID, statuses []scpb.Status, isNonCancelable bool,
 ) error {
-	if mvs.schemaChangerStatusUpdates == nil {
-		mvs.schemaChangerStatusUpdates = make(map[jobspb.JobID][]scpb.Status)
-	} else if _, exists := mvs.schemaChangerStatusUpdates[jobID]; exists {
+	if mvs.schemaChangerJobUpdates == nil {
+		mvs.schemaChangerJobUpdates = make(map[jobspb.JobID]schemaChangerJobUpdate)
+	} else if _, exists := mvs.schemaChangerJobUpdates[jobID]; exists {
 		return errors.AssertionFailedf("cannot update job %d more than once", jobID)
 	}
-	mvs.schemaChangerStatusUpdates[jobID] = statuses
+	mvs.schemaChangerJobUpdates[jobID] = schemaChangerJobUpdate{
+		progress:        statuses,
+		isNonCancelable: isNonCancelable,
+	}
 	return nil
 }
 
 func newMutationVisitorState(c Catalog) *mutationVisitorState {
 	return &mutationVisitorState{
-		c:                c,
-		drainedNames:     make(map[descpb.ID][]descpb.NameInfo),
-		indexGCJobs:      make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex),
-		descriptorGCJobs: make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID),
+		c:                 c,
+		drainedNames:      make(map[descpb.ID][]descpb.NameInfo),
+		indexGCJobs:       make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex),
+		descriptorGCJobs:  make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID),
+		eventsByStatement: make(map[uint32][]eventPayload),
 	}
 }
 
@@ -228,11 +338,43 @@ func (mvs *mutationVisitorState) AddNewGCJobForIndex(
 		})
 }
 
-func (mvs *mutationVisitorState) AddNewSchemaChangerJob(rec jobs.Record) error {
+func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
+	jobID jobspb.JobID, state scpb.State,
+) error {
 	if mvs.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
-	mvs.schemaChangerJob = &rec
+	targets := make([]*scpb.Target, len(state.Nodes))
+	nodeStatuses := make([]scpb.Status, len(state.Nodes))
+	// TODO(ajwerner): It may be better in the future to have the builder be
+	// responsible for determining this set of descriptors. As of the time of
+	// writing, the descriptors to be "locked," descriptors that need schema
+	// change jobs, and descriptors with schema change mutations all coincide. But
+	// there are future schema changes to be implemented in the new schema changer
+	// (e.g., RENAME TABLE) for which this may no longer be true.
+	for i, n := range state.Nodes {
+		targets[i] = n.Target
+		nodeStatuses[i] = n.Status
+	}
+	stmts := make([]string, len(state.Statements))
+	for i, stmt := range state.Statements {
+		stmts[i] = stmt.Statement
+	}
+	mvs.schemaChangerJob = &jobs.Record{
+		JobID:         jobID,
+		Description:   "schema change job", // TODO(ajwerner): use const
+		Statements:    stmts,
+		Username:      security.MakeSQLUsernameFromPreNormalizedString(state.Authorization.Username),
+		DescriptorIDs: screl.GetDescIDs(state),
+		Details:       jobspb.NewSchemaChangeDetails{Targets: targets},
+		Progress: jobspb.NewSchemaChangeProgress{
+			States:        nodeStatuses,
+			Authorization: &state.Authorization,
+			Statements:    state.Statements,
+		},
+		RunningStatus: "",
+		NonCancelable: false,
+	}
 	return nil
 }
 
@@ -260,4 +402,20 @@ func createGCJobRecord(
 		RunningStatus: "waiting for GC TTL",
 		NonCancelable: true,
 	}
+}
+
+// EnqueueEvent implements the scmutationexec.MutationVisitorStateUpdater
+// interface.
+func (mvs *mutationVisitorState) EnqueueEvent(
+	id descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
+) error {
+	mvs.eventsByStatement[metadata.StatementID] = append(
+		mvs.eventsByStatement[metadata.StatementID],
+		eventPayload{
+			id:       id,
+			event:    event,
+			metadata: metadata,
+		},
+	)
+	return nil
 }

@@ -14,9 +14,10 @@ begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 7 MutationType ops
-create job #1: "Schema change job"
+## PreCommitPhase stage 1 of 1 with 5 MutationType ops
+create job #1: "schema change job"
   descriptor IDs: [56]
+write *eventpb.AlterTable to event log for descriptor #56: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
 upsert descriptor #56
   ...
      - columnIds:
@@ -24,7 +25,7 @@ upsert descriptor #56
   +    - 2
        columnNames:
        - i
-  +    - j
+  +    - crdb_internal_column_2_name_placeholder
        name: primary
      formatVersion: 3
      id: 56
@@ -33,7 +34,7 @@ upsert descriptor #56
   +  - column:
   +      defaultExpr: 42:::INT8
   +      id: 2
-  +      name: j
+  +      name: crdb_internal_column_2_name_placeholder
   +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
@@ -56,13 +57,13 @@ upsert descriptor #56
   +      - 1
   +      keyColumnNames:
   +      - i
-  +      name: new_primary_key
+  +      name: crdb_internal_index_2_name_placeholder
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
   +      - 2
   +      storeColumnNames:
-  +      - j
+  +      - crdb_internal_column_2_name_placeholder
   +      unique: true
   +      version: 4
   +    mutationId: 1
@@ -73,11 +74,9 @@ upsert descriptor #56
   +  nextColumnId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
-  -  nextMutationId: 1
   +  nextIndexId: 3
-  +  nextMutationId: 2
+     nextMutationId: 1
      parentId: 54
-     primaryIndex:
   ...
        time: {}
      unexposedParentSchemaId: 55
@@ -87,7 +86,7 @@ upsert descriptor #56
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitPhase stage 1 of 8 with 4 MutationType ops
+## PostCommitPhase stage 1 of 4 with 3 MutationType ops
 update progress of schema change job #1
 upsert descriptor #56
   ...
@@ -111,21 +110,15 @@ upsert descriptor #56
   +  version: "3"
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 2 of 8 with 1 BackfillType ops
+## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+backfill indexes [2] from index #1 in table #56
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 3 of 8 with 1 MutationType ops
-update progress of schema change job #1
+## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+validate forward indexes [2] in table #56
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 4 of 8 with 1 ValidationType ops
-commit transaction #5
-begin transaction #6
-## PostCommitPhase stage 5 of 8 with 1 MutationType ops
-update progress of schema change job #1
-commit transaction #6
-begin transaction #7
-## PostCommitPhase stage 6 of 8 with 4 MutationType ops
+## PostCommitPhase stage 4 of 4 with 7 MutationType ops
 update progress of schema change job #1
 upsert descriptor #56
   ...
@@ -142,12 +135,19 @@ upsert descriptor #56
      createAsOfTime:
        wallTime: "1"
   ...
+       columnNames:
+       - i
+  -    - crdb_internal_column_2_name_placeholder
+  +    - j
+       name: primary
+     formatVersion: 3
+  ...
      modificationTime: {}
      mutations:
   -  - column:
   -      defaultExpr: 42:::INT8
   -      id: 2
-  -      name: j
+  -      name: crdb_internal_column_2_name_placeholder
   -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
@@ -170,25 +170,17 @@ upsert descriptor #56
   ...
          keyColumnNames:
          - i
-  -      name: new_primary_key
+  -      name: crdb_internal_index_2_name_placeholder
   +      name: tbl_pkey
          partitioning: {}
          sharded: {}
   -      storeColumnIds:
   -      - 2
   -      storeColumnNames:
-  -      - j
+  -      - crdb_internal_column_2_name_placeholder
          unique: true
          version: 4
-  -    mutationId: 1
-  +    mutationId: 2
-       state: DELETE_AND_WRITE_ONLY
-     name: tbl
   ...
-     nextFamilyId: 1
-     nextIndexId: 3
-  -  nextMutationId: 2
-  +  nextMutationId: 3
      parentId: 54
      primaryIndex:
   +    createdExplicitly: true
@@ -200,10 +192,6 @@ upsert descriptor #56
        interleave: {}
        keyColumnDirections:
   ...
-       keyColumnNames:
-       - i
-  -    name: tbl_pkey
-  +    name: new_primary_key
        partitioning: {}
        sharded: {}
   +    storeColumnIds:
@@ -217,14 +205,15 @@ upsert descriptor #56
      unexposedParentSchemaId: 55
   -  version: "3"
   +  version: "4"
-commit transaction #7
-begin transaction #8
-## PostCommitPhase non-revertible stage 7 of 8 with 2 MutationType ops
+commit transaction #5
+begin transaction #6
+## PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
 update progress of schema change job #1
+set schema change job #1 to non-cancellable
 upsert descriptor #56
   ...
          version: 4
-       mutationId: 2
+       mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
      name: tbl
@@ -234,11 +223,12 @@ upsert descriptor #56
      unexposedParentSchemaId: 55
   -  version: "4"
   +  version: "5"
-commit transaction #8
-begin transaction #9
-## PostCommitPhase non-revertible stage 8 of 8 with 3 MutationType ops
+commit transaction #6
+begin transaction #7
+## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 create job #2: "GC for dropping table 56 index 1"
   descriptor IDs: [56]
+update progress of schema change job #1
 upsert descriptor #56
   ...
      id: 56
@@ -262,7 +252,7 @@ upsert descriptor #56
   -      sharded: {}
   -      unique: true
   -      version: 4
-  -    mutationId: 2
+  -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []
      name: tbl
@@ -274,5 +264,5 @@ upsert descriptor #56
      unexposedParentSchemaId: 55
   -  version: "5"
   +  version: "6"
-commit transaction #9
+commit transaction #7
 # end PostCommitPhase

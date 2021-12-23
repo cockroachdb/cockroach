@@ -27,7 +27,7 @@ type EnumSetting struct {
 	enumValues map[int64]string
 }
 
-var _ extendedSetting = &EnumSetting{}
+var _ numericSetting = &EnumSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (e *EnumSetting) Typ() string {
@@ -110,18 +110,9 @@ func (e *EnumSetting) WithPublic() *EnumSetting {
 	return e
 }
 
-// WithSystemOnly indicates system-usage only and can be chained.
-func (e *EnumSetting) WithSystemOnly() *EnumSetting {
-	e.common.systemOnly = true
-	return e
-}
-
-// Defeat the linter.
-var _ = (*EnumSetting).WithSystemOnly
-
 // RegisterEnumSetting defines a new setting with type int.
 func RegisterEnumSetting(
-	key, desc string, defaultValue string, enumValues map[int64]string,
+	class Class, key, desc string, defaultValue string, enumValues map[int64]string,
 ) *EnumSetting {
 	enumValuesLower := make(map[int64]string)
 	var i int64
@@ -143,6 +134,6 @@ func RegisterEnumSetting(
 		enumValues: enumValuesLower,
 	}
 
-	register(key, fmt.Sprintf("%s %s", desc, enumValuesToDesc(enumValues)), setting)
+	register(class, key, fmt.Sprintf("%s %s", desc, enumValuesToDesc(enumValues)), setting)
 	return setting
 }

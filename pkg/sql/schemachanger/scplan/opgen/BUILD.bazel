@@ -45,6 +45,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scop",
@@ -56,6 +57,7 @@ go_library(
 
 go_test(
     name = "opgen_test",
+    size = "small",
     srcs = ["register_test.go"],
     embed = [":opgen"],
     deps = ["//pkg/sql/schemachanger/scpb"],

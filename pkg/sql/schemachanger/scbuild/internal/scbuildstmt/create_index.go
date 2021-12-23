@@ -62,9 +62,27 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			"cannot define PARTITION BY on a new INDEX in a multi-region database",
 		))
 	}
+	columnRefs := map[string]struct{}{}
+	for _, columnNode := range n.Columns {
+		colName := columnNode.Column.String()
+		if _, found := columnRefs[colName]; found {
+			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
+				"index %q contains duplicate column %q", n.Name, colName))
+		}
+		columnRefs[colName] = struct{}{}
+	}
+	for _, storingNode := range n.Storing {
+		colName := storingNode.String()
+		if _, found := columnRefs[colName]; found {
+			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
+				"index %q contains duplicate column %q", n.Name, colName))
+		}
+		columnRefs[colName] = struct{}{}
+	}
 
-	// Setup an secondary index node.
-	secondaryIndex := &scpb.SecondaryIndex{TableID: rel.GetID(),
+	// Setup a secondary index node.
+	secondaryIndex := &scpb.SecondaryIndex{
+		TableID:            rel.GetID(),
 		Unique:             n.Unique,
 		KeyColumnIDs:       make([]descpb.ColumnID, 0, len(n.Columns)),
 		StoringColumnIDs:   make([]descpb.ColumnID, 0, len(n.Storing)),
@@ -72,6 +90,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		Concurrently:       n.Concurrently,
 		KeySuffixColumnIDs: nil,
 		ShardedDescriptor:  nil,
+
+		// TODO(ajwerner): If there exists a new primary index due to a column
+		// set change in this transaction, we may need this to refer to the
+		// new primary index as opposed to the old primary index.
+		SourceIndexID: rel.GetPrimaryIndexID(),
 	}
 	colNames := make([]string, 0, len(n.Columns))
 	// Setup the column ID.
@@ -309,14 +332,7 @@ func maybeCreateAndAddShardCol(
 			newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
 			newPrimaryIndex.IndexID = b.NextIndexID(desc)
 			newPrimaryIndexName.IndexID = newPrimaryIndex.IndexID
-			newPrimaryIndexName.Name = tabledesc.GenerateUniqueName(
-				"new_primary_key",
-				func(name string) bool {
-					// TODO (lucy): Also check the new indexes specified in the targets.
-					_, err := desc.FindIndexWithName(name)
-					return err == nil
-				},
-			)
+			newPrimaryIndexName.Name = tabledesc.PrimaryKeyIndexName(desc.GetName())
 			newPrimaryIndex.StoringColumnIDs = append(newPrimaryIndex.StoringColumnIDs, shardColDesc.ID)
 			b.EnqueueDrop(oldPrimaryIndex)
 			b.EnqueueDrop(oldPrimaryIndexName)

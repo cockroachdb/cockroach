@@ -2,20 +2,23 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "scjob",
-    srcs = ["job.go"],
+    srcs = [
+        "backfill_tracker_factory.go",
+        "job.go",
+        "range_counter.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scdeps",
-        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scrun",
         "//pkg/sql/schemachanger/scsqldeps",
-        "//pkg/util/log/eventpb",
     ],
 )

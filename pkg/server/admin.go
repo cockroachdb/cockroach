@@ -2232,9 +2232,27 @@ func (s *adminServer) DecommissionStatus(
 	}
 
 	var res serverpb.DecommissionStatusResponse
+	livenessMap := map[roachpb.NodeID]livenesspb.Liveness{}
+	{
+		// We use GetLivenessesFromKV to avoid races in which the caller has
+		// just made an update to a liveness record but has not received this
+		// update in its local liveness instance yet. Doing a consistent read
+		// here avoids such issues.
+		//
+		// For an example, see:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/73636
+		ls, err := s.server.nodeLiveness.GetLivenessesFromKV(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, rec := range ls {
+			livenessMap[rec.NodeID] = rec
+		}
+	}
 
 	for nodeID := range replicaCounts {
-		l, ok := s.server.nodeLiveness.GetLiveness(nodeID)
+		l, ok := livenessMap[nodeID]
 		if !ok {
 			return nil, errors.Newf("unable to get liveness for %d", nodeID)
 		}
@@ -2411,7 +2429,7 @@ func (s *adminServer) DataDistribution(
 		defer acct.Close(txnCtx)
 
 		kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
-			Key:    keys.UserTableDataMin,
+			Key:    keys.SystemSQLCodec.TablePrefix(keys.MinUserDescriptorID(s.server.sqlServer.execCfg.SystemIDChecker)),
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
@@ -2603,7 +2621,24 @@ func (s *adminServer) enqueueRangeLocal(
 		return response, nil
 	}
 
-	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, req.Queue, repl, req.SkipShouldQueue)
+	// Handle mixed-version clusters across the "gc" to "mvccGC" queue rename.
+	// TODO(nvanbenschoten): remove this in v23.1. Inline req.Queue again.
+	// The client logic in pkg/ui/workspaces/db-console/src/views/reports/containers/enqueueRange/index.tsx
+	// should stop sending "gc" in v22.2. When removing, confirm that the
+	// associated TODO in index.tsx was addressed in the previous release.
+	//
+	// Explanation of migration:
+	// - v22.1 will understand "gc" and "mvccGC" on the server. Its client will
+	//   continue to send "gc" to interop with v21.2 servers.
+	// - v22.2's client will send "mvccGC" but will still have to understand "gc"
+	//   on the server to deal with v22.1 clients.
+	// - v23.1's server can stop understanding "gc".
+	queueName := req.Queue
+	if strings.ToLower(queueName) == "gc" {
+		queueName = "mvccGC"
+	}
+
+	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, queueName, repl, req.SkipShouldQueue)
 	if err != nil {
 		response.Details[0].Error = err.Error()
 		return response, nil

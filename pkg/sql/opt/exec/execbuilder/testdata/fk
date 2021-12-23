@@ -59,12 +59,10 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • render
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: xy@xy_pkey
-│                 spans: FULL SCAN
+│       └── • scan
+│             missing stats
+│             table: xy@xy_pkey
+│             spans: FULL SCAN
 │
 └── • constraint-check
     │
@@ -640,10 +638,6 @@ vectorized: true
                       missing stats
                       table: grandchild@grandchild_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON grandchild (c);
 
 # This update shouldn't emit checks for c, since it's unchanged.
 query T
@@ -785,10 +779,6 @@ vectorized: true
                       missing stats
                       table: grandchild@grandchild_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON grandchild (c);
 
 # Multiple grandchild tables
 statement ok
@@ -922,10 +912,6 @@ vectorized: true
                       missing stats
                       table: self@self_pkey
                       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON self (y);
 
 # Tests for the insert fast path.
 statement ok

@@ -25,14 +25,14 @@ columns, each with an ascending/descending designation; and some
 information about each column. Each column has a numeric ID that is
 unique within the table, a SQL type, and a column family ID. A column
 family is a maximal subset of columns with the same column family ID.
-For more details, see [pkg/sql/sqlbase/structured.proto].
+For more details, see [pkg/sql/catalog/descpb/structured.proto].
 
 Each row of a table gives rise to one or more KV pairs, one per column
 family as needed (see subsection NULL below). CRDB stores primary key
 data in KV keys and other data in KV values so that it can use the KV
 layer to prevent duplicate primary keys. For encoding, see
-[pkg/sql/rowwriter.go]. For decoding, see
-[pkg/sql/sqlbase/multirowfetcher.go].
+[pkg/sql/row/writer.go]. For decoding, see
+[pkg/sql/row/fetcher.go].
 
 ### Key encoding
 
@@ -72,8 +72,8 @@ In conjunction with prefix freedom, the order property ensures that the
 SQL layer and the KV layer sort primary keys the same way.
 
 For more details on primary key encoding, see `EncodeTableKey`
-([pkg/sql/sqlbase/table.go]). See also `EncDatum`
-([pkg/sql/sqlbase/encoded\_datum.go]).
+([pkg/sql/rowenc/column\_type\_encoding.go]). See also `EncDatum`
+([pkg/sql/rowenc/encoded\_datum.go]).
 
 ### Value encoding
 
@@ -143,7 +143,7 @@ Before column families (i.e., in format version 1), non-sentinel KV keys
 had a column ID where the column family ID is now. Non-sentinel KV
 values contained exactly one datum, whose encoding was indicated by the
 one-byte value type (see `MarshalColumnValue` in
-[pkg/sql/sqlbase/table.go]). Unlike the `TUPLE` encoding, this encoding
+[pkg/sql/rowenc/column\_type\_encoding.go]). Unlike the `TUPLE` encoding, this encoding
 did not need to be prefix-free, which was a boon for strings.
 
 On upgrading to format version 2 or higher, CRDB puts each existing
@@ -151,7 +151,7 @@ column in a column family whose ID is the same as the column ID. This
 allows backward-compatible encoding and decoding. The encoder uses the
 old format for single-column column families when the ID of that column
 equals the `DefaultColumnID` of the column family
-([pkg/sql/sqlbase/structured.proto]).
+([pkg/sql/catalog/descpb/structured.proto]).
 
 ### NULL
 
@@ -296,7 +296,7 @@ present for a row so that each row in the index has at least one k/v entry.
 ### Key encoding
 
 The main encoding function for secondary indexes is
-`EncodeSecondaryIndex` in [pkg/sql/sqlbase/table.go]. Each row gives
+`EncodeSecondaryIndex` in [pkg/sql/rowenc/index\_encoding.go]. Each row gives
 rise to one KV pair per secondary index, whose KV key has fields
 mirroring the primary index encoding:
 
@@ -549,13 +549,13 @@ Index ID 2 is the secondary index `i2`.
   [Implementing Column Families in CockroachDB]: https://www.cockroachlabs.com/blog/sql-cockroachdb-column-families/
   [column families RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20151214_sql_column_families.md
   [interleaving RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160624_sql_interleaved_tables.md
-  [pkg/sql/sqlbase/structured.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/structured.proto
-  [pkg/sql/rowwriter.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowwriter.go
-  [pkg/sql/sqlbase/multirowfetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/multirowfetcher.go
+  [pkg/sql/catalog/descpb/structured.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/catalog/descpb/structured.proto
+  [pkg/sql/row/writer.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/row/writer.go
+  [pkg/sql/row/fetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/row/fetcher.go
   [prefix-free]: https://en.wikipedia.org/wiki/Prefix_code
   [new `DECIMAL` encoding]: https://github.com/cockroachdb/cockroach/issues/13384#issuecomment-277120394
-  [pkg/sql/sqlbase/table.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/table.go
-  [pkg/sql/sqlbase/encoded\_datum.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/encoded_datum.go
+  [pkg/sql/rowenc/column\_type\_encoding.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/rowenc/column_type_encoding.go
+  [pkg/sql/rowenc/encoded\_datum.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/rowenc/encoded_datum.go
   [pkg/roachpb/data.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/roachpb/data.proto
   [Unicode Collation Algorithm]: http://unicode.org/reports/tr10/
   [an efficient partial inverse]: http://stackoverflow.com/q/23609457/2144669

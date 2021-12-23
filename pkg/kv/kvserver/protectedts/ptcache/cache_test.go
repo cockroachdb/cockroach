@@ -87,7 +87,7 @@ func TestCacheBasic(t *testing.T) {
 	})
 
 	// Then release the record and make sure that that gets seen.
-	require.Nil(t, p.Release(ctx, nil /* txn */, r.ID))
+	require.Nil(t, p.Release(ctx, nil /* txn */, r.ID.GetUUID()))
 	testutils.SucceedsSoon(t, func() error {
 		var coveredBy []*ptpb.Record
 		_ = c.Iterate(ctx, sp.Key, sp.EndKey,
@@ -196,7 +196,7 @@ func TestRefresh(t *testing.T) {
 		rec, createdAt := protect(t, s, p, metaTableSpan)
 		require.NoError(t, c.Refresh(ctx, createdAt))
 		go c.Iterate(ctx, keys.MinKey, keys.MaxKey, func(r *ptpb.Record) (wantMore bool) {
-			if r.ID != rec.ID {
+			if r.ID.GetUUID() != rec.ID.GetUUID() {
 				return true
 			}
 			// Make sure we see the record we created and use it to signal the main
@@ -211,7 +211,7 @@ func TestRefresh(t *testing.T) {
 		// operation, amd then refresh after it. This will demonstrate that the
 		// iteration call does not block concurrent refreshes.
 		ch := <-inIterate
-		require.NoError(t, p.Release(ctx, nil /* txn */, rec.ID))
+		require.NoError(t, p.Release(ctx, nil /* txn */, rec.ID.GetUUID()))
 		require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 		// Signal the Iterate loop to exit and wait for it to close the channel.
 		close(ch)
@@ -277,36 +277,36 @@ func TestQueryRecord(t *testing.T) {
 	r2, createdAt2 := protect(t, s, p, sp42)
 	// Ensure they both don't exist and that the read timestamps precede the
 	// create timestamps.
-	exists1, asOf := c.QueryRecord(ctx, r1.ID)
+	exists1, asOf := c.QueryRecord(ctx, r1.ID.GetUUID())
 	require.False(t, exists1)
 	require.True(t, asOf.Less(createdAt1))
-	exists2, asOf := c.QueryRecord(ctx, r2.ID)
+	exists2, asOf := c.QueryRecord(ctx, r2.ID.GetUUID())
 	require.False(t, exists2)
 	require.True(t, asOf.Less(createdAt2))
 	// Go refresh the state and make sure they both exist.
 	require.NoError(t, c.Refresh(ctx, createdAt2))
-	exists1, asOf = c.QueryRecord(ctx, r1.ID)
+	exists1, asOf = c.QueryRecord(ctx, r1.ID.GetUUID())
 	require.True(t, exists1)
 	require.True(t, !asOf.Less(createdAt1))
-	exists2, asOf = c.QueryRecord(ctx, r2.ID)
+	exists2, asOf = c.QueryRecord(ctx, r2.ID.GetUUID())
 	require.True(t, exists2)
 	require.True(t, !asOf.Less(createdAt2))
 	// Release 2 and then create 3.
-	require.NoError(t, p.Release(ctx, nil /* txn */, r2.ID))
+	require.NoError(t, p.Release(ctx, nil /* txn */, r2.ID.GetUUID()))
 	r3, createdAt3 := protect(t, s, p, sp42)
-	exists2, asOf = c.QueryRecord(ctx, r2.ID)
+	exists2, asOf = c.QueryRecord(ctx, r2.ID.GetUUID())
 	require.True(t, exists2)
 	require.True(t, asOf.Less(createdAt3))
-	exists3, asOf := c.QueryRecord(ctx, r3.ID)
+	exists3, asOf := c.QueryRecord(ctx, r3.ID.GetUUID())
 	require.False(t, exists3)
 	require.True(t, asOf.Less(createdAt3))
 	// Go refresh the state and make sure 1 and 3 exist.
 	require.NoError(t, c.Refresh(ctx, createdAt3))
-	exists1, _ = c.QueryRecord(ctx, r1.ID)
+	exists1, _ = c.QueryRecord(ctx, r1.ID.GetUUID())
 	require.True(t, exists1)
-	exists2, _ = c.QueryRecord(ctx, r2.ID)
+	exists2, _ = c.QueryRecord(ctx, r2.ID.GetUUID())
 	require.False(t, exists2)
-	exists3, _ = c.QueryRecord(ctx, r3.ID)
+	exists3, _ = c.QueryRecord(ctx, r3.ID.GetUUID())
 	require.True(t, exists3)
 }
 
@@ -431,7 +431,7 @@ func protect(
 ) (r *ptpb.Record, createdAt hlc.Timestamp) {
 	protectTS := s.Clock().Now()
 	r = &ptpb.Record{
-		ID:        uuid.MakeV4(),
+		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: protectTS,
 		Mode:      ptpb.PROTECT_AFTER,
 		Spans:     spans,
@@ -440,7 +440,7 @@ func protect(
 	txn := s.DB().NewTxn(ctx, "test")
 	require.NoError(t, p.Protect(ctx, txn, r))
 	require.NoError(t, txn.Commit(ctx))
-	_, err := p.GetRecord(ctx, nil, r.ID)
+	_, err := p.GetRecord(ctx, nil, r.ID.GetUUID())
 	require.NoError(t, err)
 	createdAt = txn.CommitTimestamp()
 	return r, createdAt

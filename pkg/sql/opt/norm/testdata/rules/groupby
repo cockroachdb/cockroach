@@ -946,41 +946,36 @@ insert xy
  ├── columns: <none>
  ├── arbiter indexes: xy_pkey
  ├── insert-mapping:
- │    ├── y:9 => x:1
- │    └── y_default:10 => xy.y:2
+ │    ├── y:6 => x:1
+ │    └── y_default:9 => y:2
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── limit
-      ├── columns: y:9!null y_default:10
+      ├── columns: y:6!null y_default:9
       ├── cardinality: [0 - 1]
-      ├── immutable
       ├── key: ()
-      ├── fd: ()-->(9,10)
+      ├── fd: ()-->(6,9)
       ├── anti-join (hash)
-      │    ├── columns: y:9!null y_default:10
-      │    ├── immutable
-      │    ├── fd: ()-->(9,10)
+      │    ├── columns: y:6!null y_default:9
+      │    ├── fd: ()-->(6,9)
       │    ├── limit hint: 1.00
       │    ├── project
-      │    │    ├── columns: y_default:10 y:9!null
-      │    │    ├── immutable
-      │    │    ├── fd: ()-->(9,10)
+      │    │    ├── columns: y_default:9 y:6!null
+      │    │    ├── fd: ()-->(6,9)
       │    │    ├── select
-      │    │    │    ├── columns: xy.y:6!null
+      │    │    │    ├── columns: y:6!null
       │    │    │    ├── fd: ()-->(6)
       │    │    │    ├── scan xy
-      │    │    │    │    └── columns: xy.y:6
+      │    │    │    │    └── columns: y:6
       │    │    │    └── filters
-      │    │    │         └── xy.y:6 = 0 [outer=(6), constraints=(/6: [/0 - /0]; tight), fd=()-->(6)]
+      │    │    │         └── y:6 = 0 [outer=(6), constraints=(/6: [/0 - /0]; tight), fd=()-->(6)]
       │    │    └── projections
-      │    │         ├── CAST(NULL AS INT8) [as=y_default:10]
-      │    │         └── assignment-cast: INT8 [as=y:9, outer=(6), immutable]
-      │    │              └── xy.y:6
+      │    │         └── CAST(NULL AS INT8) [as=y_default:9]
       │    ├── scan xy
-      │    │    ├── columns: x:11!null
-      │    │    └── key: (11)
+      │    │    ├── columns: x:10!null
+      │    │    └── key: (10)
       │    └── filters
-      │         └── y:9 = x:11 [outer=(9,11), constraints=(/9: (/NULL - ]; /11: (/NULL - ]), fd=(9)==(11), (11)==(9)]
+      │         └── y:6 = x:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
       └── 1
 
 # EnsureUpsertDistinctOn should reduce non-nullable constant grouping column.
@@ -1049,43 +1044,38 @@ insert xy
  ├── columns: <none>
  ├── arbiter indexes: xy_pkey
  ├── insert-mapping:
- │    ├── y:9 => x:1
- │    └── y_default:10 => xy.y:2
+ │    ├── y:6 => x:1
+ │    └── y_default:9 => y:2
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── upsert-distinct-on
-      ├── columns: y:9 y_default:10
-      ├── grouping columns: y:9
-      ├── immutable
-      ├── lax-key: (9)
-      ├── fd: ()-->(9,10)
+      ├── columns: y:6 y_default:9
+      ├── grouping columns: y:6
+      ├── lax-key: (6)
+      ├── fd: ()-->(6,9)
       ├── anti-join (hash)
-      │    ├── columns: y:9 y_default:10
-      │    ├── immutable
-      │    ├── fd: ()-->(9,10)
+      │    ├── columns: y:6 y_default:9
+      │    ├── fd: ()-->(6,9)
       │    ├── project
-      │    │    ├── columns: y_default:10 y:9
-      │    │    ├── immutable
-      │    │    ├── fd: ()-->(9,10)
+      │    │    ├── columns: y_default:9 y:6
+      │    │    ├── fd: ()-->(6,9)
       │    │    ├── select
-      │    │    │    ├── columns: xy.y:6
+      │    │    │    ├── columns: y:6
       │    │    │    ├── fd: ()-->(6)
       │    │    │    ├── scan xy
-      │    │    │    │    └── columns: xy.y:6
+      │    │    │    │    └── columns: y:6
       │    │    │    └── filters
-      │    │    │         └── xy.y:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+      │    │    │         └── y:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
       │    │    └── projections
-      │    │         ├── CAST(NULL AS INT8) [as=y_default:10]
-      │    │         └── assignment-cast: INT8 [as=y:9, outer=(6), immutable]
-      │    │              └── xy.y:6
+      │    │         └── CAST(NULL AS INT8) [as=y_default:9]
       │    ├── scan xy
-      │    │    ├── columns: x:11!null
-      │    │    └── key: (11)
+      │    │    ├── columns: x:10!null
+      │    │    └── key: (10)
       │    └── filters
-      │         └── y:9 = x:11 [outer=(9,11), constraints=(/9: (/NULL - ]; /11: (/NULL - ]), fd=(9)==(11), (11)==(9)]
+      │         └── y:6 = x:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
       └── aggregations
-           └── first-agg [as=y_default:10, outer=(10)]
-                └── y_default:10
+           └── first-agg [as=y_default:9, outer=(9)]
+                └── y_default:9
 
 # EnsureUpsertDistinctOn should not reduce nullable constant grouping column.
 norm expect-not=ReduceNotNullGroupingCols
@@ -1677,53 +1667,48 @@ insert a
  ├── columns: <none>
  ├── arbiter indexes: si_idx
  ├── insert-mapping:
- │    ├── "?column?":17 => k:1
- │    ├── i:18 => a.i:2
- │    ├── f_default:20 => f:3
- │    ├── "?column?":19 => s:4
- │    └── j_default:21 => j:5
+ │    ├── "?column?":15 => k:1
+ │    ├── i:9 => i:2
+ │    ├── f_default:17 => f:3
+ │    ├── "?column?":16 => s:4
+ │    └── j_default:18 => j:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── limit
-      ├── columns: "?column?":17!null i:18!null "?column?":19!null f_default:20 j_default:21
+      ├── columns: i:9!null "?column?":15!null "?column?":16!null f_default:17 j_default:18
       ├── cardinality: [0 - 1]
-      ├── immutable
       ├── key: ()
-      ├── fd: ()-->(17-21)
+      ├── fd: ()-->(9,15-18)
       ├── anti-join (hash)
-      │    ├── columns: "?column?":17!null i:18!null "?column?":19!null f_default:20 j_default:21
-      │    ├── immutable
-      │    ├── fd: ()-->(17-21)
+      │    ├── columns: i:9!null "?column?":15!null "?column?":16!null f_default:17 j_default:18
+      │    ├── fd: ()-->(9,15-18)
       │    ├── limit hint: 1.00
       │    ├── project
-      │    │    ├── columns: f_default:20 j_default:21 "?column?":17!null i:18!null "?column?":19!null
-      │    │    ├── immutable
-      │    │    ├── fd: ()-->(17-21)
+      │    │    ├── columns: f_default:17 j_default:18 "?column?":15!null "?column?":16!null i:9!null
+      │    │    ├── fd: ()-->(9,15-18)
       │    │    ├── select
-      │    │    │    ├── columns: a.i:9!null
+      │    │    │    ├── columns: i:9!null
       │    │    │    ├── fd: ()-->(9)
       │    │    │    ├── scan a
-      │    │    │    │    └── columns: a.i:9!null
+      │    │    │    │    └── columns: i:9!null
       │    │    │    └── filters
-      │    │    │         └── a.i:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+      │    │    │         └── i:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
       │    │    └── projections
-      │    │         ├── CAST(NULL AS FLOAT8) [as=f_default:20]
-      │    │         ├── CAST(NULL AS JSONB) [as=j_default:21]
-      │    │         ├── 1 [as="?column?":17]
-      │    │         ├── assignment-cast: INT8 [as=i:18, outer=(9), immutable]
-      │    │         │    └── a.i:9
-      │    │         └── 'foo' [as="?column?":19]
+      │    │         ├── CAST(NULL AS FLOAT8) [as=f_default:17]
+      │    │         ├── CAST(NULL AS JSONB) [as=j_default:18]
+      │    │         ├── 1 [as="?column?":15]
+      │    │         └── 'foo' [as="?column?":16]
       │    ├── select
-      │    │    ├── columns: a.i:23!null s:25!null
-      │    │    ├── key: (23)
-      │    │    ├── fd: ()-->(25)
+      │    │    ├── columns: i:20!null s:22!null
+      │    │    ├── key: (20)
+      │    │    ├── fd: ()-->(22)
       │    │    ├── scan a
-      │    │    │    ├── columns: a.i:23!null s:25!null
-      │    │    │    └── key: (23,25)
+      │    │    │    ├── columns: i:20!null s:22!null
+      │    │    │    └── key: (20,22)
       │    │    └── filters
-      │    │         └── s:25 = 'foo' [outer=(25), constraints=(/25: [/'foo' - /'foo']; tight), fd=()-->(25)]
+      │    │         └── s:22 = 'foo' [outer=(22), constraints=(/22: [/'foo' - /'foo']; tight), fd=()-->(22)]
       │    └── filters
-      │         └── i:18 = a.i:23 [outer=(18,23), constraints=(/18: (/NULL - ]; /23: (/NULL - ]), fd=(18)==(23), (23)==(18)]
+      │         └── i:9 = i:20 [outer=(9,20), constraints=(/9: (/NULL - ]; /20: (/NULL - ]), fd=(9)==(20), (20)==(9)]
       └── 1
 
 # --------------------------------------------------
@@ -2123,35 +2108,35 @@ insert a
  ├── columns: <none>
  ├── arbiter indexes: si_idx
  ├── insert-mapping:
- │    ├── column1:11 => k:1
- │    ├── column3:13 => i:2
- │    ├── f_default:14 => f:3
- │    ├── column2:12 => s:4
- │    └── j_default:15 => j:5
+ │    ├── column1:8 => k:1
+ │    ├── column3:10 => i:2
+ │    ├── f_default:11 => f:3
+ │    ├── column2:9 => s:4
+ │    └── j_default:12 => j:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── anti-join (hash)
-      ├── columns: column1:11!null column2:12 column3:13 f_default:14 j_default:15
+      ├── columns: column1:8!null column2:9 column3:10 f_default:11 j_default:12
       ├── cardinality: [0 - 2]
-      ├── fd: ()-->(14,15)
+      ├── fd: ()-->(11,12)
       ├── project
-      │    ├── columns: f_default:14 j_default:15 column1:11!null column2:12 column3:13
+      │    ├── columns: f_default:11 j_default:12 column1:8!null column2:9 column3:10
       │    ├── cardinality: [2 - 2]
-      │    ├── fd: ()-->(14,15)
+      │    ├── fd: ()-->(11,12)
       │    ├── values
-      │    │    ├── columns: column1:11!null column2:12 column3:13
+      │    │    ├── columns: column1:8!null column2:9 column3:10
       │    │    ├── cardinality: [2 - 2]
       │    │    ├── (1, NULL, NULL)
       │    │    └── (1, NULL, NULL)
       │    └── projections
-      │         ├── CAST(NULL AS FLOAT8) [as=f_default:14]
-      │         └── CAST(NULL AS JSONB) [as=j_default:15]
+      │         ├── CAST(NULL AS FLOAT8) [as=f_default:11]
+      │         └── CAST(NULL AS JSONB) [as=j_default:12]
       ├── scan a
-      │    ├── columns: i:17!null s:19!null
-      │    └── key: (17,19)
+      │    ├── columns: i:14!null s:16!null
+      │    └── key: (14,16)
       └── filters
-           ├── column3:13 = i:17 [outer=(13,17), constraints=(/13: (/NULL - ]; /17: (/NULL - ]), fd=(13)==(17), (17)==(13)]
-           └── column2:12 = s:19 [outer=(12,19), constraints=(/12: (/NULL - ]; /19: (/NULL - ]), fd=(12)==(19), (19)==(12)]
+           ├── column3:10 = i:14 [outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ]), fd=(10)==(14), (14)==(10)]
+           └── column2:9 = s:16 [outer=(9,16), constraints=(/9: (/NULL - ]; /16: (/NULL - ]), fd=(9)==(16), (16)==(9)]
 
 # EnsureUpsertDistinctOn treats NULL values as distinct, so it can be eliminated.
 norm expect=EliminateDistinctOnValues
@@ -2281,54 +2266,54 @@ insert a
  ├── columns: <none>
  ├── arbiter indexes: a_pkey si_idx fi_idx
  ├── insert-mapping:
- │    ├── column1:12 => k:1
- │    ├── column3:14 => i:2
- │    ├── column4:15 => f:3
- │    ├── column2:13 => s:4
- │    └── j_default:16 => j:5
+ │    ├── column1:8 => k:1
+ │    ├── column3:10 => i:2
+ │    ├── column4:11 => f:3
+ │    ├── column2:9 => s:4
+ │    └── j_default:12 => j:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── anti-join (hash)
-      ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null j_default:16
+      ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null j_default:12
       ├── cardinality: [0 - 3]
-      ├── fd: ()-->(16)
+      ├── fd: ()-->(12)
       ├── anti-join (hash)
-      │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null j_default:16
+      │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null j_default:12
       │    ├── cardinality: [0 - 3]
-      │    ├── fd: ()-->(16)
+      │    ├── fd: ()-->(12)
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null j_default:16
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null j_default:12
       │    │    ├── cardinality: [0 - 3]
-      │    │    ├── fd: ()-->(16)
+      │    │    ├── fd: ()-->(12)
       │    │    ├── project
-      │    │    │    ├── columns: j_default:16 column1:12!null column2:13!null column3:14!null column4:15!null
+      │    │    │    ├── columns: j_default:12 column1:8!null column2:9!null column3:10!null column4:11!null
       │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    ├── fd: ()-->(16)
+      │    │    │    ├── fd: ()-->(12)
       │    │    │    ├── values
-      │    │    │    │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null
+      │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
       │    │    │    │    ├── cardinality: [3 - 3]
       │    │    │    │    ├── (1, 'foo', 1, 1.0)
       │    │    │    │    ├── (2, 'bar', 2, 2.0)
       │    │    │    │    └── (3, 'foo', 2, 1.0)
       │    │    │    └── projections
-      │    │    │         └── CAST(NULL AS JSONB) [as=j_default:16]
+      │    │    │         └── CAST(NULL AS JSONB) [as=j_default:12]
       │    │    ├── scan a
-      │    │    │    ├── columns: k:17!null
-      │    │    │    └── key: (17)
+      │    │    │    ├── columns: k:13!null
+      │    │    │    └── key: (13)
       │    │    └── filters
-      │    │         └── column1:12 = k:17 [outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
+      │    │         └── column1:8 = k:13 [outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
       │    ├── scan a
-      │    │    ├── columns: i:25!null s:27!null
-      │    │    └── key: (25,27)
+      │    │    ├── columns: i:21!null s:23!null
+      │    │    └── key: (21,23)
       │    └── filters
-      │         ├── column3:14 = i:25 [outer=(14,25), constraints=(/14: (/NULL - ]; /25: (/NULL - ]), fd=(14)==(25), (25)==(14)]
-      │         └── column2:13 = s:27 [outer=(13,27), constraints=(/13: (/NULL - ]; /27: (/NULL - ]), fd=(13)==(27), (27)==(13)]
+      │         ├── column3:10 = i:21 [outer=(10,21), constraints=(/10: (/NULL - ]; /21: (/NULL - ]), fd=(10)==(21), (21)==(10)]
+      │         └── column2:9 = s:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
       ├── scan a
-      │    ├── columns: i:32!null f:33
-      │    └── lax-key: (32,33)
+      │    ├── columns: i:28!null f:29
+      │    └── lax-key: (28,29)
       └── filters
-           ├── column3:14 = i:32 [outer=(14,32), constraints=(/14: (/NULL - ]; /32: (/NULL - ]), fd=(14)==(32), (32)==(14)]
-           └── column4:15 = f:33 [outer=(15,33), constraints=(/15: (/NULL - ]; /33: (/NULL - ]), fd=(15)==(33), (33)==(15)]
+           ├── column3:10 = i:28 [outer=(10,28), constraints=(/10: (/NULL - ]; /28: (/NULL - ]), fd=(10)==(28), (28)==(10)]
+           └── column4:11 = f:29 [outer=(11,29), constraints=(/11: (/NULL - ]; /29: (/NULL - ]), fd=(11)==(29), (29)==(11)]
 
 # DO NOTHING case where one distinct op can be removed (k), but two others
 # can't: (s, i) and (f, i).
@@ -2340,81 +2325,81 @@ insert a
  ├── columns: <none>
  ├── arbiter indexes: a_pkey si_idx fi_idx
  ├── insert-mapping:
- │    ├── column1:11 => k:1
- │    ├── i_default:14 => i:2
- │    ├── column3:13 => f:3
- │    ├── column2:12 => s:4
- │    └── j_default:15 => j:5
+ │    ├── column1:8 => k:1
+ │    ├── i_default:11 => i:2
+ │    ├── column3:10 => f:3
+ │    ├── column2:9 => s:4
+ │    └── j_default:12 => j:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── upsert-distinct-on
-      ├── columns: column1:11!null column2:12!null column3:13!null i_default:14 j_default:15
-      ├── grouping columns: column3:13!null i_default:14
+      ├── columns: column1:8!null column2:9!null column3:10!null i_default:11 j_default:12
+      ├── grouping columns: column3:10!null i_default:11
       ├── cardinality: [0 - 3]
-      ├── lax-key: (12,14)
-      ├── fd: ()-->(14,15), (12,14)~~>(11,13), (13,14)~~>(11,12,15)
+      ├── lax-key: (9,11)
+      ├── fd: ()-->(11,12), (9,11)~~>(8,10), (10,11)~~>(8,9,12)
       ├── upsert-distinct-on
-      │    ├── columns: column1:11!null column2:12!null column3:13!null i_default:14 j_default:15
-      │    ├── grouping columns: column2:12!null i_default:14
+      │    ├── columns: column1:8!null column2:9!null column3:10!null i_default:11 j_default:12
+      │    ├── grouping columns: column2:9!null i_default:11
       │    ├── cardinality: [0 - 3]
-      │    ├── lax-key: (12,14)
-      │    ├── fd: ()-->(14,15), (12,14)~~>(11,13,15)
+      │    ├── lax-key: (9,11)
+      │    ├── fd: ()-->(11,12), (9,11)~~>(8,10,12)
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:11!null column2:12!null column3:13!null i_default:14 j_default:15
+      │    │    ├── columns: column1:8!null column2:9!null column3:10!null i_default:11 j_default:12
       │    │    ├── cardinality: [0 - 3]
-      │    │    ├── fd: ()-->(14,15)
+      │    │    ├── fd: ()-->(11,12)
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null i_default:14 j_default:15
+      │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null i_default:11 j_default:12
       │    │    │    ├── cardinality: [0 - 3]
-      │    │    │    ├── fd: ()-->(14,15)
+      │    │    │    ├── fd: ()-->(11,12)
       │    │    │    ├── anti-join (hash)
-      │    │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null i_default:14 j_default:15
+      │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null i_default:11 j_default:12
       │    │    │    │    ├── cardinality: [0 - 3]
-      │    │    │    │    ├── fd: ()-->(14,15)
+      │    │    │    │    ├── fd: ()-->(11,12)
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: i_default:14 j_default:15 column1:11!null column2:12!null column3:13!null
+      │    │    │    │    │    ├── columns: i_default:11 j_default:12 column1:8!null column2:9!null column3:10!null
       │    │    │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    │    │    ├── fd: ()-->(14,15)
+      │    │    │    │    │    ├── fd: ()-->(11,12)
       │    │    │    │    │    ├── values
-      │    │    │    │    │    │    ├── columns: column1:11!null column2:12!null column3:13!null
+      │    │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null
       │    │    │    │    │    │    ├── cardinality: [3 - 3]
       │    │    │    │    │    │    ├── (1, 'foo', 1.0)
       │    │    │    │    │    │    ├── (2, 'bar', 2.0)
       │    │    │    │    │    │    └── (3, 'foo', 1.0)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         ├── CAST(NULL AS INT8) [as=i_default:14]
-      │    │    │    │    │         └── CAST(NULL AS JSONB) [as=j_default:15]
+      │    │    │    │    │         ├── CAST(NULL AS INT8) [as=i_default:11]
+      │    │    │    │    │         └── CAST(NULL AS JSONB) [as=j_default:12]
       │    │    │    │    ├── scan a
-      │    │    │    │    │    ├── columns: k:16!null
-      │    │    │    │    │    └── key: (16)
+      │    │    │    │    │    ├── columns: k:13!null
+      │    │    │    │    │    └── key: (13)
       │    │    │    │    └── filters
-      │    │    │    │         └── column1:11 = k:16 [outer=(11,16), constraints=(/11: (/NULL - ]; /16: (/NULL - ]), fd=(11)==(16), (16)==(11)]
+      │    │    │    │         └── column1:8 = k:13 [outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
       │    │    │    ├── scan a
-      │    │    │    │    ├── columns: i:24!null s:26!null
-      │    │    │    │    └── key: (24,26)
+      │    │    │    │    ├── columns: i:21!null s:23!null
+      │    │    │    │    └── key: (21,23)
       │    │    │    └── filters
-      │    │    │         ├── i_default:14 = i:24 [outer=(14,24), constraints=(/14: (/NULL - ]; /24: (/NULL - ]), fd=(14)==(24), (24)==(14)]
-      │    │    │         └── column2:12 = s:26 [outer=(12,26), constraints=(/12: (/NULL - ]; /26: (/NULL - ]), fd=(12)==(26), (26)==(12)]
+      │    │    │         ├── i_default:11 = i:21 [outer=(11,21), constraints=(/11: (/NULL - ]; /21: (/NULL - ]), fd=(11)==(21), (21)==(11)]
+      │    │    │         └── column2:9 = s:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
       │    │    ├── scan a
-      │    │    │    ├── columns: i:31!null f:32
-      │    │    │    └── lax-key: (31,32)
+      │    │    │    ├── columns: i:28!null f:29
+      │    │    │    └── lax-key: (28,29)
       │    │    └── filters
-      │    │         ├── i_default:14 = i:31 [outer=(14,31), constraints=(/14: (/NULL - ]; /31: (/NULL - ]), fd=(14)==(31), (31)==(14)]
-      │    │         └── column3:13 = f:32 [outer=(13,32), constraints=(/13: (/NULL - ]; /32: (/NULL - ]), fd=(13)==(32), (32)==(13)]
+      │    │         ├── i_default:11 = i:28 [outer=(11,28), constraints=(/11: (/NULL - ]; /28: (/NULL - ]), fd=(11)==(28), (28)==(11)]
+      │    │         └── column3:10 = f:29 [outer=(10,29), constraints=(/10: (/NULL - ]; /29: (/NULL - ]), fd=(10)==(29), (29)==(10)]
       │    └── aggregations
-      │         ├── first-agg [as=column1:11, outer=(11)]
-      │         │    └── column1:11
-      │         ├── first-agg [as=column3:13, outer=(13)]
-      │         │    └── column3:13
-      │         └── first-agg [as=j_default:15, outer=(15)]
-      │              └── j_default:15
+      │         ├── first-agg [as=column1:8, outer=(8)]
+      │         │    └── column1:8
+      │         ├── first-agg [as=column3:10, outer=(10)]
+      │         │    └── column3:10
+      │         └── first-agg [as=j_default:12, outer=(12)]
+      │              └── j_default:12
       └── aggregations
-           ├── first-agg [as=column1:11, outer=(11)]
-           │    └── column1:11
-           ├── first-agg [as=column2:12, outer=(12)]
-           │    └── column2:12
-           └── first-agg [as=j_default:15, outer=(15)]
-                └── j_default:15
+           ├── first-agg [as=column1:8, outer=(8)]
+           │    └── column1:8
+           ├── first-agg [as=column2:9, outer=(9)]
+           │    └── column2:9
+           └── first-agg [as=j_default:12, outer=(12)]
+                └── j_default:12
 
 # DO NOTHING case where innermost distinct op cannot be removed (because it
 # groups on a non-constant column). Ensure that outer distinct ops can still be
@@ -2427,84 +2412,74 @@ insert a
  ├── columns: <none>
  ├── arbiter indexes: a_pkey si_idx fi_idx
  ├── insert-mapping:
- │    ├── column1:12 => k:1
- │    ├── column3:14 => i:2
- │    ├── column4:15 => f:3
- │    ├── column2:13 => s:4
- │    └── j_default:16 => j:5
+ │    ├── column1:8 => k:1
+ │    ├── column3:10 => i:2
+ │    ├── column4:11 => f:3
+ │    ├── column2:9 => s:4
+ │    └── j_default:12 => j:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── upsert-distinct-on
-      ├── columns: column1:12 column2:13!null column3:14!null column4:15!null j_default:16
-      ├── grouping columns: column1:12
+      ├── columns: column1:8 column2:9!null column3:10!null column4:11!null j_default:12
+      ├── grouping columns: column1:8
       ├── cardinality: [0 - 2]
       ├── volatile
-      ├── lax-key: (12)
-      ├── fd: ()-->(16), (12)~~>(13-16)
+      ├── lax-key: (8)
+      ├── fd: ()-->(12), (8)~~>(9-12)
       ├── anti-join (hash)
-      │    ├── columns: column1:12 column2:13!null column3:14!null column4:15!null j_default:16
+      │    ├── columns: column1:8 column2:9!null column3:10!null column4:11!null j_default:12
       │    ├── cardinality: [0 - 2]
       │    ├── volatile
-      │    ├── fd: ()-->(16)
+      │    ├── fd: ()-->(12)
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:12 column2:13!null column3:14!null column4:15!null j_default:16
+      │    │    ├── columns: column1:8 column2:9!null column3:10!null column4:11!null j_default:12
       │    │    ├── cardinality: [0 - 2]
       │    │    ├── volatile
-      │    │    ├── fd: ()-->(16)
+      │    │    ├── fd: ()-->(12)
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:12 column2:13!null column3:14!null column4:15!null j_default:16
+      │    │    │    ├── columns: column1:8 column2:9!null column3:10!null column4:11!null j_default:12
       │    │    │    ├── cardinality: [0 - 2]
       │    │    │    ├── volatile
-      │    │    │    ├── fd: ()-->(16)
+      │    │    │    ├── fd: ()-->(12)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: j_default:16 column1:12 column2:13!null column3:14!null column4:15!null
+      │    │    │    │    ├── columns: j_default:12 column1:8 column2:9!null column3:10!null column4:11!null
       │    │    │    │    ├── cardinality: [2 - 2]
       │    │    │    │    ├── volatile
-      │    │    │    │    ├── fd: ()-->(16)
+      │    │    │    │    ├── fd: ()-->(12)
       │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: column1:12 column2:13!null column3:14!null column4:15!null
+      │    │    │    │    │    ├── columns: column1:8 column2:9!null column3:10!null column4:11!null
       │    │    │    │    │    ├── cardinality: [2 - 2]
       │    │    │    │    │    ├── volatile
-      │    │    │    │    │    ├── tuple
-      │    │    │    │    │    │    ├── assignment-cast: INT8
-      │    │    │    │    │    │    │    └── unique_rowid()
-      │    │    │    │    │    │    ├── 'foo'
-      │    │    │    │    │    │    ├── 1
-      │    │    │    │    │    │    └── 1.0
-      │    │    │    │    │    └── tuple
-      │    │    │    │    │         ├── assignment-cast: INT8
-      │    │    │    │    │         │    └── unique_rowid()
-      │    │    │    │    │         ├── 'bar'
-      │    │    │    │    │         ├── 2
-      │    │    │    │    │         └── 2.0
+      │    │    │    │    │    ├── (unique_rowid(), 'foo', 1, 1.0)
+      │    │    │    │    │    └── (unique_rowid(), 'bar', 2, 2.0)
       │    │    │    │    └── projections
-      │    │    │    │         └── CAST(NULL AS JSONB) [as=j_default:16]
+      │    │    │    │         └── CAST(NULL AS JSONB) [as=j_default:12]
       │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:17!null
-      │    │    │    │    └── key: (17)
+      │    │    │    │    ├── columns: k:13!null
+      │    │    │    │    └── key: (13)
       │    │    │    └── filters
-      │    │    │         └── column1:12 = k:17 [outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
+      │    │    │         └── column1:8 = k:13 [outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
       │    │    ├── scan a
-      │    │    │    ├── columns: i:25!null s:27!null
-      │    │    │    └── key: (25,27)
+      │    │    │    ├── columns: i:21!null s:23!null
+      │    │    │    └── key: (21,23)
       │    │    └── filters
-      │    │         ├── column3:14 = i:25 [outer=(14,25), constraints=(/14: (/NULL - ]; /25: (/NULL - ]), fd=(14)==(25), (25)==(14)]
-      │    │         └── column2:13 = s:27 [outer=(13,27), constraints=(/13: (/NULL - ]; /27: (/NULL - ]), fd=(13)==(27), (27)==(13)]
+      │    │         ├── column3:10 = i:21 [outer=(10,21), constraints=(/10: (/NULL - ]; /21: (/NULL - ]), fd=(10)==(21), (21)==(10)]
+      │    │         └── column2:9 = s:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
       │    ├── scan a
-      │    │    ├── columns: i:32!null f:33
-      │    │    └── lax-key: (32,33)
+      │    │    ├── columns: i:28!null f:29
+      │    │    └── lax-key: (28,29)
       │    └── filters
-      │         ├── column3:14 = i:32 [outer=(14,32), constraints=(/14: (/NULL - ]; /32: (/NULL - ]), fd=(14)==(32), (32)==(14)]
-      │         └── column4:15 = f:33 [outer=(15,33), constraints=(/15: (/NULL - ]; /33: (/NULL - ]), fd=(15)==(33), (33)==(15)]
+      │         ├── column3:10 = i:28 [outer=(10,28), constraints=(/10: (/NULL - ]; /28: (/NULL - ]), fd=(10)==(28), (28)==(10)]
+      │         └── column4:11 = f:29 [outer=(11,29), constraints=(/11: (/NULL - ]; /29: (/NULL - ]), fd=(11)==(29), (29)==(11)]
       └── aggregations
-           ├── first-agg [as=column2:13, outer=(13)]
-           │    └── column2:13
-           ├── first-agg [as=column3:14, outer=(14)]
-           │    └── column3:14
-           ├── first-agg [as=column4:15, outer=(15)]
-           │    └── column4:15
-           └── first-agg [as=j_default:16, outer=(16)]
-                └── j_default:16
+           ├── first-agg [as=column2:9, outer=(9)]
+           │    └── column2:9
+           ├── first-agg [as=column3:10, outer=(10)]
+           │    └── column3:10
+           ├── first-agg [as=column4:11, outer=(11)]
+           │    └── column4:11
+           └── first-agg [as=j_default:12, outer=(12)]
+                └── j_default:12
 
 # DO NOTHING case with explicit conflict columns (only add upsert-distinct-on
 # for one index).
@@ -2516,57 +2491,48 @@ insert a
  ├── columns: <none>
  ├── arbiter indexes: si_idx
  ├── insert-mapping:
- │    ├── i:16 => k:1
- │    ├── i:18 => a.i:2
- │    ├── f_default:19 => f:3
- │    ├── "?column?":17 => s:4
- │    └── j_default:20 => j:5
+ │    ├── i:9 => k:1
+ │    ├── i:9 => i:2
+ │    ├── f_default:16 => f:3
+ │    ├── "?column?":15 => s:4
+ │    └── j_default:17 => j:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── upsert-distinct-on
-      ├── columns: i:16!null "?column?":17!null i:18!null f_default:19 j_default:20
-      ├── grouping columns: i:18!null
-      ├── immutable
-      ├── key: (18)
-      ├── fd: ()-->(17,19,20), (18)-->(16,17,19,20)
+      ├── columns: i:9!null "?column?":15!null f_default:16 j_default:17
+      ├── grouping columns: i:9!null
+      ├── key: (9)
+      ├── fd: ()-->(15-17)
       ├── anti-join (hash)
-      │    ├── columns: i:16!null "?column?":17!null i:18!null f_default:19 j_default:20
-      │    ├── immutable
-      │    ├── fd: ()-->(17,19,20)
+      │    ├── columns: i:9!null "?column?":15!null f_default:16 j_default:17
+      │    ├── fd: ()-->(15-17)
       │    ├── project
-      │    │    ├── columns: f_default:19 j_default:20 i:16!null "?column?":17!null i:18!null
-      │    │    ├── immutable
-      │    │    ├── fd: ()-->(17,19,20)
+      │    │    ├── columns: f_default:16 j_default:17 "?column?":15!null i:9!null
+      │    │    ├── fd: ()-->(15-17)
       │    │    ├── scan a
-      │    │    │    └── columns: a.i:9!null
+      │    │    │    └── columns: i:9!null
       │    │    └── projections
-      │    │         ├── CAST(NULL AS FLOAT8) [as=f_default:19]
-      │    │         ├── CAST(NULL AS JSONB) [as=j_default:20]
-      │    │         ├── assignment-cast: INT8 [as=i:16, outer=(9), immutable]
-      │    │         │    └── a.i:9
-      │    │         ├── 'foo' [as="?column?":17]
-      │    │         └── assignment-cast: INT8 [as=i:18, outer=(9), immutable]
-      │    │              └── a.i:9
+      │    │         ├── CAST(NULL AS FLOAT8) [as=f_default:16]
+      │    │         ├── CAST(NULL AS JSONB) [as=j_default:17]
+      │    │         └── 'foo' [as="?column?":15]
       │    ├── select
-      │    │    ├── columns: a.i:22!null s:24!null
-      │    │    ├── key: (22)
-      │    │    ├── fd: ()-->(24)
+      │    │    ├── columns: i:19!null s:21!null
+      │    │    ├── key: (19)
+      │    │    ├── fd: ()-->(21)
       │    │    ├── scan a
-      │    │    │    ├── columns: a.i:22!null s:24!null
-      │    │    │    └── key: (22,24)
+      │    │    │    ├── columns: i:19!null s:21!null
+      │    │    │    └── key: (19,21)
       │    │    └── filters
-      │    │         └── s:24 = 'foo' [outer=(24), constraints=(/24: [/'foo' - /'foo']; tight), fd=()-->(24)]
+      │    │         └── s:21 = 'foo' [outer=(21), constraints=(/21: [/'foo' - /'foo']; tight), fd=()-->(21)]
       │    └── filters
-      │         └── i:18 = a.i:22 [outer=(18,22), constraints=(/18: (/NULL - ]; /22: (/NULL - ]), fd=(18)==(22), (22)==(18)]
+      │         └── i:9 = i:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
       └── aggregations
-           ├── first-agg [as=i:16, outer=(16)]
-           │    └── i:16
-           ├── first-agg [as=f_default:19, outer=(19)]
-           │    └── f_default:19
-           ├── first-agg [as=j_default:20, outer=(20)]
-           │    └── j_default:20
-           └── const-agg [as="?column?":17, outer=(17)]
-                └── "?column?":17
+           ├── first-agg [as=f_default:16, outer=(16)]
+           │    └── f_default:16
+           ├── first-agg [as=j_default:17, outer=(17)]
+           │    └── j_default:17
+           └── const-agg [as="?column?":15, outer=(15)]
+                └── "?column?":15
 
 # --------------------------------------------------
 # PushAggDistinctIntoGroupBy

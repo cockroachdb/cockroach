@@ -282,8 +282,11 @@ import (
 //  - sleep <duration>
 //    Introduces a sleep period. Example: sleep 2s
 //
-//  - user <username>
+//  - user <username> [nodeidx=N]
 //    Changes the user for subsequent statements or queries.
+//    If nodeidx is specified, this user will connect to the node
+//    in the cluster with index N (note this is 0-indexed, while
+//    node IDs themselves are 1-indexed).
 //
 //  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is
@@ -1329,7 +1332,7 @@ func (t *logicTest) outf(format string, args ...interface{}) {
 // setUser sets the DB client to the specified user.
 // It returns a cleanup function to be run when the credentials
 // are no longer needed.
-func (t *logicTest) setUser(user string) func() {
+func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	if t.clients == nil {
 		t.clients = map[string]*gosql.DB{}
 	}
@@ -1341,9 +1344,14 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	addr := t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	nodeIdx := t.nodeIdx
+	if nodeIdxOverride > 0 {
+		nodeIdx = nodeIdxOverride
+	}
+
+	addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
 	if len(t.tenantAddrs) > 0 {
-		addr = t.tenantAddrs[t.nodeIdx]
+		addr = t.tenantAddrs[nodeIdx]
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
@@ -1354,6 +1362,12 @@ func (t *logicTest) setUser(user string) func() {
 	// connection initialization, so we need to set it back to 0 before
 	// we run anything.
 	if _, err := db.Exec("SET extra_float_digits = 0"); err != nil {
+		t.Fatal(err)
+	}
+	// The default setting for index_recommendations_enabled is true. We do not
+	// want to display index recommendations in logic tests, so we disable them
+	// here.
+	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
 		t.Fatal(err)
 	}
 	t.clients[user] = db
@@ -1547,9 +1561,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 				TracingDefault:    params.ServerArgs.TracingDefault,
 			}
 
-			// Prevent a logging assertion that the server ID is initialized multiple times.
-			log.TestingClearServerIdentifiers()
-
 			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
@@ -1674,7 +1685,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser))
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser, 0 /* nodeIdxOverride */))
 }
 
 // shutdownCluster performs the necessary cleanup to shutdown the current test
@@ -2090,8 +2101,8 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 				err = errors.New("invalid count")
 			}
 			if err != nil {
-				return errors.Errorf("%s:%d invalid repeat line: %s",
-					path, s.line+subtest.lineLineIndexIntoFile, err,
+				return errors.Wrapf(err, "%s:%d invalid repeat line",
+					path, s.line+subtest.lineLineIndexIntoFile,
 				)
 			}
 			repeat = count
@@ -2108,8 +2119,8 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 				err = errors.New("invalid duration")
 			}
 			if err != nil {
-				return errors.Errorf("%s:%d invalid sleep line: %s",
-					path, s.line+subtest.lineLineIndexIntoFile, err,
+				return errors.Wrapf(err, "%s:%d invalid sleep line",
+					path, s.line+subtest.lineLineIndexIntoFile,
 				)
 			}
 			time.Sleep(duration)
@@ -2477,13 +2488,23 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 		case "halt", "hash-threshold":
 
 		case "user":
+			var nodeIdx int
 			if len(fields) < 2 {
 				return errors.Errorf("user command requires one argument, found: %v", fields)
 			}
 			if len(fields[1]) == 0 {
 				return errors.Errorf("user command requires a non-blank argument")
 			}
-			cleanupUserFunc := t.setUser(fields[1])
+			if len(fields) >= 3 {
+				if strings.HasPrefix(fields[2], "nodeidx=") {
+					idx, err := strconv.ParseInt(strings.SplitN(fields[2], "=", 2)[1], 10, 64)
+					if err != nil {
+						return errors.Wrapf(err, "error parsing nodeidx")
+					}
+					nodeIdx = int(idx)
+				}
+			}
+			cleanupUserFunc := t.setUser(fields[1], nodeIdx)
 			defer cleanupUserFunc()
 
 		case "skip":
@@ -3194,7 +3215,7 @@ func (t *logicTest) validateAfterTestCompletion() error {
 			t.Fatalf("failed to close connection for user %s: %v", username, err)
 		}
 	}
-	t.setUser("root")
+	t.setUser("root", 0 /* nodeIdxOverride */)
 
 	// Some cleanup to make sure the following validation queries can run
 	// successfully. First we rollback in case the logic test had an uncommitted

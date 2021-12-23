@@ -1390,42 +1390,91 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 	panic(err)
 }
 
-// addAssignmentCasts builds a projection that wraps mutation values with
-// assignment casts when possible so that the resulting columns have types
-// identical to those in outTypes. If there is no valid assignment cast from a
-// column type in inScope to the corresponding target column type, then this
-// function will error.
+// addAssignmentCasts builds a projection that wraps columns in srcCols with
+// assignment casts when necessary so that the resulting columns have types
+// identical to their target column types.
 //
-// Assignment casts always wrap mutation columns even if the type of a mutation
-// column is identical to its target type. This is required in order to
-// correctly cast placeholder values. When a memo is built at PREPARE-time,
-// the exact type (e.g. int2 vs int8) of a placeholder value provided at
-// EXECUTE-time cannot be known. If a value provided does not have a type
-// identical to its target column's type, an assignment cast must be performed.
-// If the value's type is the correct type, the assignment cast is a no-op.
-func (mb *mutationBuilder) addAssignmentCasts(inScope *scope, outTypes []*types.T) *scope {
-	projectionScope := inScope.push()
-	projectionScope.cols = make([]scopeColumn, 0, len(inScope.cols))
-	for i := 0; i < len(inScope.cols); i++ {
-		srcType := inScope.cols[i].typ
-		targetType := outTypes[i]
+// srcCols should be either insertColIDs, updateColIDs, or upsertColsIDs where
+// the length of srcCols is equal to the number of columns in the target table.
+// The columns in srcCols are updated with new column IDs of the projected
+// assignment casts.
+//
+// If there is no valid assignment cast from a column type in srcCols to its
+// corresponding target column type, then this function throws an error.
+func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
+	// If all source columns have types identical to their target column types,
+	// there are no assignment casts necessary. Do not create an empty
+	// projection.
+	castRequired := false
+	for ord, colID := range srcCols {
+		if colID == 0 {
+			// Column not mutated, so nothing to do.
+			continue
+		}
+		srcType := mb.md.ColumnMeta(colID).Type
+		targetType := mb.tab.Column(ord).DatumType()
+		if !srcType.Identical(targetType) {
+			castRequired = true
+			break
+		}
+	}
+	if !castRequired {
+		return
+	}
+
+	projectionScope := mb.outScope.replace()
+	projectionScope.cols = make([]scopeColumn, 0, len(mb.outScope.cols))
+	var uncastedCols opt.ColSet
+
+	for ord, colID := range srcCols {
+		if colID == 0 {
+			// Column not mutated, so nothing to do.
+			continue
+		}
+
+		srcType := mb.md.ColumnMeta(colID).Type
+		targetCol := mb.tab.Column(ord)
+		targetType := mb.tab.Column(ord).DatumType()
+
+		// An assignment cast is not necessary if the source and target types
+		// are identical.
+		if srcType.Identical(targetType) {
+			uncastedCols.Add(colID)
+			continue
+		}
+
 		// Check if an assignment cast is available from the inScope column
 		// type to the out type.
 		if !tree.ValidCast(srcType, targetType, tree.CastContextAssignment) {
-			ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
-			colName := string(mb.tab.Column(ord).ColName())
-			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, colName))
+			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, string(targetCol.ColName())))
 		}
 
 		// Create a new column which casts the input column to the correct
 		// type.
-		variable := mb.b.factory.ConstructVariable(inScope.cols[i].id)
-		cast := mb.b.factory.ConstructAssignmentCast(variable, outTypes[i])
-		mb.b.synthesizeColumn(projectionScope, inScope.cols[i].name, outTypes[i], nil /* expr */, cast)
+		variable := mb.b.factory.ConstructVariable(colID)
+		cast := mb.b.factory.ConstructAssignmentCast(variable, targetType)
+		scopeCol := mb.b.synthesizeColumn(
+			projectionScope,
+			scopeColName(targetCol.ColName()).WithMetadataName(""),
+			targetType,
+			nil, /* expr */
+			cast,
+		)
+
+		// Replace old source column with the new one.
+		srcCols[ord] = scopeCol.id
 	}
 
-	projectionScope.expr = mb.b.constructProject(inScope.expr, projectionScope.cols)
-	return projectionScope
+	// Add uncasted columns to the projection scope so that they become
+	// passthrough columns.
+	for i := range mb.outScope.cols {
+		if uncastedCols.Contains(mb.outScope.cols[i].id) {
+			projectionScope.appendColumn(&mb.outScope.cols[i])
+		}
+	}
+
+	projectionScope.expr = mb.b.constructProject(mb.outScope.expr, projectionScope.cols)
+	mb.outScope = projectionScope
 }
 
 // partialIndexCount returns the number of public, write-only, and delete-only

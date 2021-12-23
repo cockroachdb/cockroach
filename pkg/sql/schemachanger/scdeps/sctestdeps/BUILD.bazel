@@ -3,6 +3,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "sctestdeps",
     srcs = [
+        "backfill.go",
+        "config.go",
+        "database_state.go",
         "test_deps.go",
         "test_state.go",
     ],
@@ -12,7 +15,6 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
@@ -24,9 +26,9 @@ go_library(
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
-        "//pkg/sql/parser",
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scexec/scmutationexec",

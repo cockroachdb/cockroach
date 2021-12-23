@@ -292,7 +292,7 @@ func (r *Registry) WaitForJobs(
 	// populate the crdb_internal.jobs vtable.
 	query := fmt.Sprintf(
 		`SELECT count(*) FROM system.jobs WHERE id IN (%s)
-       AND (status != $1 AND status != $2 AND status != $3 AND status != $4)`,
+       AND (status != $1 AND status != $2 AND status != $3 AND status != $4 AND status != $5)`,
 		buf.String())
 	for r := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
@@ -312,6 +312,7 @@ func (r *Registry) WaitForJobs(
 			StatusFailed,
 			StatusCanceled,
 			StatusRevertFailed,
+			StatusPaused,
 		)
 		if err != nil {
 			return errors.Wrap(err, "polling for queued jobs to complete")
@@ -340,6 +341,12 @@ func (r *Registry) WaitForJobs(
 		}
 		if j.Payload().Error != "" {
 			return errors.Newf("job %d failed with error: %s", jobs[i], j.Payload().Error)
+		}
+		if j.Status() == StatusPaused {
+			if reason := j.Payload().PauseReason; reason != "" {
+				return errors.Newf("job %d was paused before it completed with reason: %s", jobs[i], reason)
+			}
+			return errors.Newf("job %d was paused before it completed", jobs[i])
 		}
 	}
 	return nil
@@ -371,6 +378,7 @@ func (r *Registry) newJob(record Record) *Job {
 	}
 	job.mu.payload = r.makePayload(&record)
 	job.mu.progress = r.makeProgress(&record)
+	job.mu.status = StatusRunning
 	return job
 }
 
@@ -1181,7 +1189,7 @@ func (r *Registry) stepThroughStateMachine(
 	onExecutionFailed := func(cause error) error {
 		log.InfofDepth(
 			ctx, 1,
-			"job %d: %s execution encountered retriable error: %v",
+			"job %d: %s execution encountered retriable error: %+v",
 			job.ID(), status, cause,
 		)
 		start := job.getRunStats().LastRun
@@ -1220,6 +1228,10 @@ func (r *Registry) stepThroughStateMachine(
 			// paused. We should make this error clearer.
 			jm.ResumeRetryError.Inc(1)
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
+		}
+
+		if errors.Is(err, errPauseSelfSentinel) {
+			return r.PauseRequested(ctx, nil, job.ID(), err.Error())
 		}
 		// TODO(spaskob): enforce a limit on retries.
 
@@ -1457,4 +1469,25 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 	if updateErr != nil {
 		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, err)
 	}
+}
+
+// CheckPausepoint returns a PauseRequestError if the named pause-point is
+// set.
+//
+// This can be called in the middle of some job implementation to effectively
+// define a 'breakpoint' which, when reached, will cause the job to pause. This
+// can be very useful in allowing inspection of the persisted job state at that
+// point, without worrying about catching it before the job progresses further
+// or completes. These pause points can be set or removed at runtime.
+func (r *Registry) CheckPausepoint(name string) error {
+	s := debugPausepoints.Get(&r.settings.SV)
+	if s == "" {
+		return nil
+	}
+	for _, point := range strings.Split(s, ",") {
+		if name == point {
+			return MarkPauseRequestError(errors.Newf("pause point %q hit", name))
+		}
+	}
+	return nil
 }

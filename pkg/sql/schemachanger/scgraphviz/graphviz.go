@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -74,24 +75,28 @@ func DecorateErrorWithPlanDetails(err error, p scplan.Plan) error {
 		return nil
 	}
 
-	stagesURL, stagesErr := StagesURL(p)
-	if stagesErr != nil {
-		return errors.CombineErrors(err, stagesErr)
+	if p.Stages != nil {
+		stagesURL, stagesErr := StagesURL(p)
+		if stagesErr != nil {
+			return errors.CombineErrors(err, stagesErr)
+		}
+		err = errors.WithDetailf(err, "stages: %s", stagesURL)
 	}
-	err = errors.WithDetailf(err, "stages: %s", stagesURL)
 
-	dependenciesURL, dependenciesErr := DependenciesURL(p)
-	if dependenciesErr != nil {
-		return errors.CombineErrors(err, dependenciesErr)
+	if p.Graph != nil {
+		dependenciesURL, dependenciesErr := DependenciesURL(p)
+		if dependenciesErr != nil {
+			return errors.CombineErrors(err, dependenciesErr)
+		}
+		err = errors.WithDetailf(err, "dependencies: %s", dependenciesURL)
 	}
-	err = errors.WithDetailf(err, "dependencies: %s", dependenciesURL)
 
-	return err
+	return errors.WithAssertionFailure(err)
 }
 
 // DrawStages returns a graphviz string of the stages of the Plan.
 func DrawStages(p scplan.Plan) (string, error) {
-	if p.StagesForAllPhases() == nil {
+	if p.Stages == nil {
 		return "", errors.Errorf("missing stages in plan")
 	}
 	gv, err := drawStages(p)
@@ -124,14 +129,14 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 	// Note: Explains can only have one statement, so we aren't
 	// going to bother adding arrows to them.
 	for idx, stmt := range p.Initial.Statements {
-		stmtNode := statementsSubgraph.Node(strconv.Itoa(idx))
+		stmtNode := statementsSubgraph.Node(itoa(idx, len(p.Initial.Statements)))
 		stmtNode.Attr("label", htmlLabel(stmt))
 		stmtNode.Attr("fontsize", "9")
 		stmtNode.Attr("shape", "none")
 	}
 	for idx, n := range p.Initial.Nodes {
 		t := n.Target
-		tn := targetsSubgraph.Node(strconv.Itoa(idx))
+		tn := targetsSubgraph.Node(itoa(idx, len(p.Initial.Nodes)))
 		tn.Attr("label", htmlLabel(t.Element()))
 		tn.Attr("fontsize", "9")
 		tn.Attr("shape", "none")
@@ -142,6 +147,9 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 	// or something.
 	curNodes := make([]dot.Node, len(p.Initial.Nodes))
 	cur := p.Initial
+	curDummy := targetsSubgraph.Node("dummy")
+	curDummy.Attr("shape", "point")
+	curDummy.Attr("style", "invis")
 	for i, n := range p.Initial.Nodes {
 		label := targetStatusID(i, n.Status)
 		tsn := stagesSubgraph.Node(fmt.Sprintf("initial %d", i))
@@ -152,28 +160,42 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 		e.Label(n.Target.Direction.String())
 		curNodes[i] = tsn
 	}
-	for _, st := range p.StagesForAllPhases() {
+	for _, st := range p.Stages {
 		stage := st.String()
 		sg := stagesSubgraph.Subgraph(stage, dot.ClusterOption{})
 		next := st.After
 		nextNodes := make([]dot.Node, len(curNodes))
-		for i, st := range next.Nodes {
+		m := make(map[scpb.Element][]scop.Op, len(curNodes))
+		for _, op := range st.EdgeOps {
+			if oe := p.Graph.GetOpEdgeFromOp(op); oe != nil {
+				e := oe.To().Element()
+				m[e] = append(m[e], op)
+			}
+		}
+
+		for i, n := range next.Nodes {
 			cst := sg.Node(fmt.Sprintf("%s: %d", stage, i))
-			cst.Attr("label", targetStatusID(i, st.Status))
-			if st != cur.Nodes[i] {
-				ge := curNodes[i].Edge(cst)
-				oe, ok := p.Graph.GetOpEdgeFrom(cur.Nodes[i])
-				if ok {
-					ge.Attr("label", htmlLabel(oe.Op()))
+			cst.Attr("label", targetStatusID(i, n.Status))
+			ge := curNodes[i].Edge(cst)
+			if n != cur.Nodes[i] {
+				if ops := m[n.Element()]; len(ops) > 0 {
+					ge.Attr("label", htmlLabel(ops))
 					ge.Attr("fontsize", "9")
 				}
 			} else {
-				ge := curNodes[i].Edge(cst)
 				ge.Dotted()
 			}
 			nextNodes[i] = cst
 		}
-		cur, curNodes = next, nextNodes
+		nextDummy := sg.Node(fmt.Sprintf("%s: dummy", stage))
+		nextDummy.Attr("shape", "point")
+		nextDummy.Attr("style", "invis")
+		if len(st.ExtraOps) > 0 {
+			ge := curDummy.Edge(nextDummy)
+			ge.Attr("label", htmlLabel(st.ExtraOps))
+			ge.Attr("fontsize", "9")
+		}
+		cur, curNodes, curDummy = next, nextNodes, nextDummy
 	}
 
 	return dg, nil
@@ -191,14 +213,14 @@ func drawDeps(p scplan.Plan) (*dot.Graph, error) {
 	// Note: Explains can only have one statement, so we aren't
 	// going to bother adding arrows to them.
 	for idx, stmt := range p.Initial.Statements {
-		stmtNode := statementsSubgraph.Node(strconv.Itoa(idx))
+		stmtNode := statementsSubgraph.Node(itoa(idx, len(p.Initial.Statements)))
 		stmtNode.Attr("label", htmlLabel(stmt))
 		stmtNode.Attr("fontsize", "9")
 		stmtNode.Attr("shape", "none")
 	}
 	for idx, n := range p.Initial.Nodes {
 		t := n.Target
-		tn := targetsSubgraph.Node(strconv.Itoa(idx))
+		tn := targetsSubgraph.Node(itoa(idx, len(p.Initial.Nodes)))
 		tn.Attr("label", htmlLabel(t.Element()))
 		tn.Attr("fontsize", "9")
 		tn.Attr("shape", "none")
@@ -230,6 +252,9 @@ func drawDeps(p scplan.Plan) (*dot.Graph, error) {
 		case *scgraph.DepEdge:
 			ge.Attr("color", "red")
 			ge.Attr("label", e.Name())
+			if e.Kind() == scgraph.SameStagePrecedence {
+				ge.Attr("arrowhead", "diamond")
+			}
 		}
 		return nil
 	})
@@ -246,6 +271,10 @@ func htmlLabel(o interface{}) dot.HTML {
 		panic(err)
 	}
 	return dot.HTML(buf.String())
+}
+
+func itoa(i, ub int) string {
+	return fmt.Sprintf(fmt.Sprintf("%%0%dd", len(strconv.Itoa(ub))), i)
 }
 
 // ToMap converts a struct to a map, field by field. If at any point a protobuf

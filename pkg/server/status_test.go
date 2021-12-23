@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -89,28 +87,6 @@ func getStatusJSONProtoWithAdminOption(
 	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
-}
-
-// TestStatusLocalStacks verifies that goroutine stack traces are available
-// via the /_status/stacks/local endpoint.
-func TestStatusLocalStacks(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	// Verify match with at least two goroutine stacks.
-	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
-
-	var stacks serverpb.JSONResponse
-	for _, nodeID := range []string{"local", "1"} {
-		if err := getStatusJSONProto(s, "stacks/"+nodeID, &stacks); err != nil {
-			t.Fatal(err)
-		}
-		if !re.Match(stacks.Data) {
-			t.Errorf("expected %s to match %s", stacks.Data, re)
-		}
-	}
 }
 
 // TestStatusJson verifies that status endpoints return expected Json results.
@@ -2616,54 +2592,6 @@ func TestRegionsResponseFromNodesResponse(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			ret := regionsResponseFromNodesResponse(tc.resp)
 			require.Equal(t, tc.expected, ret)
-		})
-	}
-}
-
-func TestLicenseExpiryMetricNoLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ts := startServer(t)
-	defer ts.Stopper().Stop(context.Background())
-
-	for _, tc := range []struct {
-		name       string
-		expected   string
-		expiryFunc func(context.Context, *cluster.Settings, time.Time) (time.Duration, error)
-	}{
-		{"No License", "seconds_until_enterprise_license_expiry 0\n", nil},
-		{"Valid 1 second License", "seconds_until_enterprise_license_expiry 1\n", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
-		) (time.Duration, error) {
-			return time.Second, nil
-		}},
-		{"Valid Long License", "seconds_until_enterprise_license_expiry 1603926294\n", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
-		) (time.Duration, error) {
-			return timeutil.Unix(1603926294, 0).Sub(timeutil.Unix(0, 0)), nil
-		}},
-		{"Valid Long Past License", "seconds_until_enterprise_license_expiry -1603926294\n", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
-		) (time.Duration, error) {
-			return timeutil.Unix(0, 0).Sub(timeutil.Unix(1603926294, 0)), nil
-		}},
-		{"Error License", "", func(
-			_ context.Context, _ *cluster.Settings, _ time.Time,
-		) (time.Duration, error) {
-			return 0, errors.New("bad license")
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			vh := varsHandler{ts.status.metricSource, ts.status.st}
-			if tc.expiryFunc != nil {
-				base.TimeToEnterpriseLicenseExpiry = tc.expiryFunc
-			}
-
-			buf := new(bytes.Buffer)
-			vh.appendLicenseExpiryMetric(context.Background(), buf)
-
-			require.Equal(t, tc.expected, buf.String())
 		})
 	}
 }

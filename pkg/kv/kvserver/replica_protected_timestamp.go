@@ -219,7 +219,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 		// A PTS record can be updated with a new Timestamp to protect, and so we
 		// need to ensure that we are not seeing the old version of the record in
 		// case the cache has not been updated.
-		if r.ID == args.RecordID && args.Protected.LessEq(r.Timestamp) {
+		if r.ID.GetUUID() == args.RecordID && args.Protected.LessEq(r.Timestamp) {
 			seen = true
 		}
 	})
@@ -228,9 +228,9 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// to run GC will observe the Record if it still exists. The one hazard we
 	// need to avoid is a race whereby an attempt to run GC first checks the
 	// protected timestamp state and then attempts to increase the GC threshold.
-	// We set the minStateReadTimestamp here to avoid such races. The GC queue
-	// will call markPendingGC just prior to sending a request to update the GC
-	// threshold which will verify the safety of the new value relative to
+	// We set the minStateReadTimestamp here to avoid such races. The MVCC GC
+	// queue will call markPendingGC just prior to sending a request to update the
+	// GC threshold which will verify the safety of the new value relative to
 	// minStateReadTimestamp.
 	if seen {
 		r.protectedTimestampMu.minStateReadTimestamp = read.readAt
@@ -303,7 +303,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 }
 
 // markPendingGC is called just prior to sending the GC request to increase the
-// GC threshold during GC queue processing. This method synchronizes such
+// GC threshold during MVCC GC queue processing. This method synchronizes such
 // requests with the processing of AdminVerifyProtectedTimestamp requests. Such
 // synchronization is important to prevent races where the protected timestamp
 // state is read from a stale point in time and then concurrently, a

@@ -72,6 +72,7 @@ func makeStoreRebalancerMetrics() StoreRebalancerMetrics {
 // additional variables such as write load and disk usage into account.
 // If disabled, rebalancing is done purely based on replica count.
 var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
+	settings.TenantWritable,
 	"kv.allocator.load_based_rebalancing",
 	"whether to rebalance based on the distribution of QPS across stores",
 	"leases and replicas",
@@ -89,6 +90,7 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 // forgiving to avoid thrashing.
 var qpsRebalanceThreshold = func() *settings.FloatSetting {
 	s := settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"kv.allocator.qps_rebalance_threshold",
 		"minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull",
 		0.25,

@@ -274,26 +274,23 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		escapeString(buf, entry.clusterID)
 		buf.WriteByte('"')
 	}
-	if entry.nodeID != 0 {
+	if entry.nodeID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['N'].tags[tags])
 		buf.WriteString(`":`)
-		n = buf.someDigits(0, int(entry.nodeID))
-		buf.Write(buf.tmp[:n])
+		buf.WriteString(entry.nodeID)
 	}
 	if entry.tenantID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['T'].tags[tags])
-		buf.WriteString(`":"`)
-		escapeString(buf, entry.tenantID)
-		buf.WriteByte('"')
+		buf.WriteString(`":`)
+		buf.WriteString(entry.tenantID)
 	}
-	if entry.sqlInstanceID != 0 {
+	if entry.sqlInstanceID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['q'].tags[tags])
 		buf.WriteString(`":`)
-		n = buf.someDigits(0, int(entry.sqlInstanceID))
-		buf.Write(buf.tmp[:n])
+		buf.WriteString(entry.sqlInstanceID)
 	}
 
 	// The binary version.
@@ -372,25 +369,9 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	}
 
 	// Tags.
-	if entry.tags != nil {
+	if entry.payload.tags != nil {
 		buf.WriteString(`,"tags":{`)
-		comma := `"`
-		for _, t := range entry.tags.Get() {
-			buf.WriteString(comma)
-			escapeString(buf, t.Key())
-			buf.WriteString(`":"`)
-			if v := t.Value(); v != nil && v != "" {
-				var r string
-				if entry.payload.redactable {
-					r = string(redact.Sprint(v))
-				} else {
-					r = fmt.Sprint(v)
-				}
-				escapeString(buf, r)
-			}
-			buf.WriteByte('"')
-			comma = `,"`
-		}
+		entry.payload.tags.formatJSONToBuffer(buf)
 		buf.WriteByte('}')
 	}
 

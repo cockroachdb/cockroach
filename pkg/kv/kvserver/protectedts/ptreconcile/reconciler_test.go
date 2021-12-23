@@ -74,7 +74,7 @@ func TestReconciler(t *testing.T) {
 	require.NoError(t, r.Start(ctx, s0.Stopper()))
 	recMeta := "a"
 	rec1 := ptpb.Record{
-		ID:        uuid.MakeV4(),
+		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: s0.Clock().Now(),
 		Mode:      ptpb.PROTECT_AFTER,
 		MetaType:  testTaskType,
@@ -112,7 +112,7 @@ func TestReconciler(t *testing.T) {
 			return nil
 		})
 		require.Regexp(t, protectedts.ErrNotExists, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			_, err := ptp.GetRecord(ctx, txn, rec1.ID)
+			_, err := ptp.GetRecord(ctx, txn, rec1.ID.GetUUID())
 			return err
 		}))
 	})

@@ -66,8 +66,9 @@ func init() {
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.PrimaryIndex) scop.Op {
 					return &scop.BackfillIndex{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
+						TableID:       this.TableID,
+						SourceIndexID: this.SourceIndexID,
+						IndexID:       this.IndexID,
 					}
 				}),
 			),
@@ -94,7 +95,7 @@ func init() {
 			),
 		),
 		drop(
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_VALIDATED,
 				emit(func(this *scpb.PrimaryIndex) scop.Op {
 					// Most of this logic is taken from MakeMutationComplete().
 					return &scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
@@ -113,8 +114,8 @@ func init() {
 					}
 				}),
 			),
-			equiv(scpb.Status_VALIDATED, scpb.Status_DELETE_AND_WRITE_ONLY),
-			equiv(scpb.Status_BACKFILLED, scpb.Status_DELETE_AND_WRITE_ONLY),
+			equiv(scpb.Status_BACKFILLED, scpb.Status_VALIDATED),
+			equiv(scpb.Status_DELETE_AND_WRITE_ONLY, scpb.Status_VALIDATED),
 			to(scpb.Status_ABSENT,
 				revertible(false),
 				emit(func(this *scpb.PrimaryIndex) scop.Op {

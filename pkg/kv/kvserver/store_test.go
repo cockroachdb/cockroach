@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -61,6 +62,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -1274,7 +1276,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		},
 		&cfg)
 
-	baseID := uint32(keys.MinUserDescID)
+	baseID := keys.TestingUserDescID(0)
 	testData := []struct {
 		repl        *Replica
 		expMaxBytes int64
@@ -2098,7 +2100,7 @@ func TestStoreScanIntents(t *testing.T) {
 			errChan <- pErr
 		}()
 
-		wait := 1 * time.Second
+		wait := testutils.DefaultSucceedsSoonDuration
 		if !test.expFinish {
 			wait = 10 * time.Millisecond
 		}
@@ -2139,17 +2141,13 @@ func TestStoreScanIntents(t *testing.T) {
 func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// This test relies on having a committed Txn record and open intents on
-	// the same Range. This only works with auto-gc turned off; alternatively
-	// the test could move to splitting its underlying Range.
-	defer setTxnAutoGC(false)()
+
 	var intercept atomic.Value
-	intercept.Store(true)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
-			_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
-			if ok && intercept.Load().(bool) {
+			req, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
+			if ok && intercept.Load().(uuid.UUID).Equal(req.IntentTxn.ID) {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
 			return nil
@@ -2157,40 +2155,41 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	splitTestRange(store, keys.MustAddr(keys.ScratchRangeMin), t)
 
-	// Lay down 10 intents to scan over.
-	txn := newTransaction("test", roachpb.Key("foo"), 1, store.cfg.Clock)
-	keys := []roachpb.Key{}
-	for j := 0; j < 10; j++ {
-		key := roachpb.Key(fmt.Sprintf("key%02d", j))
-		keys = append(keys, key)
-		args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
-		assignSeqNumsForReqs(txn, &args)
-		if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: txn}, &args); pErr != nil {
-			t.Fatal(pErr)
+	ctx := context.Background()
+	var sl []roachpb.Key
+	require.NoError(t, store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		sl = nil                  // handle retries
+		intercept.Store(txn.ID()) // prevent async intent resolution for this txn
+		// Anchor the txn on TableDataMin-range. This prevents a fast-path in which
+		// the txn removes its intents atomically with the commit, which we want to
+		// avoid for the purpose of this test.
+		if err := txn.Put(ctx, keys.TableDataMin, "hello"); err != nil {
+			return err
 		}
-	}
+		for j := 0; j < 10; j++ {
+			var key roachpb.Key
+			key = append(key, keys.ScratchRangeMin...)
+			key = append(key, byte(j))
+			sl = append(sl, key)
+			if err := txn.Put(ctx, key, fmt.Sprintf("value%02d", j)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
 
-	// Now, commit txn without resolving intents. If we hadn't disabled auto-gc
-	// of Txn entries in this test, the Txn entry would be removed and later
-	// attempts to resolve the intents would fail.
-	etArgs, h := endTxnArgs(txn, true)
-	assignSeqNumsForReqs(txn, &etArgs)
-	if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	intercept.Store(false) // allow async intent resolution
+	intercept.Store(uuid.Nil) // allow async intent resolution
 
 	// Scan the range repeatedly until we've verified count.
-	sArgs := scanArgs(keys[0], keys[9].Next())
 	testutils.SucceedsSoon(t, func() error {
-		if reply, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
-			ReadConsistency: roachpb.INCONSISTENT,
-		}, sArgs); pErr != nil {
-			return pErr.GoError()
-		} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 10 {
-			return errors.Errorf("could not read rows as expected")
+		var b kv.Batch
+		b.Scan(sl[0], sl[9].Next())
+		b.Header.ReadConsistency = roachpb.INCONSISTENT
+		require.NoError(t, store.DB().Run(ctx, &b))
+		if exp, act := len(sl), len(b.Results[0].Rows); exp != act {
+			return errors.Errorf("expected %d keys, scanned %d", exp, act)
 		}
 		return nil
 	})
@@ -2958,6 +2957,94 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
 	}
+}
+
+// TestSnapshotReservationQueueTimeoutAvoidsStarvation verifies that the
+// snapshot reservation queue applies a tighter queueing timeout than overall
+// operation timeout to incoming snapshot requests, which enables it to avoid
+// starvation even with its FIFO queueing policy under high concurrency.
+func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	// Run each snapshot with a 100-millisecond timeout, a 50-millisecond queue
+	// timeout, and a 15-millisecond process time.
+	const timeout = 100 * time.Millisecond
+	const maxQueueTimeout = 50 * time.Millisecond
+	const timeoutFrac = float64(maxQueueTimeout) / float64(timeout)
+	const processTime = 15 * time.Millisecond
+	// Run 8 workers that are each trying to perform snapshots for 3 seconds.
+	const workers = 8
+	const duration = 3 * time.Second
+	// We expect that roughly duration / processTime snapshots "succeed". To avoid
+	// flakiness, we assert half of this.
+	const expSuccesses = int(duration / processTime)
+	const assertSuccesses = expSuccesses / 2
+	// Sanity check config. If workers*processTime < timeout, then the queue time
+	// will never be large enough to create starvation. If timeout-maxQueueTimeout
+	// < processTime then most snapshots won't have enough time to complete.
+	require.Greater(t, workers*processTime, timeout)
+	require.Greater(t, timeout-maxQueueTimeout, processTime)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tsc := TestStoreConfig(nil)
+	// Set the concurrency to 1 explicitly, in case the default ever changes.
+	tsc.concurrentSnapshotApplyLimit = 1
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, stopper, tsc)
+	s := tc.store
+	snapshotReservationQueueTimeoutFraction.Override(ctx, &s.ClusterSettings().SV, timeoutFrac)
+
+	var done int64
+	var successes int64
+	var g errgroup.Group
+	for i := 0; i < workers; i++ {
+		g.Go(func() error {
+			for atomic.LoadInt64(&done) == 0 {
+				if err := func() error {
+					snapCtx, cancel := context.WithTimeout(ctx, timeout)
+					defer cancel()
+					cleanup, err := s.reserveSnapshot(snapCtx, &SnapshotRequest_Header{RangeSize: 1})
+					if err != nil {
+						if errors.Is(err, context.DeadlineExceeded) {
+							return nil
+						}
+						return err
+					}
+					defer cleanup()
+					if atomic.LoadInt64(&done) != 0 {
+						// If the test has ended, don't process.
+						return nil
+					}
+					// Process...
+					time.Sleep(processTime)
+					// Check for sufficient processing time. If we hit a timeout, don't
+					// count the process attempt as a success. We could make this more
+					// reactive and terminate the sleep as soon as the ctx is canceled,
+					// but let's assume the worst case.
+					if err := snapCtx.Err(); err != nil {
+						t.Logf("hit %v while processing", err)
+					} else {
+						atomic.AddInt64(&successes, 1)
+					}
+					return nil
+				}(); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	time.Sleep(duration)
+	atomic.StoreInt64(&done, 1)
+	require.NoError(t, g.Wait())
+	require.GreaterOrEqual(t, int(atomic.LoadInt64(&successes)), assertSuccesses)
 }
 
 func TestSnapshotRateLimit(t *testing.T) {

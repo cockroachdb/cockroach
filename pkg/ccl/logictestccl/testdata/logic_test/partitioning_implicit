@@ -298,12 +298,6 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t (pk);
-2. type: index creation
-   SQL command: CREATE INDEX ON t (c);
 
 statement ok
 INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
@@ -805,14 +799,6 @@ vectorized: true
                         │
                         └── • scan buffer
                               label: buffer 1
-·
-index recommendations: 3
-1. type: index creation
-   SQL command: CREATE INDEX ON t (pk);
-2. type: index creation
-   SQL command: CREATE INDEX ON t (b);
-3. type: index creation
-   SQL command: CREATE INDEX ON t (c, d);
 
 statement ok
 INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
@@ -898,14 +884,6 @@ vectorized: true
                         │
                         └── • scan buffer
                               label: buffer 1
-·
-index recommendations: 3
-1. type: index creation
-   SQL command: CREATE INDEX ON t (pk) STORING (pk2, a, b, c, d);
-2. type: index creation
-   SQL command: CREATE INDEX ON t (b);
-3. type: index creation
-   SQL command: CREATE INDEX ON t (c, d);
 
 # One row already exists, one row is new.
 statement ok

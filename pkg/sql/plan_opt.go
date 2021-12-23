@@ -37,6 +37,7 @@ import (
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.query_cache.enabled", "enable the query cache", true,
 )
 
@@ -525,7 +526,8 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 	// For index recommendations, after building we must interrupt the flow to
 	// find potential index candidates in the memo.
-	if _, isExplain := opc.p.stmt.AST.(*tree.Explain); isExplain {
+	_, isExplain := opc.p.stmt.AST.(*tree.Explain)
+	if isExplain && p.SessionData().IndexRecommendationsEnabled {
 		if err := opc.makeQueryIndexRecommendation(); err != nil {
 			return nil, err
 		}

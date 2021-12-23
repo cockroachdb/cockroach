@@ -359,7 +359,7 @@ CREATE TABLE crdb_internal.tables (
 )`,
 	generator: func(ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 			if err != nil {
 				return err
@@ -476,6 +476,7 @@ CREATE TABLE crdb_internal.tables (
 // is used to define the AS OF time for querying the system.table_statistics
 // table when building crdb_internal.table_row_statistics.
 var statsAsOfTimeClusterMode = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.crdb_internal.table_row_statistics.as_of_time",
 	"historical query time used to build the crdb_internal.table_row_statistics table",
 	-10*time.Second,
@@ -2536,7 +2537,7 @@ CREATE TABLE crdb_internal.table_columns (
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 8)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
@@ -2597,7 +2598,7 @@ CREATE TABLE crdb_internal.table_indexes (
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
 		row := make(tree.Datums, 7)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
@@ -3393,7 +3394,7 @@ CREATE TABLE crdb_internal.zones (
 					if index == nil {
 						// If we can't find an active index that corresponds to this index
 						// ID then continue, as the index is being dropped, or is already
-						// dropped and in the GC queue.
+						// dropped and in the MVCC GC queue.
 						continue
 					}
 					if zoneSpecifier != nil {
@@ -4012,7 +4013,7 @@ CREATE TABLE crdb_internal.partitions (
 		if dbContext != nil {
 			dbName = dbContext.GetName()
 		}
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					return catalog.ForEachIndex(table, catalog.IndexOpts{
@@ -4805,8 +4806,13 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			descEnd = 0
 			return nil
 		}
-		// Loop over every possible descriptor ID
-		for id := keys.MinUserDescID; id < int(maxDescID); id++ {
+		idChecker := p.ExecCfg().SystemIDChecker
+		// Loop over every possible non-system descriptor ID
+		for id := uint32(keys.MaxSystemConfigDescID); id < uint32(maxDescID); id++ {
+			if idChecker.IsSystemID(id) {
+				continue
+			}
+
 			// Skip over descriptors that are known
 			if _, ok := dg.Descriptors[descpb.ID(id)]; ok {
 				err := scanAndGenerateRows()
@@ -4817,12 +4823,12 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			}
 			// Update our span range to include this
 			// descriptor.
-			prefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(id))
+			prefix := p.extendedEvalCtx.Codec.TablePrefix(id)
 			if unusedDescSpan.Key == nil {
-				descStart = id
+				descStart = int(id)
 				unusedDescSpan.Key = prefix
 			}
-			descEnd = id
+			descEnd = int(id)
 			unusedDescSpan.EndKey = prefix.PrefixEnd()
 
 		}
@@ -4912,11 +4918,12 @@ CREATE TABLE crdb_internal.default_privileges (
 					return nil
 				}
 				addRowForRole := func(role descpb.DefaultPrivilegesRole) error {
-					defaultPrivilegesForRole, found := dbContext.GetDefaultPrivilegeDescriptor().GetDefaultPrivilegesForRole(role)
+					defaultPrivilegeDescriptor := dbContext.GetDefaultPrivilegeDescriptor()
+					defaultPrivilegesForRole, found := defaultPrivilegeDescriptor.GetDefaultPrivilegesForRole(role)
 					if !found {
 						// If an entry is not found for the role, the role still has
 						// the default set of default privileges.
-						newDefaultPrivilegesForRole := descpb.InitDefaultPrivilegesForRole(role)
+						newDefaultPrivilegesForRole := descpb.InitDefaultPrivilegesForRole(role, defaultPrivilegeDescriptor.GetDefaultPrivilegeDescriptorType())
 						defaultPrivilegesForRole = &newDefaultPrivilegesForRole
 					}
 					if err := addRowHelper(*defaultPrivilegesForRole); err != nil {
@@ -4963,7 +4970,7 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 		indexStats := idxusage.NewLocalIndexUsageStatsFromExistingStats(&idxusage.Config{}, stats.Statistics)
 
 		row := make(tree.Datums, 4 /* number of columns for this virtual table */)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
 				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
 					tableID := table.GetID()
@@ -5045,7 +5052,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 		}, memSQLStats)
 
 		row := make(tree.Datums, 8 /* number of columns for this virtual table */)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
@@ -5193,7 +5200,7 @@ CREATE TABLE crdb_internal.transaction_statistics (
 		}, memSQLStats)
 
 		row := make(tree.Datums, 5 /* number of columns for this virtual table */)
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return sqlStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,

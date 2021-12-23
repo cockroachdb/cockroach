@@ -27,6 +27,8 @@ import { TerminateQueryModalRef } from "./terminateQueryModal";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable/sortedtable";
 
 import { Icon } from "antd";
+import { Ellipsis } from "@cockroachlabs/icons";
+
 import {
   Dropdown,
   DropdownOption as DropdownItem,
@@ -227,7 +229,7 @@ export function makeSessionsColumns(
       const renderDropdownToggleButton: JSX.Element = (
         <>
           <Button type="secondary" size="small">
-            <Icon type="ellipsis" />
+            <Icon component={Ellipsis} />
           </Button>
         </>
       );

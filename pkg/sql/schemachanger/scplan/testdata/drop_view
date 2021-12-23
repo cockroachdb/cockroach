@@ -12,11 +12,10 @@ DROP VIEW defaultdb.v1
 StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
     [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
-PreCommitPhase non-revertible stage 1 of 1 with 3 MutationType ops
+PreCommitPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
@@ -24,6 +23,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 3 MutationType ops
     [UserPrivileges:{DescID: 55, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
@@ -33,7 +33,20 @@ PreCommitPhase non-revertible stage 1 of 1 with 3 MutationType ops
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 55
       TableID: 54
-PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: DROP VIEW defaultdb.v1
+PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
   ops:
@@ -51,38 +64,51 @@ PostCommitPhase non-revertible stage 1 of 1 with 2 MutationType ops
         Username: root
     *scop.CreateGcJobForTable
       TableID: 55
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
 
 deps
 DROP VIEW defaultdb.v1
 ----
 - from: [Namespace:{DescID: 55, Name: v1}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
-- from: [Owner:{DescID: 55}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, ABSENT]
-  to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
-  kind: HappensAfter
+  to:   [View:{DescID: 55}, ABSENT]
+  kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [Locality:{DescID: 55}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [Owner:{DescID: 55}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
 
 create-view
 CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1)
@@ -110,15 +136,10 @@ DROP VIEW defaultdb.v1 CASCADE
 StatementPhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
-    [Locality:{DescID: 61}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
@@ -130,7 +151,7 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
       DescID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 61
-PreCommitPhase non-revertible stage 1 of 1 with 18 MutationType ops
+PreCommitPhase stage 1 of 1 with 25 MutationType ops
   transitions:
     [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
@@ -138,6 +159,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 18 MutationType ops
     [UserPrivileges:{DescID: 55, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
@@ -147,6 +169,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 18 MutationType ops
     [UserPrivileges:{DescID: 56, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 56, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 56, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
@@ -155,12 +178,14 @@ PreCommitPhase non-revertible stage 1 of 1 with 18 MutationType ops
     [UserPrivileges:{DescID: 57, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 57, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 58, Name: v4}, PUBLIC, DROP] -> ABSENT
     [Owner:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: admin}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
     [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
     [Namespace:{DescID: 61, Name: v5}, PUBLIC, DROP] -> ABSENT
@@ -170,6 +195,7 @@ PreCommitPhase non-revertible stage 1 of 1 with 18 MutationType ops
     [UserPrivileges:{DescID: 61, Username: root}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
     [ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
+    [Locality:{DescID: 61}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 55
@@ -180,33 +206,18 @@ PreCommitPhase non-revertible stage 1 of 1 with 18 MutationType ops
       TableID: 54
     *scop.MarkDescriptorAsDropped
       DescID: 56
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 56
-      TableID: 55
+    *scop.DrainDescriptorName
+      TableID: 56
     *scop.MarkDescriptorAsDropped
       DescID: 57
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 57
-      TableID: 55
-    *scop.DrainDescriptorName
-      TableID: 56
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 57
-      TableID: 56
-    *scop.MarkDescriptorAsDropped
-      DescID: 58
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 58
-      TableID: 56
     *scop.DrainDescriptorName
       TableID: 57
+    *scop.MarkDescriptorAsDropped
+      DescID: 58
     *scop.DrainDescriptorName
       TableID: 58
     *scop.MarkDescriptorAsDropped
       DescID: 61
-    *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 61
-      TableID: 58
     *scop.DrainDescriptorName
       TableID: 61
     *scop.RemoveTypeBackRef
@@ -215,7 +226,47 @@ PreCommitPhase non-revertible stage 1 of 1 with 18 MutationType ops
     *scop.RemoveTypeBackRef
       DescID: 61
       TypeID: 60
-PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 56
+      TableID: 55
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 57
+      TableID: 55
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 57
+      TableID: 56
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 58
+      TableID: 56
+    *scop.RemoveRelationDependedOnBy
+      DependedOnBy: 61
+      TableID: 58
+    *scop.AddJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 57
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 58
+      JobID: 1
+    *scop.AddJobReference
+      DescriptorID: 61
+      JobID: 1
+    *scop.CreateDeclarativeSchemaChangerJob
+      JobID: 1
+      State:
+        Authorization:
+          Username: root
+        Statements:
+        - statement: DROP VIEW defaultdb.v1 CASCADE
+PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
   transitions:
     [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
     [View:{DescID: 56}, DROPPED, DROP] -> ABSENT
@@ -293,171 +344,212 @@ PostCommitPhase non-revertible stage 1 of 1 with 10 MutationType ops
         Username: root
     *scop.CreateGcJobForTable
       TableID: 61
+    *scop.RemoveJobReference
+      DescriptorID: 54
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 55
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 56
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 57
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 58
+      JobID: 1
+    *scop.RemoveJobReference
+      DescriptorID: 61
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
 
 deps
 DROP VIEW defaultdb.v1 CASCADE
 ----
 - from: [Namespace:{DescID: 55, Name: v1}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
+  to:   [View:{DescID: 55}, ABSENT]
+  kind: Precedence
+  rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 56, Name: v2}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
+  to:   [View:{DescID: 56}, ABSENT]
+  kind: Precedence
+  rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 57, Name: v3}, ABSENT]
-  to:   [View:{DescID: 57}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
+  to:   [View:{DescID: 57}, ABSENT]
+  kind: Precedence
+  rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 58, Name: v4}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
+  to:   [View:{DescID: 58}, ABSENT]
+  kind: Precedence
+  rule: descriptor can only be cleaned up once the name is drained
 - from: [Namespace:{DescID: 61, Name: v5}, ABSENT]
-  to:   [View:{DescID: 61}, DROPPED]
-  kind: HappensAfter
-  rule: namespace needs descriptor to be dropped
-- from: [Owner:{DescID: 55}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
+  to:   [View:{DescID: 61}, ABSENT]
+  kind: Precedence
+  rule: descriptor can only be cleaned up once the name is drained
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [Locality:{DescID: 55}, ABSENT]
+  kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [Owner:{DescID: 56}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [Owner:{DescID: 57}, ABSENT]
-  to:   [View:{DescID: 57}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [Owner:{DescID: 58}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [Owner:{DescID: 61}, ABSENT]
-  to:   [View:{DescID: 61}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
-  to:   [View:{DescID: 57}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
-  to:   [View:{DescID: 57}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
-  to:   [View:{DescID: 61}, DROPPED]
-  kind: SameStage
-  rule: dependency needs relation/type as non-synthetically dropped
-- from: [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
-  to:   [View:{DescID: 55}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 56, Username: admin}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 56, Username: public}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 56, Username: root}, ABSENT]
-  to:   [View:{DescID: 56}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 57, Username: admin}, ABSENT]
-  to:   [View:{DescID: 57}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 57, Username: public}, ABSENT]
-  to:   [View:{DescID: 57}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 57, Username: root}, ABSENT]
-  to:   [View:{DescID: 57}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 58, Username: admin}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 58, Username: public}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 58, Username: root}, ABSENT]
-  to:   [View:{DescID: 58}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 61, Username: admin}, ABSENT]
-  to:   [View:{DescID: 61}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 61, Username: public}, ABSENT]
-  to:   [View:{DescID: 61}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [UserPrivileges:{DescID: 61, Username: root}, ABSENT]
-  to:   [View:{DescID: 61}, DROPPED]
-  kind: HappensAfter
-  rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, ABSENT]
+- from: [View:{DescID: 55}, DROPPED]
   to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 56}, ABSENT]
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [Owner:{DescID: 55}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 55}, DROPPED]
+  to:   [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 56}, DROPPED]
+  to:   [Locality:{DescID: 56}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 56}, DROPPED]
   to:   [Namespace:{DescID: 56, Name: v2}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 57}, ABSENT]
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped
+- from: [View:{DescID: 56}, DROPPED]
+  to:   [Owner:{DescID: 56}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 56}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 56}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 56}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 56}, DROPPED]
+  to:   [UserPrivileges:{DescID: 56, Username: admin}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 56}, DROPPED]
+  to:   [UserPrivileges:{DescID: 56, Username: public}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 56}, DROPPED]
+  to:   [UserPrivileges:{DescID: 56, Username: root}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 57}, DROPPED]
+  to:   [Locality:{DescID: 57}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 57}, DROPPED]
   to:   [Namespace:{DescID: 57, Name: v3}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 58}, ABSENT]
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped
+- from: [View:{DescID: 57}, DROPPED]
+  to:   [Owner:{DescID: 57}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 57}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 57}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 57}, DROPPED]
+  to:   [UserPrivileges:{DescID: 57, Username: admin}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 57}, DROPPED]
+  to:   [UserPrivileges:{DescID: 57, Username: public}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 57}, DROPPED]
+  to:   [UserPrivileges:{DescID: 57, Username: root}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 58}, DROPPED]
+  to:   [Locality:{DescID: 58}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 58}, DROPPED]
   to:   [Namespace:{DescID: 58, Name: v4}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 61}, ABSENT]
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped
+- from: [View:{DescID: 58}, DROPPED]
+  to:   [Owner:{DescID: 58}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 58}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 58}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 58}, DROPPED]
+  to:   [UserPrivileges:{DescID: 58, Username: admin}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 58}, DROPPED]
+  to:   [UserPrivileges:{DescID: 58, Username: public}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 58}, DROPPED]
+  to:   [UserPrivileges:{DescID: 58, Username: root}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 61}, DROPPED]
+  to:   [Locality:{DescID: 61}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 61}, DROPPED]
   to:   [Namespace:{DescID: 61, Name: v5}, ABSENT]
-  kind: HappensAfter
-  rule: descriptor can only be cleaned up once the name is drained
+  kind: Precedence
+  rule: namespace needs descriptor to be dropped
+- from: [View:{DescID: 61}, DROPPED]
+  to:   [Owner:{DescID: 61}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 61}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependency needs relation/type as non-synthetically dropped
+- from: [View:{DescID: 61}, DROPPED]
+  to:   [UserPrivileges:{DescID: 61, Username: admin}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 61}, DROPPED]
+  to:   [UserPrivileges:{DescID: 61, Username: public}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped
+- from: [View:{DescID: 61}, DROPPED]
+  to:   [UserPrivileges:{DescID: 61, Username: root}, ABSENT]
+  kind: Precedence
+  rule: table deps removal happens after table marked as dropped

@@ -51,7 +51,7 @@ var providerInstance = &Provider{}
 // Init registers the Azure provider with vm.Providers.
 //
 // If the Azure CLI utilities are not installed, the provider is a stub.
-func Init() {
+func Init() error {
 	const unimplemented = "please install the Azure CLI utilities +" +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
 
@@ -60,9 +60,10 @@ func Init() {
 	providerInstance.SyncDelete = false
 	if _, err := providerInstance.getAuthToken(); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
-		return
+		return err
 	}
 	vm.Providers[ProviderName] = providerInstance
+	return nil
 }
 
 // Provider implements the vm.Provider interface for the Microsoft Azure
@@ -108,9 +109,9 @@ func (p *Provider) CleanSSH() error {
 	return nil
 }
 
-// ConfigSSH implements vm.Provider, is a no-op, and returns nil.
-// On Azure, the SSH public key is set as part of VM instance creation.
-func (p *Provider) ConfigSSH() error {
+// ConfigSSH is part of the vm.Provider interface and is a no-op.
+func (p *Provider) ConfigSSH(zones []string) error {
+	// On Azure, the SSH public key is set as part of VM instance creation.
 	return nil
 }
 

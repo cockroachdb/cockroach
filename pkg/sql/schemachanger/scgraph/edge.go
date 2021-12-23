@@ -76,15 +76,13 @@ type DepEdgeKind int
 const (
 	_ DepEdgeKind = iota
 
-	// HappensAfter indicates that the source (from) of the edge must not be
-	// entered until after the destination (to) has entered the state. It could
-	// be in the same stage, or it could be in a subsequent stage.
-	HappensAfter
+	// Precedence indicates that the source (from) of the edge must be reached
+	// before the destination (to), whether in a previous stage or the same stage.
+	Precedence
 
-	// SameStage indicates that the source (from) of the edge must
-	// not be entered until after the destination (to) has entered the state and
-	// that both nodes must enter the state in the same stage.
-	SameStage
+	// SameStagePrecedence indicates that the source (from) of the edge must
+	// be reached before the destination (to), and _must_ do so in the same stage.
+	SameStagePrecedence
 )
 
 // DepEdge represents a dependency between two nodes. A dependency

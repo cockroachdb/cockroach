@@ -222,8 +222,7 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 	node, err := b.factory.ConstructAlterTableRelocate(
 		table.Index(relocate.Index),
 		input.root,
-		relocate.RelocateLease,
-		relocate.RelocateNonVoters,
+		relocate.SubjectReplicas,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -236,12 +235,20 @@ func (b *Builder) buildAlterRangeRelocate(relocate *memo.AlterRangeRelocateExpr)
 	if err != nil {
 		return execPlan{}, err
 	}
+	scalarCtx := buildScalarCtx{}
+	toStoreID, err := b.buildScalar(&scalarCtx, relocate.ToStoreID)
+	if err != nil {
+		return execPlan{}, err
+	}
+	fromStoreID, err := b.buildScalar(&scalarCtx, relocate.FromStoreID)
+	if err != nil {
+		return execPlan{}, err
+	}
 	node, err := b.factory.ConstructAlterRangeRelocate(
 		input.root,
-		relocate.RelocateLease,
-		relocate.RelocateNonVoters,
-		relocate.ToStoreID,
-		relocate.FromStoreID,
+		relocate.SubjectReplicas,
+		toStoreID,
+		fromStoreID,
 	)
 	if err != nil {
 		return execPlan{}, err

@@ -392,7 +392,7 @@ func (v *constraintConformanceVisitor) reset(ctx context.Context) {
 	// wouldn't create entries for constraints that aren't violated, and
 	// definitely not for zones that don't apply to any ranges.
 	maxObjectID, err := v.cfg.GetLargestObjectID(
-		0 /* maxID - return the largest ID in the config */, keys.PseudoTableIDs)
+		nil /* systemIDChecker - return the largest ID in the config */, keys.PseudoTableIDs)
 	if err != nil {
 		log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
 	}
@@ -430,7 +430,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 			return true
 		})
 	if err != nil {
-		return errors.Errorf("unexpected error visiting zones: %s", err)
+		return errors.Wrap(err, "unexpected error visiting zones")
 	}
 	v.prevZoneKey = zKey
 	v.prevConstraints = constraints

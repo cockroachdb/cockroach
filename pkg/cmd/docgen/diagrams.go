@@ -243,7 +243,7 @@ func init() {
 						// Wrap the output in a <div> so that the Markdown parser
 						// doesn't attempt to parse the inside of the contained
 						// <svg> as Markdown.
-						body = fmt.Sprintf(`<div>%s</div>`, body)
+						body = fmt.Sprintf(`<div style="overflow-x:auto;">%s</div>`, body)
 						// Remove blank lines and strip spaces.
 						body = stripRE.ReplaceAllString(body, "\n") + "\n"
 					}

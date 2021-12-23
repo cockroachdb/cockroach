@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -47,9 +49,13 @@ func registerSchemaChangeDatabaseVersionUpgrade(r registry.Registry) {
 func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Put and start the binary.
-		args := u.uploadVersion(ctx, t, nodes, v)
+		binary := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt, option.RoachprodArgOption{"--sequential=false"})
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachtestOpts.DontEncrypt = true
+		startOpts.RoachprodOpts.Sequential = false
+		settings := install.MakeClusterSettings(install.BinaryOption(binary))
+		u.c.Start(ctx, startOpts, settings, nodes)
 	}
 }
 
@@ -91,7 +97,7 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	assertDatabaseNotResolvable := func(ctx context.Context, db *gosql.DB, dbName string) error {
 		_, err = db.ExecContext(ctx, fmt.Sprintf(`SELECT table_name FROM [SHOW TABLES FROM %s]`, dbName))
 		if err == nil || err.Error() != "pq: target database or schema does not exist" {
-			return errors.AssertionFailedf("unexpected error: %s", err)
+			return errors.Newf("unexpected error: %s", pgerror.FullError(err))
 		}
 		return nil
 	}
@@ -181,10 +187,10 @@ func runSchemaChangeDatabaseVersionUpgrade(
 
 	validationStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		t.L().Printf("validating")
-		buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(1),
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1),
 			[]string{"./cockroach debug doctor cluster", "--url {pgurl:1}"}...)
 		require.NoError(t, err)
-		t.L().Printf("%s", buf)
+		t.L().Printf("%s", result.Stdout)
 	}
 
 	interactWithReparentedSchemaStep := func(schemaName string) versionStep {

@@ -5,20 +5,13 @@ go_library(
     srcs = [
         "addresses.go",
         "event.go",
-        "init.go",
-        "replication_manager.go",
         "settings.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/jobs/jobspb",
-        "//pkg/kv",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
-        "//pkg/sql/sem/tree",
-        "//pkg/streaming",
         "//pkg/util/hlc",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )

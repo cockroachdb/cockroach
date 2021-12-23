@@ -61,7 +61,7 @@ func TestInitialKeys(t *testing.T) {
 		desc, err := sql.CreateTestTableDescriptor(
 			context.Background(),
 			keys.SystemDatabaseID,
-			keys.MaxReservedDescID,
+			descpb.ID(1000 /* suitably large descriptor ID */),
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
 			descpb.NewBasePrivilegeDescriptor(security.NodeUserName()),
 		)
@@ -95,7 +95,7 @@ func TestInitialKeys(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e := i, int64(keys.MinUserDescID); a != e {
+		if a, e := i, int64(keys.TestingUserDescID(0)); a != e {
 			t.Fatalf("Expected next descriptor ID to be %d, was %d", e, a)
 		}
 	})
@@ -190,6 +190,21 @@ func TestSystemTableLiterals(t *testing.T) {
 				t.Fatalf("test: %+v, err: %v", test, err)
 			}
 			require.NoError(t, catalog.ValidateSelf(gen))
+
+			// TODO (Chengxiong) : remove this check after fixing #68031
+			// These two system tables were created before we make shard column as
+			// virtual columns. We want to keep the hardcoded table descriptors to
+			// avoid system table migrations. However, in this test we run the `create
+			// table` statement and compare the result with the hardcoded descriptor,
+			// and there is discrepancy for sure. So we change the string statement to
+			// declare the shard column and constraint for it explicitly. The problem
+			// is that we only set `Hidden=true` when creating a shard column
+			// internally. User declared constraints has everything the same but with
+			// `Hidden=false`. So overriding the value here for now. Will remove it
+			// once we have better logic creating constraints.
+			if name == "statement_statistics" || name == "transaction_statistics" {
+				gen.TableDesc().Checks[0].Hidden = true
+			}
 
 			if test.pkg.TableDesc().Equal(gen.TableDesc()) {
 				return

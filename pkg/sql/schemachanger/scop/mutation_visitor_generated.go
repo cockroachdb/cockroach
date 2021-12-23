@@ -61,7 +61,7 @@ type MutationVisitor interface {
 	RemoveJobReference(context.Context, RemoveJobReference) error
 	AddJobReference(context.Context, AddJobReference) error
 	CreateDeclarativeSchemaChangerJob(context.Context, CreateDeclarativeSchemaChangerJob) error
-	UpdateSchemaChangeJobProgress(context.Context, UpdateSchemaChangeJobProgress) error
+	UpdateSchemaChangerJob(context.Context, UpdateSchemaChangerJob) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -260,6 +260,6 @@ func (op CreateDeclarativeSchemaChangerJob) Visit(ctx context.Context, v Mutatio
 }
 
 // Visit is part of the MutationOp interface.
-func (op UpdateSchemaChangeJobProgress) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.UpdateSchemaChangeJobProgress(ctx, op)
+func (op UpdateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpdateSchemaChangerJob(ctx, op)
 }

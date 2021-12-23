@@ -21,6 +21,7 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
     keyColumnIds:
     - 1
     - 2
+    sourceIndexId: 1
     storingColumnIds:
     - 3
     tableId: 54
@@ -47,6 +48,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
     keyColumnIds:
     - 1
     - 2
+    sourceIndexId: 1
     storingColumnIds:
     - 3
     tableId: 54
@@ -85,6 +87,7 @@ CREATE INDEX id3
     keyColumnIds:
     - 1
     - 2
+    sourceIndexId: 1
     storingColumnIds:
     - 3
     tableId: 54
@@ -106,11 +109,11 @@ CREATE INDEX id4
       family: IntFamily
       oid: 23
       width: 32
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: new_primary_key}
+- ADD IndexName:{DescID: 54, IndexID: 2, Name: t1_pkey}
   state: ABSENT
   details:
     indexId: 2
-    name: new_primary_key
+    name: t1_pkey
     tableId: 54
 - ADD IndexName:{DescID: 54, IndexID: 3, Name: id4}
   state: ABSENT
@@ -127,6 +130,7 @@ CREATE INDEX id4
     keyColumnIds:
     - 1
     shardedDescriptor: {}
+    sourceIndexId: 1
     storingColumnIds:
     - 2
     - 3
@@ -150,6 +154,7 @@ CREATE INDEX id4
       isSharded: true
       name: crdb_internal_id_name_shard_8
       shardBuckets: 8
+    sourceIndexId: 1
     storingColumnIds:
     - 3
     tableId: 54
@@ -168,6 +173,7 @@ CREATE INDEX id4
     keyColumnIds:
     - 1
     shardedDescriptor: {}
+    sourceIndexId: 1
     storingColumnIds:
     - 2
     - 3

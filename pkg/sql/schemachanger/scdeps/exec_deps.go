@@ -13,7 +13,6 @@ package scdeps
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -26,11 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,25 +49,31 @@ func NewExecutorDependencies(
 	user security.SQLUsername,
 	descsCollection *descs.Collection,
 	jobRegistry JobRegistry,
-	indexBackfiller scexec.IndexBackfiller,
+	backfiller scexec.Backfiller,
+	backfillTracker scexec.BackfillTracker,
+	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
-	cclCallbacks scexec.Partitioner,
-	logEventFn LogEventCallback,
+	partitioner scmutationexec.Partitioner,
+	eventLogger scexec.EventLogger,
+	schemaChangerJobID jobspb.JobID,
 	statements []string,
 ) scexec.Dependencies {
 	return &execDeps{
 		txnDeps: txnDeps{
-			txn:             txn,
-			codec:           codec,
-			descsCollection: descsCollection,
-			jobRegistry:     jobRegistry,
-			indexValidator:  indexValidator,
-			partitioner:     cclCallbacks,
-			eventLogWriter:  newEventLogWriter(txn, logEventFn),
+			txn:                txn,
+			codec:              codec,
+			descsCollection:    descsCollection,
+			jobRegistry:        jobRegistry,
+			indexValidator:     indexValidator,
+			eventLogger:        eventLogger,
+			schemaChangerJobID: schemaChangerJobID,
 		},
-		indexBackfiller: indexBackfiller,
-		statements:      statements,
-		user:            user,
+		backfiller:              backfiller,
+		backfillTracker:         backfillTracker,
+		periodicProgressFlusher: backfillFlusher,
+		statements:              statements,
+		partitioner:             partitioner,
+		user:                    user,
 	}
 }
 
@@ -80,19 +83,26 @@ type txnDeps struct {
 	descsCollection    *descs.Collection
 	jobRegistry        JobRegistry
 	indexValidator     scexec.IndexValidator
-	partitioner        scexec.Partitioner
-	eventLogWriter     *eventLogWriter
+	eventLogger        scexec.EventLogger
 	deletedDescriptors catalog.DescriptorIDSet
+	schemaChangerJobID jobspb.JobID
 }
 
 func (d *txnDeps) UpdateSchemaChangeJob(
-	ctx context.Context, id jobspb.JobID, fn scexec.JobProgressUpdateFunc,
+	ctx context.Context, id jobspb.JobID, callback scexec.JobUpdateCallback,
 ) error {
 	const useReadLock = false
 	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
-		return fn(md, ju.UpdateProgress)
+		setNonCancelable := func() {
+			payload := *md.Payload
+			if !payload.Noncancelable {
+				payload.Noncancelable = true
+				ju.UpdatePayload(&payload)
+			}
+		}
+		return callback(md, ju.UpdateProgress, setNonCancelable)
 	})
 }
 
@@ -177,28 +187,6 @@ func (d *txnDeps) RemoveSyntheticDescriptor(id descpb.ID) {
 	d.descsCollection.RemoveSyntheticDescriptor(id)
 }
 
-// AddPartitioning implements the  scmutationexec.CatalogReader interface.
-func (d *txnDeps) AddPartitioning(
-	tableDesc *tabledesc.Mutable,
-	indexDesc *descpb.IndexDescriptor,
-	partitionFields []string,
-	listPartition []*scpb.ListPartition,
-	rangePartition []*scpb.RangePartitions,
-	allowedNewColumnNames []tree.Name,
-	allowImplicitPartitioning bool,
-) error {
-	ctx := context.Background()
-
-	return d.partitioner.AddPartitioning(ctx,
-		tableDesc,
-		indexDesc,
-		partitionFields,
-		listPartition,
-		rangePartition,
-		allowedNewColumnNames,
-		allowImplicitPartitioning)
-}
-
 // MustReadMutableDescriptor implements the scexec.Catalog interface.
 func (d *txnDeps) MustReadMutableDescriptor(
 	ctx context.Context, id descpb.ID,
@@ -221,14 +209,14 @@ type catalogChangeBatcher struct {
 
 var _ scexec.CatalogChangeBatcher = (*catalogChangeBatcher)(nil)
 
-// CreateOrUpdateDescriptor implements the scexec.CatalogChangeBatcher interface.
+// CreateOrUpdateDescriptor implements the scexec.CatalogWriter interface.
 func (b *catalogChangeBatcher) CreateOrUpdateDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) error {
 	return b.descsCollection.WriteDescToBatch(ctx, false /* kvTrace */, desc, b.batch)
 }
 
-// DeleteName implements the scexec.CatalogChangeBatcher interface.
+// DeleteName implements the scexec.CatalogWriter interface.
 func (b *catalogChangeBatcher) DeleteName(
 	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
 ) error {
@@ -254,13 +242,20 @@ func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	return nil
 }
 
-var _ scexec.TransactionalJobCreator = (*txnDeps)(nil)
+var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)
 
 func (d *txnDeps) MakeJobID() jobspb.JobID {
 	return d.jobRegistry.MakeJobID()
 }
 
-// CreateJob implements the scexec.TransactionalJobCreator interface.
+func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {
+	if d.schemaChangerJobID == 0 {
+		d.schemaChangerJobID = d.jobRegistry.MakeJobID()
+	}
+	return d.schemaChangerJobID
+}
+
+// CreateJob implements the scexec.TransactionalJobRegistry interface.
 func (d *txnDeps) CreateJob(ctx context.Context, record jobs.Record) error {
 	_, err := d.jobRegistry.CreateJobWithTxn(ctx, record, record.JobID, d.txn)
 	return err
@@ -283,9 +278,7 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime)
 }
 
-var _ scexec.JobProgressTracker = (*execDeps)(nil)
-
-// GetResumeSpans implements the scexec.JobProgressTracker interface.
+// GetResumeSpans implements the scexec.BackfillTracker interface.
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
@@ -301,7 +294,7 @@ func (d *txnDeps) GetResumeSpans(
 	return []roachpb.Span{table.IndexSpan(d.codec, indexID)}, nil
 }
 
-// SetResumeSpans implements the scexec.JobProgressTracker interface.
+// SetResumeSpans implements the scexec.BackfillTracker interface.
 func (d *txnDeps) SetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span,
 ) error {
@@ -310,9 +303,12 @@ func (d *txnDeps) SetResumeSpans(
 
 type execDeps struct {
 	txnDeps
-	indexBackfiller scexec.IndexBackfiller
-	statements      []string
-	user            security.SQLUsername
+	partitioner             scmutationexec.Partitioner
+	backfiller              scexec.Backfiller
+	backfillTracker         scexec.BackfillTracker
+	periodicProgressFlusher scexec.PeriodicProgressFlusher
+	statements              []string
+	user                    security.SQLUsername
 }
 
 var _ scexec.Dependencies = (*execDeps)(nil)
@@ -322,9 +318,24 @@ func (d *execDeps) Catalog() scexec.Catalog {
 	return d
 }
 
+// Partitioner implements the scexec.Dependencies interface.
+func (d *execDeps) Partitioner() scmutationexec.Partitioner {
+	return d.partitioner
+}
+
 // IndexBackfiller implements the scexec.Dependencies interface.
-func (d *execDeps) IndexBackfiller() scexec.IndexBackfiller {
-	return d.indexBackfiller
+func (d *execDeps) IndexBackfiller() scexec.Backfiller {
+	return d.backfiller
+}
+
+// BackfillProgressTracker implements the scexec.Dependencies interface.
+func (d *execDeps) BackfillProgressTracker() scexec.BackfillTracker {
+	return d.backfillTracker
+}
+
+// PeriodicProgressFlusher implements the scexec.Dependencies interface.
+func (d *execDeps) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
+	return d.periodicProgressFlusher
 }
 
 func (d *execDeps) IndexValidator() scexec.IndexValidator {
@@ -336,13 +347,8 @@ func (d *execDeps) IndexSpanSplitter() scexec.IndexSpanSplitter {
 	return d
 }
 
-// JobProgressTracker implements the scexec.Dependencies interface.
-func (d *execDeps) JobProgressTracker() scexec.JobProgressTracker {
-	return d
-}
-
 // TransactionalJobCreator implements the scexec.Dependencies interface.
-func (d *execDeps) TransactionalJobCreator() scexec.TransactionalJobCreator {
+func (d *execDeps) TransactionalJobRegistry() scexec.TransactionalJobRegistry {
 	return d
 }
 
@@ -356,134 +362,63 @@ func (d *execDeps) User() security.SQLUsername {
 	return d.user
 }
 
-// LogEventCallback call back to allow the new schema changer
-// to generate event log entries.
-type LogEventCallback func(ctx context.Context,
-	txn *kv.Txn,
-	depth int,
-	descID descpb.ID,
-	metadata scpb.ElementMetadata,
-	event eventpb.EventPayload,
-) error
+// EventLoggerFactory constructs a new event logger with a txn.
+type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
 
-type eventPayload struct {
-	descID   descpb.ID
-	metadata *scpb.ElementMetadata
-	event    eventpb.EventPayload
-}
-
-type eventLogWriter struct {
-	txn               *kv.Txn
-	logEvent          LogEventCallback
-	eventStatementMap map[uint32][]eventPayload
-}
-
-// newEventLogWriter makes a new event log writer which will accumulate,
-// and emit events.
-func newEventLogWriter(txn *kv.Txn, logEvent LogEventCallback) *eventLogWriter {
-	return &eventLogWriter{
-		txn:               txn,
-		logEvent:          logEvent,
-		eventStatementMap: make(map[uint32][]eventPayload),
-	}
-}
-
-// EnqueueEvent implements scexec.EventLogger
-func (m *eventLogWriter) EnqueueEvent(
-	_ context.Context, descID descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
-) error {
-	eventList := m.eventStatementMap[metadata.StatementID]
-	m.eventStatementMap[metadata.StatementID] = append(eventList,
-		eventPayload{descID: descID,
-			event:    event,
-			metadata: metadata},
-	)
-	return nil
-}
-
-// ProcessAndSubmitEvents implements scexec.EventLogger
-func (m *eventLogWriter) ProcessAndSubmitEvents(ctx context.Context) error {
-	for _, events := range m.eventStatementMap {
-		// A dependent event is one which is generated because of a
-		// dependency getting modified from the source object. An example
-		// of this is a DROP TABLE will be the source event, which will track
-		// any dependent views dropped.
-		var dependentEvents = make(map[uint32][]eventPayload)
-		var sourceEvents = make(map[uint32]eventPayload)
-		// First separate out events, where the first event generated will always
-		// be the source and everything else before will be dependencies if they have
-		// the same subtask ID.
-		for _, event := range events {
-			dependentEvents[event.metadata.SubWorkID] = append(dependentEvents[event.metadata.SubWorkID], event)
-		}
-		// Split of the source events.
-		orderedSubWorkID := make([]uint32, 0, len(dependentEvents))
-		for subWorkID := range dependentEvents {
-			elems := dependentEvents[subWorkID]
-			sort.SliceStable(elems, func(i, j int) bool {
-				return elems[i].metadata.SourceElementID < elems[j].metadata.SourceElementID
-			})
-			sourceEvents[subWorkID] = elems[0]
-			dependentEvents[subWorkID] = elems[1:]
-			orderedSubWorkID = append(orderedSubWorkID, subWorkID)
-		}
-		// Store an ordered list of sub-work IDs for deterministic
-		// event order.
-		sort.SliceStable(orderedSubWorkID, func(i, j int) bool {
-			return orderedSubWorkID[i] < orderedSubWorkID[j]
-		})
-		// Collect the dependent objects for each
-		// source event, and generate an event log entry.
-		for _, subWorkID := range orderedSubWorkID {
-			// Determine which objects we should collect.
-			collectDependentViewNames := false
-			collectDependentSchemaNames := false
-			sourceEvent := sourceEvents[subWorkID]
-			switch sourceEvent.event.(type) {
-			case *eventpb.DropDatabase:
-				// Drop database only reports dependent schemas.
-				collectDependentSchemaNames = true
-			case *eventpb.DropView, *eventpb.DropTable:
-				// Drop view and drop tables only cares about
-				// dependent views
-				collectDependentViewNames = true
-			}
-			var dependentObjects []string
-			for _, dependentEvent := range dependentEvents[subWorkID] {
-				switch ev := dependentEvent.event.(type) {
-				case *eventpb.DropView:
-					if collectDependentViewNames {
-						dependentObjects = append(dependentObjects, ev.ViewName)
-					}
-				case *eventpb.DropSchema:
-					if collectDependentSchemaNames {
-						dependentObjects = append(dependentObjects, ev.SchemaName)
-					}
-				}
-			}
-			// Add anything that we determined based
-			// on the dependencies.
-			switch ev := sourceEvent.event.(type) {
-			case *eventpb.DropTable:
-				ev.CascadeDroppedViews = dependentObjects
-			case *eventpb.DropView:
-				ev.CascadeDroppedViews = dependentObjects
-			case *eventpb.DropDatabase:
-				ev.DroppedSchemaObjects = dependentObjects
-			}
-			// Generate event log entries for the source event only. The dependent
-			// events will be ignored.
-			if m.logEvent != nil {
-				err := m.logEvent(ctx, m.txn, 0, sourceEvent.descID, *sourceEvent.metadata, sourceEvent.event)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
+// EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {
-	return d.eventLogWriter
+	return d.eventLogger
+}
+
+// NewNoOpBackfillTracker constructs a backfill tracker which does not do
+// anything. It will always return progress for a given backfill which
+// contains a full set of CompletedSpans corresponding to the source index
+// span and an empty MinimumWriteTimestamp.
+func NewNoOpBackfillTracker(codec keys.SQLCodec) scexec.BackfillTracker {
+	return noopBackfillProgress{codec: codec}
+}
+
+type noopBackfillProgress struct {
+	codec keys.SQLCodec
+}
+
+func (n noopBackfillProgress) FlushCheckpoint(ctx context.Context) error {
+	return nil
+}
+
+func (n noopBackfillProgress) FlushFractionCompleted(ctx context.Context) error {
+	return nil
+}
+
+func (n noopBackfillProgress) GetBackfillProgress(
+	ctx context.Context, b scexec.Backfill,
+) (scexec.BackfillProgress, error) {
+	key := n.codec.IndexPrefix(uint32(b.TableID), uint32(b.SourceIndexID))
+	return scexec.BackfillProgress{
+		Backfill: b,
+		CompletedSpans: []roachpb.Span{
+			{Key: key, EndKey: key.PrefixEnd()},
+		},
+	}, nil
+}
+
+func (n noopBackfillProgress) SetBackfillProgress(
+	ctx context.Context, progress scexec.BackfillProgress,
+) error {
+	return nil
+}
+
+type noopPeriodicProgressFlusher struct {
+}
+
+// NewNoopPeriodicProgressFlusher constructs a new
+// PeriodicProgressFlusher which never does anything.
+func NewNoopPeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
+	return noopPeriodicProgressFlusher{}
+}
+
+func (n noopPeriodicProgressFlusher) StartPeriodicUpdates(
+	ctx context.Context, tracker scexec.BackfillProgressFlusher,
+) (stop func() error) {
+	return func() error { return nil }
 }

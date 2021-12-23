@@ -18,12 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 func init() {
@@ -72,15 +70,16 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.DB,
 		execCfg.InternalExecutor,
 		execCfg.IndexBackfiller,
-		func(ctx context.Context, txn *kv.Txn, depth int, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error {
-			return sql.LogEventForSchemaChanger(ctx, execCtx.ExecCfg(), txn, depth, descID, metadata, event)
+		NewRangeCounter(execCfg.DB, execCfg.DistSQLPlanner),
+		func(txn *kv.Txn) scexec.EventLogger {
+			return sql.NewSchemaChangerEventLogger(txn, execCfg, 0)
 		},
+		scsqldeps.NewPartitioner(execCfg.Settings, &execCtx.ExtendedEvalContext().EvalContext),
 		execCfg.JobRegistry,
 		n.job,
 		execCfg.Codec,
 		execCfg.Settings,
 		execCfg.IndexValidator,
-		scsqldeps.NewCCLCallbacks(execCfg.Settings, nil),
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 	)

@@ -318,8 +318,8 @@ vectorized: true
     │ columns: (x, v, rowid_default)
     │ estimated row count: 10 (missing stats)
     │ render rowid_default: unique_rowid()
-    │ render x: crdb_internal.assignment_cast(x, NULL::INT8)
-    │ render v: crdb_internal.assignment_cast(v, NULL::INT8)
+    │ render x: x
+    │ render v: v
     │
     └── • top-k
         │ columns: (x, v)
@@ -333,10 +333,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: select_t@select_t_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON select_t (v) STORING (x);
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query T
@@ -355,8 +351,8 @@ vectorized: true
     │ columns: (x, v, rowid_default)
     │ estimated row count: 1 (missing stats)
     │ render rowid_default: unique_rowid()
-    │ render x: crdb_internal.assignment_cast(x, NULL::INT8)
-    │ render v: crdb_internal.assignment_cast(v, NULL::INT8)
+    │ render x: x
+    │ render v: v
     │
     └── • scan
           columns: (x, v)
@@ -471,8 +467,8 @@ vectorized: true
         │ columns: (length, "?column?", rowid_default)
         │ estimated row count: 10 (missing stats)
         │ render rowid_default: unique_rowid()
-        │ render length: crdb_internal.assignment_cast(length, NULL::INT8)
-        │ render ?column?: crdb_internal.assignment_cast("?column?", NULL::INT8)
+        │ render length: length
+        │ render ?column?: "?column?"
         │
         └── • top-k
             │ columns: (length, "?column?", column12)
@@ -600,9 +596,9 @@ vectorized: true
                     │ columns: (a, b, c, rowid_default)
                     │ estimated row count: 1,000 (missing stats)
                     │ render rowid_default: unique_rowid()
-                    │ render a: crdb_internal.assignment_cast(a, NULL::INT8)
-                    │ render b: crdb_internal.assignment_cast(b, NULL::INT8)
-                    │ render c: crdb_internal.assignment_cast(c, NULL::INT8)
+                    │ render a: a
+                    │ render b: b
+                    │ render c: c
                     │
                     └── • scan
                           columns: (a, b, c)

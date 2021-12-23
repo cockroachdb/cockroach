@@ -8,23 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export const aggregationIntervalAttr = "aggregation_interval";
-export const aggregatedTsAttr = "aggregated_ts";
-export const appAttr = "app";
-export const dashQueryString = "dash";
-export const dashboardNameAttr = "dashboard_name";
-export const databaseAttr = "database";
-export const databaseNameAttr = "database_name";
-export const implicitTxnAttr = "implicitTxn";
-export const indexNameAttr = "index_name";
-export const nodeIDAttr = "node_id";
-export const nodeQueryString = "node";
-export const rangeIDAttr = "range_id";
-export const statementAttr = "statement";
-export const sessionAttr = "session";
-export const tabAttr = "tab";
-export const tableNameAttr = "table_name";
-export const txnFingerprintIdAttr = "txn_fingerprint_id";
+import { util } from "@cockroachlabs/cluster-ui";
 
-export const REMOTE_DEBUGGING_ERROR_TEXT =
-  "This information is not available due to the current value of the 'server.remote_debugging.mode' setting.";
+export const indexNameAttr = "index_name";
+
+export const {
+  aggregationIntervalAttr,
+  aggregatedTsAttr,
+  appAttr,
+  dashQueryString,
+  dashboardNameAttr,
+  databaseAttr,
+  databaseNameAttr,
+  implicitTxnAttr,
+  nodeIDAttr,
+  nodeQueryString,
+  rangeIDAttr,
+  statementAttr,
+  sessionAttr,
+  tabAttr,
+  tableNameAttr,
+  txnFingerprintIdAttr,
+  REMOTE_DEBUGGING_ERROR_TEXT,
+} = util;

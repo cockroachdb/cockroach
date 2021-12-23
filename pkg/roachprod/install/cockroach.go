@@ -11,6 +11,7 @@
 package install
 
 import (
+	"context"
 	_ "embed" // required for go:embed
 	"fmt"
 	"net/url"
@@ -24,7 +25,6 @@ import (
 	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
@@ -33,46 +33,48 @@ import (
 var startScript string
 
 func cockroachNodeBinary(c *SyncedCluster, node Node) string {
-	if filepath.IsAbs(config.Binary) {
-		return config.Binary
+	if filepath.IsAbs(c.Binary) {
+		return c.Binary
 	}
 	if !c.IsLocal() {
-		return "./" + config.Binary
+		return "./" + c.Binary
 	}
 
-	path := filepath.Join(c.localVMDir(node), config.Binary)
+	path := filepath.Join(c.localVMDir(node), c.Binary)
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
 
 	// For "local" clusters we have to find the binary to run and translate it to
 	// an absolute path. First, look for the binary in PATH.
-	path, err := exec.LookPath(config.Binary)
+	path, err := exec.LookPath(c.Binary)
 	if err != nil {
-		if strings.HasPrefix(config.Binary, "/") {
-			return config.Binary
+		if strings.HasPrefix(c.Binary, "/") {
+			return c.Binary
 		}
 		// We're unable to find the binary in PATH and "binary" is a relative path:
 		// look in the cockroach repo.
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
-			return config.Binary
+			return c.Binary
 		}
-		path = gopath + "/src/github.com/cockroachdb/cockroach/" + config.Binary
+		path = gopath + "/src/github.com/cockroachdb/cockroach/" + c.Binary
 		var err2 error
 		path, err2 = exec.LookPath(path)
 		if err2 != nil {
-			return config.Binary
+			return c.Binary
 		}
 	}
 	path, err = filepath.Abs(path)
 	if err != nil {
-		return config.Binary
+		return c.Binary
 	}
 	return path
 }
 
-func getCockroachVersion(c *SyncedCluster, node Node) (*version.Version, error) {
+func getCockroachVersion(
+	ctx context.Context, c *SyncedCluster, node Node,
+) (*version.Version, error) {
 	sess, err := c.newSession(node)
 	if err != nil {
 		return nil, err
@@ -80,7 +82,7 @@ func getCockroachVersion(c *SyncedCluster, node Node) (*version.Version, error) 
 	defer sess.Close()
 
 	cmd := cockroachNodeBinary(c, node) + " version"
-	out, err := sess.CombinedOutput(cmd + " --build-tag")
+	out, err := sess.CombinedOutput(ctx, cmd+" --build-tag")
 	if err != nil {
 		return nil, errors.Wrapf(err, "~ %s --build-tag\n%s", cmd, out)
 	}
@@ -143,11 +145,11 @@ func (st StartTarget) String() string {
 // (node 1, as understood by SyncedCluster.TargetNodes), we use
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
-func (c *SyncedCluster) Start(startOpts StartOpts) error {
+func (c *SyncedCluster) Start(ctx context.Context, startOpts StartOpts) error {
 	if startOpts.Target == StartTenantProxy {
 		return fmt.Errorf("start tenant proxy not implemented")
 	}
-	if err := c.distributeCerts(); err != nil {
+	if err := c.distributeCerts(ctx); err != nil {
 		return err
 	}
 
@@ -160,14 +162,14 @@ func (c *SyncedCluster) Start(startOpts StartOpts) error {
 	fmt.Printf("%s: starting nodes\n", c.Name)
 	return c.Parallel("", len(nodes), parallelism, func(nodeIdx int) ([]byte, error) {
 		node := nodes[nodeIdx]
-		vers, err := getCockroachVersion(c, node)
+		vers, err := getCockroachVersion(ctx, c, node)
 		if err != nil {
 			return nil, err
 		}
 
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
-		if _, err := c.startNode(node, startOpts, vers); err != nil {
+		if _, err := c.startNode(ctx, node, startOpts, vers); err != nil {
 			return nil, err
 		}
 
@@ -195,7 +197,7 @@ func (c *SyncedCluster) Start(startOpts StartOpts) error {
 		shouldInit := !c.useStartSingleNode()
 		if shouldInit {
 			fmt.Printf("%s: initializing cluster\n", c.Name)
-			initOut, err := c.initializeCluster(node)
+			initOut, err := c.initializeCluster(ctx, node)
 			if err != nil {
 				return nil, errors.WithDetail(err, "unable to initialize cluster")
 			}
@@ -209,7 +211,7 @@ func (c *SyncedCluster) Start(startOpts StartOpts) error {
 		// cluster.
 
 		fmt.Printf("%s: setting cluster settings\n", c.Name)
-		clusterSettingsOut, err := c.setClusterSettings(node)
+		clusterSettingsOut, err := c.setClusterSettings(ctx, node)
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to set cluster settings")
 		}
@@ -283,7 +285,7 @@ func (c *SyncedCluster) NodeUIPort(node Node) int {
 //
 // In non-interactive mode, a command specified via the `-e` flag is run against
 // all nodes.
-func (c *SyncedCluster) SQL(args []string) error {
+func (c *SyncedCluster) SQL(ctx context.Context, args []string) error {
 	if len(args) == 0 || len(c.Nodes) == 1 {
 		// If no arguments, we're going to get an interactive SQL shell. Require
 		// exactly one target and ask SSH to provide a pseudoterminal.
@@ -294,17 +296,17 @@ func (c *SyncedCluster) SQL(args []string) error {
 		binary := cockroachNodeBinary(c, c.Nodes[0])
 		allArgs := []string{binary, "sql", "--url", url}
 		allArgs = append(allArgs, ssh.Escape(args))
-		return c.SSH([]string{"-t"}, allArgs)
+		return c.SSH(ctx, []string{"-t"}, allArgs)
 	}
 
 	// Otherwise, assume the user provided the "-e" flag, so we can reasonably
 	// execute the query on all specified nodes.
-	return c.RunSQL(args)
+	return c.RunSQL(ctx, args)
 }
 
 // RunSQL runs a `cockroach sql` command.
 // It is assumed that the args include the -e flag.
-func (c *SyncedCluster) RunSQL(args []string) error {
+func (c *SyncedCluster) RunSQL(ctx context.Context, args []string) error {
 	type result struct {
 		node   Node
 		output string
@@ -328,7 +330,7 @@ func (c *SyncedCluster) RunSQL(args []string) error {
 			c.NodeURL("localhost", c.NodePort(node)) + " " +
 			ssh.Escape(args)
 
-		out, err := sess.CombinedOutput(cmd)
+		out, err := sess.CombinedOutput(ctx, cmd)
 		if err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}
@@ -354,9 +356,9 @@ func (c *SyncedCluster) RunSQL(args []string) error {
 }
 
 func (c *SyncedCluster) startNode(
-	node Node, startOpts StartOpts, vers *version.Version,
+	ctx context.Context, node Node, startOpts StartOpts, vers *version.Version,
 ) (string, error) {
-	startCmd, err := c.generateStartCmd(node, startOpts, vers)
+	startCmd, err := c.generateStartCmd(ctx, node, startOpts, vers)
 	if err != nil {
 		return "", err
 	}
@@ -374,7 +376,7 @@ func (c *SyncedCluster) startNode(
 			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 		}
 		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
-		if out, err := sess.CombinedOutput(cmd); err != nil {
+		if out, err := sess.CombinedOutput(ctx, cmd); err != nil {
 			return errors.Wrapf(err, "failed to upload start script: %s", out)
 		}
 
@@ -394,7 +396,7 @@ func (c *SyncedCluster) startNode(
 		cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 	cmd += "./cockroach.sh"
-	out, err := sess.CombinedOutput(cmd)
+	out, err := sess.CombinedOutput(ctx, cmd)
 	if err != nil {
 		return "", errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
@@ -402,9 +404,9 @@ func (c *SyncedCluster) startNode(
 }
 
 func (c *SyncedCluster) generateStartCmd(
-	node Node, startOpts StartOpts, vers *version.Version,
+	ctx context.Context, node Node, startOpts StartOpts, vers *version.Version,
 ) (string, error) {
-	args, err := c.generateStartArgs(node, startOpts, vers)
+	args, err := c.generateStartArgs(ctx, node, startOpts, vers)
 	if err != nil {
 		return "", err
 	}
@@ -454,7 +456,7 @@ func execStartTemplate(data startTemplateData) (string, error) {
 // generateStartArgs generates cockroach binary arguments for starting a node.
 // The first argument is the command (e.g. "start").
 func (c *SyncedCluster) generateStartArgs(
-	node Node, startOpts StartOpts, vers *version.Version,
+	ctx context.Context, node Node, startOpts StartOpts, vers *version.Version,
 ) ([]string, error) {
 	var args []string
 
@@ -540,7 +542,7 @@ func (c *SyncedCluster) generateStartArgs(
 		node: node,
 	}
 	for _, arg := range startOpts.ExtraArgs {
-		expandedArg, err := e.expand(c, arg)
+		expandedArg, err := e.expand(ctx, c, arg)
 		if err != nil {
 			return nil, err
 		}
@@ -615,7 +617,7 @@ func (c *SyncedCluster) maybeScaleMem(val int) int {
 	return val
 }
 
-func (c *SyncedCluster) initializeCluster(node Node) (string, error) {
+func (c *SyncedCluster) initializeCluster(ctx context.Context, node Node) (string, error) {
 	initCmd := c.generateInitCmd(node)
 
 	sess, err := c.newSession(node)
@@ -624,14 +626,14 @@ func (c *SyncedCluster) initializeCluster(node Node) (string, error) {
 	}
 	defer sess.Close()
 
-	out, err := sess.CombinedOutput(initCmd)
+	out, err := sess.CombinedOutput(ctx, initCmd)
 	if err != nil {
 		return "", errors.Wrapf(err, "~ %s\n%s", initCmd, out)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (c *SyncedCluster) setClusterSettings(node Node) (string, error) {
+func (c *SyncedCluster) setClusterSettings(ctx context.Context, node Node) (string, error) {
 	clusterSettingCmd := c.generateClusterSettingCmd(node)
 
 	sess, err := c.newSession(node)
@@ -640,7 +642,7 @@ func (c *SyncedCluster) setClusterSettings(node Node) (string, error) {
 	}
 	defer sess.Close()
 
-	out, err := sess.CombinedOutput(clusterSettingCmd)
+	out, err := sess.CombinedOutput(ctx, clusterSettingCmd)
 	if err != nil {
 		return "", errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
 	}
@@ -648,8 +650,7 @@ func (c *SyncedCluster) setClusterSettings(node Node) (string, error) {
 }
 
 func (c *SyncedCluster) generateClusterSettingCmd(node Node) string {
-	license := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
-	if license == "" {
+	if config.CockroachDevLicense == "" {
 		fmt.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable\n",
 			c.Name)
 	}
@@ -672,7 +673,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(node Node) string {
 				SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
 				SET CLUSTER SETTING enterprise.license = '%s';" \
 			&& touch %s
-		fi`, path, binary, url, binary, url, license, path)
+		fi`, path, binary, url, binary, url, config.CockroachDevLicense, path)
 	return clusterSettingCmd
 }
 
@@ -726,10 +727,10 @@ func (c *SyncedCluster) useStartSingleNode() bool {
 
 // distributeCerts distributes certs if it's a secure cluster and we're
 // starting n1.
-func (c *SyncedCluster) distributeCerts() error {
+func (c *SyncedCluster) distributeCerts(ctx context.Context) error {
 	for _, node := range c.TargetNodes() {
 		if node == 1 && c.Secure {
-			return c.DistributeCerts()
+			return c.DistributeCerts(ctx)
 		}
 	}
 	return nil

@@ -231,10 +231,6 @@ vectorized: true
               estimated row count: 10 (missing stats)
               table: t@bc
               spans: /"3"-/"3"/PrefixEnd
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (b) STORING (c, d);
 
 statement ok
 TRUNCATE TABLE t
@@ -504,10 +500,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@t_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (c);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1 AND b < 5
@@ -529,10 +521,6 @@ vectorized: true
           estimated row count: 333 (missing stats)
           table: t@bc
           spans: /!NULL-/4/1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (c) STORING (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0
@@ -554,10 +542,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@t_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (c);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1.0
@@ -579,10 +563,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: t@t_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (c);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0 AND b < 5
@@ -604,10 +584,6 @@ vectorized: true
           estimated row count: 333 (missing stats)
           table: t@bc
           spans: /!NULL-/5
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (c) STORING (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b < 5.0 AND c < 1
@@ -629,10 +605,6 @@ vectorized: true
           estimated row count: 333 (missing stats)
           table: t@bc
           spans: /!NULL-/4/1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (b) STORING (c);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5, 1)
@@ -649,12 +621,6 @@ vectorized: true
       estimated row count: 1 (missing stats)
       table: t@bc
       spans: /5/1-/5/2
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t (b) STORING (c);
-2. type: index creation
-   SQL command: CREATE INDEX ON t (c) STORING (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.0, 1)
@@ -671,12 +637,6 @@ vectorized: true
       estimated row count: 1 (missing stats)
       table: t@bc
       spans: /5/1-/5/2
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON t (b) STORING (c);
-2. type: index creation
-   SQL command: CREATE INDEX ON t (c) STORING (b);
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.1, 1)
@@ -698,10 +658,6 @@ vectorized: true
           estimated row count: 990 (missing stats)
           table: t@bc
           spans: /!NULL-
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t (c) STORING (b);
 
 # Note the span is reversed because of #20203.
 query T
@@ -747,12 +703,6 @@ vectorized: true
       estimated row count: 1 (missing stats)
       table: abcd@abcd
       spans: /1/4-/1/5
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (a) STORING (b);
-2. type: index creation
-   SQL command: CREATE INDEX ON abcd (b) STORING (a);
 
 query T
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
@@ -851,10 +801,6 @@ vectorized: true
   table: abz@abz_c_b_key
   spans: LIMITED SCAN
   limit: 1
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abz (c);
 
 # Issue #14426: verify we don't have an internal filter that contains "a IN ()"
 # (which causes an error in DistSQL due to expression serialization).
@@ -885,10 +831,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: tab0@tab0_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON tab0 (b) STORING (a);
 
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
 # The test is composed of three parts: populate a table, check
@@ -925,10 +867,6 @@ vectorized: true
       table: test2@test2_k_key
       spans: /!NULL-/"100"/PrefixEnd
       limit: 20
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX test2@test2_k_key; CREATE INDEX ON test2 (k) STORING (v);
 
 # The result output of this test requires that vectorized execution
 # is not used, so it has been moved to select_index_vectorize_off.
@@ -991,12 +929,6 @@ vectorized: true
           missing stats
           table: favorites@favorites_glob_fav_idx
           spans: [/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts'] [/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts2' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts2'] [/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts3' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts3']
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON favorites (jurisdiction) STORING (resource_type, resource_key, device_group, brand, locale);
-2. type: index creation
-   SQL command: CREATE INDEX ON favorites (brand) STORING (resource_type, resource_key, device_group, jurisdiction, locale);
 
 query TI rowsort
 SELECT
@@ -1028,10 +960,6 @@ vectorized: true
   estimated row count: 9 (missing stats)
   table: abcd@abcd
   spans: /NULL/6-/!NULL
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (b) STORING (a, c, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
@@ -1044,10 +972,6 @@ vectorized: true
   estimated row count: 9 (missing stats)
   table: abcd@abcd
   spans: /NULL/!NULL-/NULL/5
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (b) STORING (a, c, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
@@ -1061,10 +985,6 @@ vectorized: true
   estimated row count: 10 (missing stats)
   table: abcd@abcd
   spans: /NULL-/!NULL
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (a) STORING (b, c, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
@@ -1078,10 +998,6 @@ vectorized: true
   estimated row count: 1 (missing stats)
   table: abcd@abcd
   spans: /1/NULL/1-/1/NULL/10
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abcd (a) STORING (b, c, d);
 
 # Regression test for #3548: verify we create constraints on implicit columns
 # when they are part of the key (non-unique index).
@@ -1255,10 +1171,6 @@ vectorized: true
       estimated row count: 10 (missing stats)
       table: xy@xy_y_idx
       spans: /NULL-/!NULL
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX xy@xy_y_idx; CREATE INDEX ON xy (y) STORING (x);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
@@ -1277,10 +1189,6 @@ vectorized: true
       estimated row count: 10 (missing stats)
       table: xy@xy_y_idx
       spans: /4-/5
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX xy@xy_y_idx; CREATE INDEX ON xy (y) STORING (x);
 
 query T
 EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
@@ -1302,10 +1210,6 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: xy@xy_y_idx
           spans: /1-/2
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX xy@xy_y_idx; CREATE INDEX ON xy (y) STORING (x);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
@@ -1405,10 +1309,6 @@ vectorized: true
       missing stats
       table: noncover@b
       spans: [/2 - /2]
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@b; CREATE INDEX ON noncover (b) STORING (c, d);
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE b = 2; SET tracing = off
@@ -1446,10 +1346,6 @@ vectorized: true
       missing stats
       table: noncover@c
       spans: [/6 - /6]
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE c = 7; SET tracing = off
@@ -1488,10 +1384,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: noncover@noncover_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c
@@ -1515,10 +1407,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: noncover@noncover_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 AND d = 8
@@ -1536,10 +1424,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: noncover@noncover_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON noncover (d, c) STORING (b);
 
 # The following testcases verify that when we have a small limit, we prefer an
 # order-matching index.
@@ -1557,10 +1441,6 @@ vectorized: true
       missing stats
       table: noncover@noncover_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
 
 query T
 EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
@@ -1576,10 +1456,6 @@ vectorized: true
       table: noncover@c
       spans: LIMITED SCAN
       limit: 5
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c OFFSET 5
@@ -1603,10 +1479,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: noncover@noncover_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
 
 # TODO(radu): need to prefer the order-matching index when OFFSET is present.
 query T
@@ -1634,10 +1506,6 @@ vectorized: true
           table: noncover@c
           spans: LIMITED SCAN
           limit: 10
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
@@ -1657,10 +1525,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: noncover@noncover_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX noncover@c; CREATE INDEX ON noncover (c) STORING (b, d);
 
 # ------------------------------------------------------------------------------
 # These tests verify that while we are joining an index with the table, we
@@ -1725,10 +1589,6 @@ vectorized: true
           estimated row count: 3 (3.3% of the table; stats collected <hidden> ago)
           table: t2@bc
           spans: /2-/3
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t2 (b) STORING (c, s);
 
 # We do NOT look up the table row for '21' and '23'.
 statement ok
@@ -1765,10 +1625,6 @@ vectorized: true
       estimated row count: 3 (3.1% of the table; stats collected <hidden> ago)
       table: t2@bc
       spans: /2/!NULL-/2/2 /2/3-/3
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t2 (b) STORING (c, s);
 
 # We do NOT look up the table row for '22'.
 statement ok
@@ -1880,10 +1736,6 @@ vectorized: true
       estimated row count: 3 (3.3% of the table; stats collected <hidden> ago)
       table: t2@bc
       spans: /2-/3
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON t2 (b) STORING (s);
 
 statement ok
 CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
@@ -1910,10 +1762,6 @@ vectorized: true
           estimated row count: 90 (missing stats)
           table: t3@v
           spans: /1-/10
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX t3@v; CREATE INDEX ON t3 (v) STORING (w);
 
 # ------------------------------------------------------------------------------
 # These tests are for the point lookup optimization: for single row lookups on

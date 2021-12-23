@@ -84,6 +84,7 @@ var allowedDebugPauseOnValues = map[string]struct{}{
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
 var featureRestoreEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"feature.restore.enabled",
 	"set to true to enable restore, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
@@ -323,7 +324,7 @@ func allocateDescriptorRewrites(
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
-	maxDescIDInBackup := int64(keys.MinNonPredefinedUserDescID)
+	maxDescIDInBackup := int64(catalogkeys.MinNonDefaultUserDescriptorID(p.ExecCfg().SystemIDChecker))
 	for _, table := range tablesByID {
 		if int64(table.ID) > maxDescIDInBackup {
 			maxDescIDInBackup = int64(table.ID)
@@ -950,7 +951,7 @@ func resolveTargetDB(
 		return intoDB, nil
 	}
 
-	if descriptorCoverage == tree.AllDescriptors && descriptor.GetParentID() < keys.MaxReservedDescID {
+	if descriptorCoverage == tree.AllDescriptors && catalog.IsSystemDescriptor(descriptor) {
 		var targetDB string
 		if descriptor.GetParentID() == systemschema.SystemDB.GetID() {
 			// For full cluster backups, put the system tables in the temporary
@@ -1367,30 +1368,12 @@ func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 	)
 }
 
-func getUserDescriptorNames(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) ([]string, error) {
-	allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, codec, true /* shouldRunPostDeserializationChanges */)
-	if err != nil {
-		return nil, err
-	}
-
-	var allNames = make([]string, 0, len(allDescs))
-	for _, desc := range allDescs {
-		if !catalogkeys.IsDefaultCreatedDescriptor(desc.GetID()) {
-			allNames = append(allNames, desc.GetName())
-		}
-	}
-
-	return allNames, nil
-}
-
 // resolveOptionsForRestoreJobDescription creates a copy of
 // the options specified during a restore, after processing
 // them to be suitable for displaying in the jobs' description.
 // This includes redacting secrets from external storage URIs.
 func resolveOptionsForRestoreJobDescription(
-	opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string,
+	opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string, incFrom []string,
 ) (tree.RestoreOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
@@ -1424,6 +1407,14 @@ func resolveOptionsForRestoreJobDescription(
 		newOpts.DecryptionKMSURI = append(newOpts.DecryptionKMSURI, tree.NewDString(redactedURI))
 	}
 
+	if opts.IncrementalStorage != nil {
+		var err error
+		newOpts.IncrementalStorage, err = sanitizeURIList(incFrom)
+		if err != nil {
+			return tree.RestoreOptions{}, err
+		}
+	}
+
 	return newOpts, nil
 }
 
@@ -1431,6 +1422,7 @@ func restoreJobDescription(
 	p sql.PlanHookState,
 	restore *tree.Restore,
 	from [][]string,
+	incFrom []string,
 	opts tree.RestoreOptions,
 	intoDB string,
 	newDBName string,
@@ -1446,19 +1438,16 @@ func restoreJobDescription(
 	var options tree.RestoreOptions
 	var err error
 	if options, err = resolveOptionsForRestoreJobDescription(opts, intoDB, newDBName,
-		kmsURIs); err != nil {
+		kmsURIs, incFrom); err != nil {
 		return "", err
 	}
 	r.Options = options
 
 	for i, backup := range from {
 		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
-		for j, uri := range backup {
-			sf, err := cloud.SanitizeExternalStorageURI(uri, nil /* extraParams */)
-			if err != nil {
-				return "", err
-			}
-			r.From[i][j] = tree.NewDString(sf)
+		r.From[i], err = sanitizeURIList(backup)
+		if err != nil {
+			return "", err
 		}
 	}
 
@@ -1525,6 +1514,20 @@ func restorePlanHook(
 	subdirFn := func() (string, error) { return "", nil }
 	if restoreStmt.Subdir != nil {
 		subdirFn, err = p.TypeAsString(ctx, restoreStmt.Subdir, "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
+	var incStorageFn func() ([]string, error)
+	if restoreStmt.Options.IncrementalStorage != nil {
+		if restoreStmt.Subdir == nil {
+			err = errors.New("incremental_storage can only be used with the following" +
+				" syntax: 'RESTORE [target] FROM [subdirectory] IN [destination]'")
+			return nil, nil, nil, false, err
+		}
+		incStorageFn, err = p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.Options.IncrementalStorage),
+			"RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -1610,6 +1613,19 @@ func restorePlanHook(
 			}
 		}
 
+		// incFrom will contain the directory URIs for incremental backups (i.e.
+		// <prefix>/<subdir>) iff len(From)==1, regardless of the
+		// 'incremental_storage' param. len(From)=1 implies that the user has not
+		// explicitly passed incremental backups, so we'll have to look for any in
+		// <prefix>/<subdir>. len(incFrom)>1 implies the incremental backups are
+		// locality aware.
+		var incFrom []string
+		if incStorageFn != nil {
+			incFrom, err = incStorageFn()
+			if err != nil {
+				return err
+			}
+		}
 		if subdir != "" {
 			if strings.EqualFold(subdir, "LATEST") {
 				// set subdir to content of latest file
@@ -1622,18 +1638,31 @@ func restorePlanHook(
 			if len(from) != 1 {
 				return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
 			}
-			for i := range from[0] {
-				parsed, err := url.Parse(from[0][i])
-				if err != nil {
+
+			appendPaths := func(uris []string, tailDir string) error {
+				for i, uri := range uris {
+					parsed, err := url.Parse(uri)
+					if err != nil {
+						return err
+					}
+					parsed.Path = path.Join(parsed.Path, tailDir)
+					uris[i] = parsed.String()
+				}
+				return nil
+			}
+
+			if err = appendPaths(from[0][:], subdir); err != nil {
+				return err
+			}
+			if len(incFrom) != 0 {
+				if err = appendPaths(incFrom[:], subdir); err != nil {
 					return err
 				}
-				parsed.Path = path.Join(parsed.Path, subdir)
-				from[0][i] = parsed.String()
 			}
 		}
 
-		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, newDBName, endTime,
-			resultsCh)
+		return doRestorePlan(ctx, restoreStmt, p, from, incFrom, passphrase, kms, intoDB,
+			newDBName, endTime, resultsCh)
 	}
 
 	if restoreStmt.Options.Detached {
@@ -1752,6 +1781,7 @@ func doRestorePlan(
 	restoreStmt *tree.Restore,
 	p sql.PlanHookState,
 	from [][]string,
+	incFrom []string,
 	passphrase string,
 	kms []string,
 	intoDB string,
@@ -1762,6 +1792,7 @@ func doRestorePlan(
 	if len(from) < 1 || len(from[0]) < 1 {
 		return errors.New("invalid base backup specified")
 	}
+
 	baseStores := make([]cloud.ExternalStorage, len(from[0]))
 	for i := range from[0] {
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][i], p.User())
@@ -1801,8 +1832,8 @@ func doRestorePlan(
 	}
 
 	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(
-		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from, endTime, encryption,
-		p.User(),
+		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
+		incFrom, endTime, encryption, p.User(),
 	)
 	if err != nil {
 		return err
@@ -1827,24 +1858,27 @@ func doRestorePlan(
 		return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
 	}
 
-	// Ensure that no user table descriptors exist for a full cluster restore.
-	txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-descs")
-	descCount, err := catalogkv.CountUserDescriptors(ctx, txn, p.ExecCfg().Codec)
-	if err != nil {
-		return errors.Wrap(err, "looking up user descriptors during restore")
-	}
-	if descCount != 0 && restoreStmt.DescriptorCoverage == tree.AllDescriptors {
-		var userDescriptorNames []string
-		userDescriptorNames, err := getUserDescriptorNames(ctx, txn, p.ExecCfg().Codec)
+	// Ensure that no user descriptors exist for a full cluster restore.
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-descs")
+		allUserDescs, err := catalogkv.GetAllUserCreatedDescriptors(ctx, txn, p.ExecCfg().Codec)
 		if err != nil {
-			// We're already returning an error, and we're just trying to make the
-			// error message more helpful. If we fail to do that, let's just log.
-			log.Errorf(ctx, "fetching user descriptor names: %+v", err)
+			return errors.Wrap(err, "looking up user descriptors during restore")
 		}
-		return errors.Errorf(
-			"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors: %s",
-			descCount, userDescriptorNames,
-		)
+		if len(allUserDescs) > 0 {
+			userDescriptorNames := make([]string, 0, 20)
+			for i, desc := range allUserDescs {
+				if i == 20 {
+					userDescriptorNames = append(userDescriptorNames, "...")
+					break
+				}
+				userDescriptorNames = append(userDescriptorNames, desc.GetName())
+			}
+			return errors.Errorf(
+				"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors: %s",
+				len(allUserDescs), strings.Join(userDescriptorNames, ", "),
+			)
+		}
 	}
 
 	// wasOffline tracks which tables were in an offline or adding state at some
@@ -2014,7 +2048,8 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(p, restoreStmt, from, restoreStmt.Options, intoDB,
+	description, err := restoreJobDescription(p, restoreStmt, from, incFrom, restoreStmt.Options,
+		intoDB,
 		newDBName, kms)
 	if err != nil {
 		return err

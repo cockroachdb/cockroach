@@ -265,13 +265,24 @@ ORDER BY object_type, object_name`, [][]string{
 			t.Run(dir.Name(), restorePublicSchemaMixedVersion(exportDir))
 		}
 	})
+
+	t.Run("missing_public_schema_namespace_entry", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(publicSchemaDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(publicSchemaDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreSyntheticPublicSchemaNamespaceEntry(exportDir))
+		}
+	})
 }
 
 func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
 		const numAccounts = 1000
-		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
@@ -368,7 +379,7 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
 		const numAccounts = 1000
-		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
@@ -406,10 +417,10 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
-		_, _, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
 		defer cleanupFn()
 
-		_, _, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
@@ -442,7 +453,7 @@ func restoreOldVersionFKRevTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
 		const numAccounts = 1000
-		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
@@ -773,10 +784,10 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
-		_, _, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
 		defer cleanupFn()
 
-		_, _, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
@@ -827,10 +838,10 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
-		_, _, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
 		defer cleanupFn()
 
-		_, _, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
@@ -876,5 +887,36 @@ func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 		require.Equal(t, publicSchemaID, keys.PublicSchemaID)
 
 		sqlDB.CheckQueryResults(t, `SELECT x FROM test.public.t`, [][]string{{"3"}, {"4"}})
+	}
+}
+
+func restoreSyntheticPublicSchemaNamespaceEntry(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		defer cleanupFn()
+
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+						Server: &server.TestingKnobs{
+							DisableAutomaticVersionUpgrade: 1,
+							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
+						},
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo))
+
+		var dbID int
+		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'd'`)
+		row.Scan(&dbID)
+
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = 'public' AND "parentID"=%d`, dbID), [][]string{{"29"}})
 	}
 }

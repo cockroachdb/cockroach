@@ -17,14 +17,6 @@ CREATE TABLE t (
   FAMILY (v)
 )
 
-statement error primary index column "v" cannot be virtual
-CREATE TABLE t (
-  a INT,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  PRIMARY KEY (b,v)
-)
-
 statement error index "t_b_idx" cannot store virtual column "v"
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -1226,3 +1218,26 @@ INSERT INTO t67528 (s) VALUES ('')
 
 statement ok
 CREATE INDEX ON t67528 (v DESC)
+
+# Regression test for #73372. Test backfills with partial indexes that reference
+# non-null virtual columns.
+subtest 73372
+
+statement ok
+CREATE TABLE t73372 (
+  i INT NOT NULL,
+  s STRING NOT NULL,
+  v INT AS (i) VIRTUAL NOT NULL,
+  INDEX idx (i) WHERE v >= 0
+)
+
+statement ok
+INSERT INTO t73372 (i, s) VALUES (0, 'foo')
+
+statement ok
+ALTER TABLE t73372 ALTER PRIMARY KEY USING COLUMNS (s, i)
+
+query ITI
+SELECT * FROM t73372
+----
+0  foo  0

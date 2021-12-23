@@ -1,0 +1,62 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.loqrecovery.loqrecoverypb;
+option go_package = "loqrecoverypb";
+
+import "roachpb/metadata.proto";
+import "gogoproto/gogo.proto";
+
+// ReplicaInfo contains info about state of range replica for the purpose of range
+// recovery. This information should be enough for recovery algorithm to pick a
+// survivor replica in when not replicas are available.
+// Information includes range descriptor as well as parts of raft state.
+message ReplicaInfo {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  roachpb.RangeDescriptor desc = 3 [(gogoproto.nullable) = false];
+  uint64 raft_applied_index = 4;
+  uint64 raft_committed_index = 5;
+  bool has_uncommitted_descriptors = 6;
+}
+
+// Collection of replica information gathered from a collect-info run on a single node.
+message NodeReplicaInfo {
+  repeated ReplicaInfo replicas = 1 [(gogoproto.nullable) = false];
+}
+
+// ReplicaUpdate contains information that needs to be updated on replica on the node
+// to make it a designated survivor so that replica could act as a source of truth when
+// doing loss of quorum recovery.
+message ReplicaUpdate {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+    (gogoproto.moretags) = "yaml:\"RangeID\""];
+  bytes start_key = 2 [
+    (gogoproto.casttype) = "RecoveryKey",
+    (gogoproto.moretags) = "yaml:\"StartKey\""];
+  int32 old_replica_id = 3 [(gogoproto.customname) = "OldReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
+    (gogoproto.moretags) = "yaml:\"OldReplicaID\""];
+  roachpb.ReplicaDescriptor new_replica = 4 [(gogoproto.moretags) = "yaml:\"NewReplica\""];
+  int32 next_replica_id = 5 [(gogoproto.customname) = "NextReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
+    (gogoproto.moretags) = "yaml:\"NextReplicaID\""];
+}
+
+// ReplicaUpdatePlan Collection of updates for all recoverable replicas in the cluster.
+message ReplicaUpdatePlan {
+  repeated ReplicaUpdate updates = 1 [(gogoproto.nullable) = false];
+}

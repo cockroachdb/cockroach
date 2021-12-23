@@ -880,7 +880,11 @@ memory that the store may consume, for example:
 </PRE>
 Commas are forbidden in all values, since they are used to separate fields.
 Also, if you use equal signs in the file path to a store, you must use the
-"path" field label.`,
+"path" field label.
+
+(default is 'cockroach-data' in current directory except for mt commands
+which use 'cockroach-data-tenant-X' for tenant 'X')
+`,
 	}
 
 	StorageEngine = FlagInfo{
@@ -1111,6 +1115,12 @@ in the history of the cluster.`,
 		Name: "self",
 		Description: `Use the node ID of the node connected to via --host
 as target of the decommissioning or recommissioning command.`,
+	}
+
+	NodeDrainSelf = FlagInfo{
+		Name: "self",
+		Description: `Use the node ID of the node connected to via --host
+as target of the drain or quit command.`,
 	}
 
 	SQLFmtLen = FlagInfo{
@@ -1650,6 +1660,38 @@ If the destination is a full well-formed URI, such as
 'userfile://db.schema.tablename_prefix/path/to/dir', then it will be used
 verbatim.
 For example: 'userfile://foo.bar.baz_root/path/to/dir'
+`,
+	}
+
+	RecoverStore = FlagInfo{
+		Name:      "store",
+		Shorthand: "s",
+		Description: `
+The file path to a storage device. This flag must be specified separately for
+each storage device.
+<PRE>
+
+  --store=/mnt/ssd01 --store=/mnt/ssd02 --store=/mnt/hda1
+
+</PRE>
+Flag is syntactically identical to --store flag of start command, but only path
+part is used. This is done to make flags interoperable between start and recover
+commands.
+
+See start --help for more flag details and examples.
+`,
+	}
+
+	ConfirmActions = FlagInfo{
+		Name:      "confirm",
+		Shorthand: "p",
+		Description: `
+Confirm action:
+<PRE>
+y - assume yes to all prompts
+n - assume no/abort to all prompts
+p - prompt interactively for a confirmation
+</PRE>
 `,
 	}
 )

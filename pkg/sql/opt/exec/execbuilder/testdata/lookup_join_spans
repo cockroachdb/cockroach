@@ -135,10 +135,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -169,10 +165,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -205,10 +197,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -239,10 +227,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -270,10 +254,6 @@ vectorized: true
           estimated row count: 1 (10% of the table; stats collected <hidden> ago)
           table: metrics@name_index
           spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -300,10 +280,6 @@ vectorized: true
           estimated row count: 1 (10% of the table; stats collected <hidden> ago)
           table: metrics@name_index
           spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -336,10 +312,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -370,10 +342,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -406,10 +374,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -440,10 +404,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -476,10 +436,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 query T
 EXPLAIN
@@ -510,10 +466,6 @@ vectorized: true
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
               table: metrics@name_index
               spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 # Test lookup conditions w/ a left join.
 query T
@@ -543,10 +495,6 @@ vectorized: true
           estimated row count: 10 (100% of the table; stats collected <hidden> ago)
           table: metrics@metrics_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values ("time") STORING (nullable, value);
 
 # Test lookup conditions w/ a semi join.
 query T
@@ -568,10 +516,6 @@ vectorized: true
       estimated row count: 10 (100% of the table; stats collected <hidden> ago)
       table: metrics@metrics_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values ("time");
 
 # Test NULL values in pre-join where conditions.
 query T
@@ -612,12 +556,6 @@ vectorized: true
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                   table: metrics@name_index
                   spans: [/'cpu' - /'cpu']
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
-2. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 # Test NULL values in bounded lookup span.
 query T
@@ -659,10 +597,6 @@ vectorized: true
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                   table: metrics@name_index
                   spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
 
 # Test NULL values in > unbounded lookup span.
 query T
@@ -704,10 +638,6 @@ vectorized: true
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                   table: metrics@name_index
                   spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
 
 # Test NULL values in >= unbounded lookup span.
 query T
@@ -749,10 +679,6 @@ vectorized: true
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                   table: metrics@name_index
                   spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
 
 
 # Test NULL values in < unbounded lookup span.
@@ -795,10 +721,6 @@ vectorized: true
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                   table: metrics@name_index
                   spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
 
 # Test NULL values in <= unbounded lookup span.
 query T
@@ -840,10 +762,6 @@ vectorized: true
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                   table: metrics@name_index
                   spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
 
 # Test NULL values in WHERE equality conditions.
 query T
@@ -884,12 +802,6 @@ vectorized: true
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                   table: metrics@name_index
                   spans: [/'cpu' - /'cpu']
-·
-index recommendations: 2
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
-2. type: index replacement
-   SQL commands: DROP INDEX metrics@name_index; CREATE INDEX ON metrics (name) STORING (nullable);
 
 
 # Test NULL values in simple equality condition.
@@ -935,10 +847,6 @@ vectorized: true
                       estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                       table: metrics@name_index
                       spans: [/'cpu' - /'cpu']
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON metric_values (nullable) STORING (value);
 
 
 # Regression test for issue #68200.  This ensures that we properly construct the

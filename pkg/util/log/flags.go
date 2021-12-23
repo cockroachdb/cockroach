@@ -86,7 +86,7 @@ func IsActive() (active bool, firstUse string) {
 // process entirely terminates. This ensures that any Go runtime
 // assertion failures on the way to termination can be properly
 // captured.
-func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
+func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
@@ -110,7 +110,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 
 	// cleanupFn is the returned cleanup function, whose purpose
 	// is to tear down the work we are doing here.
-	cleanupFn = func() {
+	cleanupFn := func() {
 		// Reset the logging channels to default.
 		si := logging.stderrSinkInfoTemplate
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
@@ -459,16 +459,6 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 	f := l.formatter.formatterName()
 	c.Format = &f
 	return c
-}
-
-// TestingClearServerIdentifiers clears the server identity from the
-// logging system. This is for use in tests that start multiple
-// servers with conflicting identities subsequently.
-// See discussion here: https://github.com/cockroachdb/cockroach/issues/58938
-func TestingClearServerIdentifiers() {
-	logging.idMu.Lock()
-	logging.idMu.idPayload = idPayload{}
-	logging.idMu.Unlock()
 }
 
 // TestingResetActive clears the active bit. This is for use in tests

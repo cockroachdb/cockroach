@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "bool.go",
         "byte_size.go",
+        "common.go",
         "doc.go",
         "duration.go",
         "enum.go",
@@ -15,6 +16,7 @@ go_library(
         "setting.go",
         "string.go",
         "updater.go",
+        "values.go",
         "version.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/settings",

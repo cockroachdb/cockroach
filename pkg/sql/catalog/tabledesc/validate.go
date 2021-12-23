@@ -42,6 +42,16 @@ func (desc *wrapper) ValidateTxnCommit(
 		vea.Report(unimplemented.NewWithIssue(48026,
 			"primary key dropped without subsequent addition of new primary key in same transaction"))
 	}
+	// Check that the mutation ID values are appropriately set when a declarative
+	// schema change is underway.
+	if n := len(desc.Mutations); n > 0 && desc.NewSchemaChangeJobID != 0 {
+		lastMutationID := desc.Mutations[n-1].MutationID
+		if lastMutationID != desc.NextMutationID {
+			vea.Report(errors.AssertionFailedf(
+				"expected next mutation ID to be %d in table undergoing declarative schema change, found %d instead",
+				lastMutationID, desc.NextMutationID))
+		}
+	}
 }
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
@@ -435,7 +445,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// of the descriptor, in both the new and old schema change jobs.)
 	if len(desc.MutationJobs) > 0 && desc.NewSchemaChangeJobID != 0 {
 		vea.Report(errors.AssertionFailedf(
-			"invalid concurrent new-style schema change job %d and old-style schema change jobs %v",
+			"invalid concurrent declarative schema change job %d and legacy schema change jobs %v",
 			desc.NewSchemaChangeJobID, desc.MutationJobs))
 	}
 
@@ -760,13 +770,6 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		columnsByID[col.GetID()] = col
 	}
 
-	// Verify that the primary index columns are not virtual.
-	for _, pkID := range desc.PrimaryIndex.KeyColumnIDs {
-		if col := columnsByID[pkID]; col != nil && col.IsVirtual() {
-			return errors.Newf("primary index column %q cannot be virtual", col.GetName())
-		}
-	}
-
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
 	for _, idx := range desc.NonDropIndexes() {
@@ -866,12 +869,53 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 					idx.GetName(), idx.GetPredicate())
 			}
 		}
-		// Ensure that indexes do not STORE virtual columns.
-		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
-			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
-				return errors.Newf("index %q cannot store virtual column %d", idx.GetName(), col)
+
+		// Ensure that indexes do not STORE virtual columns as suffix columns unless
+		// they are primary key columns or future primary key columns (when `ALTER
+		// PRIMARY KEY` is executed and a primary key mutation exists).
+		curPKColIDs := catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...)
+		newPKColIDs := catalog.MakeTableColSet()
+		for _, mut := range desc.Mutations {
+			if mut.GetPrimaryKeySwap() != nil {
+				newPKIdxID := mut.GetPrimaryKeySwap().NewPrimaryIndexId
+				newPK, err := desc.FindIndexWithID(newPKIdxID)
+				if err != nil {
+					return err
+				}
+				newPKColIDs.UnionWith(newPK.CollectKeyColumnIDs())
 			}
 		}
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			if _, ok := columnsByID[colID]; !ok {
+				return errors.Newf("column %d does not exist in table %s", colID, desc.Name)
+			}
+			col := columnsByID[colID]
+			if !col.IsVirtual() {
+				continue
+			}
+
+			// When newPKColIDs is empty, it means there's no `ALTER PRIMARY KEY` in
+			// progress.
+			if newPKColIDs.Len() == 0 && curPKColIDs.Contains(colID) {
+				continue
+			}
+
+			// When newPKColIDs is not empty, it means there is an in-progress `ALTER
+			// PRIMARY KEY`. We don't allow queueing schema changes when there's a
+			// primary key mutation, so it's safe to make the assumption that `Adding`
+			// indexes are associated with the new primary key because they are
+			// rewritten and `Non-adding` indexes should only contain virtual column
+			// from old primary key.
+			isOldPKCol := !idx.Adding() && curPKColIDs.Contains(colID)
+			isNewPKCol := idx.Adding() && newPKColIDs.Contains(colID)
+			if newPKColIDs.Len() > 0 && (isOldPKCol || isNewPKCol) {
+				continue
+			}
+
+			return errors.Newf("index %q cannot store virtual column %q", idx.GetName(), col.GetName())
+		}
+
+		// Ensure that indexes do not STORE virtual columns.
 		for i, colID := range idx.IndexDesc().StoreColumnIDs {
 			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
 				return errors.Newf("index %q cannot store virtual column %q",

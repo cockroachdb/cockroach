@@ -1246,23 +1246,23 @@ VALUES (1, FALSE, '2020-03-01', 'the-account', 'the-customer', '70F03EB1-4F58-4C
 insert transactions
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:18 => dealerid:1
- │    ├── column2:19 => isbuy:2
- │    ├── column3:20 => date:3
- │    ├── column4:21 => accountname:4
- │    ├── column5:22 => customername:5
- │    ├── column6:23 => operationid:6
- │    ├── version_default:24 => version:7
- │    └── olddate_default:25 => olddate:8
+ │    ├── column1:12 => dealerid:1
+ │    ├── column2:13 => isbuy:2
+ │    ├── column3:14 => date:3
+ │    ├── column18:18 => accountname:4
+ │    ├── column19:19 => customername:5
+ │    ├── column6:17 => operationid:6
+ │    ├── version_default:20 => version:7
+ │    └── olddate_default:21 => olddate:8
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:18!null column2:19!null column3:20!null column4:21!null column5:22!null column6:23!null version_default:24 olddate_default:25!null
+      ├── columns: column1:12!null column2:13!null column3:14!null column6:17!null column18:18!null column19:19!null version_default:20 olddate_default:21!null
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
-      ├── fd: ()-->(18-25)
-      └── (1, false, '2020-03-01 00:00:00+00:00', 'the-account', 'the-customer', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', cluster_logical_timestamp(), '0001-01-01 00:00:00')
+      ├── fd: ()-->(12-14,17-21)
+      └── (1, false, '2020-03-01 00:00:00+00:00', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', 'the-account', 'the-customer', cluster_logical_timestamp(), '0001-01-01 00:00:00')
 
 # Upsert buy or sell transaction.
 opt
@@ -1592,7 +1592,7 @@ update cardsinfo [as=ci]
       │         └── const-agg [as=q:37, outer=(37)]
       │              └── q:37
       └── projections
-           ├── crdb_internal.round_decimal_values((buyprice:23::DECIMAL - discount:25::DECIMAL)::DECIMAL(10,4), 4) [as=discountbuyprice_comp:53, outer=(23,25), immutable]
+           ├── crdb_internal.round_decimal_values(buyprice:23::DECIMAL - discount:25::DECIMAL, 4) [as=discountbuyprice_comp:53, outer=(23,25), immutable]
            ├── CAST(NULL AS STRING) [as=notes_default:50]
            ├── 0 [as=oldinventory_default:51]
            └── COALESCE(sum_int:47, 0) [as=actualinventory_new:49, outer=(47)]

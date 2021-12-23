@@ -31,6 +31,7 @@ const (
 	retryMaxDelaySettingKey        = "jobs.registry.retry.max_delay"
 	executionErrorsMaxEntriesKey   = "jobs.execution_errors.max_entries"
 	executionErrorsMaxEntrySizeKey = "jobs.execution_errors.max_entry_size"
+	debugPausePointsSettingKey     = "jobs.debug.pausepoints"
 )
 
 const (
@@ -73,6 +74,7 @@ const (
 
 var (
 	intervalBaseSetting = settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		intervalBaseSettingKey,
 		"the base multiplier for other intervals such as adopt, cancel, and gc",
 		defaultIntervalBase,
@@ -80,6 +82,7 @@ var (
 	)
 
 	adoptIntervalSetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		adoptIntervalSettingKey,
 		"the interval at which a node (a) claims some of the pending jobs and "+
 			"(b) restart its already claimed jobs that are in running or reverting "+
@@ -89,6 +92,7 @@ var (
 	)
 
 	cancelIntervalSetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		cancelIntervalSettingKey,
 		"the interval at which a node cancels the jobs belonging to the known "+
 			"dead sessions",
@@ -97,6 +101,7 @@ var (
 	)
 
 	gcIntervalSetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		gcIntervalSettingKey,
 		"the interval a node deletes expired job records that have exceeded their "+
 			"retention duration",
@@ -105,6 +110,7 @@ var (
 	)
 
 	retentionTimeSetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		retentionTimeSettingKey,
 		"the amount of time to retain records for completed jobs before",
 		defaultRetentionTime,
@@ -112,6 +118,7 @@ var (
 	).WithPublic()
 
 	cancellationsUpdateLimitSetting = settings.RegisterIntSetting(
+		settings.TenantWritable,
 		cancelUpdateLimitKey,
 		"the number of jobs that can be updated when canceling jobs concurrently from dead sessions",
 		defaultCancellationsUpdateLimit,
@@ -119,6 +126,7 @@ var (
 	)
 
 	retryInitialDelaySetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		retryInitialDelaySettingKey,
 		"the starting duration of exponential-backoff delay"+
 			" to retry a job which encountered a retryable error or had its coordinator"+
@@ -128,6 +136,7 @@ var (
 	)
 
 	retryMaxDelaySetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		retryMaxDelaySettingKey,
 		"the maximum duration by which a job can be delayed to retry",
 		defaultRetryMaxDelay,
@@ -135,6 +144,7 @@ var (
 	)
 
 	executionErrorsMaxEntriesSetting = settings.RegisterIntSetting(
+		settings.TenantWritable,
 		executionErrorsMaxEntriesKey,
 		"the maximum number of retriable error entries which will be stored for introspection",
 		defaultExecutionErrorsMaxEntries,
@@ -142,11 +152,19 @@ var (
 	)
 
 	executionErrorsMaxEntrySize = settings.RegisterByteSizeSetting(
+		settings.TenantWritable,
 		executionErrorsMaxEntrySizeKey,
 		"the maximum byte size of individual error entries which will be stored"+
 			" for introspection",
 		defaultExecutionErrorsMaxEntrySize,
 		settings.NonNegativeInt,
+	)
+
+	debugPausepoints = settings.RegisterStringSetting(
+		settings.TenantWritable,
+		debugPausePointsSettingKey,
+		"the list, comma separated, of named pausepoints currently enabled for debugging",
+		"",
 	)
 )
 

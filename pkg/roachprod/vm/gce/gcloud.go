@@ -51,7 +51,7 @@ var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
 //
 // If the gcloud tool is not available on the local path, the provider is a
 // stub.
-func Init() {
+func Init() error {
 	providerInstance.Projects = []string{defaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
@@ -61,9 +61,10 @@ func Init() {
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
-		return
+		return errors.New("gcloud not found")
 	}
 	vm.Providers[ProviderName] = providerInstance
+	return nil
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {
@@ -78,8 +79,8 @@ func runJSONCommand(args []string, parsed interface{}) error {
 		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding
 		// new zones.
 		if matched, _ := regexp.Match(`.*Unknown zone`, stderr); !matched {
-			return errors.Errorf("failed to run: gcloud %s: %s\nstdout: %s\nstderr: %s",
-				strings.Join(args, " "), err, bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
+			return errors.Wrapf(err, "failed to run: gcloud %s\nstdout: %s\nstderr: %s\n",
+				strings.Join(args, " "), bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
 		}
 	}
 
@@ -360,8 +361,9 @@ func (p *Provider) CleanSSH() error {
 	return nil
 }
 
-// ConfigSSH TODO(peter): document
-func (p *Provider) ConfigSSH() error {
+// ConfigSSH is part of the vm.Provider interface
+func (p *Provider) ConfigSSH(zones []string) error {
+	// Populate SSH config files with Host entries from each instance in active projects.
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
 		cmd := exec.Command("gcloud", args...)

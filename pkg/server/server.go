@@ -118,12 +118,14 @@ var (
 	gzipResponseWriterPool sync.Pool
 
 	forwardClockJumpCheckEnabled = settings.RegisterBoolSetting(
+		settings.TenantWritable,
 		"server.clock.forward_jump_check_enabled",
 		"if enabled, forward clock jumps > max_offset/2 will cause a panic",
 		false,
 	).WithPublic()
 
 	persistHLCUpperBoundInterval = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"server.clock.persist_upper_bound_interval",
 		"the interval between persisting the wall time upper bound of the clock. The clock "+
 			"does not generate a wall time greater than the persisted timestamp and will panic if "+
@@ -409,6 +411,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
 
+	registry.AddMetric(base.LicenseTTL)
+	err = base.UpdateMetricOnLicenseChange(ctx, cfg.Settings, base.LicenseTTL, timeutil.DefaultTimeSource{}, stopper)
+	if err != nil {
+		log.Errorf(ctx, "unable to initialize periodic license metric update: %v", err)
+	}
+
 	// Create and add KV metric rules
 	kvserver.CreateAndAddRules(ctx, ruleRegistry)
 
@@ -625,15 +633,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		KVMemoryMonitor:         kvMemoryMonitor,
 	}
 
-	var spanConfigAccessor spanconfig.KVAccessor
-	var spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
+	var spanConfig struct {
+		// kvAccessor powers the span configuration RPCs and the host tenant's
+		// reconciliation job.
+		kvAccessor spanconfig.KVAccessor
+		// subscriber is used by stores to subsribe to span configuration
+		// updates.
+		subscriber *spanconfigkvsubscriber.KVSubscriber
+		// kvAccessorForTenantRecords is when creating/destroying secondary
+		// tenant records.
+		kvAccessorForTenantRecords spanconfig.KVAccessor
+	}
 	if cfg.SpanConfigsEnabled {
 		storeCfg.SpanConfigsEnabled = true
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
 			storeCfg.SpanConfigSubscriber = spanConfigKnobs.StoreKVSubscriberOverride
 		} else {
-			spanConfigSubscriber = spanconfigkvsubscriber.New(
+			spanConfig.subscriber = spanconfigkvsubscriber.New(
 				stopper,
 				db,
 				clock,
@@ -643,15 +660,23 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				storeCfg.DefaultSpanConfig,
 				spanConfigKnobs,
 			)
-			storeCfg.SpanConfigSubscriber = spanConfigSubscriber
+			storeCfg.SpanConfigSubscriber = spanConfig.subscriber
 		}
 
-		spanConfigAccessor = spanconfigkvaccessor.New(
+		scKVAccessor := spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),
 		)
+		spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor
 	} else {
-		spanConfigAccessor = spanconfigkvaccessor.DisabledAccessor{}
+		// If the spanconfigs infrastructure is disabled, there should be no
+		// reconciliation jobs or RPCs issued against the infrastructure. Plug
+		// in a disabled spanconfig.KVAccessor that would error out for
+		// unexpected use.
+		spanConfig.kvAccessor = spanconfigkvaccessor.DisabledKVAccessor
+
+		// Use a no-op accessor where tenant records are created/destroyed.
+		spanConfig.kvAccessorForTenantRecords = spanconfigkvaccessor.NoopKVAccessor
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -686,7 +711,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, cfg.ClusterIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork), gcoords.Stores,
-		tenantUsage, spanConfigAccessor,
+		tenantUsage, spanConfig.kvAccessor,
 	)
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -771,6 +796,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			externalStorageFromURI:   externalStorageFromURI,
 			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
 			sqlSQLResponseAdmissionQ: gcoords.Regular.GetWorkQueue(admission.SQLSQLResponseWork),
+			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
 		},
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
@@ -780,7 +806,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
 		systemConfigProvider:     g,
-		spanConfigAccessor:       spanConfigAccessor,
+		spanConfigAccessor:       spanConfig.kvAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
@@ -842,7 +868,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		protectedtsReconciler:  protectedtsReconciler,
-		spanConfigSubscriber:   spanConfigSubscriber,
+		spanConfigSubscriber:   spanConfig.subscriber,
 		sqlServer:              sqlServer,
 		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
@@ -2701,6 +2727,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 					curStats := goMemStats.Load().(*status.GoMemStats)
 					cgoStats := status.GetCGoMemStats(ctx)
 					cfg.runtime.SampleEnvironment(ctx, curStats, cgoStats)
+
 					if goroutineDumper != nil {
 						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
 					}

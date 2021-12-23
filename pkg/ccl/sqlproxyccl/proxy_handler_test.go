@@ -1160,7 +1160,6 @@ func newDirectoryServer(
 			return nil, status.Error(codes.NotFound, "tenant not found")
 		}
 
-		log.TestingClearServerIdentifiers()
 		tenantStopper := tenantdirsvr.NewSubStopper(tdsStopper)
 		ten, err := srv.StartTenant(ctx, base.TestTenantArgs{
 			Existing:      true,

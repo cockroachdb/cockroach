@@ -20,7 +20,7 @@ import {
   requestMetrics as requestMetricsAction,
 } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
-import { MilliToNano, MilliToSeconds } from "src/util/convert";
+import { util } from "@cockroachlabs/cluster-ui";
 import { findChildrenOfType } from "src/util/find";
 import {
   Metric,
@@ -263,14 +263,14 @@ const timeInfoSelector = createSelector(
     const end = currentWindow.end.valueOf();
     const syncedScale = findClosestTimeScale(
       defaultTimeScaleOptions,
-      MilliToSeconds(end - start),
+      util.MilliToSeconds(end - start),
     );
 
     return {
-      start: Long.fromNumber(MilliToNano(start)),
-      end: Long.fromNumber(MilliToNano(end)),
+      start: Long.fromNumber(util.MilliToNano(start)),
+      end: Long.fromNumber(util.MilliToNano(end)),
       sampleDuration: Long.fromNumber(
-        MilliToNano(syncedScale.sampleSize.asMilliseconds()),
+        util.MilliToNano(syncedScale.sampleSize.asMilliseconds()),
       ),
     };
   },
@@ -282,16 +282,16 @@ const current = () => {
   now = moment(Math.floor(now.valueOf() / 10000) * 10000);
   return {
     start: Long.fromNumber(
-      MilliToNano(
+      util.MilliToNano(
         now
           .clone()
           .subtract(30, "s")
           .valueOf(),
       ),
     ),
-    end: Long.fromNumber(MilliToNano(now.valueOf())),
+    end: Long.fromNumber(util.MilliToNano(now.valueOf())),
     sampleDuration: Long.fromNumber(
-      MilliToNano(moment.duration(10, "s").asMilliseconds()),
+      util.MilliToNano(moment.duration(10, "s").asMilliseconds()),
     ),
   };
 };

@@ -134,12 +134,14 @@ This metric is thus not an indicator of KV health.`,
 var (
 	// graphiteEndpoint is host:port, if any, of Graphite metrics server.
 	graphiteEndpoint = settings.RegisterStringSetting(
+		settings.TenantWritable,
 		"external.graphite.endpoint",
 		"if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port",
 		"",
 	).WithPublic()
 	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
 	graphiteInterval = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		graphiteIntervalKey,
 		"the interval at which metrics are pushed to Graphite (if enabled)",
 		10*time.Second,
@@ -435,14 +437,14 @@ func (n *Node) start(
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.storeCfg.Gossip.NodeID.Set(ctx, n.Descriptor.NodeID)
 	if err := n.storeCfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-		return errors.Errorf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+		return errors.Wrapf(err, "couldn't gossip descriptor for node %d", n.Descriptor.NodeID)
 	}
 
 	// Create stores from the engines that were already initialized.
 	for _, e := range state.initializedEngines {
 		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
-			return errors.Errorf("failed to start store: %s", err)
+			return errors.Wrap(err, "failed to start store")
 		}
 
 		n.addStore(ctx, s)
@@ -617,7 +619,7 @@ func (n *Node) initializeAdditionalStores(
 		storeIDAlloc := int64(len(engines))
 		startID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, storeIDAlloc, n.storeCfg.DB)
 		if err != nil {
-			return errors.Errorf("error allocating store ids: %s", err)
+			return errors.Wrap(err, "error allocating store ids")
 		}
 
 		sIdent := roachpb.StoreIdent{

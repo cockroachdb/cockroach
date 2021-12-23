@@ -87,10 +87,6 @@ vectorized: true
               missing stats
               table: unindexed@unindexed_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON unindexed (v);
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query T
@@ -113,10 +109,6 @@ vectorized: true
               missing stats
               table: unindexed@unindexed_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON unindexed (v);
 
 # Check fast DELETE.
 query T
@@ -296,10 +288,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: xyz@xyz_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX xyz@xyz_y_idx; CREATE INDEX ON xyz (y) STORING (z);
 
 # With the hint, we use a constrained scan.
 query T
@@ -329,7 +317,3 @@ vectorized: true
               estimated row count: 990 (missing stats)
               table: xyz@xyz_y_idx
               spans: /1-/1000 /2001-/3000
-·
-index recommendations: 1
-1. type: index replacement
-   SQL commands: DROP INDEX xyz@xyz_y_idx; CREATE INDEX ON xyz (y) STORING (z);

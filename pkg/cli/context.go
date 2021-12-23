@@ -29,11 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -68,6 +68,7 @@ func initCLIDefaults() {
 	setTestDirectorySvrContextDefaults()
 	setUserfileContextDefaults()
 	setCertContextDefaults()
+	setDebugRecoverContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -91,7 +92,7 @@ func clearFlagChanges(cmd *cobra.Command) {
 // See below for defaults.
 var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings()
-	settings.SetCanonicalValuesContainer(&st.SV)
+	logcrash.SetGlobalSettings(&st.SV)
 
 	return server.MakeConfig(context.Background(), st)
 }()
@@ -492,6 +493,9 @@ var quitCtx struct {
 	// drainWait is the amount of time to wait for the server
 	// to drain. Set to 0 to disable a timeout (let the server decide).
 	drainWait time.Duration
+	// nodeDrainSelf indicates that the command should target
+	// the node we're connected to (this is the default behavior).
+	nodeDrainSelf bool
 }
 
 // setQuitContextDefaults set the default values in quitCtx.  This
@@ -499,6 +503,7 @@ var quitCtx struct {
 // test that exercises command-line parsing.
 func setQuitContextDefaults() {
 	quitCtx.drainWait = 10 * time.Minute
+	quitCtx.nodeDrainSelf = false
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
@@ -517,6 +522,7 @@ var nodeCtx struct {
 // test that exercises command-line parsing.
 func setNodeContextDefaults() {
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
+	nodeCtx.nodeDecommissionSelf = false
 	nodeCtx.statusShowRanges = false
 	nodeCtx.statusShowStats = false
 	nodeCtx.statusShowAll = false

@@ -51,6 +51,7 @@ const (
 // which the processing of a queue may time out. It is an escape hatch to raise
 // the timeout for queues.
 var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.queue.process.guaranteed_time_budget",
 	"the guaranteed duration before which the processing of a queue may "+
 		"time out",
@@ -570,7 +571,8 @@ func (bq *baseQueue) Async(
 		log.InfofDepth(ctx, 2, "%s", log.Safe(opName))
 	}
 	opName += " (" + bq.name + ")"
-	if err := bq.store.stopper.RunAsyncTaskEx(context.Background(),
+	bgCtx := bq.AnnotateCtx(context.Background())
+	if err := bq.store.stopper.RunAsyncTaskEx(bgCtx,
 		stop.TaskOpts{
 			TaskName:   opName,
 			Sem:        bq.addOrMaybeAddSem,

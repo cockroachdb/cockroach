@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -42,6 +43,11 @@ type KVAccessor interface {
 		toDelete []roachpb.Span,
 		toUpsert []roachpb.SpanConfigEntry,
 	) error
+
+	// WithTxn returns a KVAccessor that runs using the given transaction (with
+	// its operations discarded if aborted, valid only if committed). If nil, a
+	// transaction is created internally for every operation.
+	WithTxn(context.Context, *kv.Txn) KVAccessor
 }
 
 // KVSubscriber presents a consistent[1] snapshot of a StoreReader that's
@@ -52,6 +58,8 @@ type KVAccessor interface {
 // invocation, subscribers can consult the embedded StoreReader to retrieve an
 // up-to-date[2] config for the updated span. The callback is called in a single
 // goroutine; it should avoid doing any long-running or blocking work.
+// KVSubscriber also exposes a timestamp that indicates how up-to-date it is
+// with the global state.
 //
 // When a callback is first installed, it's invoked with the [min,max) span --
 // a shorthand to indicate that subscribers should consult the StoreReader for all
@@ -71,6 +79,7 @@ type KVAccessor interface {
 //      (typically through a coarsely targeted [min,max) span).
 type KVSubscriber interface {
 	StoreReader
+	LastUpdated() hlc.Timestamp
 	Subscribe(func(updated roachpb.Span))
 }
 
@@ -143,14 +152,34 @@ type SQLWatcher interface {
 	) error
 }
 
+// Reconciler is responsible for reconciling a tenant's zone configs (SQL
+// construct) with the cluster's span configs (KV construct). It's the central
+// engine for the span configs infrastructure; a single Reconciler instance is
+// active for every tenant in the system.
+type Reconciler interface {
+	// Reconcile starts the incremental reconciliation process from the given
+	// timestamp. If it does not find MVCC history going far back enough[1], it
+	// falls back to a scan of all descriptors and zone configs before being
+	// able to do more incremental work. The provided callback is invoked
+	// with timestamps that can be safely checkpointed. A future Reconciliation
+	// attempt can make use of this timestamp to reduce the amount of necessary
+	// work (provided the MVCC history is still available).
+	//
+	// [1]: It's possible for system.{zones,descriptor} to have been GC-ed away;
+	//      think suspended tenants.
+	Reconcile(
+		ctx context.Context,
+		startTS hlc.Timestamp,
+		callback func(checkpoint hlc.Timestamp) error,
+	) error
+}
+
 // ReconciliationDependencies captures what's needed by the span config
 // reconciliation job to perform its task. The job is responsible for
 // reconciling a tenant's zone configurations with the clusters span
 // configurations.
 type ReconciliationDependencies interface {
-	KVAccessor
-	SQLTranslator
-	SQLWatcher
+	Reconciler
 }
 
 // Store is a data structure used to store spans and their corresponding
@@ -164,8 +193,7 @@ type Store interface {
 type StoreWriter interface {
 	// Apply applies a batch of non-overlapping updates atomically[1] and
 	// returns (i) the existing spans that were deleted, and (ii) the entries
-	// that were newly added to make room for the batch. The deleted list can
-	// also double as a list of overlapping spans in the Store[2].
+	// that were newly added to make room for the batch.
 	//
 	// Span configs are stored in non-overlapping fashion. When an update
 	// overlaps with existing configs, the existing configs are deleted. If the
@@ -192,49 +220,8 @@ type StoreWriter interface {
 	//  Added    |             [--- D ----)[-- B --)         [-- C -)[--- E ---)
 	//  Store*   | [--- A ----)[--- D ----)[-- B --)         [-- C -)[--- E ---)
 	//
-	// TODO(irfansharif): We'll make use of the dryrun option in a future PR
-	// when wiring up the reconciliation job to use the KVAccessor. Since the
-	// KVAccessor is a "targeted" API (the spans being deleted/upserted
-	// have to already be present with the exact same bounds), we'll dryrun an
-	// update against a StoreWriter (pre-populated with the entries present in
-	// KV) to generate the targeted deletes and upserts we'd need to issue.
-	// After successfully installing them in KV, we can keep our StoreWriter
-	// up-to-date by actually applying the update.
-	//
-	// There's also the question of a "full reconciliation pass". We'll be
-	// generating updates reactively listening in on changes to
-	// system.{descriptor,zones} (see SQLWatcher). It's possible then for a
-	// suspended tenant's table history to be GC-ed away and for its SQLWatcher
-	// to never detect that a certain table/index/partition has been deleted.
-	// Left as is, this results in us never issuing a corresponding span config
-	// deletion request. We'd be leaving a bunch of delete-able span configs
-	// lying around, and a bunch of empty ranges as a result of those. A "full
-	// reconciliation pass" is our attempt to find all these extraneous entries
-	// in KV and to delete them.
-	//
-	// We can use a StoreWriter here too (one that's pre-populated with the
-	// contents of KVAccessor, as before). We'd iterate through all descriptors,
-	// find all overlapping spans, issue KVAccessor deletes for them, and upsert
-	// the descriptor's span config[3]. As for the StoreWriter itself, we'd
-	// simply delete the overlapping entries. After iterating through all the
-	// descriptors, we'd finally issue KVAccessor deletes for all span configs
-	// still remaining in the Store.
-	//
-	// TODO(irfansharif): The descriptions above presume holding the entire set
-	// of span configs in memory, but we could break away from that by adding
-	// pagination + retrieval limit to the GetSpanConfigEntriesFor API. We'd
-	// then paginate through chunks of the keyspace at a time, do a "full
-	// reconciliation pass" over just that chunk, and continue.
-	//
 	// [1]: Unless dryrun is true. We'll still generate the same {deleted,added}
 	//      lists.
-	// [2]: We could alternatively expose a GetAllOverlapping() API to make
-	//      things clearer.
-	// [3]: We could skip the delete + upsert dance if the descriptor's exact
-	//      span config entry already exists in KV. Using Apply (dryrun=true)
-	//      against a StoreWriter (populated using KVAccessor contents) using
-	//      the descriptor's span config entry would return empty lists,
-	//      indicating a no-op.
 	Apply(ctx context.Context, dryrun bool, updates ...Update) (
 		deleted []roachpb.Span, added []roachpb.SpanConfigEntry,
 	)
@@ -248,8 +235,8 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
-// DescriptorUpdate captures the ID and type of a descriptor or zone that the
-// SQLWatcher has observed updated.
+// DescriptorUpdate captures the ID and the type of descriptor or zone that been
+// updated. It's the unit of what the SQLWatcher emits.
 type DescriptorUpdate struct {
 	// ID of the descriptor/zone that has been updated.
 	ID descpb.ID
@@ -260,14 +247,26 @@ type DescriptorUpdate struct {
 }
 
 // Update captures a span and the corresponding config change. It's the unit of
-// what can be applied to a StoreWriter.
-type Update struct {
-	// Span captures the key span being updated.
-	Span roachpb.Span
+// what can be applied to a StoreWriter. The embedded span captures what's being
+// updated; the config captures what it's being updated to. An empty config
+// indicates a deletion.
+type Update roachpb.SpanConfigEntry
 
-	// Config captures the span config the key span was updated to. An empty
-	// config indicates the span config being deleted.
-	Config roachpb.SpanConfig
+// Deletion constructs an update that represents a deletion over the given span.
+func Deletion(span roachpb.Span) Update {
+	return Update{
+		Span:   span,
+		Config: roachpb.SpanConfig{}, // delete
+	}
+}
+
+// Addition constructs an update that represents adding the given config over
+// the given span.
+func Addition(span roachpb.Span, conf roachpb.SpanConfig) Update {
+	return Update{
+		Span:   span,
+		Config: conf,
+	}
 }
 
 // Deletion returns true if the update corresponds to a span config being

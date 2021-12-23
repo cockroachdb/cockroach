@@ -208,7 +208,7 @@ t  CREATE TABLE public.t (
    z INT8 NOT NULL,
    w INT8 NULL,
    v JSONB NULL,
-   crdb_internal_z_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 4:::INT8)) STORED,
+   crdb_internal_z_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 4:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC),
    UNIQUE INDEX i3 (z ASC) STORING (y),
    UNIQUE INDEX t_x_key (x ASC),
@@ -218,7 +218,7 @@ t  CREATE TABLE public.t (
    UNIQUE INDEX i5 (w ASC) STORING (y),
    INVERTED INDEX i6 (v),
    INDEX i7 (z ASC) USING HASH WITH BUCKET_COUNT = 4,
-   FAMILY fam_0_x_y_z_w_v_crdb_internal_z_shard_4 (x, y, z, w, v, crdb_internal_z_shard_4),
+   FAMILY fam_0_x_y_z_w_v (x, y, z, w, v),
    CONSTRAINT check_crdb_internal_z_shard_4 CHECK (crdb_internal_z_shard_4 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8))
 )
 
@@ -363,12 +363,12 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
-   crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) STORED,
-   crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) STORED,
+   crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) VIRTUAL,
+   crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 10,
    UNIQUE INDEX t_x_key (x ASC),
    INDEX i1 (z ASC) USING HASH WITH BUCKET_COUNT = 5,
-   FAMILY fam_0_x_y_z_crdb_internal_z_shard_5 (x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10),
+   FAMILY fam_0_x_y_z (x, y, z),
    CONSTRAINT check_crdb_internal_z_shard_5 CHECK (crdb_internal_z_shard_5 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8)),
    CONSTRAINT check_crdb_internal_y_shard_10 CHECK (crdb_internal_y_shard_10 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8))
 )
@@ -422,14 +422,14 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 5:::INT8)) STORED,
+   crdb_internal_x_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 5:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC),
    UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 5,
    INDEX i (z ASC),
-   FAMILY fam_0_x_y_z_crdb_internal_x_shard_5 (x, y, z, crdb_internal_x_shard_5),
+   FAMILY fam_0_x_y_z (x, y, z),
    CONSTRAINT check_crdb_internal_x_shard_5 CHECK (crdb_internal_x_shard_5 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8))
 )
 
@@ -554,9 +554,9 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) STORED,
+   crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 4,
-   FAMILY "primary" (x, rowid, crdb_internal_x_shard_4),
+   FAMILY "primary" (x, rowid),
    CONSTRAINT check_crdb_internal_x_shard_4 CHECK (crdb_internal_x_shard_4 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8))
 )
 
@@ -946,11 +946,11 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) STORED,
+   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
-   crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) STORED,
+   crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
-   FAMILY "primary" (crdb_internal_x_shard_2, x, crdb_internal_x_shard_3),
+   FAMILY "primary" (x),
    CONSTRAINT check_crdb_internal_x_shard_2 CHECK (crdb_internal_x_shard_2 IN (0:::INT8, 1:::INT8)),
    CONSTRAINT check_crdb_internal_x_shard_3 CHECK (crdb_internal_x_shard_3 IN (0:::INT8, 1:::INT8, 2:::INT8))
 )
@@ -966,13 +966,13 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) STORED,
+   crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
    y INT8 NOT NULL,
-   crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) STORED,
+   crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) VIRTUAL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
    UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
-   FAMILY fam_0_x_y_crdb_internal_x_shard_2 (x, y, crdb_internal_x_shard_2, crdb_internal_y_shard_2),
+   FAMILY fam_0_x_y (x, y),
    CONSTRAINT check_crdb_internal_x_shard_2 CHECK (crdb_internal_x_shard_2 IN (0:::INT8, 1:::INT8)),
    CONSTRAINT check_crdb_internal_y_shard_2 CHECK (crdb_internal_y_shard_2 IN (0:::INT8, 1:::INT8))
 )
@@ -1173,7 +1173,6 @@ query TTT
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 ----
 t_pkey  i                        ASC
-t_pkey  crdb_internal_i_shard_2  N/A
 
 # Regression tests for incorrectly reading from the unique secondary index that
 # used be a primary index in the vectorized engine (#71553). Note that this
@@ -1207,3 +1206,169 @@ query II
 SELECT * FROM t71553@t71553_b_key
 ----
 1  1
+
+subtest virtual_primary_index
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  k INT NOT NULL AS (a+b) VIRTUAL,
+  PRIMARY KEY (a),
+  INDEX t_idx_b_k (b, k),
+  FAMILY "primary" (a, b)
+);
+
+statement ok
+INSERT INTO t VALUES (1,2), (3,4);
+
+query III colnames,rowsort
+SELECT * FROM t@t_pkey;
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_b_k;
+----
+a  b  k
+1  2  3
+3  4  7
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+    a INT8 NOT NULL,
+    b INT8 NOT NULL,
+    k INT8 NOT NULL AS (a + b) VIRTUAL,
+    CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+    UNIQUE INDEX t_a_key (a ASC),
+    INDEX t_idx_b_k (b ASC, k ASC),
+    FAMILY "primary" (a, b)
+)
+
+query III colnames,rowsort
+SELECT * FROM t@t_pkey
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_a_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_b_k
+----
+a  b  k
+1  2  3
+3  4  7
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b, k);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+    a INT8 NOT NULL,
+    b INT8 NOT NULL,
+    k INT8 NOT NULL AS (a + b) VIRTUAL,
+    CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
+    UNIQUE INDEX t_k_key (k ASC),
+    UNIQUE INDEX t_a_key (a ASC),
+    INDEX t_idx_b_k (b ASC, k ASC),
+    FAMILY "primary" (a, b)
+)
+
+query III colnames,rowsort
+SELECT * FROM t@t_pkey
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_a_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_k_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_b_k
+----
+a  b  k
+1  2  3
+3  4  7
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+    a INT8 NOT NULL,
+    b INT8 NOT NULL,
+    k INT8 NOT NULL AS (a + b) VIRTUAL,
+    CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+    UNIQUE INDEX t_b_k_key (b ASC, k ASC),
+    UNIQUE INDEX t_k_key (k ASC),
+    UNIQUE INDEX t_a_key (a ASC),
+    INDEX t_idx_b_k (b ASC, k ASC),
+    FAMILY "primary" (a, b)
+)
+
+query III colnames,rowsort
+SELECT * FROM t@t_pkey
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_a_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_k_key
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_idx_b_k
+----
+a  b  k
+1  2  3
+3  4  7
+
+query III colnames,rowsort
+SELECT * FROM t@t_b_k_key
+----
+a  b  k
+1  2  3
+3  4  7

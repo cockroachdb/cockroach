@@ -6,6 +6,15 @@ ALTER RANGE default CONFIGURE ZONE = ('foo') -- fully parenthesized
 ALTER RANGE default CONFIGURE ZONE = '_' -- literals removed
 ALTER RANGE _ CONFIGURE ZONE = 'foo' -- identifiers removed
 
+error
+ALTER RANGE invalid+syntax CONFIGURE ZONE = 'foo'
+----
+at or near "EOF": syntax error: only simple names are supported in ALTER RANGE ... CONFIGURE ZONE
+DETAIL: source SQL:
+ALTER RANGE invalid+syntax CONFIGURE ZONE = 'foo'
+                                                 ^
+
+
 parse
 EXPLAIN ALTER RANGE default CONFIGURE ZONE = 'foo'
 ----
@@ -87,57 +96,57 @@ ALTER RANGE meta CONFIGURE ZONE USING DEFAULT -- literals removed
 ALTER RANGE _ CONFIGURE ZONE USING DEFAULT -- identifiers removed
 
 parse
-ALTER RANGE 1 RELOCATE LEASE TO 2
+ALTER RANGE 1+3 RELOCATE LEASE TO 1+1
 ----
-ALTER RANGE RELOCATE LEASE TO 2 FOR VALUES (1) -- normalized!
-ALTER RANGE RELOCATE LEASE TO 2 FOR VALUES ((1)) -- fully parenthesized
-ALTER RANGE RELOCATE LEASE TO 2 FOR VALUES (_) -- literals removed
-ALTER RANGE RELOCATE LEASE TO 2 FOR VALUES (1) -- identifiers removed
+ALTER RANGE RELOCATE LEASE TO 1 + 1 FOR VALUES (1 + 3) -- normalized!
+ALTER RANGE RELOCATE LEASE TO ((1) + (1)) FOR VALUES (((1) + (3))) -- fully parenthesized
+ALTER RANGE RELOCATE LEASE TO _ + _ FOR VALUES (_ + _) -- literals removed
+ALTER RANGE RELOCATE LEASE TO 1 + 1 FOR VALUES (1 + 3) -- identifiers removed
 
 parse
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM foo
+ALTER RANGE RELOCATE LEASE TO 1+1 FOR SELECT range_id FROM foo
 ----
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM foo
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT (range_id) FROM foo -- fully parenthesized
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM foo -- literals removed
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT _ FROM _ -- identifiers removed
+ALTER RANGE RELOCATE LEASE TO 1 + 1 FOR SELECT range_id FROM foo -- normalized!
+ALTER RANGE RELOCATE LEASE TO ((1) + (1)) FOR SELECT (range_id) FROM foo -- fully parenthesized
+ALTER RANGE RELOCATE LEASE TO _ + _ FOR SELECT range_id FROM foo -- literals removed
+ALTER RANGE RELOCATE LEASE TO 1 + 1 FOR SELECT _ FROM _ -- identifiers removed
 
 parse
-ALTER RANGE 1 RELOCATE FROM 3 TO 2
+ALTER RANGE 1+3 RELOCATE FROM 1+2 TO 1+1
 ----
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR VALUES (1) -- normalized!
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR VALUES ((1)) -- fully parenthesized
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR VALUES (_) -- literals removed
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR VALUES (1) -- identifiers removed
+ALTER RANGE RELOCATE VOTERS FROM 1 + 2 TO 1 + 1 FOR VALUES (1 + 3) -- normalized!
+ALTER RANGE RELOCATE VOTERS FROM ((1) + (2)) TO ((1) + (1)) FOR VALUES (((1) + (3))) -- fully parenthesized
+ALTER RANGE RELOCATE VOTERS FROM _ + _ TO _ + _ FOR VALUES (_ + _) -- literals removed
+ALTER RANGE RELOCATE VOTERS FROM 1 + 2 TO 1 + 1 FOR VALUES (1 + 3) -- identifiers removed
 
 parse
-ALTER RANGE 1 RELOCATE VOTERS FROM 3 TO 2
+ALTER RANGE 1+3 RELOCATE VOTERS FROM 1+2 TO 1+1
 ----
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR VALUES (1) -- normalized!
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR VALUES ((1)) -- fully parenthesized
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR VALUES (_) -- literals removed
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR VALUES (1) -- identifiers removed
+ALTER RANGE RELOCATE VOTERS FROM 1 + 2 TO 1 + 1 FOR VALUES (1 + 3) -- normalized!
+ALTER RANGE RELOCATE VOTERS FROM ((1) + (2)) TO ((1) + (1)) FOR VALUES (((1) + (3))) -- fully parenthesized
+ALTER RANGE RELOCATE VOTERS FROM _ + _ TO _ + _ FOR VALUES (_ + _) -- literals removed
+ALTER RANGE RELOCATE VOTERS FROM 1 + 2 TO 1 + 1 FOR VALUES (1 + 3) -- identifiers removed
 
 parse
-ALTER RANGE 1 RELOCATE NON_VOTERS FROM 3 TO 2
+ALTER RANGE 1+3 RELOCATE NONVOTERS FROM 1+2 TO 1+1
 ----
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR VALUES (1) -- normalized!
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR VALUES ((1)) -- fully parenthesized
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR VALUES (_) -- literals removed
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR VALUES (1) -- identifiers removed
+ALTER RANGE RELOCATE NONVOTERS FROM 1 + 2 TO 1 + 1 FOR VALUES (1 + 3) -- normalized!
+ALTER RANGE RELOCATE NONVOTERS FROM ((1) + (2)) TO ((1) + (1)) FOR VALUES (((1) + (3))) -- fully parenthesized
+ALTER RANGE RELOCATE NONVOTERS FROM _ + _ TO _ + _ FOR VALUES (_ + _) -- literals removed
+ALTER RANGE RELOCATE NONVOTERS FROM 1 + 2 TO 1 + 1 FOR VALUES (1 + 3) -- identifiers removed
 
 parse
-ALTER RANGE RELOCATE FROM 3 TO 2 FOR SELECT range_id FROM foo
+ALTER RANGE RELOCATE FROM 1+2 TO 1+1 FOR SELECT range_id FROM foo
 ----
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR SELECT range_id FROM foo -- normalized!
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR SELECT (range_id) FROM foo -- fully parenthesized
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR SELECT range_id FROM foo -- literals removed
-ALTER RANGE RELOCATE VOTERS FROM 3 TO 2 FOR SELECT _ FROM _ -- identifiers removed
+ALTER RANGE RELOCATE VOTERS FROM 1 + 2 TO 1 + 1 FOR SELECT range_id FROM foo -- normalized!
+ALTER RANGE RELOCATE VOTERS FROM ((1) + (2)) TO ((1) + (1)) FOR SELECT (range_id) FROM foo -- fully parenthesized
+ALTER RANGE RELOCATE VOTERS FROM _ + _ TO _ + _ FOR SELECT range_id FROM foo -- literals removed
+ALTER RANGE RELOCATE VOTERS FROM 1 + 2 TO 1 + 1 FOR SELECT _ FROM _ -- identifiers removed
 
 parse
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR SELECT range_id FROM foo
+ALTER RANGE RELOCATE NONVOTERS FROM 1+2 TO 1+1 FOR SELECT range_id FROM foo
 ----
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR SELECT range_id FROM foo
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR SELECT (range_id) FROM foo -- fully parenthesized
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR SELECT range_id FROM foo -- literals removed
-ALTER RANGE RELOCATE NON_VOTERS FROM 3 TO 2 FOR SELECT _ FROM _ -- identifiers removed
+ALTER RANGE RELOCATE NONVOTERS FROM 1 + 2 TO 1 + 1 FOR SELECT range_id FROM foo -- normalized!
+ALTER RANGE RELOCATE NONVOTERS FROM ((1) + (2)) TO ((1) + (1)) FOR SELECT (range_id) FROM foo -- fully parenthesized
+ALTER RANGE RELOCATE NONVOTERS FROM _ + _ TO _ + _ FOR SELECT range_id FROM foo -- literals removed
+ALTER RANGE RELOCATE NONVOTERS FROM 1 + 2 TO 1 + 1 FOR SELECT _ FROM _ -- identifiers removed

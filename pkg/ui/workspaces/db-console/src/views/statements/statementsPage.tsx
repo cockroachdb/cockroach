@@ -19,16 +19,7 @@ import {
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
-import {
-  aggregateStatementStats,
-  combineStatementStats,
-  ExecutionStatistics,
-  flattenStatementStats,
-  statementKey,
-  StatementStatistics,
-} from "src/util/appStats";
 import { appAttr } from "src/util/constants";
-import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
@@ -40,6 +31,7 @@ import {
   AggregateStatistics,
   Filters,
   defaultFilters,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import {
   createOpenDiagnosticsModalAction,
@@ -56,6 +48,16 @@ import { nodeRegionsByIDSelector } from "src/redux/nodes";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
+
+const {
+  aggregateStatementStats,
+  combineStatementStats,
+  flattenStatementStats,
+  statementKey,
+} = util;
+
+type ExecutionStatistics = util.ExecutionStatistics;
+type StatementStatistics = util.StatementStatistics;
 
 interface StatementsSummaryData {
   statement: string;
@@ -220,7 +222,7 @@ export const selectLastReset = createSelector(
     if (!state.data) {
       return "unknown";
     }
-    return PrintTime(TimestampToMoment(state.data.last_reset));
+    return PrintTime(util.TimestampToMoment(state.data.last_reset));
   },
 );
 

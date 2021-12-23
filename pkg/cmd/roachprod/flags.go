@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	// Do not populate providerOptsContainer here as we need to call initProviders() first.
+	// Do not populate providerOptsContainer here as we need to call InitProivders() first.
 	providerOptsContainer vm.ProviderOptionsContainer
 	pprofOpts             roachprod.PprofOpts
 	numNodes              int
@@ -45,26 +45,27 @@ var (
 	secure                = false
 	extraSSHOptions       = ""
 	nodeEnv               = []string{
+		// NOTE: The defaults are also copied in roachtest's invocation of roachprod
+		// (which overrides the default). On changes, consider updating that one
+		// too.
+
+		// RPC compressions costs around 5% on kv95, so we disable it. It might help
+		// when moving snapshots around, though.
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
+		// Get rid of an annoying popup in the UI.
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
 	}
-	tag           string
-	external      = false
-	pgurlCertsDir string
-	adminurlOpen  = false
-	adminurlPath  = ""
-	adminurlIPs   = false
-	useTreeDist   = true
-	sig           = 9
-	waitFlag      = false
-	createVMOpts  = vm.DefaultCreateOpts()
-	startOpts     = install.StartOpts{
-		Sequential:      true,
-		EncryptedStores: false,
-		SkipInit:        false,
-		StoreCount:      1,
-		TenantID:        2,
-	}
+	tag               string
+	external          = false
+	pgurlCertsDir     string
+	adminurlOpen      = false
+	adminurlPath      = ""
+	adminurlIPs       = false
+	useTreeDist       = true
+	sig               = 9
+	waitFlag          = false
+	createVMOpts      = vm.DefaultCreateOpts()
+	startOpts         = roachprod.DefaultStartOpts()
 	stageOS           string
 	stageDir          string
 	logsDir           string

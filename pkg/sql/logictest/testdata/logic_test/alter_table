@@ -2014,3 +2014,69 @@ ALTER TABLE t ALTER COLUMN b SET DEFAULT 10
 
 statement error identity column type must be INT, INT2, INT4 or INT8
 ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)
+
+# Test we can assign a PRIMARY KEY overriding the existing rowid PRIMARY KEY.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (id INT NOT NULL)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC),
+   FAMILY "primary" (id, rowid)
+)
+
+# Table has a PRIMARY KEY named index; check it errors when assinging PRIMARY KEY to id.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  id INT NOT NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pk PRIMARY KEY (rowid),
+  CONSTRAINT t_pkey UNIQUE (id)
+)
+
+statement error constraint with name "t_pkey" already exists
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+# Tests other cases where rowid is not implicitly added.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (
+  id INT NOT NULL,
+  explicit_rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pk PRIMARY KEY (explicit_rowid)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   rowid INT8 NOT VISIBLE NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   rowid INT4 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+)
+
+statement error multiple primary keys for table "t" are not allowed
+ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)

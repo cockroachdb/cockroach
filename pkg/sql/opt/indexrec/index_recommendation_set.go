@@ -114,13 +114,13 @@ func (irs *IndexRecommendationSet) getColOrdSet(
 func (irs *IndexRecommendationSet) addIndexToRecommendationSet(
 	indexOrd cat.IndexOrdinal, scannedCols opt.ColSet, tabID opt.TableID,
 ) {
-	// Do not recommend the primary index.
-	if indexOrd == cat.PrimaryIndex {
-		return
-	}
 	// Do not add real table indexes (non-hypothetical table indexes).
 	switch hypTable := irs.md.TableMeta(tabID).Table.(type) {
 	case *HypotheticalTable:
+		// Do not recommend existing indexes.
+		if indexOrd < hypTable.Table.IndexCount() {
+			return
+		}
 		scannedColOrds := irs.getColOrdSet(scannedCols, tabID)
 		// Try to find an identical existing index recommendation.
 		for _, indexRec := range irs.indexRecs[hypTable] {
@@ -256,6 +256,10 @@ func (ir *indexRecommendation) indexCols() []tree.IndexElem {
 		indexCol := ir.index.Column(i)
 		colName := indexCol.Column.ColName()
 
+		if ir.index.IsInverted() && i == len(ir.index.cols)-1 {
+			colName = ir.index.tab.Column(indexCol.InvertedSourceColumnOrdinal()).ColName()
+		}
+
 		var direction tree.Direction
 		if indexCol.Descending {
 			direction = tree.Descending
@@ -291,23 +295,30 @@ func (ir *indexRecommendation) indexRecommendationString(
 	var sb strings.Builder
 	tableName := tree.NewUnqualifiedTableName(ir.index.tab.Name())
 
+	var dropCmd tree.DropIndex
+	unique := false
 	if ir.existingIndex != nil {
 		sb.WriteString("   SQL commands: ")
 		indexName := tree.UnrestrictedName(ir.existingIndex.Name())
-		dropCmd := tree.DropIndex{
-			IndexList: []*tree.TableIndexName{{Table: *tableName, Index: indexName}},
-		}
-		sb.WriteString(dropCmd.String() + "; ")
+		dropCmd.IndexList = []*tree.TableIndexName{{Table: *tableName, Index: indexName}}
+
+		// Maintain uniqueness if the existing index is unique.
+		unique = ir.existingIndex.IsUnique()
 	} else {
 		sb.WriteString("   SQL command: ")
 	}
 
 	createCmd := tree.CreateIndex{
-		Table:   *tableName,
-		Columns: indexCols,
-		Storing: storing,
+		Table:    *tableName,
+		Columns:  indexCols,
+		Storing:  storing,
+		Unique:   unique,
+		Inverted: ir.index.IsInverted(),
 	}
 	sb.WriteString(createCmd.String() + ";")
+	if len(dropCmd.IndexList) > 0 {
+		sb.WriteString(" " + dropCmd.String() + ";")
+	}
 
 	return sb.String()
 }

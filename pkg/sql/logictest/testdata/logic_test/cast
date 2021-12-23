@@ -8,6 +8,8 @@ CREATE TABLE assn_cast (
   qc "char",
   b BIT,
   i INT,
+  i2 INT2,
+  f4 FLOAT4,
   t timestamp,
   d DECIMAL(10, 0),
   a DECIMAL(10, 0)[],
@@ -141,11 +143,44 @@ EXECUTE insert_i('1')
 statement error value type string doesn't match type int of column \"i\"
 INSERT INTO assn_cast(i) VALUES ('1'::STRING)
 
+statement error integer out of range for type int2
+INSERT INTO assn_cast(i2) VALUES (999999999)
+
+statement ok
+PREPARE insert_i2 AS INSERT INTO assn_cast(i2) VALUES ($1)
+
+statement error integer out of range for type int2
+EXECUTE insert_i2(99999999)
+
+statement ok
+INSERT INTO assn_cast(f4) VALUES (18754999.99)
+
+statement ok
+PREPARE insert_f4 AS INSERT INTO assn_cast(f4) VALUES ($1)
+
+statement ok
+EXECUTE insert_f4(18754999.99)
+
+# TODO(mgartner): Values are not correctly truncated when cast to FLOAT4, either
+# in an assignment or explicit context. The columns should have a value of
+# 1.8755e+07. See #73743.
+query F
+SELECT f4 FROM assn_cast WHERE f4 IS NOT NULL
+----
+1.875499999e+07
+1.875499999e+07
+
 statement ok
 INSERT INTO assn_cast(t) VALUES ('1970-01-01'::timestamptz)
 
 statement ok
 INSERT INTO assn_cast(d) VALUES (11.22), (88.99)
+
+statement ok
+INSERT INTO assn_cast(d) VALUES (22.33::DECIMAL(10, 0)), (99.11::DECIMAL(10, 2))
+
+statement ok
+INSERT INTO assn_cast(d) VALUES (33.11::DECIMAL(10, 0)), (44.44::DECIMAL(10, 0))
 
 statement ok
 PREPARE insert_d AS INSERT INTO assn_cast(d) VALUES ($1)
@@ -164,8 +199,27 @@ SELECT d FROM assn_cast WHERE d IS NOT NULL
 ----
 11
 89
+22
+99
+33
+44
 123
 68
+
+statement ok
+INSERT INTO assn_cast(a) VALUES (ARRAY[])
+
+statement ok
+INSERT INTO assn_cast(a) VALUES (ARRAY[NULL])
+
+statement ok
+INSERT INTO assn_cast(a) VALUES (ARRAY[1.1])
+
+statement ok
+INSERT INTO assn_cast(a) VALUES (ARRAY[2.88, NULL, 15])
+
+statement ok
+INSERT INTO assn_cast(a) VALUES (ARRAY[3.99, NULL, 16]::DECIMAL(10, 2)[])
 
 statement ok
 INSERT INTO assn_cast(a) VALUES (ARRAY[5.55, 6.66::DECIMAL(10, 2)])
@@ -176,11 +230,30 @@ PREPARE insert_a AS INSERT INTO assn_cast(a) VALUES ($1)
 statement ok
 EXECUTE insert_a(ARRAY[7.77, 8.88::DECIMAL(10, 2)])
 
+statement ok
+PREPARE insert_a2 AS INSERT INTO assn_cast(a) VALUES (ARRAY[$1])
+
+statement ok
+EXECUTE insert_a2(20.2)
+
+statement ok
+PREPARE insert_a3 AS INSERT INTO assn_cast(a) VALUES (ARRAY[30.12, $1, 32.1])
+
+statement ok
+EXECUTE insert_a3(30.9)
+
 query T rowsort
 SELECT a FROM assn_cast WHERE a IS NOT NULL
 ----
+{}
+{NULL}
+{1}
+{3,NULL,15}
+{4,NULL,16}
 {6,7}
 {8,9}
+{20}
+{30,31,32}
 
 statement ok
 INSERT INTO assn_cast(s) VALUES (1)
@@ -192,6 +265,90 @@ PREPARE insert_s AS INSERT INTO assn_cast(s) VALUES ($1)
 statement error expected EXECUTE parameter expression to have type string, but \'1\' has type int
 EXECUTE insert_s(1)
 
+# Tests for assignment casts of DEFAULT expressions.
+subtest assignment_casts_default
+
+statement ok
+CREATE TABLE assn_cast_int_default (
+  k INT,
+  -- TODO(mgartner): This should not cause the CREATE TABLE statement to fail.
+  -- See #74090.
+  -- i1 INT2 DEFAULT 9999999,
+  i2 INT2 DEFAULT 9999999::INT
+)
+
+statement error integer out of range for type int2
+INSERT INTO assn_cast_int_default(k) VALUES (1)
+
+statement ok
+CREATE TABLE assn_cast_char_default (
+  c CHAR DEFAULT 'foo'::TEXT,
+  c2 CHAR(2) DEFAULT 'bar',
+  qc "char" DEFAULT 'baz'
+)
+
+# The default value of c is too long.
+statement error value too long for type CHAR
+INSERT INTO assn_cast_char_default(c2) VALUES ('ab')
+
+# The default value of c2 is too long.
+statement error value too long for type CHAR\(2\)
+INSERT INTO assn_cast_char_default(c) VALUES ('a')
+
+# The default value of qc is truncated when inserted.
+statement ok
+INSERT INTO assn_cast_char_default(c, c2) VALUES ('a', 'ab')
+
+query TTT
+SELECT * FROM assn_cast_char_default
+----
+a ab b
+
+statement ok
+CREATE TABLE assn_cast_dec_default (
+  k INT,
+  d DECIMAL(10, 0) DEFAULT 1.56::DECIMAL(10, 2),
+  d1 DECIMAL(10, 1) DEFAULT 1.58
+)
+
+statement ok
+INSERT INTO assn_cast_dec_default(k) VALUES (1)
+
+query IRR
+SELECT * FROM assn_cast_dec_default
+----
+1  2  1.6
+
+# Tests for assignment casts of computed columns.
+subtest assignment_casts_computed
+
+statement ok
+CREATE TABLE assn_cast_comp (
+  i INT,
+  i2 INT2 AS (i + 9999999) STORED,
+  t TEXT,
+  c CHAR AS (t) STORED,
+  d DECIMAL(10, 0),
+  d_comp DECIMAL(10, 2) AS (d) STORED,
+  d2 DECIMAL(10, 2),
+  d2_comp DECIMAL(10, 0) AS (d2) STORED
+)
+
+statement error integer out of range for type int2
+INSERT INTO assn_cast_comp(i) VALUES (1)
+
+statement error value too long for type CHAR
+INSERT INTO assn_cast_comp(t) VALUES ('foo')
+
+statement ok
+INSERT INTO assn_cast_comp(d, d2) VALUES (1.56, 2.78)
+
+query RRRR
+SELECT d, d_comp, d2, d2_comp FROM assn_cast_comp
+----
+2  2.00  2.78  3
+
+# Regression tests.
 subtest regressions
 
 statement ok
@@ -332,3 +489,37 @@ SELECT '-'::regclass, '-'::regclass::oid,
   '-'::regrole, '-'::regrole::oid
 ----
 -  0  -  0  -  0  -  0  -  0  -  0
+
+# Regression test for #73450. Eliding casts should not cause incorrect results.
+subtest regression_73450
+
+statement ok
+PREPARE s73450_a AS SELECT $1::INT2
+
+statement error integer out of range for type int2
+EXECUTE s73450_a(999999)
+
+statement ok
+PREPARE s73450_b AS SELECT $1::CHAR
+
+query T
+EXECUTE s73450_b('foo')
+----
+f
+
+statement ok
+CREATE TABLE t73450 (c CHAR);
+INSERT INTO t73450 VALUES ('f')
+
+query T
+SELECT * FROM t73450 WHERE c = 'foo'::CHAR
+----
+f
+
+statement ok
+PREPARE s73450_c AS SELECT * FROM t73450 WHERE c = $1::CHAR
+
+query T
+EXECUTE s73450_c('foo')
+----
+f

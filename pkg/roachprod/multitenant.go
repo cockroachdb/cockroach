@@ -11,6 +11,7 @@
 package roachprod
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -25,6 +26,7 @@ import (
 // The host and tenant can use the same underlying cluster, as long as different
 // subsets of nodes are selected (e.g. "local:1,2" and "local:3,4").
 func StartTenant(
+	ctx context.Context,
 	tenantCluster string,
 	hostCluster string,
 	startOpts install.StartOpts,
@@ -67,7 +69,7 @@ func StartTenant(
 	saveNodes := hc.Nodes
 	hc.Nodes = hc.Nodes[:1]
 	fmt.Printf("Creating tenant metadata\n")
-	if err := hc.RunSQL([]string{
+	if err := hc.RunSQL(ctx, []string{
 		`-e`,
 		fmt.Sprintf(createTenantIfNotExistsQuery, startOpts.TenantID),
 	}); err != nil {
@@ -80,7 +82,7 @@ func StartTenant(
 		kvAddrs = append(kvAddrs, fmt.Sprintf("%s:%d", hc.Host(node), hc.NodePort(node)))
 	}
 	startOpts.KVAddrs = strings.Join(kvAddrs, ",")
-	return tc.Start(startOpts)
+	return tc.Start(ctx, startOpts)
 }
 
 // createTenantIfNotExistsQuery is used to initialize the tenant metadata, if

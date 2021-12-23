@@ -104,10 +104,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: abc@abc_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abc (b);
 
 
 # 2/3 columns
@@ -279,10 +275,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: abc@abc_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON abc (a, c DESC, b);
 
 #################
 # With ORDER BY #
@@ -310,10 +302,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: xyz@xyz_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x);
 
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
@@ -337,10 +325,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: xyz@xyz_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (z) STORING (x, y);
 
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
@@ -366,10 +350,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: xyz@xyz_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x, z DESC, y DESC);
 
 #####################
 # With aggregations #
@@ -435,10 +415,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: xyz@xyz_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (y) STORING (x);
 
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
@@ -471,10 +447,6 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: xyz@xyz_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (y) STORING (x);
 
 #########################
 # With window functions #
@@ -622,10 +594,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: xyz@xyz_pkey
       spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x, y) STORING (z);
 
 query T
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
@@ -652,10 +620,6 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: xyz@xyz_pkey
               spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x) STORING (y, z);
 
 # Regression tests for #34112: distinct on constant column.
 query T
@@ -681,10 +645,6 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: xyz@xyz_pkey
           spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x) STORING (y);
 
 query T
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
@@ -717,7 +677,3 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: xyz@xyz_pkey
                   spans: FULL SCAN
-·
-index recommendations: 1
-1. type: index creation
-   SQL command: CREATE INDEX ON xyz (x) STORING (y);

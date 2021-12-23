@@ -16,8 +16,10 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +34,7 @@ func registerGORM(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
 			t.Fatal(err)
@@ -97,13 +99,6 @@ func registerGORM(r registry.Registry) {
 		}
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
-		// Write the cockroach config into the test suite to use.
-		if err := repeatRunE(
-			ctx, t, c, node, fmt.Sprintf(`echo "%s" > %s/tests_test.go`, gormTestHelperGoFile, gormTestPath),
-		); err != nil {
-			t.Fatal(err)
-		}
-
 		err = c.RunE(ctx, node, `./cockroach sql -e "CREATE DATABASE gorm" --insecure`)
 		require.NoError(t, err)
 
@@ -121,8 +116,8 @@ func registerGORM(r registry.Registry) {
 		err = c.RunE(
 			ctx,
 			node,
-			fmt.Sprintf(`cd %s && GORM_DIALECT="postgres"
-		PGUSER=root PGPORT=26257 PGSSLMODE=disable go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
+			fmt.Sprintf(`cd %s && GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port=26257 sslmode=disable"
+				go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
 				gormTestPath, goPath, resultsPath),
 		)
 		if err != nil {

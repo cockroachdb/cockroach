@@ -374,6 +374,12 @@ func WriteDescriptors(
 				return err
 			}
 			b.CPut(catalogkeys.EncodeNameKey(codec, desc), desc.GetID(), nil)
+
+			// We also have to put a system.namespace entry for the public schema
+			// if the database does not have a public schema backed by a descriptor.
+			if !desc.HasPublicSchemaWithDescriptor() {
+				b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
+			}
 		}
 
 		// Write namespace and descriptor entries for each schema.
@@ -967,15 +973,14 @@ func isSchemaEmpty(
 	return true, nil
 }
 
-func getTempSystemDBID(details jobspb.RestoreDetails) descpb.ID {
-	tempSystemDBID := keys.MinNonPredefinedUserDescID
+func getTempSystemDBID(details jobspb.RestoreDetails, idChecker keys.SystemIDChecker) descpb.ID {
+	tempSystemDBID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(idChecker))
 	for id := range details.DescriptorRewrites {
-		if int(id) > tempSystemDBID {
-			tempSystemDBID = int(id)
+		if id > tempSystemDBID {
+			tempSystemDBID = id
 		}
 	}
-
-	return descpb.ID(tempSystemDBID)
+	return tempSystemDBID
 }
 
 // spansForAllRestoreTableIndexes returns non-overlapping spans for every index
@@ -1106,7 +1111,7 @@ func createImportingDescriptors(
 
 	tempSystemDBID := descpb.InvalidID
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		tempSystemDBID = getTempSystemDBID(details)
+		tempSystemDBID = getTempSystemDBID(details, p.ExecCfg().SystemIDChecker)
 		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
 			security.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
 		databases = append(databases, tempSystemDB)
@@ -1322,11 +1327,8 @@ func createImportingDescriptors(
 					return err
 				}
 				db := desc.(*dbdesc.Mutable)
-				if db.Schemas == nil {
-					db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-				}
 				for _, sc := range schemas {
-					db.Schemas[sc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()}
+					db.AddSchemaToDatabase(sc.GetName(), descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()})
 				}
 				if err := descsCol.WriteDescToBatch(
 					ctx, false /* kvTrace */, db, b,
@@ -1551,15 +1553,7 @@ func remapPublicSchemas(
 			return err
 		}
 
-		if db.Schemas == nil {
-			db.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
-				tree.PublicSchema: {
-					ID: id,
-				},
-			}
-		} else {
-			db.Schemas[tree.PublicSchema] = descpb.DatabaseDescriptor_SchemaInfo{ID: id}
-		}
+		db.AddSchemaToDatabase(tree.PublicSchema, descpb.DatabaseDescriptor_SchemaInfo{ID: id})
 		// Every database must be initialized with the public schema.
 		// Create the SchemaDescriptor.
 		// In postgres, the user "postgres" is the owner of the public schema in a
@@ -1567,6 +1561,8 @@ func remapPublicSchemas(
 		// In CockroachDB, root is our substitute for the postgres user.
 		publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		// By default, everyone has USAGE and CREATE on the public schema.
+		// Once https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
+		// the public role will no longer have CREATE privilege.
 		publicSchemaPrivileges.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false)
 		publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 			ParentID:   db.GetID(),
@@ -1607,8 +1603,9 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 			const errorFmt = "job failed with error (%v) but is being paused due to the %s=%s setting"
 			log.Warningf(ctx, errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn)
 
-			return r.execCfg.JobRegistry.PauseRequested(ctx, nil, r.job.ID(),
-				fmt.Sprintf(errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn))
+			return jobs.MarkPauseRequestError(errors.Wrapf(err,
+				"pausing job due to the %s=%s setting",
+				restoreOptDebugPauseOn, details.DebugPauseOn))
 		}
 		return err
 	}
@@ -1916,7 +1913,15 @@ func revalidateIndexes(
 			}
 		}
 		if len(forward) > 0 {
-			if err := sql.ValidateForwardIndexes(ctx, tableDesc.MakePublic(), forward, runner, false, true, sessiondata.InternalExecutorOverride{}); err != nil {
+			if err := sql.ValidateForwardIndexes(
+				ctx,
+				tableDesc.MakePublic(),
+				forward,
+				runner,
+				false, /* withFirstMutationPublic */
+				true,  /* gatherAllInvalid */
+				sessiondata.InternalExecutorOverride{},
+			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
 					invalidIndexes[tableDesc.ID] = invalid.Indexes
 				} else {
@@ -1925,7 +1930,16 @@ func revalidateIndexes(
 			}
 		}
 		if len(inverted) > 0 {
-			if err := sql.ValidateInvertedIndexes(ctx, execCfg.Codec, tableDesc.MakePublic(), inverted, runner, true, sessiondata.InternalExecutorOverride{}); err != nil {
+			if err := sql.ValidateInvertedIndexes(
+				ctx,
+				execCfg.Codec,
+				tableDesc.MakePublic(),
+				inverted,
+				runner,
+				false, /* withFirstMutationPublic */
+				true,  /* gatherAllInvalid */
+				sessiondata.InternalExecutorOverride{},
+			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
 					invalidIndexes[tableDesc.ID] = append(invalidIndexes[tableDesc.ID], invalid.Indexes...)
 				} else {
@@ -2645,7 +2659,9 @@ func getRestorePrivilegesForTableOrSchema(
 
 		// TODO(dt): Make this more configurable.
 		immutableDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
-		updatedPrivileges = immutableDefaultPrivileges.CreatePrivilegesFromDefaultPrivileges(
+		updatedPrivileges = catprivilege.CreatePrivilegesFromDefaultPrivileges(
+			immutableDefaultPrivileges,
+			nil, /* schemaDefaultPrivilegeDescriptor */
 			parentDB.GetID(), user, tree.Tables, parentDB.GetPrivileges())
 	}
 	return updatedPrivileges, nil
@@ -2665,7 +2681,7 @@ func (r *restoreResumer) restoreSystemTables(
 	restoreDetails jobspb.RestoreDetails,
 	tables []catalog.TableDescriptor,
 ) error {
-	tempSystemDBID := getTempSystemDBID(restoreDetails)
+	tempSystemDBID := getTempSystemDBID(restoreDetails, r.execCfg.SystemIDChecker)
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.SystemTablesMigrated == nil {
 		details.SystemTablesMigrated = make(map[string]bool)

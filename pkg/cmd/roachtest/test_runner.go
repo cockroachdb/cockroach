@@ -36,8 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -179,7 +179,7 @@ func (r *testRunner) Run(
 		return fmt.Errorf("no test matched filters")
 	}
 
-	hasDevLicense := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "") != ""
+	hasDevLicense := config.CockroachDevLicense != ""
 	for _, t := range tests {
 		if t.RequiresLicense && !hasDevLicense {
 			return fmt.Errorf("test %q requires an enterprise license, set COCKROACH_DEV_LICENSE", t.Name)
@@ -565,11 +565,12 @@ elif [[ -e "${PERF_ARTIFACTS}" ]]; then
 else
     echo false
 fi'`
-			out, err := c.RunWithBuffer(ctx, l, c.Node(node), "bash", "-c", testCmd)
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "bash", "-c", testCmd)
 			if err != nil {
-				return errors.Wrapf(err, "failed to check for perf artifacts: %v", string(out))
+				return errors.Wrapf(err, "failed to check for perf artifacts")
 			}
-			switch out := strings.TrimSpace(string(out)); out {
+			out := strings.TrimSpace(result.Stdout)
+			switch out {
 			case "true":
 				dst := fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), node, perfArtifactsDir)
 				return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
@@ -819,8 +820,10 @@ func (r *testRunner) runTest(
 		if nodes := c.All(); len(nodes) > 0 { // avoid tests
 			innerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			// Send SIGQUIT to dump stacks (this is how CRDB handles it) followed by SIGKILL.
-			_ = c.StopE(innerCtx, c.All(), option.StopArgs("--sig=3"))
-			_ = c.StopE(innerCtx, c.All())
+			stopOpts := option.DefaultStopOpts()
+			stopOpts.RoachprodOpts.Sig = 3
+			_ = c.StopE(innerCtx, stopOpts, c.All())
+			_ = c.StopE(innerCtx, option.DefaultStopOpts(), c.All())
 			t.L().PrintfCtx(ctx, "CockroachDB nodes aborted; check the stderr log for goroutine stack traces")
 			cancel()
 		}
@@ -919,10 +922,11 @@ func (r *testRunner) maybePostGithubIssue(
 		projColID = teams[sl[0]].TriageColumnID
 	}
 
-	branch := "<unknown branch>"
-	if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
-		branch = b
+	branch := os.Getenv("TC_BUILD_BRANCH")
+	if branch == "" {
+		branch = "<unknown branch>"
 	}
+
 	msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
 		branch, t.Spec().(*registry.TestSpec).Cluster.Cloud, output)
 	artifacts := fmt.Sprintf("/%s", t.Name())
@@ -1077,7 +1081,7 @@ func (r *testRunner) getWork(
 		if err := c.WipeE(ctx, l); err != nil {
 			return testToRunRes{}, nil, err
 		}
-		if err := c.RunL(ctx, l, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
+		if err := c.RunE(ctx, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
 			return testToRunRes{}, nil, errors.Wrapf(err, "failed to remove perf artifacts dir")
 		}
 		if c.localCertsDir != "" {

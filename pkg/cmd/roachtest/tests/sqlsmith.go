@@ -21,9 +21,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -90,7 +93,7 @@ func registerSQLSmith(r registry.Registry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatalf("could not initialize libraries: %v", err)
 		}
-		c.Start(ctx)
+		c.Start(ctx, option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		setupFunc, ok := setups[setupName]
 		if !ok {
@@ -115,6 +118,38 @@ func registerSQLSmith(r registry.Registry) {
 			t.Fatal(err)
 		} else {
 			logStmt(setup)
+		}
+
+		if settingName == "multi-region" {
+			regionsSet := make(map[string]struct{})
+			var region, zone string
+			rows, err := conn.Query("SHOW REGIONS FROM CLUSTER")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for rows.Next() {
+				if err := rows.Scan(&region, &zone); err != nil {
+					t.Fatal(err)
+				}
+				regionsSet[region] = struct{}{}
+			}
+
+			var regionList []string
+			for region := range regionsSet {
+				regionList = append(regionList, region)
+			}
+
+			if len(regionList) == 0 {
+				t.Fatal(errors.New("no regions, cannot run multi-region config"))
+			}
+
+			if _, err := conn.Exec(
+				fmt.Sprintf(`ALTER DATABASE defaultdb SET PRIMARY REGION "%s";
+ALTER TABLE seed_mr_table SET LOCALITY REGIONAL BY ROW;
+INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		const timeout = time.Minute
@@ -247,11 +282,17 @@ func registerSQLSmith(r registry.Registry) {
 	}
 
 	register := func(setup, setting string) {
+		var clusterSpec spec.ClusterSpec
+		if strings.Contains(setting, "multi-region") {
+			clusterSpec = r.MakeClusterSpec(numNodes, spec.Geo())
+		} else {
+			clusterSpec = r.MakeClusterSpec(numNodes)
+		}
 		r.Add(registry.TestSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:   registry.OwnerSQLQueries,
-			Cluster: r.MakeClusterSpec(numNodes),
+			Cluster: clusterSpec,
 			Timeout: time.Minute * 20,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
@@ -265,8 +306,11 @@ func registerSQLSmith(r registry.Registry) {
 		}
 	}
 	setups["seed-vec"] = sqlsmith.Setups["seed-vec"]
+	setups["seed-multi-region"] = sqlsmith.Setups["seed-multi-region"]
 	settings["ddl-nodrop"] = sqlsmith.Settings["ddl-nodrop"]
 	settings["vec"] = sqlsmith.SettingVectorize
+	settings["multi-region"] = sqlsmith.Settings["multi-region"]
 	register("seed-vec", "vec")
 	register("tpcc", "ddl-nodrop")
+	register("seed-multi-region", "multi-region")
 }

@@ -28,7 +28,7 @@ type testingB interface {
 
 	// logScope is used to wrap log.Scope and make it available only in
 	// appropriate contexts.
-	logScope() func()
+	logScope() (getDirectory func() string, close func())
 }
 
 type bShim struct {
@@ -37,9 +37,9 @@ type bShim struct {
 
 var _ testingB = bShim{}
 
-func (b bShim) logScope() func() {
+func (b bShim) logScope() (getDirectory func() string, close func()) {
 	sc := log.Scope(b)
-	return func() { sc.Close(b) }
+	return sc.GetDirectory, func() { sc.Close(b) }
 }
 func (b bShim) N() int { return b.B.N }
 func (b bShim) Run(name string, f func(b testingB)) {
@@ -54,13 +54,17 @@ func (b bShim) Run(name string, f func(b testingB)) {
 // execution.
 type tShim struct {
 	*testing.T
+	scope   *log.TestLogScope
 	results *resultSet
 }
 
 var _ testingB = tShim{}
 
-func (ts tShim) logScope() func() {
-	return func() {}
+func (ts tShim) logScope() (getDirectory func() string, close func()) {
+	return ts.scope.GetDirectory, func() {}
+}
+func (ts tShim) GetDirectory() string {
+	return ts.scope.GetDirectory()
 }
 func (ts tShim) N() int      { return 1 }
 func (ts tShim) ResetTimer() {}
@@ -81,6 +85,6 @@ func (ts tShim) Name() string {
 }
 func (ts tShim) Run(s string, f func(testingB)) {
 	ts.T.Run(s, func(t *testing.T) {
-		f(tShim{results: ts.results, T: t})
+		f(tShim{results: ts.results, T: t, scope: ts.scope})
 	})
 }
