@@ -2,5 +2,6 @@
 set -e
 
 if [ "$1" != "$2" ]; then # previous ref != new ref.
+  git clean pkg -fd
   exec git submodule update --init --recursive
 fi
