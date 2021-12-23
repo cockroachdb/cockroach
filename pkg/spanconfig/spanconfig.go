@@ -181,14 +181,6 @@ type Reconciler interface {
 	Checkpoint() hlc.Timestamp
 }
 
-// ReconciliationDependencies captures what's needed by the span config
-// reconciliation job to perform its task. The job is responsible for
-// reconciling a tenant's zone configurations with the clusters span
-// configurations.
-type ReconciliationDependencies interface {
-	Reconciler
-}
-
 // Store is a data structure used to store spans and their corresponding
 // configs.
 type Store interface {
