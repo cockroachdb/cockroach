@@ -383,10 +383,10 @@ func (sb *statisticsBuilder) colStatFromInput(
 }
 
 // colStat gets a column statistic for the given set of columns if it exists.
-// If the column statistic is not available in the current expression, colStat
-// recursively tries to find it in the children of the expression, lazily
-// populating s.ColStats with the statistic as it gets passed up the expression
-// tree.
+// If the column statistic is not available in the current expression,
+// colStat recursively tries to find it in the children of the expression,
+// lazily populating s.ColStats with the statistic as it gets passed up the
+// expression tree.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.ColumnStatistic {
 	if colSet.Empty() {
 		panic(errors.AssertionFailedf("column statistics cannot be determined for empty column set"))
@@ -397,7 +397,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return stat
 	}
 
-	// We only calculate statistics on the normalized expression in a memo group.
+	// Only calculate statistics on the normalized expression in a memo group.
 	e = e.FirstExpr()
 
 	// The statistic was not found in the cache, so calculate it based on the
