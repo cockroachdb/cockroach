@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -129,8 +130,12 @@ func startReplicationStreamJob(
 	statementTime := hlc.Timestamp{
 		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
 	}
+
+	deprecatedSpansToProtect := roachpb.Spans{*makeTenantSpan(tenantID)}
+	targetToProtect := ptpb.MakeRecordTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(tenantID)})
+
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
-		[]roachpb.Span{*makeTenantSpan(tenantID)}, jobsprotectedts.Jobs)
+		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 
 	if err := ptp.Protect(evalCtx.Ctx(), txn, pts); err != nil {
 		return streaming.InvalidStreamID, err

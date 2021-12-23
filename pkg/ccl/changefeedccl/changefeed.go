@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -64,10 +66,24 @@ func createProtectedTimestampRecord(
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
 		progress.ProtectedTimestampRecord, resolved)
-	spansToProtect := makeSpansToProtect(codec, targets)
+	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
+	targetToProtect := makeTargetToProtect(targets)
 	rec := jobsprotectedts.MakeRecord(
-		progress.ProtectedTimestampRecord, int64(jobID), resolved, spansToProtect, jobsprotectedts.Jobs)
+		progress.ProtectedTimestampRecord, int64(jobID), resolved, deprecatedSpansToProtect,
+		jobsprotectedts.Jobs, targetToProtect)
 	return pts.Protect(ctx, txn, rec)
+}
+
+func makeTargetToProtect(targets jobspb.ChangefeedTargets) *ptpb.Target {
+	// NB: We add 1 because we're also going to protect system.descriptors.
+	// We protect system.descriptors because a changefeed needs all of the history
+	// of table descriptors to version data.
+	tablesToProtect := make(descpb.IDs, 0, len(targets)+1)
+	for t := range targets {
+		tablesToProtect = append(tablesToProtect, t)
+	}
+	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID)
+	return ptpb.MakeRecordSchemaObjectsTarget(tablesToProtect)
 }
 
 func makeSpansToProtect(codec keys.SQLCodec, targets jobspb.ChangefeedTargets) []roachpb.Span {
