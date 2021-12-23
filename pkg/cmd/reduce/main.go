@@ -17,7 +17,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -27,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
-	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
+	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
+	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -130,10 +129,10 @@ func reduceSQL(
 		return "", err
 	}
 
-	var logger io.Writer
+	var logger *log.Logger
 	if verbose {
-		logger = os.Stderr
-		fmt.Fprintf(logger, "input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
+		logger = log.New(os.Stderr, "", 0)
+		logger.Printf("input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
 	}
 
 	var chunkReducer reduce.ChunkReducer
@@ -142,11 +141,13 @@ func reduceSQL(
 	}
 
 	isInteresting := func(ctx context.Context, sql string) (interesting bool, logOriginalHint func()) {
-		// Disable telemetry and license generation.
+		// Disable telemetry and license generation. Do not exit on errors so
+		// the entirety of the input SQL is processed.
 		cmd := exec.CommandContext(ctx, binary,
 			"demo",
 			"--empty",
 			"--disable-demo-license",
+			"--set=errexit=false",
 		)
 		cmd.Env = []string{"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", "true"}
 		if !strings.HasSuffix(sql, ";") {
@@ -164,7 +165,7 @@ func reduceSQL(
 		}
 		if verbose {
 			logOriginalHint = func() {
-				fmt.Fprintf(logger, "output did not match regex %s:\n\n%s", contains, string(out))
+				logger.Printf("output did not match regex %s:\n\n%s", contains, string(out))
 			}
 		}
 		return containsRE.Match(out), logOriginalHint

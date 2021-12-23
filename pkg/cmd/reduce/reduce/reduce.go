@@ -16,8 +16,7 @@ package reduce
 
 import (
 	"context"
-	"fmt"
-	"io"
+	"log"
 	"math/rand"
 	"runtime"
 
@@ -79,7 +78,7 @@ const (
 // log progress output. numGoroutines is the number of parallel workers, or 0
 // for GOMAXPROCS.
 func Reduce(
-	logger io.Writer,
+	logger *log.Logger,
 	originalTestCase string,
 	isInteresting InterestingFn,
 	numGoroutines int,
@@ -136,10 +135,7 @@ func Reduce(
 				}
 				for {
 					variant, result, err := p.Transform(current, state)
-					if err != nil {
-						return err
-					}
-					if result != OK {
+					if err != nil || result != OK {
 						state = nil
 						break
 					}
@@ -199,8 +195,10 @@ func Reduce(
 			var ierr errInteresting
 			if errors.As(err, &ierr) {
 				vs := varState(ierr)
-				log(logger, "\tpass %d of %d (%s): %d bytes\n", vs.pi+1, len(passList),
-					passList[vs.pi].Name(), len(vs.file))
+				if logger != nil {
+					logger.Printf("\tpass %d of %d (%s): %d bytes\n", vs.pi+1, len(passList),
+						passList[vs.pi].Name(), len(vs.file))
+				}
 				return &vs, nil
 			}
 			return nil, err
@@ -212,13 +210,18 @@ func Reduce(
 	vs := varState{
 		file: chunkReducedTestCase,
 	}
-	log(logger, "size: %d\n", len(vs.file))
+	if logger != nil {
+		logger.Printf("size: %d\n", len(vs.file))
+	}
 	for {
 		sizeAtStart := len(vs.file)
 		foundInteresting := false
 		for {
 			next, err := findNextInteresting(vs)
 			if err != nil {
+				if logger != nil {
+					logger.Printf("unexpected error: %s", err)
+				}
 				//nolint:returnerrcheck
 				return "", nil
 			}
@@ -247,21 +250,16 @@ func Reduce(
 			file: vs.file,
 		}
 	}
-	log(logger, "total time: %v\n", timeutil.Since(start))
-	log(logger, "original size: %v\n", len(originalTestCase))
-	if chunkReducer != nil {
-		log(logger, "chunk-reduced size: %v\n", len(chunkReducedTestCase))
+	if logger != nil {
+		logger.Printf("total time: %v\n", timeutil.Since(start))
+		logger.Printf("original size: %v\n", len(originalTestCase))
+		if chunkReducer != nil {
+			logger.Printf("chunk-reduced size: %v\n", len(chunkReducedTestCase))
+		}
+		logger.Printf("final size: %v\n", len(vs.file))
+		logger.Printf("reduction: %v%%\n", 100-int(100*float64(len(vs.file))/float64(len(originalTestCase))))
 	}
-	log(logger, "final size: %v\n", len(vs.file))
-	log(logger, "reduction: %v%%\n", 100-int(100*float64(len(vs.file))/float64(len(originalTestCase))))
 	return vs.file, nil
-}
-
-func log(logger io.Writer, format string, args ...interface{}) {
-	if logger == nil {
-		return
-	}
-	fmt.Fprintf(logger, format, args...)
 }
 
 // errInteresting is an error version of varState that is a special sentinel
@@ -312,7 +310,10 @@ type ChunkReducer interface {
 // reduce segments until it fails to reduce chunkReducer.HaltAfter() times in a
 // row.
 func attemptChunkReduction(
-	logger io.Writer, originalTestCase string, isInteresting InterestingFn, chunkReducer ChunkReducer,
+	logger *log.Logger,
+	originalTestCase string,
+	isInteresting InterestingFn,
+	chunkReducer ChunkReducer,
 ) (string, error) {
 	if chunkReducer == nil {
 		return originalTestCase, nil
@@ -335,7 +336,9 @@ func attemptChunkReduction(
 		localReduced := chunkReducer.DeleteSegments(start, end)
 		if interesting, _ := isInteresting(ctx, localReduced); interesting {
 			reduced = localReduced
-			log(logger, "\tchunk reduction: %d bytes\n", len(reduced))
+			if logger != nil {
+				logger.Printf("\tchunk reduction: %d bytes\n", len(reduced))
+			}
 			failedAttempts = 0
 		} else {
 			failedAttempts++

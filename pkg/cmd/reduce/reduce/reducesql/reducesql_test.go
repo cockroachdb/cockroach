@@ -18,10 +18,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
+	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils/reduce"
-	"github.com/cockroachdb/cockroach/pkg/testutils/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/jackc/pgx/v4"
 )
