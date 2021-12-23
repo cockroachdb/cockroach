@@ -1029,7 +1029,7 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 		name,
 		typ,
 		true, /* nullable */
-		cat.Hidden,
+		cat.Inaccessible,
 		exprStr,
 	)
 	tt.Columns = append(tt.Columns, col)
