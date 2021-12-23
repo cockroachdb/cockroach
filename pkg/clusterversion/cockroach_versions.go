@@ -223,7 +223,7 @@ const (
 	// This version comes with a migration to populate the same seed data
 	// for existing tenants.
 	SeedTenantSpanConfigs
-	// Public schema is backed by a descriptor.
+	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors
 	// AlterSystemProtectedTimestampAddColumn adds a target column to the
 	// system.protected_ts_records table that describes what is protected by the
