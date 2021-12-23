@@ -670,3 +670,67 @@ vectorized: true
                           estimated row count: 333 (missing stats)
                           table: source@source_y_z_idx
                           spans: /NULL-/!NULL /1-
+
+# Test to make sure hash sharded index is used for uniqueness check
+subtest hash_index_unique_constraint
+
+statement ok
+set experimental_enable_hash_sharded_indexes = on
+
+statement ok
+CREATE TABLE t_hash_indexed (
+  a INT8 PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8,
+  b INT8 NOT NULL
+);
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO UPDATE SET b = 8765
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_hash_indexed(crdb_internal_a_shard_8, a, b)
+│ auto commit
+│ arbiter constraints: t_hash_indexed_pkey
+│
+└── • project
+    │ columns: (crdb_internal_a_shard_8_comp, column1, column2, crdb_internal_a_shard_8, a, b, upsert_b, crdb_internal_a_shard_8, check1)
+    │
+    └── • render
+        │ columns: (check1, upsert_b, column1, column2, crdb_internal_a_shard_8_comp, crdb_internal_a_shard_8, a, b)
+        │ estimated row count: 1 (missing stats)
+        │ render check1: CASE WHEN crdb_internal_a_shard_8 IS NULL THEN crdb_internal_a_shard_8_comp ELSE crdb_internal_a_shard_8 END IN (0, 1, 2, 3, 4, 5, 6, 7)
+        │ render upsert_b: CASE WHEN crdb_internal_a_shard_8 IS NULL THEN column2 ELSE 8765 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render crdb_internal_a_shard_8_comp: crdb_internal_a_shard_8_comp
+        │ render crdb_internal_a_shard_8: crdb_internal_a_shard_8
+        │ render a: a
+        │ render b: b
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, column2, crdb_internal_a_shard_8_comp, crdb_internal_a_shard_8, a, b)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, column2, crdb_internal_a_shard_8_comp)
+            │     size: 3 columns, 1 row
+            │     row 0, expr 0: 4321
+            │     row 0, expr 1: 8765
+            │     row 0, expr 2: 1
+            │
+            └── • render
+                │ columns: (crdb_internal_a_shard_8, a, b)
+                │ estimated row count: 1 (missing stats)
+                │ render crdb_internal_a_shard_8: mod(fnv32(crdb_internal.datums_to_bytes(a)), 8)
+                │ render a: a
+                │ render b: b
+                │
+                └── • scan
+                      columns: (a, b)
+                      estimated row count: 1 (missing stats)
+                      table: t_hash_indexed@t_hash_indexed_pkey
+                      spans: /1/4321/0
