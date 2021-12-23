@@ -4034,6 +4034,7 @@ backslash_quote                                       safe_encoding       NULL  
 bytea_output                                          hex                 NULL      NULL        NULL        string
 client_encoding                                       UTF8                NULL      NULL        NULL        string
 client_min_messages                                   notice              NULL      NULL        NULL        string
+cost_scans_with_default_col_size                      off                 NULL      NULL        NULL        string
 database                                              test                NULL      NULL        NULL        string
 datestyle                                             ISO, MDY            NULL      NULL        NULL        string
 datestyle_enabled                                     off                 NULL      NULL        NULL        string
@@ -4142,6 +4143,7 @@ backslash_quote                                       safe_encoding       NULL  
 bytea_output                                          hex                 NULL  user     NULL      hex                 hex
 client_encoding                                       UTF8                NULL  user     NULL      UTF8                UTF8
 client_min_messages                                   notice              NULL  user     NULL      notice              notice
+cost_scans_with_default_col_size                      off                 NULL  user     NULL      off                 off
 database                                              test                NULL  user     NULL      ·                   test
 datestyle                                             ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
 datestyle_enabled                                     off                 NULL  user     NULL      off                 off
@@ -4244,6 +4246,7 @@ backslash_quote                                       NULL    NULL     NULL     
 bytea_output                                          NULL    NULL     NULL     NULL        NULL
 client_encoding                                       NULL    NULL     NULL     NULL        NULL
 client_min_messages                                   NULL    NULL     NULL     NULL        NULL
+cost_scans_with_default_col_size                      NULL    NULL     NULL     NULL        NULL
 crdb_version                                          NULL    NULL     NULL     NULL        NULL
 database                                              NULL    NULL     NULL     NULL        NULL
 datestyle                                             NULL    NULL     NULL     NULL        NULL
