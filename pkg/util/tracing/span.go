@@ -43,8 +43,8 @@ const (
 // The CockroachDB-internal Span (crdbSpan) is more complex because
 // rather than reporting to some external sink, the caller's "owner"
 // must propagate the trace data back across process boundaries towards
-// the root of the trace span tree; see WithParent
-// and WithRemoteParent, respectively.
+// the root of the trace span tree; see WithParent and WithRemoteParent,
+// respectively.
 //
 // Additionally, the internal span type also supports turning on, stopping,
 // and restarting its data collection (see Span.StartRecording), and this is
@@ -78,7 +78,7 @@ func (sp *Span) IsNoop() bool {
 // been configured to not tolerate use-after-Finish, it crashes.
 //
 // Exported methods on Span are supposed to call this and short-circuit if true
-// is returrned.
+// is returned.
 func (sp *Span) detectUseAfterFinish() bool {
 	if sp == nil {
 		return true
@@ -116,7 +116,7 @@ func (sp *Span) Redactable() bool {
 	return sp.Tracer().Redactable()
 }
 
-// Finish marks the Span as completed. Its illegal to use a Span after calling
+// Finish marks the Span as completed. It's illegal to use a Span after calling
 // Finish().
 //
 // Finishing a nil *Span is a noop.

@@ -173,7 +173,7 @@ type TracingMode int
 const (
 	// TracingModeFromEnv configures tracing according to enableTracingByDefault.
 	TracingModeFromEnv TracingMode = iota
-	// TracingModeOnDemand means that Spans will no be created unless there's a
+	// TracingModeOnDemand means that Spans will not be created unless there's a
 	// particular reason to create them (i.e. a span being created with
 	// WithForceRealSpan(), a net.Trace or OpenTelemetry tracers attached).
 	TracingModeOnDemand
@@ -199,10 +199,6 @@ const (
 // Even when tracing is disabled, we still use this Tracer (with x/net/trace and
 // lightstep disabled) because of its recording capability (verbose tracing needs
 // to work in all cases).
-//
-// Tracer is currently stateless so we could have a single instance; however,
-// this won't be the case if the cluster settings move away from using global
-// state.
 type Tracer struct {
 	// Preallocated noopSpans, used to avoid creating spans when we are not using
 	// x/net/trace or OpenTelemetry and we are not recording.
@@ -211,8 +207,8 @@ type Tracer struct {
 
 	tracingDefault TracingMode
 
-	// backardsCompatibilityWith211, if set, makes the Tracer
-	// work with 21.1 remote nodes.
+	// backwardsCompatibilityWith211, if set, makes the Tracer work with 21.1
+	// remote nodes.
 	//
 	// Accessed atomically.
 	backwardsCompatibilityWith211 int64
@@ -236,6 +232,7 @@ type Tracer struct {
 	// i.e. those for which no WithParent(<non-nil>) option was supplied.
 	activeSpansRegistry *spanRegistry
 
+	testing                 TracerTestingKnobs
 	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
 	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
@@ -250,8 +247,6 @@ type Tracer struct {
 	// to help debug use-after-Finish() bugs - stack traces will be collected and
 	// stored on every Span.Finish().
 	debugUseAfterFinish bool
-
-	testing TracerTestingKnobs
 
 	// stack is populated in NewTracer and is printed in assertions related to
 	// mixing tracers.
@@ -1195,34 +1190,37 @@ func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	if sp == nil {
 		return ctx, nil
 	}
-	opts := make([]SpanOption, 0, 3)
+	opts := newOpts()
+	defer releaseOpts(opts)
 	if sp.Tracer().ShouldRecordAsyncSpans() {
-		opts = append(opts, WithParent(sp))
+		*opts = append(*opts, WithParent(sp))
 	} else {
-		opts = append(opts, WithParent(sp), WithDetachedRecording())
+		*opts = append(*opts, WithParent(sp), WithDetachedRecording())
 	}
-	opts = append(opts, WithFollowsFrom())
-	return sp.Tracer().StartSpanCtx(ctx, opName, opts...)
+	*opts = append(*opts, WithFollowsFrom())
+	return sp.Tracer().StartSpanCtx(ctx, opName, *opts...)
 }
 
 // EnsureForkSpan is like ForkSpan except that, if there is no span in ctx, it
 // creates a root span.
 func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
-	var opts []SpanOption
+	opts := &noOpts
 	// If there's a span in ctx, we use it as a parent.
 	if sp != nil {
 		tr = sp.Tracer()
+		opts = newOpts()
+		defer releaseOpts(opts)
 		if tr.ShouldRecordAsyncSpans() {
-			opts = append(opts, WithParent(sp))
+			*opts = append(*opts, WithParent(sp))
 		} else {
 			// Using auto collection here ensures that recordings from async spans
 			// also show up at the parent.
-			opts = append(opts, WithParent(sp), WithDetachedRecording())
+			*opts = append(*opts, WithParent(sp), WithDetachedRecording())
 		}
-		opts = append(opts, WithFollowsFrom())
+		*opts = append(*opts, WithFollowsFrom())
 	}
-	return tr.StartSpanCtx(ctx, opName, opts...)
+	return tr.StartSpanCtx(ctx, opName, *opts...)
 }
 
 // ChildSpan creates a child span of the current one, if any. Recordings from
@@ -1249,20 +1247,14 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 func EnsureChildSpan(
 	ctx context.Context, tr *Tracer, name string, os ...SpanOption,
 ) (context.Context, *Span) {
-	slp := optsPool.Get().(*[]SpanOption)
-	*slp = append(*slp, WithParent(SpanFromContext(ctx)))
-	*slp = append(*slp, os...)
-	ctx, sp := tr.StartSpanCtx(ctx, name, *slp...)
-	// Clear and zero-length the slice. Note that we have to clear
-	// explicitly or the options will continue to be referenced by
-	// the slice.
-	for i := range *slp {
-		(*slp)[i] = nil
-	}
-	*slp = (*slp)[0:0:cap(*slp)]
-	optsPool.Put(slp)
-	return ctx, sp
+	opts := newOpts()
+	defer releaseOpts(opts)
+	*opts = append(*opts, WithParent(SpanFromContext(ctx)))
+	*opts = append(*opts, os...)
+	return tr.StartSpanCtx(ctx, name, *opts...)
 }
+
+var noOpts []SpanOption
 
 var optsPool = sync.Pool{
 	New: func() interface{} {
@@ -1272,14 +1264,28 @@ var optsPool = sync.Pool{
 	},
 }
 
+func newOpts() *[]SpanOption {
+	return optsPool.Get().(*[]SpanOption)
+}
+
+func releaseOpts(opts *[]SpanOption) {
+	// Clear and zero-length the slice. Note that we have to clear
+	// explicitly or the options will continue to be referenced by
+	// the slice.
+	for i := range *opts {
+		(*opts)[i] = nil
+	}
+	*opts = (*opts)[:0]
+	optsPool.Put(opts)
+}
+
 // StartVerboseTrace takes in a context and returns a derived one with a
 // Span in it that is recording verbosely. The caller takes ownership of
 // this Span from the returned context and is in charge of Finish()ing it.
 //
 // TODO(tbg): remove this method. It adds very little over EnsureChildSpan.
 func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
-	ctx, sp := EnsureChildSpan(ctx, tr, opName, WithRecording(RecordingVerbose))
-	return ctx, sp
+	return EnsureChildSpan(ctx, tr, opName, WithRecording(RecordingVerbose))
 }
 
 // ContextWithRecordingSpan returns a context with an embedded trace Span. The

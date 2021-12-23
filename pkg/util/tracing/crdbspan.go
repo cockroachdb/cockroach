@@ -633,16 +633,14 @@ func (s *crdbSpan) addChildLocked(child *crdbSpan, collectChildRec bool) bool {
 func (s *crdbSpan) childFinished(child *crdbSpan) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var childIdx int
-	found := false
+	childIdx := -1
 	for i, c := range s.mu.openChildren {
 		if c.crdbSpan == child {
 			childIdx = i
-			found = true
 			break
 		}
 	}
-	if !found {
+	if childIdx == -1 {
 		panic("child not present in parent")
 	}
 

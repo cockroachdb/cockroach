@@ -337,7 +337,7 @@ func WithRecording(recType RecordingType) SpanOption {
 	case RecordingOff:
 		panic("invalid recording option: RecordingOff")
 	default:
-		recCpy := recType // copy excaping to the heap
+		recCpy := recType // copy escaping to the heap
 		panic(fmt.Sprintf("invalid recording option: %d", recCpy))
 	}
 }
