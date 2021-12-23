@@ -680,10 +680,10 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		}
 	}
 
-	// Scanning an index with a few columns is faster than scanning an index with
-	// many columns. Ideally, we would want to use statistics about the size of
-	// each column. In lieu of that, use the number of columns.
-	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
+	// Each lookup might retrieve many rows; add the IO cost of retrieving the
+	// rows (relevant when we expect many resulting rows per lookup) and the CPU
+	// cost of emitting the rows.
+	perRowCost := c.rowScanCost(memo.RelExpr(scan), scan.Table, scan.Index, scan.Cols, stats)
 
 	numSpans := 1
 	if scan.Constraint != nil {
@@ -996,9 +996,9 @@ func (c *coster) computeIndexLookupJoinCost(
 	// cost of emitting the rows.
 	// TODO(harding): Add the cost of reading all columns in the lookup table when
 	// we cost rows by column size.
-	numLookupCols := cols.Difference(input.Relational().OutputCols).Len()
+	lookupCols := cols.Difference(input.Relational().OutputCols)
 	perRowCost := lookupJoinRetrieveRowCost + filterPerRow +
-		c.rowScanCost(table, index, numLookupCols)
+		c.rowScanCost(join, table, index, lookupCols, join.Relational().Stats)
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
 
@@ -1073,9 +1073,9 @@ func (c *coster) computeInvertedJoinCost(
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
 	// rows (relevant when we expect many resulting rows per lookup) and the CPU
 	// cost of emitting the rows.
-	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
+	lookupCols := join.Cols.Difference(join.Input.Relational().OutputCols)
 	perRowCost := lookupJoinRetrieveRowCost + filterPerRow +
-		c.rowScanCost(join.Table, join.Index, numLookupCols)
+		c.rowScanCost(join, join.Table, join.Index, lookupCols, join.Relational().Stats)
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
 	return cost
@@ -1126,19 +1126,19 @@ func (c *coster) computeFiltersCost(
 func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	rowCount := join.Relational().Stats.RowCount
 
-	// Assume the upper bound on scan cost to be the sum of the cost of
-	// scanning the two constituent indexes. To determine how many columns
-	// are returned from each scan, intersect the output column set join.Cols
-	// with each side's IndexColumns. Columns present in both indexes are
-	// projected from the left side only.
+	// Assume the upper bound on scan cost to be the sum of the cost of scanning
+	// the two constituent indexes. To determine which columns are returned from
+	// each scan, intersect the output column set join.Cols with each side's
+	// IndexColumns. Columns present in both indexes are projected from the left
+	// side only.
 	md := c.mem.Metadata()
 	leftCols := md.TableMeta(join.LeftTable).IndexColumns(join.LeftIndex)
 	leftCols.IntersectionWith(join.Cols)
 	rightCols := md.TableMeta(join.RightTable).IndexColumns(join.RightIndex)
 	rightCols.IntersectionWith(join.Cols)
 	rightCols.DifferenceWith(leftCols)
-	scanCost := c.rowScanCost(join.LeftTable, join.LeftIndex, leftCols.Len())
-	scanCost += c.rowScanCost(join.RightTable, join.RightIndex, rightCols.Len())
+	scanCost := c.rowScanCost(join, join.LeftTable, join.LeftIndex, leftCols, join.Relational().Stats)
+	scanCost += c.rowScanCost(join, join.RightTable, join.RightIndex, rightCols, join.Relational().Stats)
 
 	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
 
@@ -1333,10 +1333,12 @@ func (c *coster) rowCmpCost(numKeyCols int) memo.Cost {
 	return memo.Cost(cost)
 }
 
-// rowScanCost is the CPU cost to scan one row, which depends on the number of
-// columns in the index and (to a lesser extent) on the number of columns we are
+// rowScanCost is the CPU cost to scan one row, which depends on the average
+// size of the columns in the index and the average size of the columns we are
 // scanning.
-func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) memo.Cost {
+func (c *coster) rowScanCost(
+	expr memo.RelExpr, tabID opt.TableID, idxOrd int, scannedCols opt.ColSet, stats props.Statistics,
+) memo.Cost {
 	md := c.mem.Metadata()
 	tab := md.Table(tabID)
 	idx := tab.Index(idxOrd)
@@ -1364,7 +1366,32 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 	// more data to scan. The number of columns we actually return also matters
 	// because that is the amount of data that we could potentially transfer over
 	// the network.
-	return memo.Cost(numCols+numScannedCols) * costFactor
+	if c.evalCtx != nil && c.evalCtx.SessionData().CostScansWithDefaultColSize {
+		numScannedCols := scannedCols.Len()
+		return memo.Cost(numCols+numScannedCols) * costFactor
+	}
+	var cost memo.Cost
+	for i := 0; i < idx.ColumnCount(); i++ {
+		colID := tabID.ColumnID(idx.Column(i).Ordinal())
+		isScannedCol := scannedCols.Contains(colID)
+		isSystemCol := idx.Column(i).Kind() == cat.System
+		if isSystemCol && !isScannedCol {
+			continue
+		}
+		colSet := opt.MakeColSet(colID)
+		colStat, ok := c.mem.RequestColStatTable(tabID, colSet)
+		if !ok {
+			panic(errors.AssertionFailedf("could not request the stats for ColSet %v", colSet))
+		}
+		// Scanned columns are double-counted due to the cost of transferring data
+		// over the network.
+		var networkCostFactor memo.Cost = 1
+		if isScannedCol && !isSystemCol {
+			networkCostFactor = 2
+		}
+		cost += memo.Cost(colStat.AvgSize/4) * costFactor * networkCostFactor
+	}
+	return cost
 }
 
 // rowBufferCost adds a cost for buffering rows according to a ramp function:

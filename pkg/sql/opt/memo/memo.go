@@ -204,6 +204,14 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.logPropsBuilder.init(evalCtx, m)
 }
 
+// ResetLogProps resets the logPropsBuilder. It should be used in combination
+// with the perturb-cost OptTester flag in order to update the query plan tree
+// after optimization is complete with the real computed cost, not the perturbed
+// cost.
+func (m *Memo) ResetLogProps(evalCtx *tree.EvalContext) {
+	m.logPropsBuilder.init(evalCtx, m)
+}
+
 // NotifyOnNewGroup sets a callback function which is invoked each time we
 // create a new memo group.
 func (m *Memo) NotifyOnNewGroup(fn func(opt.Expr)) {
@@ -405,6 +413,19 @@ func (m *Memo) RequestColStat(
 	// If this happens, we can't serve the request anymore.
 	if m.logPropsBuilder.sb.md != nil {
 		return m.logPropsBuilder.sb.colStat(cols, expr), true
+	}
+	return nil, false
+}
+
+// RequestColStatTable calculates and returns the column statistic in table
+// tabId.
+func (m *Memo) RequestColStatTable(
+	tabID opt.TableID, colSet opt.ColSet,
+) (colStat *props.ColumnStatistic, ok bool) {
+	// When SetRoot is called, the statistics builder may have been cleared.
+	// If this happens, we can't serve the request anymore.
+	if m.logPropsBuilder.sb.md != nil {
+		return m.logPropsBuilder.sb.colStatTable(tabID, colSet), true
 	}
 	return nil, false
 }
