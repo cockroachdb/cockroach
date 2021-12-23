@@ -272,6 +272,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().NullOrderedLast = false
 	notStale()
 
+	// Stale enable cost scans with default column size.
+	evalCtx.SessionData().CostScansWithDefaultColSize = true
+	stale()
+	evalCtx.SessionData().CostScansWithDefaultColSize = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

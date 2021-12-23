@@ -1889,6 +1889,25 @@ var varGen = map[string]sessionVar{
 			return rowexec.ParallelizeMultiKeyLookupJoinsEnabled.String(sv)
 		},
 	},
+
+	// TODO(harding): Remove this when costing scans based on average column size
+	// is fully supported.
+	// CockroachDB extension.
+	`cost_scans_with_default_col_size`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`cost_scans_with_default_col_size`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`cost_scans_with_default_col_size`, s)
+			if err != nil {
+				return err
+			}
+			m.SetCostScansWithDefaultColSize(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CostScansWithDefaultColSize), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
