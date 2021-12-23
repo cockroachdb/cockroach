@@ -122,3 +122,231 @@ vectorized: true
   estimated row count: 1 (missing stats)
   table: sharded_primary_with_many_column_types@sharded_primary_with_many_column_types_pkey
   spans: /3/1/1/1/1/1/"1"/"1"/"1"/1/00:00:01/1/1970-01-01T00:00:01Z/1970-01-01T00:00:01Z/1/"\x00 \u007f\x00\x00\x01"/B/0
+
+
+# Test to make sure hash sharded index is used for uniqueness check.
+subtest test_hash_index_unique_constraint
+
+statement ok
+set experimental_enable_hash_sharded_indexes = on
+
+statement ok
+DROP TABLE IF EXISTS t_hash_indexed
+
+statement ok
+CREATE TABLE t_hash_indexed (
+  a INT8 PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8,
+  b INT8 NOT NULL
+);
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_hash_indexed(crdb_internal_a_shard_8, a, b)
+  auto commit
+  size: 4 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 4321
+  row 0, expr 2: 8765
+  row 0, expr 3: true
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_hash_indexed SET b = 8765 WHERE a = 4321;
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t_hash_indexed
+│ set: b
+│ auto commit
+│
+└── • render
+    │ columns: (crdb_internal_a_shard_8, a, b, b_new)
+    │ estimated row count: 1 (missing stats)
+    │ render b_new: 8765
+    │ render crdb_internal_a_shard_8: mod(fnv32(crdb_internal.datums_to_bytes(a)), 8)
+    │ render a: a
+    │ render b: b
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t_hash_indexed@t_hash_indexed_pkey
+          spans: /1/4321/0
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO t_hash_indexed VALUES (4321, 8765);
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_hash_indexed(crdb_internal_a_shard_8, a, b)
+│ auto commit
+│
+└── • project
+    │ columns: (crdb_internal_a_shard_8_cast, column1, column2, column2, check1)
+    │
+    └── • values
+          columns: (column1, column2, crdb_internal_a_shard_8_cast, check1)
+          size: 4 columns, 1 row
+          row 0, expr 0: 4321
+          row 0, expr 1: 8765
+          row 0, expr 2: 1
+          row 0, expr 3: true
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO UPDATE SET b = 8765
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_hash_indexed(crdb_internal_a_shard_8, a, b)
+│ auto commit
+│ arbiter constraints: t_hash_indexed_pkey
+│
+└── • project
+    │ columns: (crdb_internal_a_shard_8_cast, column1, column2, crdb_internal_a_shard_8, a, b, upsert_b, crdb_internal_a_shard_8, check1)
+    │
+    └── • render
+        │ columns: (check1, upsert_b, column1, column2, crdb_internal_a_shard_8_cast, crdb_internal_a_shard_8, a, b)
+        │ estimated row count: 1 (missing stats)
+        │ render check1: CASE WHEN crdb_internal_a_shard_8 IS NULL THEN crdb_internal_a_shard_8_cast ELSE crdb_internal_a_shard_8 END IN (0, 1, 2, 3, 4, 5, 6, 7)
+        │ render upsert_b: CASE WHEN crdb_internal_a_shard_8 IS NULL THEN column2 ELSE 8765 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render crdb_internal_a_shard_8_cast: crdb_internal_a_shard_8_cast
+        │ render crdb_internal_a_shard_8: crdb_internal_a_shard_8
+        │ render a: a
+        │ render b: b
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, column2, crdb_internal_a_shard_8_cast, crdb_internal_a_shard_8, a, b)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, column2, crdb_internal_a_shard_8_cast)
+            │     size: 3 columns, 1 row
+            │     row 0, expr 0: 4321
+            │     row 0, expr 1: 8765
+            │     row 0, expr 2: 1
+            │
+            └── • render
+                │ columns: (crdb_internal_a_shard_8, a, b)
+                │ estimated row count: 1 (missing stats)
+                │ render crdb_internal_a_shard_8: mod(fnv32(crdb_internal.datums_to_bytes(a)), 8)
+                │ render a: a
+                │ render b: b
+                │
+                └── • scan
+                      columns: (a, b)
+                      estimated row count: 1 (missing stats)
+                      table: t_hash_indexed@t_hash_indexed_pkey
+                      spans: /1/4321/0
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT DO NOTHING
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_hash_indexed(crdb_internal_a_shard_8, a, b)
+│ auto commit
+│ arbiter indexes: t_hash_indexed_pkey
+│ arbiter constraints: t_hash_indexed_pkey
+│
+└── • render
+  │ columns: (crdb_internal_a_shard_8_cast, column1, column2, check1)
+  │ estimated row count: 0 (missing stats)
+  │ render check1: crdb_internal_a_shard_8_cast IN (0, 1, 2, 3, 4, 5, 6, 7)
+  │ render column1: column1
+  │ render column2: column2
+  │ render crdb_internal_a_shard_8_cast: crdb_internal_a_shard_8_cast
+  │
+  └── • lookup join (anti)
+      │ columns: (column1, column2, crdb_internal_a_shard_8_cast)
+      │ estimated row count: 0 (missing stats)
+      │ table: t_hash_indexed@t_hash_indexed_pkey
+      │ equality cols are key
+      │ lookup condition: (column1 = a) AND (crdb_internal_a_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7))
+      │
+      └── • cross join (anti)
+          │ columns: (column1, column2, crdb_internal_a_shard_8_cast)
+          │ estimated row count: 0 (missing stats)
+          │
+          ├── • values
+          │     columns: (column1, column2, crdb_internal_a_shard_8_cast)
+          │     size: 3 columns, 1 row
+          │     row 0, expr 0: 4321
+          │     row 0, expr 1: 8765
+          │     row 0, expr 2: 1
+          │
+          └── • project
+              │ columns: ()
+              │ estimated row count: 1 (missing stats)
+              │
+              └── • scan
+                    columns: (a)
+                    estimated row count: 1 (missing stats)
+                    table: t_hash_indexed@t_hash_indexed_pkey
+                    spans: /1/4321/0
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO NOTHING
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t_hash_indexed(crdb_internal_a_shard_8, a, b)
+│ auto commit
+│ arbiter constraints: t_hash_indexed_pkey
+│
+└── • render
+    │ columns: (crdb_internal_a_shard_8_cast, column1, column2, check1)
+    │ estimated row count: 0 (missing stats)
+    │ render check1: crdb_internal_a_shard_8_cast IN (0, 1, 2, 3, 4, 5, 6, 7)
+    │ render column1: column1
+    │ render column2: column2
+    │ render crdb_internal_a_shard_8_cast: crdb_internal_a_shard_8_cast
+    │
+    └── • cross join (anti)
+        │ columns: (column1, column2, crdb_internal_a_shard_8_cast)
+        │ estimated row count: 0 (missing stats)
+        │
+        ├── • values
+        │     columns: (column1, column2, crdb_internal_a_shard_8_cast)
+        │     size: 3 columns, 1 row
+        │     row 0, expr 0: 4321
+        │     row 0, expr 1: 8765
+        │     row 0, expr 2: 1
+        │
+        └── • project
+            │ columns: ()
+            │ estimated row count: 1 (missing stats)
+            │
+            └── • scan
+                  columns: (a)
+                  estimated row count: 1 (missing stats)
+                  table: t_hash_indexed@t_hash_indexed_pkey
+                  spans: /1/4321/0

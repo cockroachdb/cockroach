@@ -843,6 +843,19 @@ func newOptTable(
 				validity: descpb.ConstraintValidity_Validated,
 			})
 		}
+
+		// Add unique constraint for hash sharded indexes.
+		if idx.IsUnique() && idx.IsSharded() {
+			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+				name:                  idx.GetName(),
+				table:                 ot.ID(),
+				columns:               idx.IndexDesc().KeyColumnIDs[1:],
+				withoutIndex:          true,
+				predicate:             idx.GetPredicate(),
+				validity:              descpb.ConstraintValidity_Validated,
+				ignoreUniquenessCheck: true,
+			})
+		}
 	}
 
 	_ = ot.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
@@ -1604,6 +1617,8 @@ type optUniqueConstraint struct {
 
 	withoutIndex bool
 	validity     descpb.ConstraintValidity
+
+	ignoreUniquenessCheck bool
 }
 
 var _ cat.UniqueConstraint = &optUniqueConstraint{}
@@ -1649,6 +1664,14 @@ func (u *optUniqueConstraint) WithoutIndex() bool {
 // Validated is part of the cat.UniqueConstraint interface.
 func (u *optUniqueConstraint) Validated() bool {
 	return u.validity == descpb.ConstraintValidity_Validated
+}
+
+// UniquenessGuaranteedByAnotherIndex is part of the cat.UniqueConstraint
+// interface. It is a hack to make unique hash sharded index work before issue
+// #75070 is resolved. Be sure to remove `ignoreUniquenessCheck` field from
+// `optUniqueConstraint` struct when dropping this hack.
+func (u *optUniqueConstraint) UniquenessGuaranteedByAnotherIndex() bool {
+	return u.ignoreUniquenessCheck
 }
 
 // optForeignKeyConstraint implements cat.ForeignKeyConstraint and represents a
