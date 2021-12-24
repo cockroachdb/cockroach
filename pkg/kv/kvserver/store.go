@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -257,19 +256,6 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()
 	return sc
-}
-
-// TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration randomizes
-// the StoreConfig to be before or after completion of the separated intents
-// migration.
-func TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(clock *hlc.Clock) StoreConfig {
-	version := clusterversion.TestingBinaryVersion
-	if rand.Intn(2) == 0 {
-		// This is before SeparatedIntentsMigration, so we may have interleaved
-		// intents.
-		version = clusterversion.ByKey(clusterversion.SeparatedIntentsMigration - 1)
-	}
-	return testStoreConfig(clock, version)
 }
 
 func newRaftConfig(
