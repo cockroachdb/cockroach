@@ -12,17 +12,11 @@ package types
 
 import "github.com/cockroachdb/cockroach/pkg/clusterversion"
 
-// regroleTypeVersion is an alias for MarkerDataKeysRegistry to avoid
-// having to backport a new version.
-const regroleTypeVersion = clusterversion.MarkerDataKeysRegistry
-
 // minimumTypeUsageVersions defines the minimum version needed for a new
 // data type.
 // Note: please do not remove this map or IsTypeSupportedInVersion even
 // if the map becomes empty temporarily.
-var minimumTypeUsageVersions = map[*T]clusterversion.Key{
-	RegRole: regroleTypeVersion,
-}
+var minimumTypeUsageVersions = map[*T]clusterversion.Key{}
 
 // IsTypeSupportedInVersion returns whether a given type is supported in the given version.
 func IsTypeSupportedInVersion(v clusterversion.ClusterVersion, t *T) bool {
