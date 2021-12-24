@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// SpanConfigurationsTable adds the span configurations system table, to
-	// store all KV span configs.
-	SpanConfigurationsTable
 	// BoundedStaleness adds capabilities to perform bounded staleness reads.
 	BoundedStaleness
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
@@ -307,10 +304,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     SpanConfigurationsTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1154},
 	},
 	{
 		Key:     BoundedStaleness,
