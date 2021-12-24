@@ -151,18 +151,16 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.DefaultPrivileges) {
-		if n.grantOn == privilege.Database {
-			compatiblePrivileges, err := convertPGIncompatibleDatabasePrivilegesToDefaultPrivileges(ctx, p, n, params)
-			if err != nil {
-				return err
-			}
-			// When granting, we exclude the incompatible privileges.
-			// Note: we can't do this when revoking in case the privilege was granted
-			// before 21.2 where this conversion does not happen.
-			if n.isGrant {
-				n.desiredprivs = compatiblePrivileges
-			}
+	if n.grantOn == privilege.Database {
+		compatiblePrivileges, err := convertPGIncompatibleDatabasePrivilegesToDefaultPrivileges(ctx, p, n, params)
+		if err != nil {
+			return err
+		}
+		// When granting, we exclude the incompatible privileges.
+		// Note: we can't do this when revoking in case the privilege was granted
+		// before 21.2 where this conversion does not happen.
+		if n.isGrant {
+			n.desiredprivs = compatiblePrivileges
 		}
 	}
 
