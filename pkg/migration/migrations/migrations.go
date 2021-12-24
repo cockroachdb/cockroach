@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"add the system.database_role_settings table",
-		toCV(clusterversion.DatabaseRoleSettings),
-		NoPrecondition,
-		databaseRoleSettingsTableMigration,
-	),
-	migration.NewTenantMigration(
 		"add the system.tenant_usage table",
 		toCV(clusterversion.TenantUsageTable),
 		NoPrecondition,
