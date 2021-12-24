@@ -359,7 +359,6 @@ go_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/scrun",
-        "//pkg/sql/schemachanger/scsqldeps",
         "//pkg/sql/scrub",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/transform",
