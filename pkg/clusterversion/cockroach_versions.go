@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// DatabaseRoleSettings adds the system table for storing per-user and
-	// per-role default session settings.
-	DatabaseRoleSettings
 	// TenantUsageTable adds the system table for tracking tenant usage.
 	TenantUsageTable
 	// SQLInstancesTable adds the system table for storing SQL instance information
@@ -352,10 +349,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     DatabaseRoleSettings,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1118},
 	},
 	{
 		Key:     TenantUsageTable,

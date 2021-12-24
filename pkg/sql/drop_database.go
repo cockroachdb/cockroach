@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -319,10 +318,6 @@ func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
 }
 
 func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) error {
-	// TODO(rafi): Remove this condition in 21.2.
-	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
-		return nil
-	}
 	rowsDeleted, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"delete-db-role-settings",

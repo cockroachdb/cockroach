@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -357,23 +356,21 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 
-		// TODO(rafi): Remove this condition in 21.2.
-		if params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.DatabaseRoleSettings) {
-			rowsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
-				params.ctx,
-				opName,
-				params.p.txn,
-				fmt.Sprintf(
-					`DELETE FROM %s WHERE role_name = $1`,
-					sessioninit.DatabaseRoleSettingsTableName,
-				),
-				normalizedUsername,
-			)
-			if err != nil {
-				return err
-			}
-			numRoleSettingsRowsDeleted += rowsDeleted
+		rowsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			opName,
+			params.p.txn,
+			fmt.Sprintf(
+				`DELETE FROM %s WHERE role_name = $1`,
+				sessioninit.DatabaseRoleSettingsTableName,
+			),
+			normalizedUsername,
+		)
+		if err != nil {
+			return err
 		}
+		numRoleSettingsRowsDeleted += rowsDeleted
+
 	}
 
 	// Bump role-related table versions to force a refresh of membership/auth
@@ -385,8 +382,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
 		}
-		if numRoleSettingsRowsDeleted > 0 &&
-			params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.DatabaseRoleSettings) {
+		if numRoleSettingsRowsDeleted > 0 {
 			if err := params.p.bumpDatabaseRoleSettingsTableVersion(params.ctx); err != nil {
 				return err
 			}
