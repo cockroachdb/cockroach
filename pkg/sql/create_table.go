@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -2558,8 +2557,7 @@ func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 // maybeRegionalByRowOnUpdateExpr returns a gateway region default statement if
 // the auto rehoming session setting is enabled, nil otherwise.
 func maybeRegionalByRowOnUpdateExpr(evalCtx *tree.EvalContext, enumOid oid.Oid) tree.Expr {
-	if evalCtx.SessionData().AutoRehomingEnabled &&
-		evalCtx.Settings.Version.IsActive(evalCtx.Ctx(), clusterversion.OnUpdateExpressions) {
+	if evalCtx.SessionData().AutoRehomingEnabled {
 		return &tree.CastExpr{
 			Expr: &tree.FuncExpr{
 				Func: tree.WrapFunction(builtins.RehomeRowBuiltinName),
