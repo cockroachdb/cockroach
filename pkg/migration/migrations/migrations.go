@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"add the system.span_configurations table to system tenant",
-		toCV(clusterversion.SpanConfigurationsTable),
-		NoPrecondition,
-		spanConfigurationsTableMigration,
-	),
-	migration.NewTenantMigration(
 		"change system.tenant_usage table to use a single column for consumption",
 		toCV(clusterversion.TenantUsageSingleConsumptionColumn),
 		NoPrecondition,

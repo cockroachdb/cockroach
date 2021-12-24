@@ -10,7 +10,6 @@ go_library(
         "migrations.go",
         "schema_changes.go",
         "seed_tenant_span_configs.go",
-        "span_configurations.go",
         "sql_stats.go",
         "tenant_usage.go",
     ],
