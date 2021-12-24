@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -612,5 +612,5 @@ func selectPartitionExprsByName(
 
 func init() {
 	sql.CreatePartitioningCCL = createPartitioning
-	scsqldeps.CreatePartitioningCCL = createPartitioning
+	scdeps.CreatePartitioningCCL = createPartitioning
 }

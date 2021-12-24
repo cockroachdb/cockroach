@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 )
 
 func init() {
@@ -74,7 +73,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		func(txn *kv.Txn) scexec.EventLogger {
 			return sql.NewSchemaChangerEventLogger(txn, execCfg, 0)
 		},
-		scsqldeps.NewPartitioner(execCfg.Settings, &execCtx.ExtendedEvalContext().EvalContext),
+		scdeps.NewPartitioner(execCfg.Settings, &execCtx.ExtendedEvalContext().EvalContext),
 		execCfg.JobRegistry,
 		n.job,
 		execCfg.Codec,
