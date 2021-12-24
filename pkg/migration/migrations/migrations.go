@@ -40,12 +40,6 @@ func NoPrecondition(context.Context, clusterversion.ClusterVersion, migration.Te
 var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
-	migration.NewTenantMigration(
-		"add the system.sql_instances table",
-		toCV(clusterversion.SQLInstancesTable),
-		NoPrecondition,
-		sqlInstancesTableMigration,
-	),
 	migration.NewSystemMigration(
 		"move over all intents to separate lock table",
 		toCV(clusterversion.SeparatedIntentsMigration),
