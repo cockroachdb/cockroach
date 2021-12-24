@@ -153,6 +153,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		insertMissingPublicSchemaNamespaceEntry,
 	),
+	migration.NewTenantMigration(
+		"add column target to system.protected_ts_records",
+		toCV(clusterversion.AlterSystemProtectedTimestampAddColumn),
+		NoPrecondition,
+		alterTableProtectedTimestampRecords,
+	),
 }
 
 func init() {

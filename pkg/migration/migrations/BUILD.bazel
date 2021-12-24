@@ -4,6 +4,7 @@ go_library(
     name = "migrations",
     srcs = [
         "alter_statement_diagnostics_requests.go",
+        "alter_table_protected_timestamp_records.go",
         "alter_table_statistics_avg_size.go",
         "alter_web_sessions_create_indexes.go",
         "database_role_settings.go",
@@ -71,6 +72,7 @@ go_test(
     name = "migrations_test",
     srcs = [
         "alter_statement_diagnostics_requests_test.go",
+        "alter_table_protected_timestamp_records_test.go",
         "alter_table_statistics_avg_size_test.go",
         "alter_web_sessions_create_indexes_test.go",
         "builtins_test.go",
