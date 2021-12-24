@@ -172,8 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// BoundedStaleness adds capabilities to perform bounded staleness reads.
-	BoundedStaleness
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
 	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
@@ -304,10 +302,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     BoundedStaleness,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1156},
 	},
 	{
 		Key:     DateAndIntervalStyle,
