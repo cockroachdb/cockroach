@@ -48,7 +48,7 @@ var migrationRegistry = make(map[roachpb.Version]migration)
 type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error)
 
 func init() {
-	registerMigration(clusterversion.PostSeparatedIntentsMigration, postSeparatedIntentsMigration)
+	_ = registerMigration // prevent unused warning.
 }
 
 func registerMigration(key clusterversion.Key, migration migration) {
@@ -87,16 +87,6 @@ func Migrate(
 	// after it.
 	pd.Replicated.State.Version = &migrationVersion
 	return pd, nil
-}
-
-// postSeparatedIntentsMigration is the below-raft part of the migration for
-// interleaved to separated intents. It is a no-op as the only purpose of
-// running the Migrate command here is to clear out any orphaned replicas with
-// interleaved intents.
-func postSeparatedIntentsMigration(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs,
-) (result.Result, error) {
-	return result.Result{}, nil
 }
 
 // TestingRegisterMigrationInterceptor is used in tests to register an

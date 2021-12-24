@@ -156,7 +156,7 @@ func (tc *testContext) Clock() *hlc.Clock {
 // entire keyspace.
 func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
 	tc.manualClock = hlc.NewManualClock(123)
-	cfg := TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(
+	cfg := TestStoreConfig(
 		hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	// testContext tests like to move the manual clock around and assume that they can write at past
 	// timestamps.
