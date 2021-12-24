@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,6 +48,35 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 	if cursor, _ := p.sqlCursors.getCursor(cursorName); cursor != nil {
 		return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", cursorName)
 	}
+
+	// Try to plan the cursor query to make sure that it's valid.
+	stmt := makeStatement(parser.Statement{AST: s.Select}, ClusterWideID{})
+	planTop := planTop{}
+	planTop.init(&stmt, &p.instrumentation)
+	opc := &p.optPlanningCtx
+	opc.p.stmt = stmt
+	opc.reset()
+
+	memo, err := opc.buildExecMemo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := opc.runExecBuilder(
+		&planTop,
+		&stmt,
+		newExecFactory(p),
+		memo,
+		p.EvalContext(),
+		p.autoCommit,
+	); err != nil {
+		return nil, err
+	}
+	if planTop.flags.IsSet(planFlagContainsMutation) {
+		// Cursors with mutations are invalid.
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"DECLARE CURSOR must not contain data-modifying statements in WITH")
+	}
+
 	statement := s.Select.String()
 	rows, err := ie.QueryIterator(ctx, "sql-cursor", p.txn, statement)
 	if err != nil {

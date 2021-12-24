@@ -335,3 +335,15 @@ COMMIT
 query TTBBB
 SELECT name, statement, is_scrollable, is_holdable, is_binary FROM pg_catalog.pg_cursors
 ----
+
+# Make sure that CTEs with mutations are banned.
+statement error DECLARE CURSOR must not contain data-modifying statements in WITH
+BEGIN;
+DECLARE foo CURSOR FOR WITH x AS (INSERT INTO a VALUES (1, 2) RETURNING a) SELECT * FROM x
+
+# Make sure that declaring a cursor against an invalid query is eagerly
+# returned as an error.
+statement error relation \"doesntexist\" does not exist
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM doesntexist
