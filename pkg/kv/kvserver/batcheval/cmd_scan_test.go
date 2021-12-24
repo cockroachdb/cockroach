@@ -40,46 +40,38 @@ func TestScanReverseScanTargetBytes(t *testing.T) {
 		tbLots = 100000 // de facto ditto tbNone
 	)
 	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
-		testutils.RunTrueAndFalse(t, "avoidExcess", func(t *testing.T, avoidExcess bool) {
-			testutils.RunTrueAndFalse(t, "allowEmpty", func(t *testing.T, allowEmpty bool) {
-				testutils.RunTrueAndFalse(t, "requireNextBytes", func(t *testing.T, requireNextBytes bool) {
-					for _, tb := range []int64{tbNeg, tbNone, tbOne, tbMid, tbLots} {
-						t.Run(fmt.Sprintf("targetBytes=%d", tb), func(t *testing.T) {
-							// allowEmpty takes precedence over avoidExcess at the RPC
-							// level, since callers have no control over avoidExcess.
-							expN := 2
-							if tb == tbNeg {
+		testutils.RunTrueAndFalse(t, "allowEmpty", func(t *testing.T, allowEmpty bool) {
+			testutils.RunTrueAndFalse(t, "requireNextBytes", func(t *testing.T, requireNextBytes bool) {
+				for _, tb := range []int64{tbNeg, tbNone, tbOne, tbMid, tbLots} {
+					t.Run(fmt.Sprintf("targetBytes=%d", tb), func(t *testing.T) {
+						// allowEmpty takes precedence over avoidExcess at the RPC
+						// level, since callers have no control over avoidExcess.
+						expN := 2
+						if tb == tbNeg {
+							expN = 0
+						} else if tb == tbOne {
+							if allowEmpty {
 								expN = 0
-							} else if tb == tbOne {
-								if allowEmpty {
-									expN = 0
-								} else {
-									expN = 1
-								}
-							} else if tb == tbMid && (allowEmpty || avoidExcess) {
+							} else {
 								expN = 1
 							}
-							for _, sf := range []roachpb.ScanFormat{roachpb.KEY_VALUES, roachpb.BATCH_RESPONSE} {
-								t.Run(fmt.Sprintf("format=%s", sf), func(t *testing.T) {
-									testScanReverseScanInner(t, tb, sf, reverse, avoidExcess, allowEmpty, expN)
-								})
-							}
-						})
-					}
-				})
+						} else if tb == tbMid {
+							expN = 1
+						}
+						for _, sf := range []roachpb.ScanFormat{roachpb.KEY_VALUES, roachpb.BATCH_RESPONSE} {
+							t.Run(fmt.Sprintf("format=%s", sf), func(t *testing.T) {
+								testScanReverseScanInner(t, tb, sf, reverse, allowEmpty, expN)
+							})
+						}
+					})
+				}
 			})
 		})
 	})
 }
 
 func testScanReverseScanInner(
-	t *testing.T,
-	tb int64,
-	sf roachpb.ScanFormat,
-	reverse bool,
-	avoidExcess bool,
-	allowEmpty bool,
-	expN int,
+	t *testing.T, tb int64, sf roachpb.ScanFormat, reverse bool, allowEmpty bool, expN int,
 ) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -109,9 +101,6 @@ func testScanReverseScanInner(
 	req.SetHeader(roachpb.RequestHeader{Key: k1, EndKey: roachpb.KeyMax})
 
 	version := clusterversion.TestingBinaryVersion
-	if !avoidExcess {
-		version = clusterversion.ByKey(clusterversion.TargetBytesAvoidExcess - 1)
-	}
 	settings := cluster.MakeTestingClusterSettingsWithVersions(version, clusterversion.TestingBinaryMinSupportedVersion, true)
 
 	cArgs := CommandArgs{
