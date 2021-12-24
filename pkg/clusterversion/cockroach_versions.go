@@ -156,22 +156,6 @@ type Key int
 const (
 	_ Key = iota - 1 // want first named one to start at zero
 
-	// v21.1 versions.
-	//
-	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
-	//
-	// TODO(irfansharif): This can be removed as part of #71708 (bump
-	// min-supported version to 21.2).
-	V21_1
-
-	// v21.1PLUS release. This is a special v21.1.x release with extra changes,
-	// used internally for the 2021 serverless offering.
-	Start21_1PLUS
-
-	// v21.2 versions.
-	//
-	// Start21_2 demarcates work towards CockroachDB v21.2.
-	Start21_2
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
 
@@ -265,32 +249,6 @@ const TODOPreV21_2 = V21_2
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions{
-	// v21.1 versions.
-	{
-		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
-		Key:     V21_1,
-		Version: roachpb.Version{Major: 21, Minor: 1},
-	},
-
-	// Internal versions must be even.
-
-	// v21.1PLUS version. This is a special v21.1.x release with extra changes,
-	// used internally for the 2021 Serverless offering.
-	//
-	// Any v21.1PLUS change that needs a migration will have a v21.2 version on
-	// master but a v21.1PLUS version on the v21.1PLUS branch.
-	{
-		Key: Start21_1PLUS,
-		// The Internal version starts out at 14 for historic reasons: at the time
-		// this was added, v21.2 versions were already defined up to 12.
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 14},
-	},
-
-	// v21.2 versions.
-	{
-		Key:     Start21_2,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
 	{
 		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 		Key:     V21_2,
@@ -378,7 +336,7 @@ var (
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(V21_1)
+	binaryMinSupportedVersion = ByKey(V21_2)
 
 	// binaryVersion is the version of this binary.
 	//
