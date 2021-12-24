@@ -1567,6 +1567,13 @@ func (txn *Txn) Step(ctx context.Context) error {
 	return txn.mu.sender.Step(ctx)
 }
 
+// SetReadSeqNum sets the read sequence number for this transaction.
+func (txn *Txn) SetReadSeqNum(seq enginepb.TxnSeq) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	txn.mu.sender.SetReadSeqNum(seq)
+}
+
 // ConfigureStepping configures step-wise execution in the
 // transaction.
 func (txn *Txn) ConfigureStepping(ctx context.Context, mode SteppingMode) (prevMode SteppingMode) {
