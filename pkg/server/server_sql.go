@@ -72,8 +72,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -799,7 +799,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
 	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg, ieFactory)
-	execCfg.IndexValidator = scsqldeps.NewIndexValidator(
+	execCfg.IndexValidator = scdeps.NewIndexValidator(
 		execCfg.DB,
 		execCfg.Codec,
 		execCfg.Settings,

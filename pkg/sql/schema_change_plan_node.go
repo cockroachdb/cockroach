@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scsqldeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -171,7 +170,7 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoOpBackfillTracker(execCfg.Codec),
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
-		scsqldeps.NewPartitioner(execCfg.Settings, evalContext),
+		scdeps.NewPartitioner(execCfg.Settings, evalContext),
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		schemaChangerJobID,
 		stmts,
