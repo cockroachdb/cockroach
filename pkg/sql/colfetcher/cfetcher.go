@@ -1278,6 +1278,9 @@ func (rf *cFetcher) processValueBytes(
 			nextID := table.orderedColIdxMap.vals[lastColIDIndex]
 			if nextID == colID {
 				vecIdx = table.orderedColIdxMap.ords[lastColIDIndex]
+				// Since the next value part (if it exists) will belong to the
+				// column after the current one, we can advance the index.
+				lastColIDIndex++
 				break
 			} else if nextID > colID {
 				break
