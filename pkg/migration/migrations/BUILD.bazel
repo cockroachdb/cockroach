@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "alter_statement_diagnostics_requests.go",
         "alter_table_statistics_avg_size.go",
-        "alter_web_sessions_create_indexes.go",
         "ensure_no_draining_names.go",
         "insert_missing_public_schema_namespace_entry.go",
         "migrations.go",
@@ -62,7 +61,6 @@ go_test(
     srcs = [
         "alter_statement_diagnostics_requests_test.go",
         "alter_table_statistics_avg_size_test.go",
-        "alter_web_sessions_create_indexes_test.go",
         "builtins_test.go",
         "ensure_no_draining_names_external_test.go",
         "helpers_test.go",
