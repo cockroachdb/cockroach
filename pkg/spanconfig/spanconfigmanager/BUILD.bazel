@@ -33,13 +33,11 @@ go_test(
     deps = [
         ":spanconfigmanager",
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/testutils",

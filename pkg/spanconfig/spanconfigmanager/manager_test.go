@@ -16,12 +16,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -189,23 +186,13 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 func TestManagerCheckJobConditions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	spanConfigJobVersion := clusterversion.ByKey(clusterversion.AutoSpanConfigReconciliationJob)
-	preSpanConfigJobVersion := clusterversion.ByKey(clusterversion.AutoSpanConfigReconciliationJob - 1)
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		spanConfigJobVersion, preSpanConfigJobVersion, false, /* initializeVersion */
-	)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings:          settings,
 			EnableSpanConfigs: true,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation
-				},
-				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          preSpanConfigJobVersion,
-					DisableAutomaticVersionUpgrade: 1,
 				},
 			},
 		},
@@ -250,8 +237,5 @@ func TestManagerCheckJobConditions(t *testing.T) {
 	currentCount = checkInterceptCountGreaterThan(currentCount) // the job enablement setting triggers a check
 
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.experimental_reconciliation_job.check_interval = '25m'`)
-	currentCount = checkInterceptCountGreaterThan(currentCount) // the job check interval setting triggers a check
-
-	tdb.Exec(t, `SET CLUSTER SETTING version = $1`, spanConfigJobVersion.String())
-	_ = checkInterceptCountGreaterThan(currentCount) // the cluster version setting triggers a check
+	_ = checkInterceptCountGreaterThan(currentCount) // the job check interval setting triggers a check
 }
