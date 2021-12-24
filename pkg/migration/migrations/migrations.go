@@ -41,11 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"add last_run and num_runs columns to system.jobs",
-		toCV(clusterversion.RetryJobsWithExponentialBackoff),
-		NoPrecondition,
-		retryJobsWithExponentialBackoff),
-	migration.NewTenantMigration(
 		"add system.zones table for secondary tenants",
 		toCV(clusterversion.ZonesTableForSecondaryTenants),
 		NoPrecondition,
