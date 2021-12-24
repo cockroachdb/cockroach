@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"add the system.statement_statistics and system.transaction_statistics tables",
-		toCV(clusterversion.SQLStatsTables),
-		NoPrecondition,
-		sqlStatsTablesMigration,
-	),
-	migration.NewTenantMigration(
 		"ensure that draining names are no longer in use",
 		toCV(clusterversion.DrainingNamesMigration),
 		NoPrecondition,
