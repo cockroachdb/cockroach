@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
-	// use a single consumption column (encoding a proto).
-	TenantUsageSingleConsumptionColumn
 	// SQLStatsTables adds the system table for storing persisted SQL statistics
 	// for statements.
 	SQLStatsTables
@@ -300,10 +297,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     TenantUsageSingleConsumptionColumn,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1168},
 	},
 	{
 		Key:     SQLStatsTables,
