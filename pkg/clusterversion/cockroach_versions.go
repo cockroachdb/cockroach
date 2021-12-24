@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// SerializeViewUDTs serializes user defined types used in views to allow
-	// for renaming of the referenced types.
-	SerializeViewUDTs
 	// ExpressionIndexes is when expression indexes are supported.
 	ExpressionIndexes
 	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
@@ -361,10 +358,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     SerializeViewUDTs,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1108},
 	},
 	{
 		Key:     ExpressionIndexes,
