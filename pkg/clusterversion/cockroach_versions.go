@@ -172,8 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
-	DateAndIntervalStyle
 	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
 	// use a single consumption column (encoding a proto).
 	TenantUsageSingleConsumptionColumn
@@ -302,10 +300,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     DateAndIntervalStyle,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
 	},
 	{
 		Key:     TenantUsageSingleConsumptionColumn,
