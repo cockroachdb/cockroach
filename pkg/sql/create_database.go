@@ -14,7 +14,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -107,12 +106,6 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 					" enable_multiregion_placement_policy = true or enable the cluster setting"+
 					" sql.defaults.multiregion_placement_policy.enabled",
 			)
-		}
-
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.DatabasePlacementPolicy) {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to use PLACEMENT",
-				clusterversion.ByKey(clusterversion.DatabasePlacementPolicy))
 		}
 
 		if n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
