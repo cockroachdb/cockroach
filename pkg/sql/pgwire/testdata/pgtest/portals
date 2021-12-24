@@ -932,3 +932,119 @@ ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test that we can use a portal with MaxRows from an implicit transaction.
+send
+Parse {"Name": "s12", "Query": "SELECT * FROM generate_series(1, 10)"}
+Bind {"DestinationPortal": "C_1", "PreparedStatement": "s12"}
+Execute {"Portal": "C_1", "MaxRows": 2}
+Execute {"Portal": "C_1", "MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# We can reuse the portal name, but not the statement name.
+# This also tests that when the rows are fully consumed, reading from the
+# portal returns 0 rows.
+send
+Parse {"Name": "s13", "Query": "SELECT * FROM generate_series(1, 7)"}
+Bind {"DestinationPortal": "C_1", "PreparedStatement": "s13"}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"4"}]}
+{"Type":"DataRow","Values":[{"text":"5"}]}
+{"Type":"DataRow","Values":[{"text":"6"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"7"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS portal_sync_test"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE portal_sync_test (a FLOAT)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test that Sync is treated as an auto-commit and that it can deal with
+# errors during the implicit transaction.
+send
+Parse {"Name": "s14", "Query": "INSERT INTO portal_sync_test VALUES(1.0/0);"}
+Bind {"DestinationPortal": "C_1", "PreparedStatement": "s14"}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Execute {"Portal": "C_1", "MaxRows": 3}
+Sync
+----
+
+# CockroachDB sends a BindComplete here, but PostgreSQL does not.
+until keepErrMessage ignore=BindComplete
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"22012","Message":"division by zero"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO portal_sync_test VALUES(1);"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM portal_sync_test;"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

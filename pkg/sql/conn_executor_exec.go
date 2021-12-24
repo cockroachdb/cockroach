@@ -265,7 +265,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, pl, nil
 	}
 
-	if prepared != nil {
+	isExtendedProtocol := prepared != nil
+	if isExtendedProtocol {
 		stmt = makeStatementFromPrepared(prepared, queryID)
 	} else {
 		stmt = makeStatement(parserStmt, queryID)
@@ -490,7 +491,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		if retEv != nil || retErr != nil {
 			return
 		}
-		if os.ImplicitTxn.Get() {
+		// The postgres docs say that commands in the extended protocol are
+		// all treated as an implicit transaction that does not get committed
+		// until a Sync message is received. The prepared statement will only be
+		// nil if we are in the simple protocol; for the extended protocol the
+		// commit occurs when Sync is received.
+		if os.ImplicitTxn.Get() && !isExtendedProtocol {
 			retEv, retPayload = ex.handleAutoCommit(ctx, ast)
 			return
 		}
