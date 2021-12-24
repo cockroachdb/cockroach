@@ -80,8 +80,35 @@ FETCH 3 foo
 statement ok
 COMMIT
 
+# Make sure also that the cursor is sensitive on a "large" table that will
+# require fetching more than once. Since we fetch a batch as soon as we run
+# the DECLARE, and the scan would end after that first batch if we didn't
+# have more than 1 batch of data inside, we need to make sure that the table
+# has more than 1 batch of data inside!
+
+statement ok
+CREATE TABLE big (a PRIMARY KEY, b) AS SELECT g, repeat('a', 1024 * 1024) FROM generate_series(1,11) g(g)
+
+statement ok
+BEGIN;
+INSERT INTO big VALUES(100,'blargh');
+DECLARE foo CURSOR FOR SELECT * FROM big;
+INSERT INTO big VALUES(101,'argh')
+
+query IT
+FETCH RELATIVE 12 foo
+----
+100 blargh
+
+# Make sure that the cursor can't see the 101, argh line, which would indciate
+# that the cursor is in fact "sensitive" to writes after it was declared.
+query IT
+FETCH 1 foo
+----
+
 # Test cursor fetch directions.
 statement ok
+ABORT;
 BEGIN;
 DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
 
