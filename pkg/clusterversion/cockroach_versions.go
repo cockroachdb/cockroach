@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// AlterSystemWebSessionsCreateIndexes creates indexes on the columns revokedAt and
-	// lastUsedAt for the system.web_sessions table.
-	AlterSystemWebSessionsCreateIndexes
 	// SeparatedIntentsMigration adds the migration to move over all remaining
 	// intents to the separated lock table space.
 	SeparatedIntentsMigration
@@ -342,10 +339,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     AlterSystemWebSessionsCreateIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1126},
 	},
 	{
 		Key:     SeparatedIntentsMigration,

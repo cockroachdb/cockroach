@@ -66,12 +66,6 @@ var migrations = []migration.Migration{
 		spanConfigurationsTableMigration,
 	),
 	migration.NewTenantMigration(
-		"create indexes on revokedAt and lastUsedAt columns from system.web_sessions",
-		toCV(clusterversion.AlterSystemWebSessionsCreateIndexes),
-		NoPrecondition,
-		alterSystemWebSessionsCreateIndexes,
-	),
-	migration.NewTenantMigration(
 		"change system.tenant_usage table to use a single column for consumption",
 		toCV(clusterversion.TenantUsageSingleConsumptionColumn),
 		NoPrecondition,
