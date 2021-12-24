@@ -19,7 +19,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -2578,8 +2577,7 @@ func (r roleOptions) createRole() (tree.DBool, error) {
 }
 
 func forEachRoleQuery(ctx context.Context, p *planner) string {
-	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
-		return `
+	return `
 SELECT
 	u.username,
 	"isRole",
@@ -2593,21 +2591,6 @@ FROM
 			drs.role_name = u.username AND drs.database_id = 0
 GROUP BY
 	u.username, "isRole", drs.settings;
-`
-	}
-
-	return `
-SELECT
-	u.username,
-	"isRole",
-	NULL::STRING[] AS settings,
-	json_object_agg(COALESCE(ro.option, 'null'), ro.value)
-FROM
-	system.users AS u
-	LEFT JOIN system.role_options AS ro ON
-			ro.username = u.username
-GROUP BY
-	u.username, "isRole", settings;
 `
 }
 

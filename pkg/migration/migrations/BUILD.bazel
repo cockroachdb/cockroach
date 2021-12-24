@@ -6,7 +6,6 @@ go_library(
         "alter_statement_diagnostics_requests.go",
         "alter_table_statistics_avg_size.go",
         "alter_web_sessions_create_indexes.go",
-        "database_role_settings.go",
         "ensure_no_draining_names.go",
         "insert_missing_public_schema_namespace_entry.go",
         "migrations.go",
