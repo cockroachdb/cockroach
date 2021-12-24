@@ -65,20 +65,24 @@ func TestAlterSystemStmtDiagReqs(t *testing.T) {
 	)
 
 	// Inject the old copy of the descriptor.
-	migrations.InjectLegacyTable(ctx, t, s, systemschema.StatementDiagnosticsRequestsTable, getDeprecatedStmtDiagReqsDescriptor)
+	migrations.InjectLegacyTable(ctx, t, s, systemschema.StatementDiagnosticsRequestsTable,
+		getDeprecatedStmtDiagReqsDescriptor)
+	validateSchemaExists := func(expectExists bool) {
+		migrations.ValidateSchemaExists(
+			ctx,
+			t,
+			s,
+			sqlDB,
+			keys.StatementDiagnosticsRequestsTableID,
+			systemschema.StatementDiagnosticsRequestsTable,
+			validationStmts,
+			validationSchemas,
+			expectExists,
+		)
+	}
 	// Validate that the statement_diagnostics_requests table has the old
 	// schema.
-	migrations.ValidateSchemaExists(
-		ctx,
-		t,
-		s,
-		sqlDB,
-		keys.StatementDiagnosticsRequestsTableID,
-		systemschema.StatementDiagnosticsRequestsTable,
-		validationStmts,
-		validationSchemas,
-		false, /* expectExists */
-	)
+	validateSchemaExists(false)
 	// Run the migration.
 	migrations.Migrate(
 		t,
@@ -88,17 +92,7 @@ func TestAlterSystemStmtDiagReqs(t *testing.T) {
 		false, /* expectError */
 	)
 	// Validate that the table has new schema.
-	migrations.ValidateSchemaExists(
-		ctx,
-		t,
-		s,
-		sqlDB,
-		keys.StatementDiagnosticsRequestsTableID,
-		systemschema.StatementDiagnosticsRequestsTable,
-		validationStmts,
-		validationSchemas,
-		true, /* expectExists */
-	)
+	validateSchemaExists(true)
 }
 
 // getDeprecatedStmtDiagReqsDescriptor returns the
