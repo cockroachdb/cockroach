@@ -11,30 +11,29 @@ func _() {
 	_ = x[V21_1-0]
 	_ = x[Start21_1PLUS-1]
 	_ = x[Start21_2-2]
-	_ = x[SQLStatsTables-3]
-	_ = x[SQLStatsCompactionScheduledJob-4]
-	_ = x[V21_2-5]
-	_ = x[Start22_1-6]
-	_ = x[AvoidDrainingNames-7]
-	_ = x[DrainingNamesMigration-8]
-	_ = x[TraceIDDoesntImplyStructuredRecording-9]
-	_ = x[AlterSystemTableStatisticsAddAvgSizeCol-10]
-	_ = x[AlterSystemStmtDiagReqs-11]
-	_ = x[MVCCAddSSTable-12]
-	_ = x[InsertPublicSchemaNamespaceEntryOnRestore-13]
-	_ = x[UnsplitRangesInAsyncGCJobs-14]
-	_ = x[ValidateGrantOption-15]
-	_ = x[PebbleFormatBlockPropertyCollector-16]
-	_ = x[ProbeRequest-17]
-	_ = x[SelectRPCsTakeTracingInfoInband-18]
-	_ = x[PreSeedTenantSpanConfigs-19]
-	_ = x[SeedTenantSpanConfigs-20]
-	_ = x[PublicSchemasWithDescriptors-21]
+	_ = x[SQLStatsCompactionScheduledJob-3]
+	_ = x[V21_2-4]
+	_ = x[Start22_1-5]
+	_ = x[AvoidDrainingNames-6]
+	_ = x[DrainingNamesMigration-7]
+	_ = x[TraceIDDoesntImplyStructuredRecording-8]
+	_ = x[AlterSystemTableStatisticsAddAvgSizeCol-9]
+	_ = x[AlterSystemStmtDiagReqs-10]
+	_ = x[MVCCAddSSTable-11]
+	_ = x[InsertPublicSchemaNamespaceEntryOnRestore-12]
+	_ = x[UnsplitRangesInAsyncGCJobs-13]
+	_ = x[ValidateGrantOption-14]
+	_ = x[PebbleFormatBlockPropertyCollector-15]
+	_ = x[ProbeRequest-16]
+	_ = x[SelectRPCsTakeTracingInfoInband-17]
+	_ = x[PreSeedTenantSpanConfigs-18]
+	_ = x[SeedTenantSpanConfigs-19]
+	_ = x[PublicSchemasWithDescriptors-20]
 }
 
-const _Key_name = "V21_1Start21_1PLUSStart21_2SQLStatsTablesSQLStatsCompactionScheduledJobV21_2Start22_1AvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptors"
+const _Key_name = "V21_1Start21_1PLUSStart21_2SQLStatsCompactionScheduledJobV21_2Start22_1AvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptors"
 
-var _Key_index = [...]uint16{0, 5, 18, 27, 41, 71, 76, 85, 103, 125, 162, 201, 224, 238, 279, 305, 324, 358, 370, 401, 425, 446, 474}
+var _Key_index = [...]uint16{0, 5, 18, 27, 57, 62, 71, 89, 111, 148, 187, 210, 224, 265, 291, 310, 344, 356, 387, 411, 432, 460}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

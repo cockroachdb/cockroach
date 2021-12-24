@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// SQLStatsTables adds the system table for storing persisted SQL statistics
-	// for statements.
-	SQLStatsTables
 	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
 	// compaction on cluster startup and ensures that there is only one entry for
 	// the schedule.
@@ -297,10 +294,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     SQLStatsTables,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1170},
 	},
 	{
 		Key:     SQLStatsCompactionScheduledJob,
