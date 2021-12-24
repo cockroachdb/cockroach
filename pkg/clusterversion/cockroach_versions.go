@@ -172,10 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
-	// include the type of lease acquisition event that resulted in that replica's
-	// current lease.
-	AcquisitionTypeInLeaseHistory
 	// SerializeViewUDTs serializes user defined types used in views to allow
 	// for renaming of the referenced types.
 	SerializeViewUDTs
@@ -365,10 +361,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     AcquisitionTypeInLeaseHistory,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1106},
 	},
 	{
 		Key:     SerializeViewUDTs,
