@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// OnUpdateExpressions setting ON UPDATE column expressions is supported in
-	// this version.
-	OnUpdateExpressions
 	// SpanConfigurationsTable adds the span configurations system table, to
 	// store all KV span configs.
 	SpanConfigurationsTable
@@ -310,10 +307,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     OnUpdateExpressions,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1152},
 	},
 	{
 		Key:     SpanConfigurationsTable,
