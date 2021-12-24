@@ -1311,6 +1311,18 @@ func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked(ctx)
 }
 
+// SetReadSeqNum is part of the TxnSender interface.
+func (tc *TxnCoordSender) SetReadSeqNum(seq enginepb.TxnSeq) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if seq < 0 || seq > tc.interceptorAlloc.txnSeqNumAllocator.writeSeq {
+		return errors.AssertionFailedf("invalid read seq num < 0 || > writeSeq (%d): %d",
+			tc.interceptorAlloc.txnSeqNumAllocator.writeSeq, seq)
+	}
+	tc.interceptorAlloc.txnSeqNumAllocator.readSeq = seq
+	return nil
+}
+
 // ConfigureStepping is part of the TxnSender interface.
 func (tc *TxnCoordSender) ConfigureStepping(
 	ctx context.Context, mode kv.SteppingMode,
