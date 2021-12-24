@@ -172,8 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// Can return new retryable rangefeed errors without crashing the client
-	NewRetryableRangefeedErrors
 	// AlterSystemWebSessionsCreateIndexes creates indexes on the columns revokedAt and
 	// lastUsedAt for the system.web_sessions table.
 	AlterSystemWebSessionsCreateIndexes
@@ -344,10 +342,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     NewRetryableRangefeedErrors,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1124},
 	},
 	{
 		Key:     AlterSystemWebSessionsCreateIndexes,
