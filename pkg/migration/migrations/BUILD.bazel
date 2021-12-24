@@ -51,7 +51,6 @@ go_test(
         "ensure_no_draining_names_external_test.go",
         "helpers_test.go",
         "main_test.go",
-        "on_update_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":migrations"],
