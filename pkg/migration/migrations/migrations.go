@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"delete the deprecated namespace table descriptor at ID=2",
-		toCV(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration),
-		NoPrecondition,
-		deleteDeprecatedNamespaceTableDescriptorMigration,
-	),
-	migration.NewTenantMigration(
 		"fix all descriptors",
 		toCV(clusterversion.FixDescriptors),
 		NoPrecondition,
