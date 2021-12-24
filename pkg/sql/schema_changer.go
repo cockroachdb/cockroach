@@ -1355,11 +1355,6 @@ func maybeUpdateZoneConfigsForPKChange(
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
-	if !ZonesTableExists(ctx, execCfg.Codec, execCfg.Settings.Version) {
-		// Tenants are agnostic to zone configs if they don't have a zones table.
-		return nil
-	}
-
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, table.ID)
 	if err != nil {
 		return err
@@ -2163,8 +2158,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			//
 			// NB: Secondary tenants prior to the introduction of system.zones could
 			// not set zone configurations, so there's nothing to do for them.
-			if ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) &&
-				len(details.DroppedTables) == 0 {
+			if len(details.DroppedTables) == 0 {
 				zoneKeyPrefix := config.MakeZoneKeyPrefix(p.ExecCfg().Codec, dbID)
 				if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)

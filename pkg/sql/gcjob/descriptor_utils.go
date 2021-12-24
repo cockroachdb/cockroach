@@ -65,13 +65,6 @@ func deleteDatabaseZoneConfig(
 	if databaseID == descpb.InvalidID {
 		return nil
 	}
-	if !sql.ZonesTableExists(ctx, codec, settings.Version) {
-		// Secondary tenants at a version lower than when `system.zones` was
-		// introduced do not have zone configurations for individual objects.
-		// Zone configurations can't exist for individual objects if `system.zones`
-		// does not exist, so there's nothing to do here.
-		return nil
-	}
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
 			return err
