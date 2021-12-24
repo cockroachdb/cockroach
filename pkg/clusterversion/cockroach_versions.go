@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// GeneratedAsIdentity is the syntax support for `GENERATED {ALWAYS | BY
-	// DEFAULT} AS IDENTITY` under `CREATE TABLE` syntax.
-	GeneratedAsIdentity
 	// OnUpdateExpressions setting ON UPDATE column expressions is supported in
 	// this version.
 	OnUpdateExpressions
@@ -313,10 +310,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     GeneratedAsIdentity,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1150},
 	},
 	{
 		Key:     OnUpdateExpressions,
