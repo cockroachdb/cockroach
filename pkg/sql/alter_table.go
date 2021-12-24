@@ -177,15 +177,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"UNIQUE WITHOUT INDEX constraint on the column",
 				)
 			}
-			if t.ColumnDef.GeneratedIdentity.IsGeneratedAsIdentity {
-				evalCtx := params.EvalContext()
-				ctx := params.ctx
-				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.GeneratedAsIdentity) {
-					return pgerror.Newf(pgcode.FeatureNotSupported,
-						"version %v must be finalized to use GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY expression",
-						clusterversion.GeneratedAsIdentity)
-				}
-			}
 			var err error
 			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
 				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t)
