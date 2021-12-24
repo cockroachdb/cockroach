@@ -40,14 +40,6 @@ func NoPrecondition(context.Context, clusterversion.ClusterVersion, migration.Te
 var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
-	migration.NewSystemMigration(
-		"move over all intents to separate lock table",
-		toCV(clusterversion.SeparatedIntentsMigration),
-		separatedIntentsMigration),
-	migration.NewSystemMigration(
-		"run no-op migrate command on all ranges after lock table migration",
-		toCV(clusterversion.PostSeparatedIntentsMigration),
-		postSeparatedIntentsMigration),
 	migration.NewTenantMigration(
 		"add last_run and num_runs columns to system.jobs",
 		toCV(clusterversion.RetryJobsWithExponentialBackoff),

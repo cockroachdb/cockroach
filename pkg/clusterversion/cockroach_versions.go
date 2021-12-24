@@ -172,12 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// SeparatedIntentsMigration adds the migration to move over all remaining
-	// intents to the separated lock table space.
-	SeparatedIntentsMigration
-	// PostSeparatedIntentsMigration runs a cleanup migration after the main
-	// SeparatedIntentsMigration.
-	PostSeparatedIntentsMigration
 	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
 	RetryJobsWithExponentialBackoff
 	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
@@ -339,14 +333,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     SeparatedIntentsMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1128},
-	},
-	{
-		Key:     PostSeparatedIntentsMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1130},
 	},
 	{
 		Key:     RetryJobsWithExponentialBackoff,
