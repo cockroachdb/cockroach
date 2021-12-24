@@ -2031,6 +2031,7 @@ system         public        protected_ts_records             meta              
 system         public        protected_ts_records             meta_type                                                                                                 3
 system         public        protected_ts_records             num_spans                                                                                                 5
 system         public        protected_ts_records             spans                                                                                                     6
+system         public        protected_ts_records             target                                                                                                    8
 system         public        protected_ts_records             ts                                                                                                        2
 system         public        protected_ts_records             verified                                                                                                  7
 system         public        rangelog                         eventType                                                                                                 4
