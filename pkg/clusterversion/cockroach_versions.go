@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// DatabasePlacementPolicy setting PLACEMENT for databases is supported in this
-	// version.
-	DatabasePlacementPolicy
 	// GeneratedAsIdentity is the syntax support for `GENERATED {ALWAYS | BY
 	// DEFAULT} AS IDENTITY` under `CREATE TABLE` syntax.
 	GeneratedAsIdentity
@@ -316,10 +313,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     DatabasePlacementPolicy,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1148},
 	},
 	{
 		Key:     GeneratedAsIdentity,
