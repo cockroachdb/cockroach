@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -698,25 +697,16 @@ CREATE TABLE crdb_internal.jobs (
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
 		// out results that the current user is not able to see.
 		const (
-			qSelect             = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
-			qFrom               = ` FROM system.jobs`
-			queryWithoutBackoff = qSelect + qFrom
-			backoffArgs         = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
-			queryWithBackoff    = qSelect + `, last_run, COALESCE(num_runs, 0), ` + jobs.NextRunClause + ` as next_run` + qFrom + ", " + backoffArgs
+			qSelect          = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
+			qFrom            = ` FROM system.jobs`
+			backoffArgs      = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
+			queryWithBackoff = qSelect + `, last_run, COALESCE(num_runs, 0), ` + jobs.NextRunClause + ` as next_run` + qFrom + ", " + backoffArgs
 		)
-		query := queryWithoutBackoff
-		var args []interface{}
-		settings := p.execCfg.Settings
-		backoffIsEnabled := settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
-		if backoffIsEnabled {
-			query = queryWithBackoff
-			args = append(args, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay())
-		}
 
 		it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			query, args...)
+			queryWithBackoff, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -849,12 +839,10 @@ CREATE TABLE crdb_internal.jobs (
 					}
 				}
 
-				if backoffIsEnabled {
-					lastRun, numRuns, nextRun = r[7], r[8], r[9]
-					if payload != nil {
-						executionErrors = jobs.
-							FormatRetriableExecutionErrorLogToStringArray(ctx, payload)
-					}
+				lastRun, numRuns, nextRun = r[7], r[8], r[9]
+				if payload != nil {
+					executionErrors = jobs.
+						FormatRetriableExecutionErrorLogToStringArray(ctx, payload)
 				}
 
 				container = container[:0]

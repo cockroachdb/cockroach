@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -891,46 +889,6 @@ SELECT last_run IS NULL,
 		require.True(t, validNextRun)
 		require.True(t, validNumRuns)
 	}))
-
-	t.Run("without new columns", func(t *testing.T) {
-		// This test validates the use of new columns in a cluster that does not
-		// support new system.jobs table. It creates the test cluster with a version
-		// that does not have exponential-backoff params columns in system.jobs table.
-		// We expect NULL values for the new columns in the internal jobs table when
-		// system.jobs does not have corresponding columns.
-
-		clusterArgs := base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						DisableAutomaticVersionUpgrade: 1,
-						BinaryVersionOverride: clusterversion.ByKey(
-							clusterversion.RetryJobsWithExponentialBackoff - 1),
-					},
-					JobsTestingKnobs: &jobs.TestingKnobs{
-						DisableAdoptions: true,
-					},
-				},
-			},
-		}
-
-		ctx := context.Background()
-		tc := testcluster.StartTestCluster(t, 1, clusterArgs)
-		defer tc.Stopper().Stop(ctx)
-		sqlDB := tc.ServerConn(0)
-		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		tdb.Exec(t,
-			"INSERT INTO system.jobs (id, status, created, payload) values ($1, $2, $3, 'test'::bytes)",
-			1, jobs.StatusRunning, timeutil.Now(),
-		)
-		tdb.CheckQueryResults(t, `
-SELECT last_run IS NULL,
-       next_run IS NULL,
-       num_runs IS NULL,
-       execution_errors IS NULL
-  FROM crdb_internal.jobs WHERE job_id = 1`,
-			[][]string{{"true", "true", "true", "true"}})
-	})
 }
 
 func TestIsAtLeastVersion(t *testing.T) {

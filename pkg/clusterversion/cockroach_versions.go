@@ -172,8 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
-	RetryJobsWithExponentialBackoff
 	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
 	// type.
 	AutoSpanConfigReconciliationJob
@@ -328,10 +326,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     RetryJobsWithExponentialBackoff,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1132},
 	},
 	{
 		Key:     AutoSpanConfigReconciliationJob,
