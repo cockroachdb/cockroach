@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"add the system.tenant_usage table",
-		toCV(clusterversion.TenantUsageTable),
-		NoPrecondition,
-		tenantUsageTableMigration,
-	),
-	migration.NewTenantMigration(
 		"add the system.sql_instances table",
 		toCV(clusterversion.SQLInstancesTable),
 		NoPrecondition,

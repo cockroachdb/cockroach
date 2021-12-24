@@ -172,8 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// TenantUsageTable adds the system table for tracking tenant usage.
-	TenantUsageTable
 	// SQLInstancesTable adds the system table for storing SQL instance information
 	// per tenant.
 	SQLInstancesTable
@@ -349,10 +347,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     TenantUsageTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1120},
 	},
 	{
 		Key:     SQLInstancesTable,
