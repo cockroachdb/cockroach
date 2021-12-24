@@ -11,7 +11,6 @@ go_library(
         "ensure_no_draining_names.go",
         "fix_descriptor_migration.go",
         "insert_missing_public_schema_namespace_entry.go",
-        "join_tokens.go",
         "migrations.go",
         "retry_jobs_with_exponential_backoff.go",
         "schema_changes.go",
