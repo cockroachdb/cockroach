@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"change system.tenant_usage table to use a single column for consumption",
-		toCV(clusterversion.TenantUsageSingleConsumptionColumn),
-		NoPrecondition,
-		tenantUsageSingleConsumptionColumn,
-	),
-	migration.NewTenantMigration(
 		"add the system.statement_statistics and system.transaction_statistics tables",
 		toCV(clusterversion.SQLStatsTables),
 		NoPrecondition,
