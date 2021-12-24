@@ -1203,7 +1203,7 @@ func (rf *cFetcher) processValueSingle(
 
 	if idx, ok := table.ColIdxMap.Get(colID); ok {
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].GetName())
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.cols[idx].GetName())
 		}
 		val := rf.machine.nextKV.Value
 		if len(val.RawBytes) == 0 {
@@ -1300,7 +1300,7 @@ func (rf *cFetcher) processValueBytes(
 		}
 
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[vecIdx].GetName())
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.cols[vecIdx].GetName())
 		}
 
 		valueBytes, err = colencoding.DecodeTableValueToCol(

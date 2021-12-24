@@ -29,8 +29,8 @@ import (
 type cFetcherTableArgs struct {
 	desc  catalog.TableDescriptor
 	index catalog.Index
-	// ColIdxMap is a mapping from ColumnID of each column to its ordinal. Only
-	// needed columns are present.
+	// ColIdxMap is a mapping from ColumnID to the ordinal of the corresponding
+	// column within the cols field. Only needed columns are present.
 	ColIdxMap        catalog.TableColMap
 	isSecondaryIndex bool
 	// cols are all needed columns of the table that are present in the index.
