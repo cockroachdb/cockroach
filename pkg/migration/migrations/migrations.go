@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"fix all descriptors",
-		toCV(clusterversion.FixDescriptors),
-		NoPrecondition,
-		fixDescriptorMigration,
-	),
-	migration.NewTenantMigration(
 		"add the system.database_role_settings table",
 		toCV(clusterversion.DatabaseRoleSettings),
 		NoPrecondition,

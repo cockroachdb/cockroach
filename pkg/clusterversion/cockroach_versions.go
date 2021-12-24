@@ -172,8 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// FixDescriptors is for the migration to fix all descriptors.
-	FixDescriptors
 	// DatabaseRoleSettings adds the system table for storing per-user and
 	// per-role default session settings.
 	DatabaseRoleSettings
@@ -354,10 +352,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     FixDescriptors,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1114},
 	},
 	{
 		Key:     DatabaseRoleSettings,
