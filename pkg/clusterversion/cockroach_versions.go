@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// UseKeyEncodeForHashShardedIndexes changes the expression used in hash
-	// sharded indexes from string casts to crdb_internal.datums_to_bytes.
-	UseKeyEncodeForHashShardedIndexes
 	// DatabasePlacementPolicy setting PLACEMENT for databases is supported in this
 	// version.
 	DatabasePlacementPolicy
@@ -319,10 +316,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     UseKeyEncodeForHashShardedIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1146},
 	},
 	{
 		Key:     DatabasePlacementPolicy,

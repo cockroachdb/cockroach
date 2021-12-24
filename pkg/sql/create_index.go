@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -508,8 +507,7 @@ func setupShardedIndex(
 		return nil, nil, false, err
 	}
 	shardCol, newColumn, err := maybeCreateAndAddShardCol(int(buckets), tableDesc,
-		colNames, isNewTable,
-		evalCtx.Settings.Version.IsActive(ctx, clusterversion.UseKeyEncodeForHashShardedIndexes))
+		colNames, isNewTable)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -531,9 +529,9 @@ func setupShardedIndex(
 // `desc`, if one doesn't already exist for the given index column set and number of shard
 // buckets.
 func maybeCreateAndAddShardCol(
-	shardBuckets int, desc *tabledesc.Mutable, colNames []string, isNewTable, useKeyEncodeInExpr bool,
+	shardBuckets int, desc *tabledesc.Mutable, colNames []string, isNewTable bool,
 ) (col catalog.Column, created bool, err error) {
-	shardColDesc, err := makeShardColumnDesc(colNames, shardBuckets, useKeyEncodeInExpr)
+	shardColDesc, err := makeShardColumnDesc(colNames, shardBuckets)
 	if err != nil {
 		return nil, false, err
 	}
