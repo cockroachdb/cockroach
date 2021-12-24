@@ -49,12 +49,6 @@ func (n *alterDefaultPrivilegesNode) Close(context.Context)        {}
 func (p *planner) alterDefaultPrivileges(
 	ctx context.Context, n *tree.AlterDefaultPrivileges,
 ) (planNode, error) {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.DefaultPrivileges) {
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to use default privileges",
-			clusterversion.DefaultPrivileges)
-	}
-
 	// ALTER DEFAULT PRIVILEGES without specifying a schema alters the privileges
 	// for the current database.
 	database := p.CurrentDatabase()
