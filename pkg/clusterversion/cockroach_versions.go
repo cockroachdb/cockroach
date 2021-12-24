@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
-	// type.
-	AutoSpanConfigReconciliationJob
 	// DefaultPrivileges default privileges are supported in this version.
 	DefaultPrivileges
 	// ZonesTableForSecondaryTenants adds system.zones for all secondary tenants.
@@ -326,10 +323,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     AutoSpanConfigReconciliationJob,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1136},
 	},
 	{
 		Key:     DefaultPrivileges,
