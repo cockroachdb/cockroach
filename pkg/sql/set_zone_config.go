@@ -174,10 +174,6 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
 		return nil, err
 	}
-	if !ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) {
-		// Can't set a zone configuration if `system.zones` doesn't exist.
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
 
 	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
 		ctx,
@@ -1041,10 +1037,6 @@ func prepareZoneConfigWrites(
 	zone *zonepb.ZoneConfig,
 	hasNewSubzones bool,
 ) (_ *zoneConfigUpdate, err error) {
-	if !ZonesTableExists(ctx, execCfg.Codec, execCfg.Settings.Version) {
-		// Can't write zone configurations if `system.zones` doesn't exist.
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
@@ -1099,11 +1091,6 @@ func writeZoneConfigUpdate(
 func getZoneConfigRaw(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, settings *cluster.Settings, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
-	if !ZonesTableExists(ctx, codec, settings.Version) {
-		// There can't be zone configs for individual objects if `system.zones` does
-		// not exist. Nothing to do here.
-		return nil, nil
-	}
 	kv, err := txn.Get(ctx, config.MakeZoneKey(codec, id))
 	if err != nil {
 		return nil, err
@@ -1128,11 +1115,6 @@ func getZoneConfigRawBatch(
 	settings *cluster.Settings,
 	ids []descpb.ID,
 ) (map[descpb.ID]*zonepb.ZoneConfig, error) {
-	if !ZonesTableExists(ctx, codec, settings.Version) {
-		// There can't be zone configs for individual objects if `system.zones` does
-		// not exist. Nothing to do here.
-		return nil, nil
-	}
 	b := txn.NewBatch()
 	for _, id := range ids {
 		b.Get(config.MakeZoneKey(codec, id))

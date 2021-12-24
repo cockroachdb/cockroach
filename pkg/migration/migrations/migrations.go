@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"add system.zones table for secondary tenants",
-		toCV(clusterversion.ZonesTableForSecondaryTenants),
-		NoPrecondition,
-		zonesTableForSecondaryTenants,
-	),
-	migration.NewTenantMigration(
 		"add the system.span_configurations table to system tenant",
 		toCV(clusterversion.SpanConfigurationsTable),
 		NoPrecondition,

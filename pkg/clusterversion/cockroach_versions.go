@@ -172,8 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// ZonesTableForSecondaryTenants adds system.zones for all secondary tenants.
-	ZonesTableForSecondaryTenants
 	// UseKeyEncodeForHashShardedIndexes changes the expression used in hash
 	// sharded indexes from string casts to crdb_internal.datums_to_bytes.
 	UseKeyEncodeForHashShardedIndexes
@@ -321,10 +319,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     ZonesTableForSecondaryTenants,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1144},
 	},
 	{
 		Key:     UseKeyEncodeForHashShardedIndexes,

@@ -3250,12 +3250,6 @@ CREATE TABLE crdb_internal.zones (
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if !ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) {
-			// Don't try to populate crdb_internal.zones if `system.zones` doesn't
-			// exist.
-			return nil
-		}
-
 		namespace, err := p.getAllNames(ctx)
 		if err != nil {
 			return err
@@ -3841,12 +3835,6 @@ func addPartitioningRows(
 	colOffset int,
 	addRow func(...tree.Datum) error,
 ) error {
-	if !ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) {
-		// Zone configs can only be set on individual objects if `system.zones`
-		// exists.
-		return nil
-	}
-
 	tableID := tree.NewDInt(tree.DInt(table.GetID()))
 	indexID := tree.NewDInt(tree.DInt(index.GetID()))
 	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns()))

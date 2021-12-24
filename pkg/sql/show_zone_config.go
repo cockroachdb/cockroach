@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -65,12 +64,6 @@ const (
 )
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
-	if !ZonesTableExists(ctx, p.ExecCfg().Codec, p.ExecCfg().Settings.Version) {
-		// Secondary tenants prior to the introduction of system.zones for them
-		// could not set/show zone configurations on individual objects.
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
-
 	return &delayedNode{
 		name:    n.String(),
 		columns: showZoneConfigColumns,
