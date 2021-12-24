@@ -358,12 +358,6 @@ func replaceExpressionElemsWithVirtualCols(
 	for i := range elems {
 		elem := &elems[i]
 		if elem.Expr != nil {
-			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.ExpressionIndexes) {
-				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"version %v must be finalized to use expression indexes",
-					clusterversion.ExpressionIndexes)
-			}
-
 			// Create a dummy ColumnTableDef to use for validating the
 			// expression. The type is Any because it is unknown until
 			// validation is performed.

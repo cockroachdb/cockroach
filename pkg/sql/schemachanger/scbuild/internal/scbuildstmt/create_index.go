@@ -11,7 +11,6 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -112,11 +111,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			panic(scerrors.NotImplementedErrorf(n, "column was added in the current transaction"))
 		}
 		if columnNode.Expr != nil {
-			if !b.ClusterSettings().Version.IsActive(b, clusterversion.ExpressionIndexes) {
-				panic(pgerror.Newf(pgcode.FeatureNotSupported,
-					"version %v must be finalized to use expression indexes",
-					clusterversion.ExpressionIndexes))
-			}
 			// TODO(fqazi): We need to deal with columns added in the same
 			// transaction here as well.
 			_, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
