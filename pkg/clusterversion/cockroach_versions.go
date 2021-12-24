@@ -209,9 +209,6 @@ const (
 	PostSeparatedIntentsMigration
 	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
 	RetryJobsWithExponentialBackoff
-	// RecordsBasedRegistry replaces the existing monolithic protobuf-based
-	// encryption-at-rest file registry with the new incremental records-based registry.
-	RecordsBasedRegistry
 	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
 	// type.
 	AutoSpanConfigReconciliationJob
@@ -238,17 +235,6 @@ const (
 	BoundedStaleness
 	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
 	DateAndIntervalStyle
-	// PebbleFormatVersioned ratchets Pebble's format major version to
-	// the version FormatVersioned.
-	PebbleFormatVersioned
-	// MarkerDataKeysRegistry switches to using an atomic marker file
-	// for denoting which data keys registry is active.
-	MarkerDataKeysRegistry
-	// PebbleSetWithDelete switches to a backwards incompatible Pebble version
-	// that provides SingleDelete semantics that are cleaner and robust to
-	// programming error. See https://github.com/cockroachdb/pebble/issues/1255
-	// and #69891.
-	PebbleSetWithDelete
 	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
 	// use a single consumption column (encoding a proto).
 	TenantUsageSingleConsumptionColumn
@@ -334,6 +320,10 @@ const (
 	// Do not add new versions to a patch release.
 	// *************************************************
 )
+
+// TODOPreV21_2 is an alias for V21_2 for use in any version gate/check that
+// previously referenced a < 21.2 version until that check/gate can be removed.
+const TODOPreV21_2 = V21_2
 
 // versionsSingleton lists all historical versions here in chronological order,
 // with comments describing what backwards-incompatible features were
@@ -436,9 +426,6 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1132},
 	},
 	{
-		Key:     RecordsBasedRegistry,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1134},
-	}, {
 		Key:     AutoSpanConfigReconciliationJob,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1136},
 	},
@@ -477,18 +464,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DateAndIntervalStyle,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
-	},
-	{
-		Key:     PebbleFormatVersioned,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1162},
-	},
-	{
-		Key:     MarkerDataKeysRegistry,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1164},
-	},
-	{
-		Key:     PebbleSetWithDelete,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1166},
 	},
 	{
 		Key:     TenantUsageSingleConsumptionColumn,
