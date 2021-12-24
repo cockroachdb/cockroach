@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// SQLInstancesTable adds the system table for storing SQL instance information
-	// per tenant.
-	SQLInstancesTable
 	// Can return new retryable rangefeed errors without crashing the client
 	NewRetryableRangefeedErrors
 	// AlterSystemWebSessionsCreateIndexes creates indexes on the columns revokedAt and
@@ -347,10 +344,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     SQLInstancesTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1122},
 	},
 	{
 		Key:     NewRetryableRangefeedErrors,
