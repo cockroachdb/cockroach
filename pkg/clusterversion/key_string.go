@@ -8,31 +8,28 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[V21_1-0]
-	_ = x[Start21_1PLUS-1]
-	_ = x[Start21_2-2]
-	_ = x[V21_2-3]
-	_ = x[Start22_1-4]
-	_ = x[AvoidDrainingNames-5]
-	_ = x[DrainingNamesMigration-6]
-	_ = x[TraceIDDoesntImplyStructuredRecording-7]
-	_ = x[AlterSystemTableStatisticsAddAvgSizeCol-8]
-	_ = x[AlterSystemStmtDiagReqs-9]
-	_ = x[MVCCAddSSTable-10]
-	_ = x[InsertPublicSchemaNamespaceEntryOnRestore-11]
-	_ = x[UnsplitRangesInAsyncGCJobs-12]
-	_ = x[ValidateGrantOption-13]
-	_ = x[PebbleFormatBlockPropertyCollector-14]
-	_ = x[ProbeRequest-15]
-	_ = x[SelectRPCsTakeTracingInfoInband-16]
-	_ = x[PreSeedTenantSpanConfigs-17]
-	_ = x[SeedTenantSpanConfigs-18]
-	_ = x[PublicSchemasWithDescriptors-19]
+	_ = x[V21_2-0]
+	_ = x[Start22_1-1]
+	_ = x[AvoidDrainingNames-2]
+	_ = x[DrainingNamesMigration-3]
+	_ = x[TraceIDDoesntImplyStructuredRecording-4]
+	_ = x[AlterSystemTableStatisticsAddAvgSizeCol-5]
+	_ = x[AlterSystemStmtDiagReqs-6]
+	_ = x[MVCCAddSSTable-7]
+	_ = x[InsertPublicSchemaNamespaceEntryOnRestore-8]
+	_ = x[UnsplitRangesInAsyncGCJobs-9]
+	_ = x[ValidateGrantOption-10]
+	_ = x[PebbleFormatBlockPropertyCollector-11]
+	_ = x[ProbeRequest-12]
+	_ = x[SelectRPCsTakeTracingInfoInband-13]
+	_ = x[PreSeedTenantSpanConfigs-14]
+	_ = x[SeedTenantSpanConfigs-15]
+	_ = x[PublicSchemasWithDescriptors-16]
 }
 
-const _Key_name = "V21_1Start21_1PLUSStart21_2V21_2Start22_1AvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptors"
+const _Key_name = "V21_2Start22_1AvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptors"
 
-var _Key_index = [...]uint16{0, 5, 18, 27, 32, 41, 59, 81, 118, 157, 180, 194, 235, 261, 280, 314, 326, 357, 381, 402, 430}
+var _Key_index = [...]uint16{0, 5, 14, 32, 54, 91, 130, 153, 167, 208, 234, 253, 287, 299, 330, 354, 375, 403}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
