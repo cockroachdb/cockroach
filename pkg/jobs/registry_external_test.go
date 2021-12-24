@@ -24,18 +24,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -43,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -727,143 +722,5 @@ SELECT unnest(execution_errors)
 		}
 		close(seventhRun.resume)
 		require.Regexp(t, err3, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
-	})
-}
-
-// TestExponentialBackoffUpgradeRacesWithUpdate tests that the system does not
-// encounter a nil pointer panic if the version is activated during an update.
-// When exponential-backoff is not active, num_runs and last_run columns are not
-// present in system.jobs table. As we checked version updates at multiple
-// locations and query system.jobs table during a job lifecycle, this test
-// checks that version update between two cluster-version checks does not result
-// in an error.
-func TestExponentialBackoffUpgradeRacesWithUpdate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var stmtFilter atomic.Value
-	resetStmtFilter := func() { stmtFilter.Store(func(context.Context, string) {}) }
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
-					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.RetryJobsWithExponentialBackoff - 1),
-				},
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					StatementFilter: func(ctx context.Context, data *sessiondata.SessionData, s string, err error) {
-						stmtFilter.Load().(func(context.Context, string))(ctx, s)
-					},
-				},
-			},
-		},
-	}
-
-	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{}
-	})
-	defer jobs.ResetConstructors()
-	type updateFunc = func(j *jobs.Job, ctx context.Context) error
-	// Sketch of the test:
-	//  * Create the cluster in the old version.
-	//  * Create the job but don't start it.
-	//  * Install a hook to block the select of the update.
-	//  * Launch a goroutine to run the relevant update.
-	//  * Wait for the update to block and unregister the hook.
-	//  * Upgrade the version.
-	//  * Unblock the update, see no panic.
-	run := func(t *testing.T, f updateFunc) {
-		resetStmtFilter()
-		ctx := context.Background()
-		tc := testcluster.StartTestCluster(t, 1, clusterArgs)
-		defer tc.Stopper().Stop(ctx)
-		s := tc.Server(0)
-
-		sqlDB := tc.ServerConn(0)
-		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		registry := s.JobRegistry().(*jobs.Registry)
-		var sj *jobs.StartableJob
-		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return registry.CreateStartableJobWithTxn(ctx, &sj, registry.MakeJobID(), txn, jobs.Record{
-				Details:  jobspb.ImportDetails{},
-				Progress: jobspb.ImportProgress{},
-			})
-		}))
-		blocked := make(chan chan struct{})
-
-		stmtFilter.Store(func(ctx context.Context, s string) {
-			if !strings.HasPrefix(s, `SELECT status, payload, progress`) {
-				return
-			}
-			resetStmtFilter() // so nobody else gets blocked
-			unblock := make(chan struct{})
-			blocked <- unblock
-			<-unblock
-		})
-		updateErr := make(chan error)
-		go func() { updateErr <- f(sj.Job, ctx) }()
-		unblock := <-blocked
-		resetStmtFilter() // so we don't catch other jobs
-		tdb.Exec(t,
-			`SET CLUSTER SETTING version = $1`, clusterversion.ByKey(clusterversion.RetryJobsWithExponentialBackoff).String(),
-		)
-		select {
-		case <-unblock:
-			t.Fatal("expected update not to finish")
-		case <-time.After(time.Millisecond):
-		}
-		close(unblock)
-		require.NoError(t, <-updateErr)
-	}
-	for _, tc := range []struct {
-		name string
-		f    updateFunc
-	}{
-		{"started", (*jobs.Job).Started},
-		{"reverted", func(j *jobs.Job, ctx context.Context) error {
-			return j.Reverted(ctx, errors.New("boom"))
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			run(t, tc.f)
-		})
-	}
-}
-
-// TestMixedVersionRevertFailed tests a revert failure in the mixed version
-// state before exponential backoff has been made active will result in the
-// job failing permanently rather than retrying forever without backoff.
-func TestMixedVersionRevertFailed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	// Override the version because in 21.2, expontential backoff and uncontitional
-	// retries are not permitted.
-	v21_1 := clusterversion.ByKey(clusterversion.V21_1)
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		v21_1, v21_1, true, /* initializeVersion */
-	)
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			DistSQL: &execinfra.TestingKnobs{
-				RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-					return errors.New("boom")
-				},
-			},
-		},
-	})
-	defer s.Stopper().Stop(ctx)
-
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
-	_, err := sqlDB.Exec("ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 32")
-	require.Regexp(t, "boom", err)
-	tdb.CheckQueryResults(t, "SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%ALTER TABLE%'", [][]string{
-		{"revert-failed", "boom"},
 	})
 }
