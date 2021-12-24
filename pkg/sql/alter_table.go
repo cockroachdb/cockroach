@@ -1114,12 +1114,6 @@ func applyColumnMutation(
 		}
 
 	case *tree.AlterTableSetOnUpdate:
-		if !params.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.OnUpdateExpressions) {
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to use ON UPDATE",
-				clusterversion.ByKey(clusterversion.OnUpdateExpressions))
-		}
-
 		// We want to reject uses of ON UPDATE where there is also a foreign key ON
 		// UPDATE.
 		for _, fk := range tableDesc.OutboundFKs {
