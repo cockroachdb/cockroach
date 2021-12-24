@@ -172,9 +172,6 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
-	// JoinTokensTable adds the system table for storing ephemeral generated
-	// join tokens.
-	JoinTokensTable
 	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
 	// include the type of lease acquisition event that resulted in that replica's
 	// current lease.
@@ -368,10 +365,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     JoinTokensTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1104},
 	},
 	{
 		Key:     AcquisitionTypeInLeaseHistory,

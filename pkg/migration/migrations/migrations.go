@@ -41,12 +41,6 @@ var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
 	migration.NewTenantMigration(
-		"add the systems.join_tokens table",
-		toCV(clusterversion.JoinTokensTable),
-		NoPrecondition,
-		joinTokensTableMigration,
-	),
-	migration.NewTenantMigration(
 		"delete the deprecated namespace table descriptor at ID=2",
 		toCV(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration),
 		NoPrecondition,
