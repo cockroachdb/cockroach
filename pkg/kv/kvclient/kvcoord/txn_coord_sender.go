@@ -1302,6 +1302,13 @@ func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked(ctx)
 }
 
+// SetReadSeqNum is part of the TxnSender interface.
+func (tc *TxnCoordSender) SetReadSeqNum(seq enginepb.TxnSeq) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.interceptorAlloc.txnSeqNumAllocator.readSeq = seq
+}
+
 // ConfigureStepping is part of the TxnSender interface.
 func (tc *TxnCoordSender) ConfigureStepping(
 	ctx context.Context, mode kv.SteppingMode,

@@ -14,10 +14,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -50,8 +52,11 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to DECLARE CURSOR")
 	}
+	inputState := p.txn.GetLeafTxnInputState(ctx)
 	cursor := &sqlCursor{
 		InternalRows: rows,
+		readSeqNum:   inputState.ReadSeqNum,
+		txn:          p.txn,
 		statement:    statement,
 		created:      timeutil.Now(),
 	}
@@ -98,9 +103,22 @@ type fetchNode struct {
 	fetchType tree.FetchType
 
 	seeked bool
+
+	// origTxnSeqNum is the transaction sequence number of the user's transaction
+	// before the fetch began.
+	origTxnSeqNum enginepb.TxnSeq
 }
 
-func (f fetchNode) startExec(_ runParams) error { return nil }
+func (f *fetchNode) startExec(params runParams) error {
+	state := f.cursor.txn.GetLeafTxnInputState(params.ctx)
+	// We need to make sure that we're reading at the same read sequence number
+	// that we had when we created the cursor, to preserve the "sensitivity"
+	// semantics of cursors, which demand that data written after the cursor
+	// was declared is not visible to the cursor.
+	f.origTxnSeqNum = state.ReadSeqNum
+	f.cursor.txn.SetReadSeqNum(f.cursor.readSeqNum)
+	return nil
+}
 
 func (f *fetchNode) Next(params runParams) (bool, error) {
 	if f.fetchType == tree.FetchAll {
@@ -158,6 +176,11 @@ func (f fetchNode) Values() tree.Datums {
 func (f fetchNode) Close(ctx context.Context) {
 	// We explicitly do not pass through the Close to our InternalRows, because
 	// running FETCH on a CURSOR does not close it.
+
+	// Reset the trasnaction's read sequence number to what it was before the
+	// fetch began, so that subsequent reads in the transaction can still see
+	// writes from that transaction.
+	f.cursor.txn.SetReadSeqNum(f.origTxnSeqNum)
 }
 
 // CloseCursor implements the FETCH statement.
@@ -168,9 +191,15 @@ func (p *planner) CloseCursor(ctx context.Context, n *tree.CloseCursor) (planNod
 
 type sqlCursor struct {
 	sqlutil.InternalRows
-	statement string
-	created   time.Time
-	curRow    int64
+	// txn is the transaction object that the internal executor for this cursor
+	// is running with.
+	txn *kv.Txn
+	// readSeqNum is the sequence number of the transaction that the cursor was
+	// initialized with.
+	readSeqNum enginepb.TxnSeq
+	statement  string
+	created    time.Time
+	curRow     int64
 }
 
 // Next implements the InternalRows interface.
