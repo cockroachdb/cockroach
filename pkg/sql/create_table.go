@@ -1495,7 +1495,6 @@ func NewTableDesc(
 				}
 				shardCol, _, err := maybeCreateAndAddShardCol(int(buckets), &desc,
 					[]string{string(d.Name)}, true, /* isNewTable */
-					evalCtx.Settings.Version.IsActive(ctx, clusterversion.UseKeyEncodeForHashShardedIndexes),
 				)
 				if err != nil {
 					return nil, err
@@ -2473,11 +2472,8 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 
 // makeShardColumnDesc returns a new column descriptor for a hidden computed shard column
 // based on all the `colNames` and the bucket count. It delegates to one of
-// makeHashShardComputeExpr or makeDeprecatedHashShardComputeExpr for the
-// computed expression based on the value of useDatumsToBytes.
-func makeShardColumnDesc(
-	colNames []string, buckets int, useDatumsToBytes bool,
-) (*descpb.ColumnDescriptor, error) {
+// makeHashShardComputeExpr.
+func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescriptor, error) {
 	col := &descpb.ColumnDescriptor{
 		Hidden:   true,
 		Nullable: false,
@@ -2485,77 +2481,8 @@ func makeShardColumnDesc(
 		Virtual:  true,
 	}
 	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
-	if useDatumsToBytes {
-		col.ComputeExpr = schemaexpr.MakeHashShardComputeExpr(colNames, buckets)
-	} else {
-		col.ComputeExpr = makeDeprecatedHashShardComputeExpr(colNames, buckets)
-	}
+	col.ComputeExpr = schemaexpr.MakeHashShardComputeExpr(colNames, buckets)
 	return col, nil
-}
-
-// makeDeprecatedHashShardComputeExpr creates the serialized computed expression for a hash shard
-// column based on the column names and the number of buckets. The expression will be
-// of the form:
-//
-//    mod(fnv32(colNames[0]::STRING)+fnv32(colNames[1])+...,buckets)
-//
-func makeDeprecatedHashShardComputeExpr(colNames []string, buckets int) *string {
-	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
-		return tree.ResolvableFunctionReference{
-			FunctionReference: &tree.UnresolvedName{
-				NumParts: 1,
-				Parts:    tree.NameParts{funcName},
-			},
-		}
-	}
-	hashedColumnExpr := func(colName string) tree.Expr {
-		return &tree.FuncExpr{
-			Func: unresolvedFunc("fnv32"),
-			Exprs: tree.Exprs{
-				// NB: We have created the hash shard column as NOT NULL so we need
-				// to coalesce NULLs into something else. There's a variety of different
-				// reasonable choices here. We could pick some outlandish value, we
-				// could pick a zero value for each type, or we can do the simple thing
-				// we do here, however the empty string seems pretty reasonable. At worst
-				// we'll have a collision for every combination of NULLable string
-				// columns. That seems just fine.
-				&tree.CoalesceExpr{
-					Name: "COALESCE",
-					Exprs: tree.Exprs{
-						&tree.CastExpr{
-							Type: types.String,
-							Expr: &tree.ColumnItem{ColumnName: tree.Name(colName)},
-						},
-						tree.NewDString(""),
-					},
-				},
-			},
-		}
-	}
-
-	// Construct an expression which is the sum of all of the casted and hashed
-	// columns.
-	var expr tree.Expr
-	for i := len(colNames) - 1; i >= 0; i-- {
-		c := colNames[i]
-		if expr == nil {
-			expr = hashedColumnExpr(c)
-		} else {
-			expr = &tree.BinaryExpr{
-				Left:     hashedColumnExpr(c),
-				Operator: tree.MakeBinaryOperator(tree.Plus),
-				Right:    expr,
-			}
-		}
-	}
-	str := tree.Serialize(&tree.FuncExpr{
-		Func: unresolvedFunc("mod"),
-		Exprs: tree.Exprs{
-			expr,
-			tree.NewDInt(tree.DInt(buckets)),
-		},
-	})
-	return &str
 }
 
 func makeShardCheckConstraintDef(
