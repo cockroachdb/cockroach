@@ -30,10 +30,8 @@ func TestIsTypeSupportedInVersion(t *testing.T) {
 
 		ok bool
 	}{
-		{regroleTypeVersion, RegRole, true},
-		{regroleTypeVersion - 1, RegRole, false},
-		{regroleTypeVersion, MakeArray(RegRole), true},
-		{regroleTypeVersion - 1, MakeArray(RegRole), false},
+		{clusterversion.TODOPreV21_2, RegRole, true},
+		{clusterversion.TODOPreV21_2, MakeArray(RegRole), true},
 	}
 
 	for _, tc := range testCases {
