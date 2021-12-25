@@ -181,6 +181,12 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 					}
 				}
 			}
+		case "ignore_constraint_name":
+			for _, msg := range msgs {
+				if m, ok := msg.(*pgproto3.ErrorResponse); ok {
+					m.ConstraintName = ""
+				}
+			}
 		case "ignore":
 			for _, typ := range arg.Vals {
 				ignore[fmt.Sprintf("*pgproto3.%s", typ)] = true
