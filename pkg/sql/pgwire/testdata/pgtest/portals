@@ -1048,3 +1048,98 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS portal_sync_test"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE portal_sync_test (a FLOAT CHECK(a > 1))"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s15", "Query": "INSERT INTO portal_sync_test VALUES($1);"}
+Describe {"ObjectType": "S", "Name": "s15"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[701]}
+{"Type":"NoData"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that the "insert fast path" does not cause an auto-commit before
+# the Sync message is handled. This also tests behavior with the unnamed
+# portal.
+send
+Bind {"PreparedStatement": "s15", "Parameters": [{"text":"2"}]}
+Describe {"ObjectType": "P"}
+Execute
+Bind {"PreparedStatement": "s15", "Parameters": [{"text":"3"}]}
+Describe {"ObjectType": "P"}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that an error during the implicit transaction causes both
+# INSERTs to be rolled back.
+send
+Bind {"PreparedStatement": "s15", "Parameters": [{"text":"4"}]}
+Describe {"ObjectType": "P"}
+Execute
+Bind {"PreparedStatement": "s15", "Parameters": [{"text":"0"}]}
+Describe {"ObjectType": "P"}
+Execute
+Sync
+----
+
+until ignore_constraint_name
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"ErrorResponse","Code":"23514"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM portal_sync_test ORDER BY a;"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
