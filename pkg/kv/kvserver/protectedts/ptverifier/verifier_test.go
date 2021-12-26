@@ -77,11 +77,13 @@ func TestVerifier(t *testing.T) {
 		for i, tid := range tables {
 			spans[i] = makeTableSpan(tid)
 		}
+		unusedTarget := ptpb.MakeRecordClusterTarget()
 		r := ptpb.Record{
 			ID:              uuid.MakeV4().GetBytes(),
 			Timestamp:       s.Clock().Now(),
 			Mode:            ptpb.PROTECT_AFTER,
 			DeprecatedSpans: spans,
+			Target:          unusedTarget,
 		}
 		require.Nil(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return pts.Protect(ctx, txn, &r)

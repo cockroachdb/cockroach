@@ -3372,10 +3372,12 @@ func TestStrictGCEnforcement(t *testing.T) {
 		tableKey      = keys.SystemSQLCodec.TablePrefix(tableID)
 		tableSpan     = roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 		mkRecord      = func() ptpb.Record {
+			unusedTarget := ptpb.MakeRecordClusterTarget()
 			return ptpb.Record{
 				ID:              uuid.MakeV4().GetBytes(),
 				Timestamp:       tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
 				DeprecatedSpans: []roachpb.Span{tableSpan},
+				Target:          unusedTarget,
 			}
 		}
 		mkStaleTxn = func() *kv.Txn {

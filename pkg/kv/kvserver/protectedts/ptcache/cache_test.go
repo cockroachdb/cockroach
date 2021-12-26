@@ -430,11 +430,13 @@ func protect(
 	t *testing.T, s serverutils.TestServerInterface, p protectedts.Storage, spans ...roachpb.Span,
 ) (r *ptpb.Record, createdAt hlc.Timestamp) {
 	protectTS := s.Clock().Now()
+	unusedTarget := ptpb.MakeRecordClusterTarget()
 	r = &ptpb.Record{
 		ID:              uuid.MakeV4().GetBytes(),
 		Timestamp:       protectTS,
 		Mode:            ptpb.PROTECT_AFTER,
 		DeprecatedSpans: spans,
+		Target:          unusedTarget,
 	}
 	ctx := context.Background()
 	txn := s.DB().NewTxn(ctx, "test")
