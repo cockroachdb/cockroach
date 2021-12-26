@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -45,7 +47,12 @@ import (
 func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	var params base.TestServerArgs
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: 1,
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
@@ -109,6 +116,10 @@ func TestRefresh(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: 1,
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+				},
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: kvserverbase.ReplicaRequestFilter(st.requestFilter),
 				},
@@ -223,7 +234,12 @@ func TestStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	setup := func() (*testcluster.TestCluster, *ptcache.Cache) {
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		var params base.TestServerArgs
+		params.Knobs.Server = &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: 1,
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+		}
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 		s := tc.Server(0)
 		p := ptstorage.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor))
@@ -255,7 +271,12 @@ func TestStart(t *testing.T) {
 func TestQueryRecord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	var params base.TestServerArgs
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: 1,
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
@@ -312,7 +333,12 @@ func TestQueryRecord(t *testing.T) {
 
 func TestIterate(t *testing.T) {
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	var params base.TestServerArgs
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: 1,
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
@@ -377,7 +403,12 @@ func (recs *records) sorted() []*ptpb.Record {
 
 func TestSettingChangedLeadsToFetch(t *testing.T) {
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	var params base.TestServerArgs
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: 1,
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),

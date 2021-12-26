@@ -32,6 +32,7 @@ go_test(
     deps = [
         ":ptcache",
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",

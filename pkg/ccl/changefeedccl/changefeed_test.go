@@ -38,6 +38,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // registers cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -3751,10 +3752,15 @@ func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
 		return nil
 	})
 
-	setStoreKnobs := func(args *base.TestServerArgs) {
+	setStoreAndServerKnobs := func(args *base.TestServerArgs) {
 		storeKnobs := &kvserver.StoreTestingKnobs{}
 		storeKnobs.TestingRequestFilter = requestFilter
 		args.Knobs.Store = storeKnobs
+
+		serverKnobs := &server.TestingKnobs{}
+		serverKnobs.DisableAutomaticVersionUpgrade = 1
+		serverKnobs.BinaryVersionOverride = clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1)
+		args.Knobs.Server = serverKnobs
 	}
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
@@ -3785,7 +3791,7 @@ func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
 			return err
 		})
 	}
-	opts := []feedTestOption{withArgsFn(setStoreKnobs), feedTestNoTenants}
+	opts := []feedTestOption{withArgsFn(setStoreAndServerKnobs), feedTestNoTenants}
 	t.Run(`enterprise`, enterpriseTest(testFn, opts...))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn, opts...))
 	t.Run(`kafka`, kafkaTest(testFn, opts...))
