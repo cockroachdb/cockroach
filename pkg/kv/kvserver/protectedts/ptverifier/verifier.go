@@ -45,6 +45,13 @@ func (v *verifier) Verify(ctx context.Context, id uuid.UUID) error {
 		return errors.Wrapf(err, "failed to fetch record %s", id)
 	}
 
+	// TODO(adityamaru): Remove this once we delete all `Verify` calls. The new
+	// subsystem is not going to provide verification semantics. Until then mark
+	// the record as verified so it is a noop.
+	if r.DeprecatedSpans == nil {
+		return nil
+	}
+
 	if r.Verified { // already verified
 		return nil
 	}
