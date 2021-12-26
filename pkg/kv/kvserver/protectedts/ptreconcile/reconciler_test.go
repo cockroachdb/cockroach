@@ -79,6 +79,7 @@ func TestReconciler(t *testing.T) {
 		Mode:      ptpb.PROTECT_AFTER,
 		MetaType:  testTaskType,
 		Meta:      []byte(recMeta),
+		Target:    ptpb.MakeRecordClusterTarget(),
 		DeprecatedSpans: []roachpb.Span{
 			{Key: keys.MinKey, EndKey: keys.MaxKey},
 		},

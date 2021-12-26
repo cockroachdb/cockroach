@@ -140,6 +140,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor))
 	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB())
 	startKey := getTableStartKey("foo")
+	unusedTarget := ptpb.MakeRecordClusterTarget()
 	ptsRec := ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: s0.Clock().Now(),
@@ -150,6 +151,7 @@ func TestProtectedTimestamps(t *testing.T) {
 				EndKey: startKey.PrefixEnd(),
 			},
 		},
+		Target: unusedTarget,
 	}
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &ptsRec))
 	upsertUntilBackpressure()
