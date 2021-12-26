@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -48,8 +47,8 @@ func TestCacheBasic(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
-	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
+	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor),
+		nil /* knobs */), s.DB())
 
 	// Set the poll interval to be very short.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Microsecond)
@@ -110,7 +109,7 @@ func TestRefresh(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					TestingRequestFilter: kvserverbase.ReplicaRequestFilter(st.requestFilter),
+					TestingRequestFilter: st.requestFilter,
 				},
 			},
 		},
@@ -118,7 +117,7 @@ func TestRefresh(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -225,8 +224,7 @@ func TestStart(t *testing.T) {
 	setup := func() (*testcluster.TestCluster, *ptcache.Cache) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		s := tc.Server(0)
-		p := ptstorage.New(s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor))
+		p := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */)
 		// Set the poll interval to be very long.
 		protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 		c := ptcache.New(ptcache.Config{
@@ -259,7 +257,7 @@ func TestQueryRecord(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 	c := ptcache.New(ptcache.Config{
@@ -316,7 +314,7 @@ func TestIterate(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -381,7 +379,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
+		s.InternalExecutor().(sqlutil.InternalExecutor), nil /* knobs */), s.DB())
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)

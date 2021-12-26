@@ -35,6 +35,7 @@ type Config struct {
 	Stores               *kvserver.Stores
 	ReconcileStatusFuncs ptreconcile.StatusFuncs
 	InternalExecutor     sqlutil.InternalExecutor
+	Knobs                *protectedts.TestingKnobs
 }
 
 type provider struct {
@@ -48,7 +49,7 @@ func New(cfg Config) (protectedts.Provider, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
-	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor)
+	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor, cfg.Knobs)
 	verifier := ptverifier.New(cfg.DB, storage)
 	return &provider{
 		Storage: storage,

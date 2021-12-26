@@ -5,10 +5,12 @@ go_library(
     srcs = [
         "protectedts.go",
         "settings.go",
+        "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb:with-mocks",
