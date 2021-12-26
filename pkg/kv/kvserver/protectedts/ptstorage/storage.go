@@ -14,6 +14,7 @@ package ptstorage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -71,30 +72,17 @@ func (p *storage) UpdateTimestamp(
 	return nil
 }
 
-func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
-	if err := validateRecordForProtect(r); err != nil {
-		return err
-	}
-	if txn == nil {
-		return errNoTxn
-	}
+func (p *storage) deprecatedProtect(
+	ctx context.Context, txn *kv.Txn, r *ptpb.Record, meta []byte,
+) error {
+	s := makeSettings(p.settings)
 	encodedSpans, err := protoutil.Marshal(&Spans{Spans: r.DeprecatedSpans})
 	if err != nil { // how can this possibly fail?
 		return errors.Wrap(err, "failed to marshal spans")
 	}
-	meta := r.Meta
-	if meta == nil {
-		// v20.1 crashes in rowToRecord and storage.Release if it finds a NULL
-		// value in system.protected_ts_records.meta. v20.2 and above handle
-		// this correctly, but we need to maintain mixed version compatibility
-		// for at least one release.
-		// TODO(nvanbenschoten): remove this for v21.1.
-		meta = []byte{}
-	}
-	s := makeSettings(p.settings)
 	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-protect", txn,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
-		protectQuery,
+		protectQueryWithoutTarget,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
 		r.ID, r.Timestamp.AsOfSystemTime(),
 		r.MetaType, meta,
@@ -134,21 +122,106 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	return nil
 }
 
+func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
+	if err := validateRecordForProtect(ctx, r, p.settings); err != nil {
+		return err
+	}
+	if txn == nil {
+		return errNoTxn
+	}
+
+	meta := r.Meta
+	if meta == nil {
+		// v20.1 crashes in rowToRecord and storage.Release if it finds a NULL
+		// value in system.protected_ts_records.meta. v20.2 and above handle
+		// this correctly, but we need to maintain mixed version compatibility
+		// for at least one release.
+		// TODO(nvanbenschoten): remove this for v21.1.
+		meta = []byte{}
+	}
+	if !p.settings.Version.IsActive(ctx, clusterversion.AlterSystemProtectedTimestampAddColumn) {
+		return p.deprecatedProtect(ctx, txn, r, meta)
+	}
+
+	// TODO(during review): To avoid breaking protected timestamps before the
+	// multi-tenant pts subsystem is hooked up, should we continue writing spans
+	// for the GC queue to observe? Maybe we can add a temporary cluster setting
+	// such as `mt_pts.complete` that is false until it is complete so that we can
+	// write tests that assume persisted spans will be nil.
+	//
+	// Clear the `DeprecatedSpans` field even if it has been set by the caller.
+	// Once the `AlterSystemProtectedTimestampAddColumn` migration has run, we
+	// only want to persist the `target` on which the pts record applies. We have
+	// already verified that the record has a valid `target`.
+	r.DeprecatedSpans = nil
+	s := makeSettings(p.settings)
+	encodedTarget, err := protoutil.Marshal(&ptpb.Target{Union: r.Target.GetUnion()})
+	if err != nil { // how can this possibly fail?
+		return errors.Wrap(err, "failed to marshal spans")
+	}
+	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-protect", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+		protectQuery,
+		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
+		r.ID, r.Timestamp.AsOfSystemTime(),
+		r.MetaType, meta,
+		len(r.DeprecatedSpans), encodedTarget, encodedTarget)
+	if err != nil {
+		return errors.Wrapf(err, "failed to write record %v", r.ID)
+	}
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "failed to write record %v", r.ID)
+	}
+	if !ok {
+		return errors.Newf("failed to write record %v", r.ID)
+	}
+	row := it.Cur()
+	if err := it.Close(); err != nil {
+		log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+	}
+	if failed := *row[0].(*tree.DBool); failed {
+		curBytes := int64(*row[1].(*tree.DInt))
+		recordBytes := int64(len(encodedTarget) + len(r.Meta) + len(r.MetaType))
+		if s.maxBytes > 0 && curBytes+recordBytes > s.maxBytes {
+			return errors.WithHint(
+				errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes", curBytes, recordBytes,
+					s.maxBytes),
+				"SET CLUSTER SETTING kv.protectedts.max_bytes to a higher value")
+		}
+		return protectedts.ErrExists
+	}
+
+	return nil
+}
+
 func (p *storage) GetRecord(ctx context.Context, txn *kv.Txn, id uuid.UUID) (*ptpb.Record, error) {
 	if txn == nil {
 		return nil, errNoTxn
 	}
-	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
-		getRecordQuery, id.GetBytesMut())
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read record %v", id)
+
+	var row tree.Datums
+	var err error
+	if p.settings.Version.IsActive(ctx, clusterversion.AlterSystemProtectedTimestampAddColumn) {
+		row, err = p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			getRecordQuery, id.GetBytesMut())
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to read record %v", id)
+		}
+	} else {
+		row, err = p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			getRecordWithoutTargetQuery, id.GetBytesMut())
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to read record %v", id)
+		}
 	}
 	if len(row) == 0 {
 		return nil, protectedts.ErrNotExists
 	}
 	var r ptpb.Record
-	if err := rowToRecord(ctx, row, &r); err != nil {
+	if err := rowToRecord(ctx, row, &r, p.settings); err != nil {
 		return nil, err
 	}
 	return &r, nil
@@ -226,17 +299,29 @@ func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error)
 }
 
 func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
-	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,
-		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
-		getRecordsQuery)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read records")
+	var it sqlutil.InternalRows
+	var err error
+	if p.settings.Version.IsActive(ctx, clusterversion.AlterSystemProtectedTimestampAddColumn) {
+		it, err = p.ex.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			getRecordsQuery)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read records")
+		}
+	} else {
+		it, err = p.ex.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
+			getRecordsWithoutTargetQuery)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read records")
+		}
 	}
+
 	var ok bool
 	var records []ptpb.Record
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var record ptpb.Record
-		if err := rowToRecord(ctx, it.Cur(), &record); err != nil {
+		if err := rowToRecord(ctx, it.Cur(), &record, p.settings); err != nil {
 			log.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
 		records = append(records, record)
@@ -252,7 +337,7 @@ func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, e
 // they are logged but not returned. Returning an error due to malformed data
 // in the protected timestamp subsystem would create more problems than it would
 // solve. Malformed records can still be removed (and hopefully will be).
-func rowToRecord(ctx context.Context, row tree.Datums, r *ptpb.Record) error {
+func rowToRecord(ctx context.Context, row tree.Datums, r *ptpb.Record, st *cluster.Settings) error {
 	r.ID = row[0].(*tree.DUuid).UUID.GetBytes()
 	tsDecimal := row[1].(*tree.DDecimal)
 	ts, err := tree.DecimalToHLC(&tsDecimal.Decimal)
@@ -269,10 +354,18 @@ func rowToRecord(ctx context.Context, row tree.Datums, r *ptpb.Record) error {
 	}
 	var spans Spans
 	if err := protoutil.Unmarshal([]byte(*row[4].(*tree.DBytes)), &spans); err != nil {
-		return errors.Wrapf(err, "failed to unmarshal spans for %v", r.ID)
+		return errors.Wrapf(err, "failed to unmarshal span for %v", r.ID)
 	}
 	r.DeprecatedSpans = spans.Spans
 	r.Verified = bool(*row[5].(*tree.DBool))
+
+	if st.Version.IsActive(ctx, clusterversion.AlterSystemProtectedTimestampAddColumn) {
+		target := &ptpb.Target{}
+		if err := protoutil.Unmarshal([]byte(*row[6].(*tree.DBytes)), target); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal target for %v", r.ID)
+		}
+		r.Target = target
+	}
 	return nil
 }
 
@@ -292,18 +385,23 @@ var (
 	errZeroTimestamp        = errors.New("invalid zero value timestamp")
 	errZeroID               = errors.New("invalid zero value ID")
 	errEmptySpans           = errors.Errorf("invalid empty set of spans")
+	errNilTarget            = errors.Errorf("invalid nil target")
 	errInvalidMeta          = errors.Errorf("invalid Meta with empty MetaType")
 	errCreateVerifiedRecord = errors.Errorf("cannot create a verified record")
 )
 
-func validateRecordForProtect(r *ptpb.Record) error {
+func validateRecordForProtect(ctx context.Context, r *ptpb.Record, st *cluster.Settings) error {
 	if r.Timestamp.IsEmpty() {
 		return errZeroTimestamp
 	}
 	if r.ID.GetUUID() == uuid.Nil {
 		return errZeroID
 	}
-	if len(r.DeprecatedSpans) == 0 {
+	isTargetActive := st.Version.IsActive(ctx, clusterversion.AlterSystemProtectedTimestampAddColumn)
+	if isTargetActive && r.Target == nil {
+		return errNilTarget
+	}
+	if !isTargetActive && len(r.DeprecatedSpans) == 0 {
 		return errEmptySpans
 	}
 	if len(r.Meta) > 0 && len(r.MetaType) == 0 {

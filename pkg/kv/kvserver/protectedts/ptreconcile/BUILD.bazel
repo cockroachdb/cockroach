@@ -36,6 +36,7 @@ go_test(
     deps = [
         ":ptreconcile",
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",

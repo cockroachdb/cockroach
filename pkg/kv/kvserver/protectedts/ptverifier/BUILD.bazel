@@ -26,6 +26,7 @@ go_test(
     deps = [
         ":ptverifier",
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord:with-mocks",

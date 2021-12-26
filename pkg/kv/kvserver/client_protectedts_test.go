@@ -17,11 +17,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptverifier"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -53,6 +55,10 @@ func TestProtectedTimestamps(t *testing.T) {
 	skip.UnderShort(t)
 
 	args := base.TestClusterArgs{}
+	args.ServerArgs.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: 1,
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+	}
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		DisableGCQueue:            true,
 		DisableLastProcessedCheck: true,

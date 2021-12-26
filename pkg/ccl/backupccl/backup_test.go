@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -53,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -6246,6 +6248,10 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 			return nil
 		},
 	}
+	params.ServerArgs.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: 1,
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+	}
 	tc := testcluster.StartTestCluster(t, 3, params)
 	defer tc.Stopper().Stop(ctx)
 
@@ -6742,6 +6748,8 @@ func TestRestoreErrorPropagates(t *testing.T) {
 
 // TestProtectedTimestampsFailDueToLimits ensures that when creating a protected
 // timestamp record fails, we return the correct error.
+//
+// TODO(adityamaru): Remove in 22.2 once no records protect spans.
 func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6749,9 +6757,19 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-	tc := testcluster.StartTestCluster(t, 1, params)
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: 1,
+					BinaryVersionOverride: clusterversion.ByKey(
+						clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+				},
+			},
+		},
+	}
+	clusterArgs.ServerArgs.ExternalIODir = dir
+	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(db)
@@ -8970,6 +8988,10 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 				<-allowGC
 				return nil
 			}},
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: 1,
+				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemProtectedTimestampAddColumn - 1),
+			},
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
