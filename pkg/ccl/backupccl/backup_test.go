@@ -6747,6 +6747,8 @@ func TestRestoreErrorPropagates(t *testing.T) {
 
 // TestProtectedTimestampsFailDueToLimits ensures that when creating a protected
 // timestamp record fails, we return the correct error.
+//
+// TODO(adityamaru): Remove in 22.2 once no records protect spans.
 func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6754,9 +6756,9 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-	tc := testcluster.StartTestCluster(t, 1, params)
+	clusterArgs := base.TestClusterArgs{}
+	clusterArgs.ServerArgs.ExternalIODir = dir
+	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(db)

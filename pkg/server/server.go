@@ -580,11 +580,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		user security.SQLUsername) (cloud.ExternalStorage, error) {
 		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri, user)
 	}
+
+	protectedtsKnobs, _ := cfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
 		DB:               db,
 		InternalExecutor: internalExecutor,
 		Settings:         st,
-	})
+	}, protectedtsKnobs)
 	if err != nil {
 		return nil, err
 	}
