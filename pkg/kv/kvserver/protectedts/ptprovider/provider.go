@@ -44,11 +44,11 @@ type provider struct {
 }
 
 // New creates a new protectedts.Provider.
-func New(cfg Config) (protectedts.Provider, error) {
+func New(cfg Config, knobs *protectedts.TestingKnobs) (protectedts.Provider, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
-	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor)
+	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor, knobs)
 	verifier := ptverifier.New(cfg.DB, storage)
 	return &provider{
 		Storage: storage,
