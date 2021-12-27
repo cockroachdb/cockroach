@@ -37,7 +37,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		ctx := context.Background()
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		tc.Start(t, stopper)
+		tc.Start(ctx, t, stopper)
 
 		// Lock the replica for the entire test.
 		r := tc.repl

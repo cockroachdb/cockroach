@@ -57,9 +57,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -2181,7 +2181,7 @@ func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (e
 		factory := kv.MockTxnSenderFactory{}
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 		stopper := stop.NewStopper()
-		db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
+		db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 		ot.evalCtx.Txn = kv.NewTxn(context.Background(), db, 1)
 	}
 	bld := execbuilder.New(f, ot.makeOptimizer(), mem, ot.catalog, expr, &ot.evalCtx, true)

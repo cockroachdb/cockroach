@@ -90,7 +90,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 			// that a push on a STAGING transaction record immediately launches
 			// the transaction recovery process.
 			cfg.TestingKnobs.EvalKnobs.RecoverIndeterminateCommitsOnFailedPushes = true
-			store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+			store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 			// Create a transaction that will get stuck performing a parallel commit.
 			txn := newTransaction("txn", keyA, 1, store.Clock())
@@ -227,7 +227,7 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 		defer stopper.Stop(ctx)
 		manual := hlc.NewManualClock(123)
 		cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-		store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+		store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 		// Create a transaction that will get stuck performing a parallel
 		// commit.
@@ -347,7 +347,7 @@ func TestTxnClearRangeIntents(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	// Immediately launch transaction recovery when pushing a STAGING txn.
 	cfg.TestingKnobs.EvalKnobs.RecoverIndeterminateCommitsOnFailedPushes = true
-	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 	// Set up a couple of keys to write, and a range to clear that covers
 	// B and its intent.

@@ -106,7 +106,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	// Make a db with a short heartbeat interval, so that the aborted txn finds
 	// out quickly.
-	ambient := log.AmbientContext{Tracer: s.TracerI().(*tracing.Tracer)}
+	ambient := s.AmbientCtx()
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,

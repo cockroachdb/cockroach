@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -445,18 +444,18 @@ func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
 	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
-	rctx := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		Config:     cfg,
-		Clock:      clock,
-		Stopper:    stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
+	ctx := context.Background()
+	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID: roachpb.SystemTenantID,
+		Config:   cfg,
+		Clock:    clock,
+		Stopper:  stopper,
+		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rctx.ClusterID.Set(context.Background(), uuid.MakeV4())
+	rctx.ClusterID.Set(ctx, uuid.MakeV4())
 
 	return rctx
 }

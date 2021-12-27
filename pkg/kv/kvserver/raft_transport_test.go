@@ -107,24 +107,24 @@ type raftTransportTestContext struct {
 }
 
 func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
+	ctx := context.Background()
 	tr := tracing.NewTracer()
 	rttc := &raftTransportTestContext{
 		t:          t,
 		stopper:    stop.NewStopper(stop.WithTracer(tr)),
 		transports: map[roachpb.NodeID]*kvserver.RaftTransport{},
 	}
-	rttc.nodeRPCContext = rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tr},
-		Config:     testutils.NewNodeTestBaseContext(),
-		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		Stopper:    rttc.stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
+	rttc.nodeRPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID: roachpb.SystemTenantID,
+		Config:   testutils.NewNodeTestBaseContext(),
+		Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Stopper:  rttc.stopper,
+		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rttc.nodeRPCContext.ClusterID.Set(context.Background(), uuid.MakeV4())
+	rttc.nodeRPCContext.ClusterID.Set(ctx, uuid.MakeV4())
 
 	// We are sharing the same RPC context for all simulated nodes, so
 	// we can't enforce some of the RPC check validation.
@@ -160,7 +160,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 ) (*kvserver.RaftTransport, net.Addr) {
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
 	transport := kvserver.NewRaftTransport(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
+		log.MakeTestingAmbientCtxWithNewTracer(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,

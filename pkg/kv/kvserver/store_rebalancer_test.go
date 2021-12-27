@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
@@ -290,7 +290,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	stopper, g, _, a, _ := createTestAllocatorWithKnobs(
+	stopper, g, _, a, _ := createTestAllocatorWithKnobs(ctx,
 		10, false /* deterministic */, &AllocatorTestingKnobs{
 			// Let the allocator pick lease transfer targets that are replicas in need
 			// of snapshots, in order to avoid mocking out a fake raft group for the
@@ -305,7 +305,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
 	cfg.Gossip = g
-	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
 	rq := newReplicateQueue(s, a)
 	rr := newReplicaRankings()
@@ -533,7 +533,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 	for i := 0; i < numIterations; i++ {
 		t.Run(fmt.Sprintf("%d", i+1), func(t *testing.T) {
 			ctx := context.Background()
-			stopper, g, _, a, _ := createTestAllocator(numNodes, false /* deterministic */)
+			stopper, g, _, a, _ := createTestAllocator(ctx, numNodes, false /* deterministic */)
 			defer stopper.Stop(context.Background())
 
 			stores, actualQPSMean := randomNoLocalityStores(numNodes, qpsMultiplier)
@@ -557,7 +557,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 			localDesc := *stores[0]
 			cfg := TestStoreConfig(nil)
-			s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
 			rq := newReplicateQueue(s, a)
 			rr := newReplicaRankings()
@@ -795,7 +795,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Boilerplate for test setup.
-			stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+			stopper, g, _, a, _ := createTestAllocator(ctx, 10, false /* deterministic */)
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(multiRegionStores, t)
 			storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
@@ -807,7 +807,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 				}
 			}
 			cfg := TestStoreConfig(nil)
-			s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
 			rq := newReplicateQueue(s, a)
 			rr := newReplicaRankings()
@@ -888,7 +888,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	stopper, g, _, a, _ := createTestAllocatorWithKnobs(
+	stopper, g, _, a, _ := createTestAllocatorWithKnobs(ctx,
 		10,
 		false, /* deterministic */
 		&AllocatorTestingKnobs{AllowLeaseTransfersToReplicasNeedingSnapshots: true},
@@ -901,7 +901,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	cfg.Gossip = g
 	cfg.StorePool = a.storePool
-	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(noLocalityStores, t)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
 	rq := newReplicateQueue(s, a)

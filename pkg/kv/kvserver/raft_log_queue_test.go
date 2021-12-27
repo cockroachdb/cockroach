@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
@@ -422,8 +422,9 @@ func TestNewTruncateDecisionMaxSize(t *testing.T) {
 	cfg := TestStoreConfig(hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond))
 	const exp = 1881
 	cfg.RaftLogTruncationThreshold = exp
+	ctx := context.Background()
 	store := createTestStoreWithConfig(
-		t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
+		ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
 	)
 
 	repl, err := store.GetReplica(1)
@@ -431,7 +432,6 @@ func TestNewTruncateDecisionMaxSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := context.Background()
 	td, err := newTruncateDecision(ctx, repl)
 	if err != nil {
 		t.Fatal(err)
@@ -450,9 +450,10 @@ func TestNewTruncateDecision(t *testing.T) {
 
 	skip.WithIssue(t, 38584)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	store, _ := createTestStore(t,
+	defer stopper.Stop(ctx)
+	store, _ := createTestStore(ctx, t,
 		testStoreOpts{
 			// This test was written before test stores could start with more than one
 			// range and was not adapted.
@@ -467,7 +468,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	}
 
 	getIndexes := func() (uint64, int, uint64, error) {
-		d, err := newTruncateDecision(context.Background(), r)
+		d, err := newTruncateDecision(ctx, r)
 		if err != nil {
 			return 0, 0, 0, err
 		}
@@ -486,7 +487,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := kv.SendWrapped(context.Background(), store.TestSender(), &args); err != nil {
+		if _, err := kv.SendWrapped(ctx, store.TestSender(), &args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -582,7 +583,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			store, _ := createTestStore(t,
+			store, _ := createTestStore(ctx, t,
 				testStoreOpts{
 					// This test was written before test stores could start with more than one
 					// range and was not adapted.
@@ -702,11 +703,12 @@ func TestTruncateLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
+	ctx := context.Background()
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
 	var indexes []uint64
@@ -860,8 +862,8 @@ func TestTruncateLogRecompute(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	key := roachpb.Key("a")
 	repl := tc.store.LookupReplica(keys.MustAddr(key))

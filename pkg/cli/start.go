@@ -699,6 +699,8 @@ If problems persist, please see %s.`
 	// decommission`, or a signal.
 
 	// We'll want to log any shutdown activity against a separate span.
+	// We cannot use s.AnnotateCtx here because s might not have
+	// been assigned yet (the goroutine above runs asynchronously).
 	shutdownCtx, shutdownSpan := ambientCtx.AnnotateCtxWithSpan(context.Background(), "server shutdown")
 	defer shutdownSpan.Finish()
 
@@ -763,7 +765,7 @@ If problems persist, please see %s.`
 			}
 			// Don't use shutdownCtx because this is in a goroutine that may
 			// still be running after shutdownCtx's span has been finished.
-			drainCtx := ambientCtx.AnnotateCtx(context.Background())
+			drainCtx := s.AnnotateCtx(context.Background())
 			drainCtx = logtags.AddTag(drainCtx, "server drain process", nil)
 
 			// Perform a graceful drain. We keep retrying forever, in
@@ -1220,14 +1222,14 @@ func getClientGRPCConn(
 	// as that of nodes in the cluster.
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: cfg.Tracer},
-		Config:     cfg.Config,
-		Clock:      clock,
-		Stopper:    stopper,
-		Settings:   cfg.Settings,
-	})
+	rpcContext := rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+			Config:   cfg.Config,
+			Clock:    clock,
+			Stopper:  stopper,
+			Settings: cfg.Settings,
+		})
 	if cfg.TestingKnobs.Server != nil {
 		rpcContext.Knobs = cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs
 	}

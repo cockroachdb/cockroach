@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -208,7 +207,7 @@ func TestRunSeparatedIntentsMigration(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db := kv.NewDB(log.AmbientContext{Tracer: tracing.NewTracer()}, mockSender, hlcClock, stopper)
+	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), mockSender, hlcClock, stopper)
 
 	datadriven.RunTest(t, "testdata/separated_intents",
 		func(t *testing.T, d *datadriven.TestData) string {

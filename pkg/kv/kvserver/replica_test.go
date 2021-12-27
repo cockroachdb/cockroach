@@ -154,29 +154,34 @@ func (tc *testContext) Clock() *hlc.Clock {
 
 // Start initializes the test context with a single range covering the
 // entire keyspace.
-func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
+func (tc *testContext) Start(ctx context.Context, t testing.TB, stopper *stop.Stopper) {
 	tc.manualClock = hlc.NewManualClock(123)
 	cfg := TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(
 		hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	// testContext tests like to move the manual clock around and assume that they can write at past
 	// timestamps.
 	cfg.TestingKnobs.DontCloseTimestamps = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 }
 
 // StartWithStoreConfig initializes the test context with a single
 // range covering the entire keyspace.
-func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper, cfg StoreConfig) {
-	tc.StartWithStoreConfigAndVersion(t, stopper, cfg, cfg.Settings.Version.BinaryVersion())
+func (tc *testContext) StartWithStoreConfig(
+	ctx context.Context, t testing.TB, stopper *stop.Stopper, cfg StoreConfig,
+) {
+	tc.StartWithStoreConfigAndVersion(ctx, t, stopper, cfg, cfg.Settings.Version.BinaryVersion())
 }
 
 // StartWithStoreConfigAndVersion is like StartWithStoreConfig but additionally
 // allows control over the bootstrap version.
 func (tc *testContext) StartWithStoreConfigAndVersion(
-	t testing.TB, stopper *stop.Stopper, cfg StoreConfig, bootstrapVersion roachpb.Version,
+	ctx context.Context,
+	t testing.TB,
+	stopper *stop.Stopper,
+	cfg StoreConfig,
+	bootstrapVersion roachpb.Version,
 ) {
 	tc.TB = t
-	ctx := context.Background()
 	require.Nil(t, tc.gossip)
 	require.Nil(t, tc.transport)
 	require.Nil(t, tc.engine)
@@ -190,7 +195,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	//
 	// NB: split queue, merge queue, and scanner are also disabled.
 	store := createTestStoreWithoutStart(
-		t, stopper, testStoreOpts{
+		ctx, t, stopper, testStoreOpts{
 			createSystemRanges: false,
 			bootstrapVersion:   bootstrapVersion,
 		}, &cfg,
@@ -533,13 +538,14 @@ func TestReplicaReadConsistency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
 	if err != nil {
@@ -653,10 +659,11 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 				}
 				return nil
 			}
+		ctx := context.Background()
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
-		tc.StartWithStoreConfig(t, stopper, tsc)
-		secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
+		defer stopper.Stop(ctx)
+		tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+		secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -674,7 +681,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		// Initiate a transfer (async) and wait for it to be blocked.
 		transferResChan := make(chan error)
 		go func() {
-			err := tc.repl.AdminTransferLease(context.Background(), secondReplica.StoreID)
+			err := tc.repl.AdminTransferLease(ctx, secondReplica.StoreID)
 			if !testutils.IsError(err, "injected") {
 				transferResChan <- err
 			} else {
@@ -772,15 +779,16 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -810,9 +818,10 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	lease, _ := tc.repl.GetLease()
 	invalidLease := lease
@@ -830,7 +839,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	}
 	tc.repl.mu.Lock()
 	_, _, pErr := checkForcedErr(
-		context.Background(), makeIDKey(), &raftCmd, false, /* isLocal */
+		ctx, makeIDKey(), &raftCmd, false, /* isLocal */
 		&tc.repl.mu.state,
 	)
 	tc.repl.mu.Unlock()
@@ -845,9 +854,10 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.RKey("a")
 	firstRepl := tc.store.LookupReplica(key)
@@ -896,7 +906,7 @@ func TestReplicaLease(t *testing.T) {
 	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tsc.TestingKnobs.TestingApplyFilter = applyFilter
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -964,15 +974,16 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1022,8 +1033,9 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer EnableLeaseHistory(100)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	var tc testContext
 	cfg := TestStoreConfig(nil)
@@ -1032,7 +1044,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	// with an AmbiguousResultError.
 	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
 	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	assert := func(actual, min, max int64) error {
 		if actual < min || actual > max {
@@ -1122,15 +1134,16 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1218,15 +1231,16 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	// Disable raft log truncation which confuses this test.
 	cfg.TestingKnobs.DisableRaftLogQueue = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
 	if err != nil {
@@ -1305,12 +1319,12 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
@@ -1467,9 +1481,10 @@ func TestReplicaGossipFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 	for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor, gossip.KeySentinel} {
 		bytes, err := tc.gossip.GetInfo(key)
 		if err != nil {
@@ -1494,10 +1509,11 @@ func TestReplicaGossipFirstRange(t *testing.T) {
 func TestReplicaGossipAllConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 	if cfg := tc.gossip.GetSystemConfig(); cfg == nil {
 		t.Fatal("config not set")
 	}
@@ -1737,9 +1753,10 @@ func TestOptimizePuts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	pArgs := make([]roachpb.PutRequest, optimizePutThreshold)
 	cpArgs := make([]roachpb.ConditionalPutRequest, optimizePutThreshold)
@@ -1985,7 +2002,7 @@ func TestAcquireLease(t *testing.T) {
 				tc := testContext{}
 				stopper := stop.NewStopper()
 				defer stopper.Stop(ctx)
-				tc.Start(t, stopper)
+				tc.Start(ctx, t, stopper)
 
 				lease, _ := tc.repl.GetLease()
 
@@ -2057,8 +2074,9 @@ func TestLeaseConcurrent(t *testing.T) {
 
 	const origMsg = "boom"
 	testutils.RunTrueAndFalse(t, "withError", func(t *testing.T, withError bool) {
+		ctx := context.Background()
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
+		defer stopper.Stop(ctx)
 
 		var seen int32
 		var active int32
@@ -2081,7 +2099,7 @@ func TestLeaseConcurrent(t *testing.T) {
 				// Morally speaking, this is an error, but reproposals can
 				// happen and so we warn (in case this trips the test up
 				// in more unexpected ways).
-				log.Infof(context.Background(), "reproposal of %+v", ll)
+				log.Infof(ctx, "reproposal of %+v", ll)
 			}
 			// Wait for all lease requests to join the same LeaseRequest command.
 			wg.Wait()
@@ -2090,14 +2108,14 @@ func TestLeaseConcurrent(t *testing.T) {
 			}
 			return nil
 		}
-		tc.StartWithStoreConfig(t, stopper, cfg)
+		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 		atomic.StoreInt32(&active, 1)
 		tc.manualClock.Increment(leaseExpiry(tc.repl))
 		now := tc.Clock().NowAsClockTimestamp()
 		pErrCh := make(chan *roachpb.Error, num)
 		for i := 0; i < num; i++ {
-			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
+			if err := stopper.RunAsyncTask(ctx, "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
 				status := tc.repl.leaseStatusAtRLocked(ctx, now)
 				llHandle := tc.repl.requestLeaseLocked(ctx, status)
@@ -2131,7 +2149,7 @@ func TestLeaseConcurrent(t *testing.T) {
 				t.Errorf("%d: errors shared memory: %v", i, pErr)
 			} else if testutils.IsPError(pErr, origMsg) {
 				// Mess with anyone holding the same reference.
-				pErr.EncodedError = errors.EncodeError(context.Background(), newErr)
+				pErr.EncodedError = errors.EncodeError(ctx, newErr)
 			} else if pErr != nil {
 				t.Errorf("%d: unexpected error: %s", i, pErr)
 			}
@@ -2146,10 +2164,11 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+		ctx := context.Background()
 		tc := testContext{}
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
-		tc.Start(t, stopper)
+		defer stopper.Stop(ctx)
+		tc.Start(ctx, t, stopper)
 
 		startNanos := tc.Clock().Now().WallTime
 
@@ -2263,9 +2282,10 @@ func TestReplicaLatching(t *testing.T) {
 								}
 								return nil
 							}
+						ctx := context.Background()
 						stopper := stop.NewStopper()
-						defer stopper.Stop(context.Background())
-						tc.StartWithStoreConfig(t, stopper, tsc)
+						defer stopper.Stop(ctx)
+						tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 						defer close(blockingDone) // make sure teardown can happen
 
@@ -2436,9 +2456,10 @@ func TestReplicaLatchingInconsistent(t *testing.T) {
 
 					return nil
 				}
+			ctx := context.Background()
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			tc.StartWithStoreConfig(t, stopper, tsc)
+			defer stopper.Stop(ctx)
+			tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 			cmd1Done := make(chan *roachpb.Error)
 			go func() {
 				args := putArgs(key, []byte{1})
@@ -2485,10 +2506,11 @@ func TestReplicaLatchingInconsistent(t *testing.T) {
 func TestReplicaLatchingSelfOverlap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	testutils.RunTrueAndFalse(t, "cmd1Read", func(t *testing.T, cmd1Read bool) {
 		testutils.RunTrueAndFalse(t, "cmd2Read", func(t *testing.T, cmd2Read bool) {
@@ -2543,9 +2565,10 @@ func TestReplicaLatchingTimestampNonInterference(t *testing.T) {
 			}
 			return nil
 		}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	testCases := []struct {
 		readerTS    hlc.Timestamp
@@ -2710,9 +2733,10 @@ func TestReplicaLatchingOptimisticEvaluation(t *testing.T) {
 			}
 			return nil
 		}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	// Write initial keys.
 	for _, k := range []string{"a", "b", "c", "d"} {
 		pArgs := putArgs([]byte(k), []byte("value"))
@@ -2805,7 +2829,7 @@ func TestReplicaUseTSCache(t *testing.T) {
 		tc := testContext{}
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		tc.Start(t, stopper)
+		tc.Start(ctx, t, stopper)
 		startTS := tc.Clock().Now()
 
 		// Set clock to time 1s and do the read.
@@ -2845,7 +2869,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 		tc := testContext{}
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		tc.Start(t, stopper)
+		tc.Start(ctx, t, stopper)
 
 		tsOld := tc.Clock().Now()
 		tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0).WithSynthetic(synthetic)
@@ -2901,12 +2925,13 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DontPushOnWriteIntentError = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// Set clock to time 2s and do the conditional put.
 	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
@@ -2984,12 +3009,13 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DontPushOnWriteIntentError = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// InitPut args to write "0". Should succeed.
 	key := []byte("a")
@@ -3085,9 +3111,10 @@ func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 	} {
 		t.Run(rc.String(), func(t *testing.T) {
 			tc := testContext{}
+			ctx := context.Background()
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			tc.Start(t, stopper)
+			defer stopper.Stop(ctx)
+			tc.Start(ctx, t, stopper)
 			// Set clock to time 1s and do the read.
 			t0 := 1 * time.Second
 			tc.manualClock.Set(t0.Nanoseconds())
@@ -3124,12 +3151,13 @@ func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DontPushOnWriteIntentError = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// Test for both read & write attempts.
 	for i, read := range []bool{true, false} {
@@ -3178,9 +3206,10 @@ func TestReplicaNoTSCacheIncrementWithinTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	// Test for both read & write attempts.
 	key := roachpb.Key("a")
@@ -3254,10 +3283,11 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	})
 	defer log.ResetExitFunc()
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	k := []byte("a")
 	txn := newTransaction("test", k, 10, tc.Clock())
@@ -3272,7 +3302,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 
 	// Overwrite Abort span entry with garbage for the last op.
 	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
-	err := storage.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
+	err := storage.MVCCPut(ctx, tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3295,10 +3325,11 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 func TestReplicaAbortSpanOnlyWithIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	txn := newTransaction("test", []byte("test"), 10, tc.Clock())
 	txn.Sequence = 100
@@ -3307,7 +3338,7 @@ func TestReplicaAbortSpanOnlyWithIntent(t *testing.T) {
 		Timestamp: txn.WriteTimestamp,
 		Priority:  0,
 	}
-	if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+	if err := tc.repl.abortSpan.Put(ctx, tc.engine, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3324,16 +3355,17 @@ func TestReplicaAbortSpanOnlyWithIntent(t *testing.T) {
 func TestReplicaTxnIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	runWithTxn := func(txn *roachpb.Transaction, reqs ...roachpb.Request) error {
 		ba := roachpb.BatchRequest{}
 		ba.Header.Txn = txn
 		ba.Add(reqs...)
-		_, pErr := tc.Sender().Send(context.Background(), ba)
+		_, pErr := tc.Sender().Send(ctx, ba)
 		return pErr.GoError()
 	}
 	keyAtSeqHasVal := func(txn *roachpb.Transaction, key []byte, seq enginepb.TxnSeq, val *roachpb.Value) error {
@@ -3754,10 +3786,11 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 func TestEndTxnDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	// 4 cases: no deadline, past deadline, equal deadline, future deadline.
 	for i := 0; i < 4; i++ {
@@ -3767,7 +3800,7 @@ func TestEndTxnDeadline(t *testing.T) {
 		assignSeqNumsForReqs(txn, &put)
 
 		if _, pErr := kv.SendWrappedWith(
-			context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &put,
+			ctx, tc.Sender(), roachpb.Header{Txn: txn}, &put,
 		); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -3822,10 +3855,11 @@ func TestEndTxnDeadline(t *testing.T) {
 func TestSerializableDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	// Create our txn. It will be pushed next.
 	key := roachpb.Key("key")
@@ -3873,10 +3907,11 @@ func TestSerializableDeadline(t *testing.T) {
 func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("a")
 	desc := tc.repl.Desc()
@@ -3971,10 +4006,11 @@ func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 func TestEndTxnDeadline_1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
@@ -3988,7 +4024,7 @@ func TestEndTxnDeadline_1PC(t *testing.T) {
 	ba.Header = etH
 	ba.Add(&put, &et)
 	assignSeqNumsForReqs(txn, &put, &et)
-	_, pErr := tc.Sender().Send(context.Background(), ba)
+	_, pErr := tc.Sender().Send(ctx, ba)
 	retErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError)
 	if !ok || retErr.Reason != roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED {
 		t.Fatalf("expected deadline exceeded, got: %v", pErr)
@@ -4003,10 +4039,11 @@ func TestEndTxnDeadline_1PC(t *testing.T) {
 func Test1PCTransactionWriteTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("key")
 	txn := newTransaction("test", key, 1, tc.Clock())
@@ -4024,7 +4061,7 @@ func Test1PCTransactionWriteTimestamp(t *testing.T) {
 	ba.Header = etH
 	ba.Add(&put, &et)
 	assignSeqNumsForReqs(txn, &put, &et)
-	_, pErr := tc.Sender().Send(context.Background(), ba)
+	_, pErr := tc.Sender().Send(ctx, ba)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 		t.Errorf("expected retry error; got %s", pErr)
 	}
@@ -4042,16 +4079,17 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 	})
 	defer log.ResetExitFunc()
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("foo")
 	txn := newTransaction("test", key, 1, tc.Clock())
 	pArgs := putArgs(key, []byte("only here to make this a rw transaction"))
 	assignSeqNumsForReqs(txn, &pArgs)
-	if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
 		Txn: txn,
 	}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -4094,10 +4132,11 @@ func TestEndTxnBeforeHeartbeat(t *testing.T) {
 	// committed Transaction and compare it against our expectations.
 	// When it's removed, the heartbeat would recreate it.
 	defer setTxnAutoGC(false)()
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := []byte("a")
 	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
@@ -4145,10 +4184,11 @@ func TestEndTxnBeforeHeartbeat(t *testing.T) {
 func TestEndTxnAfterHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("a")
 	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
@@ -4200,10 +4240,11 @@ func TestEndTxnAfterHeartbeat(t *testing.T) {
 func TestEndTxnWithPushedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	testCases := []struct {
 		commit bool
@@ -4221,7 +4262,7 @@ func TestEndTxnWithPushedTimestamp(t *testing.T) {
 		put := putArgs(key, []byte("value"))
 		assignSeqNumsForReqs(pushee, &put)
 		if _, pErr := kv.SendWrappedWith(
-			context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put,
+			ctx, tc.Sender(), roachpb.Header{Txn: pushee}, &put,
 		); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -4264,16 +4305,17 @@ func TestEndTxnWithPushedTimestamp(t *testing.T) {
 func TestEndTxnWithIncrementedEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := []byte("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
 	put := putArgs(key, key)
 	assignSeqNumsForReqs(txn, &put)
-	if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &put); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: txn}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -4317,7 +4359,7 @@ func TestEndTxnWithErrors(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	txn := newTransaction("test", roachpb.Key(""), 1, tc.Clock())
 
@@ -4376,7 +4418,7 @@ func TestEndTxnWithErrorAndSyncIntentResolution(t *testing.T) {
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.IntentResolverKnobs.ForceSyncIntentResolution = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	txn := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
 
@@ -4408,18 +4450,19 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "populateAbortSpan", func(t *testing.T, populateAbortSpan bool) {
 		tc := testContext{}
+		ctx := context.Background()
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
+		defer stopper.Stop(ctx)
 		cfg := TestStoreConfig(nil)
 		cfg.TestingKnobs.DontPushOnWriteIntentError = true
-		tc.StartWithStoreConfig(t, stopper, cfg)
+		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 		key := []byte("a")
 		txn := newTransaction("test", key, 1, tc.Clock())
 		put := putArgs(key, key)
 		assignSeqNumsForReqs(txn, &put)
 		if _, pErr := kv.SendWrappedWith(
-			context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &put,
+			ctx, tc.Sender(), roachpb.Header{Txn: txn}, &put,
 		); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -4441,7 +4484,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
-		_, pErr := tc.Sender().Send(context.Background(), ba)
+		_, pErr := tc.Sender().Send(ctx, ba)
 		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 			t.Errorf("expected write intent error, but got %s", pErr)
 		}
@@ -4450,7 +4493,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			var txnRecord roachpb.Transaction
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if ok, err := storage.MVCCGetProto(
-				context.Background(), tc.repl.store.Engine(),
+				ctx, tc.repl.store.Engine(),
 				txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
@@ -4458,7 +4501,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 				t.Fatalf("unexpected txn record %v", txnRecord)
 			}
 
-			if pErr := tc.store.intentResolver.ResolveIntents(context.Background(),
+			if pErr := tc.store.intentResolver.ResolveIntents(ctx,
 				[]roachpb.LockUpdate{
 					roachpb.MakeLockUpdate(&txnRecord, roachpb.Span{Key: key}),
 				}, intentresolver.ResolveOptions{Poison: true}); pErr != nil {
@@ -4479,7 +4522,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 		}
 
 		// Verify that the intent has been resolved.
-		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+		if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 			t.Errorf("expected resolved intent, but got %s", pErr)
 		}
 	})
@@ -4495,7 +4538,7 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	testutils.RunTrueAndFalse(t, "CanForwardReadTimestamp", func(t *testing.T, noPriorReads bool) {
 		key := roachpb.Key("a")
@@ -4544,7 +4587,7 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
@@ -4586,12 +4629,13 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 func TestBatchRetryCantCommitIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DontPushOnWriteIntentError = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	key := roachpb.Key("a")
 	keyB := roachpb.Key("b")
@@ -4606,7 +4650,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 		t.Fatal(err)
 	}
-	br, pErr := tc.Sender().Send(context.Background(), ba)
+	br, pErr := tc.Sender().Send(ctx, ba)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
@@ -4618,7 +4662,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	ba2.Header = roachpb.Header{Txn: putTxn}
 	ba2.Add(&putB)
 	assignSeqNumsForReqs(putTxn, &putB)
-	br, pErr = tc.Sender().Send(context.Background(), ba2)
+	br, pErr = tc.Sender().Send(ctx, ba2)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
@@ -4642,7 +4686,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	// Verify txn record is cleaned.
 	var readTxn roachpb.Transaction
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	ok, err := storage.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey,
+	ok, err := storage.MVCCGetProto(ctx, tc.repl.store.Engine(), txnKey,
 		hlc.Timestamp{}, &readTxn, storage.MVCCGetOptions{})
 	if err != nil || ok {
 		t.Errorf("expected transaction record to be cleared (%t): %+v", ok, err)
@@ -4650,7 +4694,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 
 	// Now replay put for key A; this succeeds as there's nothing to detect
 	// the replay. The WriteTooOld flag will be set though.
-	br, pErr = tc.Sender().Send(context.Background(), ba)
+	br, pErr = tc.Sender().Send(ctx, ba)
 	require.NoError(t, pErr.GoError())
 	require.True(t, br.Txn.WriteTooOld)
 
@@ -4698,9 +4742,10 @@ func TestEndTxnLocalGC(t *testing.T) {
 			}
 			return nil
 		}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	splitKey := roachpb.RKey("c")
 	splitTestRange(tc.store, splitKey, t)
@@ -4724,7 +4769,7 @@ func TestEndTxnLocalGC(t *testing.T) {
 		txn := newTransaction("test", key, 1, tc.Clock())
 		put := putArgs(putKey, key)
 		assignSeqNumsForReqs(txn, &put)
-		if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &put); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: txn}, &put); pErr != nil {
 			t.Fatal(pErr)
 		}
 		putKey = putKey.Next() // for the next iteration
@@ -4736,7 +4781,7 @@ func TestEndTxnLocalGC(t *testing.T) {
 		}
 		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		ok, err := storage.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.Timestamp{},
+		ok, err := storage.MVCCGetProto(ctx, tc.repl.store.Engine(), txnKey, hlc.Timestamp{},
 			&readTxn, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
@@ -4810,9 +4855,10 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 			return nil
 		}
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	newRepl, txn := setupResolutionTest(t, tc, key, splitKey, true /* commit */)
 
@@ -4825,7 +4871,7 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
-		_, pErr := newRepl.Send(context.Background(), ba)
+		_, pErr := newRepl.Send(ctx, ba)
 		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 			t.Errorf("expected write intent error, but got %s", pErr)
 		}
@@ -4859,12 +4905,12 @@ func TestEndTxnDirectGC(t *testing.T) {
 		keys.RangeDescriptorKey(keys.MustAddr(roachpb.KeyMin)),
 	} {
 		func() {
+			ctx := context.Background()
+			ctx = logtags.AddTag(ctx, "testcase", i)
 			tc := testContext{}
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			tc.Start(t, stopper)
-
-			ctx := logtags.AddTag(context.Background(), "testcase", i)
+			defer stopper.Stop(ctx)
+			tc.Start(ctx, t, stopper)
 
 			rightRepl, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate AbortSpan entry */)
 
@@ -4924,9 +4970,10 @@ func TestEndTxnDirectGCFailure(t *testing.T) {
 			}
 			return nil
 		}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	setupResolutionTest(t, tc, key, splitKey, true /* commit */)
 
@@ -4938,7 +4985,7 @@ func TestEndTxnDirectGCFailure(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		if atomic.LoadInt64(&count) == 0 {
 			return errors.Errorf("intent resolution not attempted yet")
-		} else if err := tc.store.DB().Put(context.Background(), "panama", "banana"); err != nil {
+		} else if err := tc.store.DB().Put(ctx, "panama", "banana"); err != nil {
 			return err
 		}
 		return nil
@@ -4952,10 +4999,11 @@ func TestEndTxnDirectGC_1PC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	for _, commit := range []bool{true, false} {
 		func() {
+			ctx := context.Background()
 			tc := testContext{}
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			tc.Start(t, stopper)
+			defer stopper.Stop(ctx)
+			tc.Start(ctx, t, stopper)
 
 			key := roachpb.Key("a")
 			txn := newTransaction("test", key, 1, tc.Clock())
@@ -4967,7 +5015,7 @@ func TestEndTxnDirectGC_1PC(t *testing.T) {
 			var ba roachpb.BatchRequest
 			ba.Header = etH
 			ba.Add(&put, &et)
-			br, err := tc.Sender().Send(context.Background(), ba)
+			br, err := tc.Sender().Send(ctx, ba)
 			if err != nil {
 				t.Fatalf("commit=%t: %+v", commit, err)
 			}
@@ -4977,7 +5025,7 @@ func TestEndTxnDirectGC_1PC(t *testing.T) {
 			}
 
 			var entry roachpb.AbortSpanEntry
-			if aborted, err := tc.repl.abortSpan.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
+			if aborted, err := tc.repl.abortSpan.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
 				t.Fatal(err)
 			} else if aborted {
 				t.Fatalf("commit=%t: AbortSpan still populated: %v", commit, entry)
@@ -5005,10 +5053,11 @@ func TestReplicaTransactionRequires1PC(t *testing.T) {
 			}
 			return nil
 		}
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	testCases := []struct {
 		setupFn     func(roachpb.Key)
@@ -5052,7 +5101,7 @@ func TestReplicaTransactionRequires1PC(t *testing.T) {
 			test.setupFn(key)
 
 			// Send the batch command.
-			_, pErr := tc.Sender().Send(context.Background(), ba)
+			_, pErr := tc.Sender().Send(ctx, ba)
 			if !testutils.IsPError(pErr, test.expErrorPat) {
 				t.Errorf("expected error=%q running required 1PC txn; got %s", test.expErrorPat, pErr)
 			}
@@ -5073,10 +5122,11 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
@@ -5085,7 +5135,7 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 	put := putArgs(key, []byte("value"))
 	ba.Add(&put)
 	assignSeqNumsForReqs(txn, &put)
-	if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
@@ -5095,7 +5145,7 @@ func TestReplicaEndTxnWithRequire1PC(t *testing.T) {
 	ba.Header = etH
 	ba.Add(&et)
 	assignSeqNumsForReqs(txn, &et)
-	_, pErr := tc.Sender().Send(context.Background(), ba)
+	_, pErr := tc.Sender().Send(ctx, ba)
 	if !testutils.IsPError(pErr, "could not commit in one phase as requested") {
 		t.Fatalf("expected requires 1PC error; fgot %v", pErr)
 	}
@@ -5115,10 +5165,11 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 	// checks whether we get the correct behavior as it touches the
 	// Range again.
 	run := func(abort bool) {
+		ctx := context.Background()
 		tc := testContext{}
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
-		tc.Start(t, stopper)
+		defer stopper.Stop(ctx)
+		tc.Start(ctx, t, stopper)
 
 		pusher := newTransaction("test", key, 1, tc.Clock())
 		pushee := newTransaction("test", key, 1, tc.Clock())
@@ -5130,7 +5181,7 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 				RequestHeader: roachpb.RequestHeader{Key: k}, Increment: 123,
 			}
 			assignSeqNumsForReqs(actor, incArgs)
-			reply, pErr := kv.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
+			reply, pErr := kv.SendWrappedWith(ctx, tc.store, roachpb.Header{
 				Txn:     actor,
 				RangeID: 1,
 			}, incArgs)
@@ -5143,7 +5194,7 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 		get := func(actor *roachpb.Transaction, k roachpb.Key) *roachpb.Error {
 			gArgs := getArgs(k)
 			assignSeqNumsForReqs(actor, &gArgs)
-			_, pErr := kv.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
+			_, pErr := kv.SendWrappedWith(ctx, tc.store, roachpb.Header{
 				Txn:     actor,
 				RangeID: 1,
 			}, &gArgs)
@@ -5226,10 +5277,11 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 func TestAbortSpanError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	txn := roachpb.Transaction{}
 	txn.ID = uuid.MakeV4()
@@ -5245,12 +5297,12 @@ func TestAbortSpanError(t *testing.T) {
 		Timestamp: ts,
 		Priority:  priority,
 	}
-	if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+	if err := tc.repl.abortSpan.Put(ctx, tc.engine, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
 	rec := &SpanSetReplicaEvalContext{tc.repl, *allSpans()}
-	pErr := checkIfTxnAborted(context.Background(), rec, tc.engine, txn)
+	pErr := checkIfTxnAborted(ctx, rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
 		expected.WriteTimestamp = txn.WriteTimestamp
@@ -5268,10 +5320,11 @@ func TestAbortSpanError(t *testing.T) {
 func TestPushTxnBadKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
 	pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
@@ -5306,10 +5359,11 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 
 		// Test for COMMITTED and ABORTED transactions.
 		testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
+			ctx := context.Background()
 			tc := testContext{}
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			tc.Start(t, stopper)
+			defer stopper.Stop(ctx)
+			tc.Start(ctx, t, stopper)
 
 			key := roachpb.Key(fmt.Sprintf("key-%t-%t", autoGC, commit))
 			pusher := newTransaction("test", key, 1, tc.Clock())
@@ -5318,7 +5372,7 @@ func TestPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 			// Begin the pushee's transaction.
 			put := putArgs(key, key)
 			assignSeqNumsForReqs(pushee, &put)
-			if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
+			if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 				t.Fatal(pErr)
 			}
 			// End the pushee's transaction.
@@ -5364,7 +5418,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	testCases := []struct {
 		startOffset, pushOffset, expOffset int64
@@ -5428,12 +5482,13 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DontRetryPushTxnFailures = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	key := roachpb.Key("key")
 	pushee := newTransaction("test", key, 1, tc.Clock())
@@ -5449,7 +5504,7 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 
 	put := putArgs(key, key)
 	assignSeqNumsForReqs(pushee, &put)
-	if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -5479,7 +5534,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DontRetryPushTxnFailures = true
 	cfg.TestingKnobs.DontRecoverIndeterminateCommits = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	const noError = ""
 	const txnPushError = "failed to push"
@@ -5623,10 +5678,11 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	b := tc.engine.NewBatch()
 	defer b.Close()
@@ -5639,7 +5695,6 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	var ra roachpb.ResolveIntentRequest
 	var rra roachpb.ResolveIntentRangeRequest
 
-	ctx := context.Background()
 	h := roachpb.Header{Txn: txn, Timestamp: tc.Clock().Now()}
 	// Should not be able to push or resolve in a transaction.
 	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: h, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
@@ -5677,12 +5732,13 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 func TestPushTxnPriorities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DontRetryPushTxnFailures = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	now := tc.Clock().Now()
 	ts1 := now.Add(1, 0)
@@ -5760,7 +5816,7 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 		tc := testContext{}
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		tc.Start(t, stopper)
+		tc.Start(ctx, t, stopper)
 
 		pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
 		pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
@@ -5807,10 +5863,11 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
 	pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
@@ -5821,7 +5878,7 @@ func TestPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	key := roachpb.Key("a")
 	put := putArgs(key, key)
 	assignSeqNumsForReqs(pushee, &put)
-	if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -5855,7 +5912,7 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("a")
 	pushee := newTransaction("test", key, 1, tc.Clock())
@@ -5921,10 +5978,11 @@ func TestQueryIntentRequest(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "errIfMissing", func(t *testing.T, errIfMissing bool) {
+		ctx := context.Background()
 		tc := testContext{}
 		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
-		tc.Start(t, stopper)
+		defer stopper.Stop(ctx)
+		tc.Start(ctx, t, stopper)
 
 		key1 := roachpb.Key("a")
 		key2 := roachpb.Key("b")
@@ -6048,10 +6106,11 @@ func TestQueryIntentRequest(t *testing.T) {
 func TestReplicaResolveIntentRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")}
 	txn := newTransaction("test", keys[0], 1, tc.Clock())
@@ -6112,10 +6171,11 @@ func verifyRangeStats(
 func TestRangeStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	baseStats := tc.repl.GetMVCCStats()
 
@@ -6227,10 +6287,11 @@ func TestRangeStatsComputation(t *testing.T) {
 func TestMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := []byte("mergedkey")
 	args := make([]roachpb.InternalTimeSeriesData, 3)
@@ -6290,10 +6351,11 @@ func TestMerge(t *testing.T) {
 func TestConditionFailedError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := []byte("k")
 	value := []byte("quack")
@@ -6346,10 +6408,11 @@ func TestReplicaSetsEqual(t *testing.T) {
 func TestAppliedIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	var appliedIndex uint64
 	var sum int64
@@ -6398,10 +6461,11 @@ func TestReplicaCorruption(t *testing.T) {
 			return nil
 		}
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	// First send a regular command.
 	args := putArgs(roachpb.Key("test1"), []byte("value"))
@@ -6439,12 +6503,13 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 	}
 	for _, typ := range tests {
 		t.Run(typ.String(), func(t *testing.T) {
+			ctx := context.Background()
 			tc := testContext{}
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
+			defer stopper.Stop(ctx)
 			cfg := TestStoreConfig(nil)
 			cfg.TestingKnobs.DisableReplicateQueue = true
-			tc.StartWithStoreConfig(t, stopper, cfg)
+			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 			// We now allow adding a replica to the same node, to support rebalances
 			// within the same node when replication is 1x, so add another replica to the
 			// range descriptor to avoid this case.
@@ -6489,7 +6554,7 @@ func TestReplicaDanglingMetaIntent(t *testing.T) {
 		defer stopper.Stop(ctx)
 		cfg := TestStoreConfig(nil)
 		cfg.TestingKnobs.DontPushOnWriteIntentError = true
-		tc.StartWithStoreConfig(t, stopper, cfg)
+		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 		key := roachpb.Key("a")
 
@@ -6561,7 +6626,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	splitRangeBefore := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("h")}
 	splitRangeLHS := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")}
@@ -6673,7 +6738,7 @@ func TestRangeLookup(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	expected := []roachpb.RangeDescriptor{*tc.repl.Desc()}
 	testCases := []struct {
@@ -6714,8 +6779,9 @@ func TestRangeLookup(t *testing.T) {
 func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	// Mock propose to return a roachpb.RaftGroupDeletedError.
 	var active int32
@@ -6730,13 +6796,13 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	tc := testContext{manualClock: manual}
 	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.TestingProposalFilter = proposeFn
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	atomic.StoreInt32(&active, 1)
 	gArgs := getArgs(roachpb.Key("a"))
 	// Force the read command request a new lease.
 	manual.Set(leaseExpiry(tc.repl))
-	_, pErr := kv.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
+	_, pErr := kv.SendWrappedWith(ctx, tc.store, roachpb.Header{
 		Timestamp: tc.Clock().Now(),
 		RangeID:   1,
 	}, &gArgs)
@@ -6817,10 +6883,11 @@ func TestIntentIntersect(t *testing.T) {
 func TestBatchErrorWithIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	ba := roachpb.BatchRequest{}
 	// This one succeeds.
@@ -6840,7 +6907,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
 	})
 
-	if _, pErr := tc.Sender().Send(context.Background(), ba); pErr == nil {
+	if _, pErr := tc.Sender().Send(ctx, ba); pErr == nil {
 		t.Fatal("expected an error")
 	} else if pErr.Index == nil || pErr.Index.Index != 1 || !testutils.IsPError(pErr, "unexpected value") {
 		t.Fatalf("invalid index or error type: %s", pErr)
@@ -6852,10 +6919,11 @@ func TestBatchErrorWithIndex(t *testing.T) {
 func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 	scStartSddr, err := keys.Addr(keys.SystemConfigSpan.Key)
 	if err != nil {
 		t.Fatal(err)
@@ -6872,7 +6940,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	pushee.Priority = enginepb.MinTxnPriority // low so it can be pushed
 	put := putArgs(key, []byte("foo"))
 	assignSeqNumsForReqs(pushee, &put)
-	if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -6887,7 +6955,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	}
 
 	// Verify that the intent trips up loading the SystemConfig data.
-	if _, err := repl.loadSystemConfig(context.Background()); !errors.Is(err, errSystemConfigIntent) {
+	if _, err := repl.loadSystemConfig(ctx); !errors.Is(err, errSystemConfigIntent) {
 		t.Fatal(err)
 	}
 
@@ -6895,12 +6963,12 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// there and verify that we can now load the data as expected.
 	v := roachpb.MakeValueFromString("foo")
 	testutils.SucceedsSoon(t, func() error {
-		if err := storage.MVCCPut(context.Background(), repl.store.Engine(), &enginepb.MVCCStats{},
+		if err := storage.MVCCPut(ctx, repl.store.Engine(), &enginepb.MVCCStats{},
 			keys.SystemConfigSpan.Key, repl.store.Clock().Now(), v, nil); err != nil {
 			return err
 		}
 
-		cfg, err := repl.loadSystemConfig(context.Background())
+		cfg, err := repl.loadSystemConfig(ctx)
 		if err != nil {
 			return err
 		}
@@ -6930,7 +6998,7 @@ func TestReplicaDestroy(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	repl, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -6976,9 +7044,10 @@ func TestReplicaDestroy(t *testing.T) {
 func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	type magicKey struct{}
 	var minQuotaSize uint64
@@ -6992,7 +7061,7 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 		}
 		return nil
 	}
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	// Flush a write all the way through the Raft proposal pipeline to ensure
 	// that the replica becomes the Raft leader and sets up its quota pool.
@@ -7004,7 +7073,7 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	var ba roachpb.BatchRequest
 	pArg := putArgs(roachpb.Key("a"), make([]byte, 1<<10))
 	ba.Add(&pArg)
-	ctx := context.WithValue(context.Background(), magicKey{}, "foo")
+	ctx = context.WithValue(ctx, magicKey{}, "foo")
 	if _, pErr := tc.Sender().Send(ctx, ba); !testutils.IsPError(pErr, propErr.Error()) {
 		t.Fatalf("expected error %v, found %v", propErr, pErr)
 	}
@@ -7020,17 +7089,18 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	repl, err := tc.store.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ctx := repl.AnnotateCtx(context.Background())
+	ctx = repl.AnnotateCtx(ctx)
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
@@ -7053,6 +7123,7 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 func TestEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	cfg := TestStoreConfig(nil)
 	// Disable ticks to avoid quiescence, which can result in empty
@@ -7060,8 +7131,8 @@ func TestEntries(t *testing.T) {
 	cfg.RaftTickInterval = math.MaxInt32
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	repl := tc.repl
 	rangeID := repl.RangeID
@@ -7086,7 +7157,7 @@ func TestEntries(t *testing.T) {
 	truncateLogs := func(index int) {
 		truncateArgs := truncateLogArgs(indexes[index], rangeID)
 		if _, err := kv.SendWrappedWith(
-			context.Background(),
+			ctx,
 			tc.Sender(),
 			roachpb.Header{RangeID: 1},
 			&truncateArgs,
@@ -7208,12 +7279,13 @@ func TestEntries(t *testing.T) {
 func TestTerm(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	repl := tc.repl
 	rangeID := repl.RangeID
@@ -7294,10 +7366,11 @@ func TestTerm(t *testing.T) {
 func TestGCIncorrectRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	// Split range into two ranges.
 	splitKey := roachpb.RKey("c")
@@ -7314,10 +7387,10 @@ func TestGCIncorrectRange(t *testing.T) {
 	ts2 := now.Add(2, 0)
 	ts1Header := roachpb.Header{RangeID: repl2.RangeID, Timestamp: ts1}
 	ts2Header := roachpb.Header{RangeID: repl2.RangeID, Timestamp: ts2}
-	if _, pErr := kv.SendWrappedWith(context.Background(), repl2, ts1Header, &putReq); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, repl2, ts1Header, &putReq); pErr != nil {
 		t.Errorf("unexpected pError on put key request: %s", pErr)
 	}
-	if _, pErr := kv.SendWrappedWith(context.Background(), repl2, ts2Header, &putReq); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, repl2, ts2Header, &putReq); pErr != nil {
 		t.Errorf("unexpected pError on put key request: %s", pErr)
 	}
 
@@ -7327,7 +7400,7 @@ func TestGCIncorrectRange(t *testing.T) {
 	gKey := gcKey(key, ts1)
 	gcReq := gcArgs(repl1.Desc().StartKey, repl1.Desc().EndKey, gKey)
 	if _, pErr := kv.SendWrappedWith(
-		context.Background(),
+		ctx,
 		repl1,
 		roachpb.Header{RangeID: 1, Timestamp: tc.Clock().Now()},
 		&gcReq,
@@ -7337,7 +7410,7 @@ func TestGCIncorrectRange(t *testing.T) {
 
 	// Make sure the key still exists on range 2.
 	getReq := getArgs(key)
-	if res, pErr := kv.SendWrappedWith(context.Background(), repl2, ts1Header, &getReq); pErr != nil {
+	if res, pErr := kv.SendWrappedWith(ctx, repl2, ts1Header, &getReq); pErr != nil {
 		t.Errorf("unexpected pError on get request to correct range: %s", pErr)
 	} else if resVal := res.(*roachpb.GetResponse).Value; resVal == nil {
 		t.Errorf("expected value %s to exists after GC to incorrect range but before GC to correct range, found %v", val, resVal)
@@ -7346,7 +7419,7 @@ func TestGCIncorrectRange(t *testing.T) {
 	// Send GC request to range 2 for the same key.
 	gcReq = gcArgs(repl2.Desc().StartKey, repl2.Desc().EndKey, gKey)
 	if _, pErr := kv.SendWrappedWith(
-		context.Background(),
+		ctx,
 		repl2,
 		roachpb.Header{RangeID: repl2.RangeID, Timestamp: tc.Clock().Now()},
 		&gcReq,
@@ -7355,7 +7428,7 @@ func TestGCIncorrectRange(t *testing.T) {
 	}
 
 	// Make sure the key no longer exists on range 2.
-	if res, pErr := kv.SendWrappedWith(context.Background(), repl2, ts1Header, &getReq); pErr != nil {
+	if res, pErr := kv.SendWrappedWith(ctx, repl2, ts1Header, &getReq); pErr != nil {
 		t.Errorf("unexpected pError on get request to correct range: %s", pErr)
 	} else if resVal := res.(*roachpb.GetResponse).Value; resVal != nil {
 		t.Errorf("expected value at key %s to no longer exist after GC to correct range, found value %v", key, resVal)
@@ -7388,8 +7461,8 @@ func TestReplicaCancelRaft(t *testing.T) {
 			}
 			tc := testContext{}
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			tc.StartWithStoreConfig(t, stopper, cfg)
+			defer stopper.Stop(ctx)
+			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 			if cancelEarly {
 				cancel()
 			}
@@ -7428,13 +7501,15 @@ func TestReplicaCancelRaft(t *testing.T) {
 func TestReplicaAbandonProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	tc := testContext{}
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	type magicKey struct{}
-	ctx, cancel := context.WithCancel(context.Background())
+	var cancel func()
+	ctx, cancel = context.WithCancel(ctx)
 	ctx = context.WithValue(ctx, magicKey{}, "foo")
 
 	// Cancel the request before it is proposed to Raft.
@@ -7627,11 +7702,12 @@ func TestSyncSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	// With enough time in BlockingSnapshotDuration, we succeed on the
 	// first try.
@@ -7654,8 +7730,8 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	ctx := context.Background()
 	var tc testContext
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	type magicKey struct{}
 
@@ -7759,7 +7835,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	var tc testContext
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 	repl := tc.repl
 
 	tc.repl.mu.Lock()
@@ -7822,12 +7898,13 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	// Raft leadership instability.
 	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
 	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	type magicKey struct{}
-	ctx := context.WithValue(context.Background(), magicKey{}, "foo")
+	ctx = context.WithValue(ctx, magicKey{}, "foo")
 
 	var seenCmds []int
 	dropAll := int32(1)
@@ -7917,7 +7994,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	cfg.RaftTickInterval = math.MaxInt32
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// Flush a write all the way through the Raft proposal pipeline. This
 	// ensures that leadership settles down before we start manually submitting
@@ -8053,7 +8130,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	var tc testContext
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	repl := tc.repl
 
 	key := roachpb.Key("a")
@@ -8184,7 +8261,7 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	var tc testContext
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	type magicKey struct{}
 	magicCtx := context.WithValue(ctx, magicKey{}, "foo")
@@ -8277,7 +8354,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 	tc := &testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	for _, keyThresh := range []hlc.Timestamp{{}, {Logical: 1}} {
 		t.Run(fmt.Sprintf("thresh=%s", keyThresh), func(t *testing.T) {
@@ -8326,7 +8403,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	key := roachpb.Key("a")
 	txn := newTransaction("test", key, 1, tc.Clock())
@@ -8390,10 +8467,11 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 func TestCommandTimeThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	now := tc.Clock().Now()
 	ts1 := now.Add(1, 0)
@@ -8469,12 +8547,13 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-	ctx := tc.store.AnnotateCtx(context.Background())
+	ctx = tc.store.AnnotateCtx(ctx)
 	key := keys.LocalMax
 
 	txn := newTransaction("test", key, 1, tc.Clock())
@@ -8527,12 +8606,13 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-	ctx := tc.repl.AnnotateCtx(context.Background())
+	ctx = tc.repl.AnnotateCtx(ctx)
 	key := keys.LocalMax
 
 	txn := newTransaction("test", key, 1, tc.Clock())
@@ -8607,11 +8687,12 @@ func TestReplicaMetrics(t *testing.T) {
 		return m
 	}
 
+	ctx := context.Background()
 	var tc testContext
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(nil)
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	testCases := []struct {
 		replicas    int32
@@ -8812,7 +8893,7 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
-				context.Background(), hlc.Timestamp{}, &cfg.RaftConfig, spanConfig,
+				ctx, hlc.Timestamp{}, &cfg.RaftConfig, spanConfig,
 				c.liveness, 0, &c.desc, c.raftStatus, kvserverpb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
 				concurrency.LatchMetrics{}, concurrency.LockTableMetrics{}, c.raftLogSize, true)
@@ -8831,7 +8912,7 @@ func TestCancelPendingCommands(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	// Install a proposal function which drops all increment commands on
 	// the floor (so the command remains "pending" until we cancel it).
@@ -9106,7 +9187,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			tc := testContext{}
-			tc.StartWithStoreConfig(t, stopper, cfg)
+			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 			repl := tc.repl
 
 			// Update the transaction's timestamps so that it
@@ -9172,8 +9253,8 @@ func TestCommandTooLarge(t *testing.T) {
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	st := tc.store.cfg.Settings
 	st.Manual.Store(true)
@@ -9287,7 +9368,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	repl := tc.repl
 
 	var ba roachpb.BatchRequest
@@ -9352,7 +9433,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	repl := tc.repl
 
 	// Block command application then propose a command to Raft.
@@ -9883,10 +9964,11 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 func TestReplicaRecomputeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.RKey("a")
 	repl := tc.store.LookupReplica(key)
@@ -9936,7 +10018,6 @@ func TestReplicaRecomputeStats(t *testing.T) {
 		runTest(test)
 	}
 
-	ctx := context.Background()
 	seed := randutil.NewPseudoSeed()
 	t.Logf("seed is %d", seed)
 	rnd := rand.New(rand.NewSource(seed))
@@ -9987,7 +10068,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 		},
 	}
 	tc := testContext{}
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
@@ -10008,10 +10089,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// TODO(andrei): make each subtest use its own testContext so that they don't
 	// have to use distinct keys.
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	// Increment the clock so that all the transactions in the tests run at a
 	// different physical timestamp than the one used to initialize the replica's
@@ -10026,7 +10108,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		return &txn
 	}
 	send := func(ba roachpb.BatchRequest) (hlc.Timestamp, error) {
-		br, pErr := tc.Sender().Send(context.Background(), ba)
+		br, pErr := tc.Sender().Send(ctx, ba)
 		if pErr != nil {
 			return hlc.Timestamp{}, pErr.GoError()
 		}
@@ -10035,7 +10117,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Regression test for #31870.
 		snap := tc.engine.NewSnapshot()
 		defer snap.Close()
-		res, err := tc.repl.sha512(context.Background(), *tc.repl.Desc(), tc.engine,
+		res, err := tc.repl.sha512(ctx, *tc.repl.Desc(), tc.engine,
 			nil /* diff */, roachpb.ChecksumMode_CHECK_FULL,
 			quotapool.NewRateLimiter("ConsistencyQueue", quotapool.Limit(math.MaxFloat64), math.MaxInt64))
 		if err != nil {
@@ -10541,12 +10623,12 @@ func TestReplicaPushed1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-	ctx := context.Background()
 	k := roachpb.Key("key")
 
 	// Start a transaction and assign its ReadTimestamp.
@@ -10607,7 +10689,7 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	// Disable txn liveness pushes. See below for why.
 	st := tc.store.cfg.Settings
@@ -10821,7 +10903,7 @@ func TestRangeStatsRequest(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	keyPrefix := roachpb.RKey("dummy-prefix")
 
@@ -10876,7 +10958,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
 	pusher.Priority = enginepb.MaxTxnPriority
@@ -12367,7 +12449,7 @@ func TestRollbackMissingTxnRecordNoError(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("bogus key")
 	txn := newTransaction("test", key, roachpb.NormalUserPriority, tc.Clock())
@@ -12532,7 +12614,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 				roachpb.NewErrorf("forced error that can be reproposed at a higher index")
 		},
 	}
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 	key := roachpb.Key("a")
 	st := tc.repl.CurrentLeaseStatus(ctx)
 	txn := newTransaction("test", key, roachpb.NormalUserPriority, tc.Clock())
@@ -12626,7 +12708,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
-		tc.Start(t, stopper)
+		tc.Start(ctx, t, stopper)
 		r := tc.store.LookupReplica(rKeyA)
 		t.Run(c.name, func(t *testing.T) {
 			c.f(t, r)
@@ -12695,7 +12777,7 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	errBoom := errors.New("boom")
 	tc.repl.mu.Lock()
@@ -12736,7 +12818,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		var tc testContext
-		tc.Start(t, stopper)
+		tc.Start(ctx, t, stopper)
 
 		proposal := someRequestToProposal(&tc, ctx)
 
@@ -12956,7 +13038,7 @@ func TestRangeInfoReturned(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	var tc testContext
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	key := roachpb.Key("a")
 	gArgs := getArgs(key)
@@ -13092,10 +13174,11 @@ func isSystemTenantRepl(t *testing.T, repl *Replica) {
 func TestStoreTenantMetricsAndRateLimiterRefcount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	tc := testContext{}
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	// Initially all replicas are system tenant replicas.
 	tc.store.VisitReplicas(func(repl *Replica) (wantMore bool) {
