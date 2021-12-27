@@ -59,11 +59,10 @@ func TestServer(t *testing.T) {
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	ts := execinfrapb.TableReaderSpec{
-		Table:         *td.TableDesc(),
-		IndexIdx:      0,
-		Reverse:       false,
-		Spans:         []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
-		NeededColumns: []uint32{0, 1},
+		Table:    *td.TableDesc(),
+		IndexIdx: 0,
+		Reverse:  false,
+		Spans:    []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 	}
 	post := execinfrapb.PostProcessSpec{
 		Projection:    true,

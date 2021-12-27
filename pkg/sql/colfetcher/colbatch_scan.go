@@ -206,17 +206,11 @@ func NewColBatchScan(
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
 	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
-	tableArgs, idxMap, err := populateTableArgs(
+	tableArgs, _, err := populateTableArgs(
 		ctx, flowCtx, table, table.ActiveIndexes()[spec.IndexIdx],
 		invertedColumn, spec.Visibility, spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
-		return nil, err
-	}
-
-	if err = keepOnlyNeededColumns(
-		flowCtx, tableArgs, idxMap, spec.NeededColumns, post, helper,
-	); err != nil {
 		return nil, err
 	}
 
