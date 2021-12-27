@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -128,7 +127,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			}
 
 			ds := NewDistSender(DistSenderConfig{
-				AmbientCtx:      testutils.MakeAmbientCtx(),
+				AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:           clock,
 				NodeDescs:       g,
 				RPCRetryOptions: &retry.Options{MaxRetries: 10},

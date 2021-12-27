@@ -384,7 +384,7 @@ func TestOracle(t *testing.T) {
 	current := clock.Now()
 	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
 
-	c := kv.NewDB(testutils.MakeAmbientCtx(), kv.MockTxnSenderFactory{}, clock, stopper)
+	c := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), kv.MockTxnSenderFactory{}, clock, stopper)
 	staleTxn := kv.NewTxn(ctx, c, 0)
 	require.NoError(t, staleTxn.SetFixedTimestamp(ctx, stale))
 	currentTxn := kv.NewTxn(ctx, c, 0)
