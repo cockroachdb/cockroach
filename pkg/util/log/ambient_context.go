@@ -196,6 +196,24 @@ func MakeTestingAmbientContext(tracer *tracing.Tracer) AmbientContext {
 	return AmbientContext{Tracer: tracer}
 }
 
+// MakeTestingAmbientCtxWithNewTracer is like MakeTestingAmbientContext() but it
+// also instantiates a new tracer.
+//
+// TODO(andrei): Remove this API.
+//
+// This is generally a bad idea because it creates a Tracer under the
+// hood, and if this Tracer ends up actually being used, chances are
+// it's going to crash because it'll end up mixing with some other
+// Tracer. When a test uses multiple tracers and does not crash,
+// either it's because one of the tracers is not being used (in which
+// case it'd be clearer to share the one being used using
+// MakeTestingAmbientContext), or, by happenstance, the trace in
+// question doesn't end up having more than one span. This is very
+// brittle.
+func MakeTestingAmbientCtxWithNewTracer() AmbientContext {
+	return MakeTestingAmbientContext(tracing.NewTracer())
+}
+
 // MakeServerAmbientContext creates an AmbientContext for use by
 // server processes.
 func MakeServerAmbientContext(

@@ -210,7 +210,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		// Note: we create a fresh AmbientContext here, instead of using
 		// t.server.AmbientCtx(), because we want the lease manager to
 		// pretend to be a mock node with its own node ID.
-		ambientCtx := testutils.MakeAmbientCtx()
+		ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 		ambientCtx.AddLogTag("n", nc)
 		// Hack the ExecutorConfig that we pass to the Manager to have a
 		// different node id.

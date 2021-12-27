@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -143,7 +144,7 @@ func newTestProcessorWithTxnPusher(
 	}
 
 	p := NewProcessor(Config{
-		AmbientContext:       testutils.MakeAmbientCtx(),
+		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		TxnPusher:            txnPusher,

@@ -160,7 +160,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 ) (*kvserver.RaftTransport, net.Addr) {
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
 	transport := kvserver.NewRaftTransport(
-		testutils.MakeAmbientCtx(),
+		log.MakeTestingAmbientCtxWithNewTracer(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,

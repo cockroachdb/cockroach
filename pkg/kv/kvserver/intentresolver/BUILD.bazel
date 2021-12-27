@@ -44,6 +44,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",

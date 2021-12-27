@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
@@ -175,7 +175,7 @@ func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {
 		factory := kv.NonTransactionalFactoryFunc(s)
-		cfg.DB = kv.NewDB(testutils.MakeAmbientCtx(), factory, cfg.Clock, stopper)
+		cfg.DB = kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, cfg.Clock, stopper)
 	}
 	return cfg
 }

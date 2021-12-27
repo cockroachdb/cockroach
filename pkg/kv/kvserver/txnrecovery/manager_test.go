@@ -20,12 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/assert"
 )
 
 func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
-	ac := testutils.MakeAmbientCtx()
+	ac := log.MakeTestingAmbientCtxWithNewTracer()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	db := kv.NewDB(ac, kv.NonTransactionalFactoryFunc(func(

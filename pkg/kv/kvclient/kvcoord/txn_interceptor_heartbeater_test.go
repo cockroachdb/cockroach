@@ -34,7 +34,7 @@ func makeMockTxnHeartbeater(
 	mockSender, mockGatekeeper = &mockLockedSender{}, &mockLockedSender{}
 	manual := hlc.NewManualClock(123)
 	th.init(
-		testutils.MakeAmbientCtx(),
+		log.MakeTestingAmbientCtxWithNewTracer(),
 		stop.NewStopper(),
 		hlc.NewClock(manual.UnixNano, time.Nanosecond),
 		new(TxnMetrics),

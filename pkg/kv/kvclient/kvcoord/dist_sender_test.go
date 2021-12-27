@@ -373,7 +373,7 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -531,7 +531,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -658,7 +658,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: testutils.MakeAmbientCtx(),
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:      clock,
 				NodeDescs:  g,
 				RPCContext: rpcContext,
@@ -748,7 +748,7 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -841,7 +841,7 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 		}
 	}
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -937,7 +937,7 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -1027,7 +1027,7 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: testutils.MakeAmbientCtx(),
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:      clock,
 				NodeDescs:  g,
 				RPCContext: rpcContext,
@@ -1131,7 +1131,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -1189,7 +1189,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -1265,7 +1265,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	})
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -1413,7 +1413,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: testutils.MakeAmbientCtx(),
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:      clock,
 				NodeDescs:  g,
 				RPCContext: rpcContext,
@@ -1486,7 +1486,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -1586,7 +1586,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -1687,7 +1687,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -1811,7 +1811,7 @@ func TestSendRPCRetry(t *testing.T) {
 		return batchReply, nil
 	}
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -1934,7 +1934,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: testutils.MakeAmbientCtx(),
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:      clock,
 				NodeDescs:  g,
 				RPCContext: rpcContext,
@@ -2050,7 +2050,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 		return br, nil
 	}
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -2085,7 +2085,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:         testutils.MakeAmbientCtx(),
+		AmbientCtx:         log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:              clock,
 		NodeDescs:          g,
 		RPCContext:         rpcContext,
@@ -2269,7 +2269,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		return batchReply, nil
 	}
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -2318,7 +2318,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -2358,7 +2358,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	cfg := DistSenderConfig{
-		AmbientCtx:        testutils.MakeAmbientCtx(),
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -2810,7 +2810,7 @@ func TestMultiRangeWithEndTxn(t *testing.T) {
 		}
 
 		cfg := DistSenderConfig{
-			AmbientCtx: testutils.MakeAmbientCtx(),
+			AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 			Clock:      clock,
 			NodeDescs:  g,
 			RPCContext: rpcContext,
@@ -2943,7 +2943,7 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: testutils.MakeAmbientCtx(),
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:      clock,
 				NodeDescs:  g,
 				RPCContext: rpcContext,
@@ -3072,7 +3072,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: testutils.MakeAmbientCtx(),
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:      clock,
 				NodeDescs:  g,
 				RPCContext: rpcContext,
@@ -3158,7 +3158,7 @@ func TestCountRanges(t *testing.T) {
 	// Mock out descriptor DB and sender function.
 	descDB := mockRangeDescriptorDBForDescs(append(descriptors[:], testMetaRangeDescriptor)...)
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -3250,7 +3250,7 @@ func TestGatewayNodeID(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -3600,7 +3600,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: testutils.MakeAmbientCtx(),
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:      clock,
 				NodeDescs:  g,
 				RPCContext: rpcContext,
@@ -3681,7 +3681,7 @@ func TestCanSendToFollower(t *testing.T) {
 		return ba.CreateReply(), nil
 	}
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -3901,7 +3901,7 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 
 		cfg := DistSenderConfig{
-			AmbientCtx: testutils.MakeAmbientCtx(),
+			AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 			Clock:      clock,
 			NodeDescs:  g,
 			RPCContext: rpcContext,
@@ -4007,7 +4007,7 @@ func TestConnectionClass(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -4145,7 +4145,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -4759,7 +4759,7 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 
 	rangeLookups := 0
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  ns,
 		RPCContext: rpcContext,
@@ -4838,7 +4838,7 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: testutils.MakeAmbientCtx(),
+		AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:      clock,
 		NodeDescs:  ns,
 		RPCContext: rpcContext,
