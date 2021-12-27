@@ -212,7 +212,7 @@ FROM a
 ----
 project
  ├── columns: i:8 arr:9 s:10 s:11 i:12 s:13 array:14 array:15
- ├── stable
+ ├── immutable
  ├── scan a
  │    └── columns: a.i:2 a.s:4 a.arr:5
  └── projections
@@ -222,7 +222,7 @@ project
       ├── a.s:4::VARCHAR(2) [as=s:11, outer=(4), immutable]
       ├── a.i:2::INT2::INT8 [as=i:12, outer=(2), immutable]
       ├── a.s:4::CHAR::VARCHAR [as=s:13, outer=(4), immutable]
-      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), stable]
+      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), immutable]
       └── ARRAY[a.i:2, 2]::INT2VECTOR [as=array:15, outer=(2), immutable]
 
 # --------------------------------------------------
