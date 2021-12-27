@@ -924,7 +924,9 @@ func (s *scope) Resolve(
 	inScope := srcMeta.(*scope)
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
-		if col.name.MatchesReferenceName(colName) && sourceNameMatches(*prefix, col.table) {
+		if col.visibility != inaccessible &&
+			col.name.MatchesReferenceName(colName) &&
+			sourceNameMatches(*prefix, col.table) {
 			return col, nil
 		}
 	}
