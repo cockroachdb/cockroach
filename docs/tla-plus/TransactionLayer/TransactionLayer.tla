@@ -12,6 +12,7 @@ CONSTANTS Nil
 CONSTANTS MaxAttempt
 
 
+
 \* Multi-version value of key.
 VARIABLES MVCCData
 \* Intent write of key.
@@ -26,8 +27,6 @@ VARIABLES Read_result
 VARIABLES Txn_exeid
 \* Most recently used ts of each key.
 VARIABLES Tscache
-\* In the ParallelCommit, set that should be checked.
-VARIABLES Tocheck
 
 
 \* The following VARIABLES are used to create three txns, and will never be changed.
@@ -40,7 +39,7 @@ keys == <<key1,key2,key3,key4,key5,key6,key7,key8,key9,keyt,keyj,keyq>>
 Unchangedvars == <<Transactions,ops,keys,T1,T2,T3>>
 
 \* All VARIABLES
-vars == <<Unchangedvars,MVCCData,Record,System_ts,Read_result,Txn_exeid,Intent_write,Tscache,Tocheck>>
+vars == <<Unchangedvars,MVCCData,Record,System_ts,Read_result,Txn_exeid,Intent_write,Tscache>>
 
 \* Keys in command.
 KEYS == {"A","B"}
@@ -61,7 +60,7 @@ InitT1 == /\ op1 \in {Write} /\ op2 \in {Read} /\ op3 \in {Write, Read}
 \* Initiate txn2.
 \* in this case:
 \* op              key        value(useless if Read)
-\* Write           B          4(useless)
+\* Write           B          4
 \* Write or Read   A or B     5(useless if Read)
 \* Write or Read   B          6(useless if Read)
 \* Read            A          7(useless)      
@@ -99,7 +98,6 @@ InitRecoed == Record = <<>>
 InitSign == /\ System_ts    = 1
             /\ Txn_exeid    = [i \in 1..3 |-> 1]
             /\ Tscache      = [i \in KEYS |-> 0] 
-            /\ Tocheck      = <<>>
 
 InitResult == Read_result = [i \in 1..3 |-> <<>>]
 
@@ -135,7 +133,7 @@ BeginTransaction(tid) ==
                   /\ tid \notin DOMAIN Record
                   /\ Record' = SthIndexAdd(Record,tid,newT)
                   /\ System_ts' = System_ts + 1
-                  /\ UNCHANGED <<Unchangedvars,MVCCData,Read_result,Txn_exeid,Intent_write,Tscache,Tocheck>>
+                  /\ UNCHANGED <<Unchangedvars,MVCCData,Read_result,Txn_exeid,Intent_write,Tscache>>
 \* Execute next command of a txn.
 PipeLineWrite(tid) == 
            /\ Record[tid].status = "pending"
@@ -162,7 +160,7 @@ PipeLineWrite(tid) ==
                              /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
                              \* Update ts cache.
                              /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
-                             /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write,Tocheck>>
+                             /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write>>
                           \/ /\ iw /= Nil
                              \* With intent_write on key
                              
@@ -183,14 +181,14 @@ PipeLineWrite(tid) ==
                                          /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,GetLastNum(key,ts))]
                                          /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
                                          /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
-                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write,Tocheck>>
+                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write>>
                                       \/ /\ iwts = ts
                                          \* This Intent_write was written by myself.
                                          \* Read this Intent_write directly.
                                          /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,iwv)]
                                          /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
                                          /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
-                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write,Tocheck>>
+                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Intent_write>>
                                       \/ /\ iwts < ts
                                          \* Judge whether the intent write is written by this txn.
                                          /\ \/ /\ otid = tid
@@ -200,7 +198,7 @@ PipeLineWrite(tid) ==
                                                /\ Read_result' = [Read_result EXCEPT ![tid] = Append(@,GetLastNum(key,ts))]
                                                /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
                                                /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
-                                               /\ UNCHANGED <<MVCCData,Record,System_ts,Tocheck>>
+                                               /\ UNCHANGED <<MVCCData,Record,System_ts>>
                                             \/ /\ otid /= tid
                                                \* This is a txn conflict.
                                                \* Handle this conflict according to status.
@@ -213,7 +211,7 @@ PipeLineWrite(tid) ==
                                                                                                                     value |-> iwv])]
                                                      /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
                                                      /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
-                                                     /\ UNCHANGED <<Record,System_ts,Tocheck>>
+                                                     /\ UNCHANGED <<Record,System_ts>>
                                                      
                                                   \/ /\ ostatus = "aborted"
                                                      \* Clean this Intent_write and read MVCCData according to ts.
@@ -222,7 +220,7 @@ PipeLineWrite(tid) ==
                                                      /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
                                                      /\ Tscache' = [Tscache EXCEPT ![key] = Max({ts,@})]
                                                      
-                                                     /\ UNCHANGED <<MVCCData,Record,System_ts,Tocheck>>
+                                                     /\ UNCHANGED <<MVCCData,Record,System_ts>>
                                                   \/ /\ ostatus = "staging"
                                                      /\ FALSE
                                                   \/ /\ ostatus = "pending"
@@ -248,7 +246,7 @@ PipeLineWrite(tid) ==
                                                            /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
                                                            /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
                                                            /\ UNCHANGED <<Tscache>>
-                                                     /\ UNCHANGED <<MVCCData,Intent_write,Tocheck>>
+                                                     /\ UNCHANGED <<MVCCData,Intent_write>>
                     \/ /\ op = Write
                        \* op is Write
                        /\ \/ /\ ts < Tscache[key] 
@@ -263,7 +261,7 @@ PipeLineWrite(tid) ==
                              /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
                              
                              /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
-                             /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache,Tocheck>>
+                             /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache>>
                           \/ /\ ts >= Tscache[key]
                              /\ \/ /\ ExistNCV(key,ts)
                                    \* Exist newer committed value.
@@ -278,7 +276,7 @@ PipeLineWrite(tid) ==
                                    /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
                                    /\ System_ts' = System_ts + 1
                                    
-                                   /\ UNCHANGED<<MVCCData,Intent_write,Tscache,Tocheck>>
+                                   /\ UNCHANGED<<MVCCData,Intent_write,Tscache>>
                                 \/ /\ ~ExistNCV(key,ts)
                                    \* Do not exist newer committed value.
                                    /\ \/ /\ iw = Nil 
@@ -287,7 +285,7 @@ PipeLineWrite(tid) ==
                                                                                            value |-> value,
                                                                                            ts    |-> ts]]
                                          /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
-                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache,Tocheck>>
+                                         /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache>>
                                       \/ /\ iw /= Nil
                                          \* Compare priority
                                          /\ LET otid    == iw.tid
@@ -302,7 +300,7 @@ PipeLineWrite(tid) ==
                                                                                                        value |-> value,
                                                                                                        ts    |-> ts]]
                                                      /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
-                                                     /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache,Tocheck>>
+                                                     /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache>>
                                                   \/ /\ otid /= tid 
                                                      \* This is a txn conflict.
                                                      \* Handle this conflict according to status.
@@ -315,14 +313,14 @@ PipeLineWrite(tid) ==
                                                                                                                           value |-> iwv])]
                                                                                                                           
                                                            /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
-                                                           /\ UNCHANGED <<Record,System_ts,Read_result,Tscache,Tocheck>> 
+                                                           /\ UNCHANGED <<Record,System_ts,Read_result,Tscache>> 
                                                         \/ /\ ostatus = "aborted"
                                                            \* Update Intent_write.
                                                            /\ Intent_write' = [Intent_write EXCEPT ![key] = [tid   |-> tid,
                                                                                                              value |-> value,
                                                                                                              ts    |-> ts]]
                                                            /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = @ + 1]
-                                                           /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache,Tocheck>> 
+                                                           /\ UNCHANGED <<MVCCData,Record,System_ts,Read_result,Tscache>> 
                                                         \/ /\ ostatus = "staging"
                                                            /\ FALSE
                                                         \/ /\ ostatus = "pending"
@@ -330,7 +328,7 @@ PipeLineWrite(tid) ==
                                                            /\ \/ \* Abort the conflicting transaction.
                                                                  /\ Record' = [Record EXCEPT ![otid].status = "aborted"]
                                                                  /\ Read_result' = [Read_result EXCEPT ![otid] = <<>>]
-                                                                 /\ UNCHANGED <<MVCCData,System_ts,Txn_exeid,Intent_write,Tscache,Tocheck>> 
+                                                                 /\ UNCHANGED <<MVCCData,System_ts,Txn_exeid,Intent_write,Tscache>> 
                                                               \/ \* Retry myself
                                                                  /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
                                                                                                        \* Set status according to attempt.
@@ -340,7 +338,7 @@ PipeLineWrite(tid) ==
                                                                  /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
                                                                  /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
                                                                  /\ System_ts' = System_ts + 1
-                                                                 /\ UNCHANGED <<MVCCData,Intent_write,Tscache,Tocheck>>
+                                                                 /\ UNCHANGED <<MVCCData,Intent_write,Tscache>>
                                                  
                  /\ UNCHANGED <<Unchangedvars>>
 
@@ -351,49 +349,24 @@ StartParallelCommit(tid) ==
             \* Change txn's status from "pending" to "staging"
             /\ Record[tid].status = "pending" 
             /\ Record' = [Record EXCEPT ![tid].status = "staging"]
-            /\ LET commands == Record[tid].command
-                   len == Len(Record[tid].command) 
-                   allwriteindex == {i \in 1..len: commands[i].op = Write}
-                   allwrite == {commands[i] : i \in allwriteindex}
-                   inflight == {[success |-> Nil,
-                                 key     |-> i.key,
-                                 value   |-> i.value]: i \in allwrite}
-                  \* Use tocheck to store commands that need to be checked for successfully replicated.
-               IN /\ Tocheck' = SthIndexAdd(Tocheck,tid,inflight)
-                  /\ UNCHANGED <<Unchangedvars,MVCCData,System_ts,Read_result,Txn_exeid,Intent_write,Tscache>>
+            /\ UNCHANGED <<Unchangedvars,MVCCData,System_ts,Read_result,Txn_exeid,Intent_write,Tscache>>
 
-\* Check whether a command is successfully replicated.
-CheckInflight(tid,command) == 
-            /\ command.success = Nil
-            /\ \/ \* Replication succeeded.
-                  /\ Tocheck' = [Tocheck EXCEPT ![tid] = (Tocheck[tid] \ {command}) 
-                                  \union {[key     |-> command.key,
-                                           value   |-> command.value,
-                                           success |-> TRUE]}]
-                  /\ UNCHANGED <<Record,System_ts,Txn_exeid,Read_result>>
-               \/ \* Replication failed.
-                  \* There is no need to check other commands.
-                  \* Retry this txn.
-                  /\ Tocheck' = [i \in DOMAIN Tocheck \ {tid} |-> Tocheck[i]]
+\* Check whether all inflight write have been persisted. 
+CheckInflightAndCommit(tid) ==
+            /\ Record[tid].status = "staging"
+            /\ \/ \* If all inflight write have been persisted.
+                  /\ Record' = [Record EXCEPT ![tid].status = "committed"]
+                  /\ UNCHANGED <<System_ts,Read_result,Txn_exeid>>
+               \/ \* If some inflight write fails persistence
                   /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
+                                                        \* Set status according to attempt.
                                                         status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
                                                         attempt |-> @.attempt + 1,
                                                         command |-> @.command]]
-                  /\ System_ts' = System_ts + 1
                   /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
                   /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
-                  
+                  /\ System_ts' = System_ts + 1
             /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache>>
-
-
-\* Judge whether the txn meets the commit conditions.
-JudgeCommit(tid) == 
-            /\ Record[tid].status = "staging"
-            \* All commands have been successfully replicated.
-            /\ \A i \in Tocheck[tid] : i.success = TRUE
-            /\ Record' = [Record EXCEPT ![tid].status = "committed"] 
-            /\ Tocheck' = [i \in (DOMAIN Tocheck) \ {tid} |-> Tocheck[i]] 
-            /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache,Read_result,Txn_exeid,System_ts>>
 
 
 \* Move the value from intent write to MVCCData.
@@ -404,15 +377,14 @@ CleanIntentWrite(k) ==
             /\ Intent_write' = [Intent_write EXCEPT ![k] = Nil]
             /\ MVCCData' = [MVCCData EXCEPT ![k] = Append(@,[ts    |-> Intent_write[k].ts,
                                                              value |-> Intent_write[k].value])]
-            /\ UNCHANGED <<Unchangedvars,Record,System_ts,Read_result,Txn_exeid,Tscache,Tocheck>>                                                                 
+            /\ UNCHANGED <<Unchangedvars,Record,System_ts,Read_result,Txn_exeid,Tscache>>                                                                 
 
 
 Next == 
         \/ \E tid \in 1..3 : BeginTransaction(tid)
         \/ \E tid \in DOMAIN Record : PipeLineWrite(tid)
         \/ \E tid \in DOMAIN Record : StartParallelCommit(tid)
-        \/ \E tid \in DOMAIN Tocheck : \E command \in Tocheck[tid] : CheckInflight(tid,command)
-        \/ \E tid \in DOMAIN Tocheck : JudgeCommit(tid)
+        \/ \E tid \in DOMAIN Record : CheckInflightAndCommit(tid)
         \/ \E k \in KEYS : CleanIntentWrite(k)
         
        
@@ -506,9 +478,6 @@ invTs == ~ \E i,j \in DOMAIN Record : /\ i /= j
          
                                
 invOthers == 
-          \* Only txns in staging status need to be checked.
-          /\ ~ \E i \in DOMAIN Record : /\ Record[i].status /= "staging"
-                                        /\ i \in DOMAIN Tocheck
           \* If a txn is committed, all commands of it have been executed.
           /\ \A i \in DOMAIN Record : Record[i].status = "committed" => Txn_exeid[i] = Len(Transactions[i]) + 1 
           \* Without txn committed, MVCCData has no other values.
