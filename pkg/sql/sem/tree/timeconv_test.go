@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,7 +52,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			panic("unused")
 		})
-	db := kv.NewDB(testutils.MakeAmbientCtx(), senderFactory, clock, stopper)
+	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), senderFactory, clock, stopper)
 
 	for _, d := range testData {
 		ts := hlc.ClockTimestamp{WallTime: d.walltime, Logical: d.logical}

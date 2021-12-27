@@ -80,6 +80,7 @@ func (insecureCtx) HTTPRequestScheme() string {
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// This test is verifying the (unimplemented) authentication of SSL
 		// client certificates over HTTP endpoints. Web session authentication
@@ -87,10 +88,10 @@ func TestSSLEnforcement(t *testing.T) {
 		// clients being instantiated.
 		DisableWebSessionAuthentication: true,
 	})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(rpc.ContextOptions{
+		return rpc.NewContext(ctx, rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
 			Config:   cfg,
 			Clock:    hlc.NewClock(hlc.UnixNano, 1),

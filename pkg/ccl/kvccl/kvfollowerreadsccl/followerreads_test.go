@@ -384,7 +384,7 @@ func TestOracle(t *testing.T) {
 	current := clock.Now()
 	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
 
-	c := kv.NewDB(log.AmbientContext{Tracer: tracing.NewTracer()}, kv.MockTxnSenderFactory{}, clock, stopper)
+	c := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), kv.MockTxnSenderFactory{}, clock, stopper)
 	staleTxn := kv.NewTxn(ctx, c, 0)
 	require.NoError(t, staleTxn.SetFixedTimestamp(ctx, stale))
 	currentTxn := kv.NewTxn(ctx, c, 0)
@@ -408,7 +408,7 @@ func TestOracle(t *testing.T) {
 	closestFollower := replicas[1]
 	leaseholder := replicas[2]
 
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	setLatency := func(addr string, latency time.Duration) {
 		// All test cases have to have at least 11 measurement values in order for
 		// the exponentially-weighted moving average to work properly. See the

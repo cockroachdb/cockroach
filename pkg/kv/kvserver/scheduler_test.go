@@ -230,12 +230,14 @@ func TestSchedulerLoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
-	p := newTestProcessor()
-	s := newRaftScheduler(log.AmbientContext{}, m, p, 1)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
+
+	m := newStoreMetrics(metric.TestSampleInterval)
+	p := newTestProcessor()
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
+
 	s.Start(stopper)
 	s.EnqueueRaftTicks(1, 2, 3)
 
@@ -256,12 +258,13 @@ func TestSchedulerBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
-	p := newTestProcessor()
-	s := newRaftScheduler(log.AmbientContext{}, m, p, 1)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
+
+	m := newStoreMetrics(metric.TestSampleInterval)
+	p := newTestProcessor()
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
 	s.Start(stopper)
 
 	testCases := []struct {

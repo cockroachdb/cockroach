@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -207,21 +206,22 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tc.Server(0).TracerI().(*tracing.Tracer)},
-		Config:     tc.Server(1).RPCContext().Config,
-		Clock:      tc.Server(1).Clock(),
-		Stopper:    tc.Stopper(),
-		Settings:   tc.Server(1).ClusterSettings(),
+	ctx := context.Background()
+	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
+		TenantID: roachpb.SystemTenantID,
+		Config:   server1.RPCContext().Config,
+		Clock:    server1.Clock(),
+		Stopper:  tc.Stopper(),
+		Settings: server1.ClusterSettings(),
 	})
 	conn, err := rpcContext.GRPCDialNode(server1.ServingRPCAddr(), server1.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
+		rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	statusClient1 := serverpb.NewStatusClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	var cancel func()
+	ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if _, err := statusClient1.Metrics(ctx, &serverpb.MetricsRequest{NodeId: "local"}); err != nil {
 		t.Fatal(err)

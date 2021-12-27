@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
@@ -37,7 +36,7 @@ func newTestInfoStore() (*infoStore, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nc := &base.NodeIDContainer{}
 	nc.Set(context.Background(), 1)
-	is := newInfoStore(log.AmbientContext{Tracer: tracing.NewTracer()}, nc, emptyAddr, stopper)
+	is := newInfoStore(log.MakeTestingAmbientCtxWithNewTracer(), nc, emptyAddr, stopper)
 	return is, stopper
 }
 

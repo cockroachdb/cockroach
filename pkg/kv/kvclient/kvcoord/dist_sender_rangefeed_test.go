@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -58,7 +57,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			defer cancel()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 			g := makeGossip(t, stopper, rpcContext)
 
 			desc := roachpb.RangeDescriptor{
@@ -128,7 +127,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			}
 
 			ds := NewDistSender(DistSenderConfig{
-				AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+				AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:           clock,
 				NodeDescs:       g,
 				RPCRetryOptions: &retry.Options{MaxRetries: 10},

@@ -173,7 +173,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	repls := createReplicas(t, &tc, 2)
 	r1, r2 := repls[0], repls[1]
@@ -312,7 +312,7 @@ func TestBaseQueueSamePriorityFIFO(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	repls := createReplicas(t, &tc, 5)
 
@@ -351,7 +351,7 @@ func TestBaseQueueAdd(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -388,8 +388,9 @@ func TestBaseQueueNoop(t *testing.T) {
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	repls := createReplicas(t, &tc, 2)
 	r1, r2 := repls[0], repls[1]
@@ -405,7 +406,6 @@ func TestBaseQueueNoop(t *testing.T) {
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
-	ctx := context.Background()
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	testQueue.blocker <- struct{}{}
 	testutils.SucceedsSoon(t, func() error {
@@ -442,9 +442,10 @@ func TestBaseQueueProcess(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	repls := createReplicas(t, &tc, 2)
 	r1, r2 := repls[0], repls[1]
@@ -460,7 +461,6 @@ func TestBaseQueueProcess(t *testing.T) {
 	bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
-	ctx := context.Background()
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	if pc := testQueue.getProcessed(); pc != 0 {
@@ -515,7 +515,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -562,7 +562,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	// Configure a gossip instance that won't have the system config available in it.
 	cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	{
 		confReader, err := tc.store.GetConfReader()
@@ -636,16 +636,16 @@ func TestNeedsSystemConfig(t *testing.T) {
 func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	s, _ := createTestStore(t,
+	defer stopper.Stop(ctx)
+	s, _ := createTestStore(ctx, t,
 		testStoreOpts{
 			// This test was written before test stores could start with more than one
 			// range and was not adapted.
 			createSystemRanges: false,
 		},
 		stopper)
-	ctx := context.Background()
 
 	maxWontSplitAddr, err := keys.Addr(keys.SystemPrefix)
 	if err != nil {
@@ -778,9 +778,10 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tsc := TestStoreConfig(nil)
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	testQueue := &testQueueImpl{
 		duration: time.Nanosecond,
@@ -920,8 +921,9 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -943,7 +945,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 			acceptsUnsplitRanges: true,
 		})
 	bq.Start(stopper)
-	bq.maybeAdd(context.Background(), r, hlc.ClockTimestamp{})
+	bq.maybeAdd(ctx, r, hlc.ClockTimestamp{})
 
 	if l := bq.Length(); l != 1 {
 		t.Errorf("expected one queued replica; got %d", l)
@@ -1038,9 +1040,10 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -1114,7 +1117,7 @@ func TestBaseQueueDisable(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 
 	r, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -1183,8 +1186,9 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	repls := createReplicas(t, &tc, 3)
 	r1, r2, r3 := repls[0], repls[1], repls[2]
@@ -1206,7 +1210,6 @@ func TestBaseQueueProcessConcurrently(t *testing.T) {
 	)
 	bq.Start(stopper)
 
-	ctx := context.Background()
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	bq.maybeAdd(ctx, r2, hlc.ClockTimestamp{})
 	bq.maybeAdd(ctx, r3, hlc.ClockTimestamp{})
@@ -1252,7 +1255,7 @@ func TestBaseQueueChangeReplicaID(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now hlc.ClockTimestamp, r *Replica) (shouldQueue bool, priority float64) {
 			return true, 1.0
@@ -1292,8 +1295,9 @@ func TestBaseQueueRequeue(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	repls := createReplicas(t, &tc, 1)
 	r1 := repls[0]
@@ -1341,7 +1345,6 @@ func TestBaseQueueRequeue(t *testing.T) {
 			return nil
 		})
 	}
-	ctx := context.Background()
 	// MaybeAdd a replica. Should queue after checking ShouldQueue.
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(1)
