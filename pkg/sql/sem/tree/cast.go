@@ -114,6 +114,10 @@ type cast struct {
 	// the source value, or dependent on outside factors (such as parameter
 	// variables or table contents).
 	volatility Volatility
+	// volatilityHint is an optional string for VolatilityStable casts. When
+	// set, it is used as an error hint suggesting a possible workaround when
+	// stable casts are not allowed.
+	volatilityHint string
 }
 
 // volatilityTODO is used temporarily to indicate that cast's volatility has not
@@ -172,11 +176,16 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_text:    {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		oid.T_varchar: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		// Automatic I/O conversions from bpchar to other types.
-		oid.T_bit:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bool:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oidext.T_box2d:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bytea:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_date:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bit:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bool:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oidext.T_box2d: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bytea:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_date: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "CHAR to DATE casts depend on session DateStyle; use parse_date(string) instead",
+		},
 		oid.T_float4:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_float8:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oidext.T_geography: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
@@ -185,7 +194,12 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_int2:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int4:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int8:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_interval:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_interval: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "CHAR to INTERVAL casts depend on session IntervalStyle; use parse_interval(string) instead",
+		},
 		oid.T_jsonb:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_numeric:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_oid:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
@@ -195,13 +209,29 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_time:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_time: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "CHAR to TIME casts depend on session DateStyle; use parse_time(string) instead",
+		},
+		oid.T_timestamp: {
+			maxContext: CastContextExplicit,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "CHAR to TIMESTAMP casts are context-dependent because of relative timestamp strings " +
+				"like 'now' and session settings such as DateStyle; use parse_timestamp(string) instead.",
+		},
+		oid.T_timestamptz: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_timetz: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "CHAR to TIMETZ casts depend on session DateStyle; use parse_timetz(char) instead",
+		},
+		oid.T_uuid:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_varbit: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_void:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 	},
 	oid.T_bytea: {
 		oidext.T_geography: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
@@ -221,11 +251,16 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		// Automatic I/O conversions to string types.
 		oid.T_name: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		// Automatic I/O conversions from "char" to other types.
-		oid.T_bit:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bool:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oidext.T_box2d:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bytea:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_date:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bit:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bool:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oidext.T_box2d: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bytea:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_date: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: `"char" to DATE casts depend on session DateStyle; use parse_date(string) instead`,
+		},
 		oid.T_float4:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_float8:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oidext.T_geography: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
@@ -233,7 +268,12 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_inet:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int2:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int8:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_interval:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_interval: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: `"char" to INTERVAL casts depend on session IntervalStyle; use parse_interval(string) instead`,
+		},
 		oid.T_jsonb:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_numeric:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_oid:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
@@ -243,23 +283,69 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_time:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_time: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: `"char" to TIME casts depend on session DateStyle; use parse_time(string) instead`,
+		},
+		oid.T_timestamp: {
+			maxContext: CastContextExplicit,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: `"char" to TIMESTAMP casts are context-dependent because of relative timestamp strings ` +
+				"like 'now' and session settings such as DateStyle; use parse_timestamp(string) instead.",
+		},
+		oid.T_timestamptz: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_timetz: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: `"char" to TIMETZ casts depend on session DateStyle; use parse_timetz(string) instead`,
+		},
+		oid.T_uuid:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_varbit: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_void:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 	},
 	oid.T_date: {
 		oid.T_timestamp:   {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		oid.T_timestamptz: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		// Automatic I/O conversions to string types.
-		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bpchar: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "DATE to CHAR casts are dependent on DateStyle; consider " +
+				"using to_char(date) instead.",
+		},
+		oid.T_char: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: `DATE to "char" casts are dependent on DateStyle; consider ` +
+				"using to_char(date) instead.",
+		},
+		oid.T_name: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "DATE to NAME casts are dependent on DateStyle; consider " +
+				"using to_char(date) instead.",
+		},
+		oid.T_text: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "DATE to TEXT casts are dependent on DateStyle; consider " +
+				"using to_char(date) instead.",
+		},
+		oid.T_varchar: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "DATE to VARCHAR casts are dependent on DateStyle; consider " +
+				"using to_char(date) instead.",
+		},
 	},
 	oid.T_float4: {
 		oid.T_float8:  {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
@@ -386,11 +472,36 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_interval: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		oid.T_time:     {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: volatilityTODO},
 		// Automatic I/O conversions to string types.
-		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bpchar: {
+			maxContext:     CastContextAssignment,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "INTERVAL to CHAR casts depend on IntervalStyle; consider using to_char(interval)",
+		},
+		oid.T_char: {
+			maxContext:     CastContextAssignment,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: `INTERVAL to "char" casts depend on IntervalStyle; consider using to_char(interval)`,
+		},
+		oid.T_name: {
+			maxContext:     CastContextAssignment,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "INTERVAL to NAME casts depend on IntervalStyle; consider using to_char(interval)",
+		},
+		oid.T_text: {
+			maxContext:     CastContextAssignment,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "INTERVAL to TEXT casts depend on IntervalStyle; consider using to_char(interval)",
+		},
+		oid.T_varchar: {
+			maxContext:     CastContextAssignment,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "INTERVAL to VARCHAR casts depend on IntervalStyle; consider using to_char(interval)",
+		},
 	},
 	oid.T_jsonb: {
 		oid.T_bool:    {maxContext: CastContextExplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
@@ -414,11 +525,16 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		// Automatic I/O conversions to string types.
 		oid.T_char: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		// Automatic I/O conversions from NAME to other types.
-		oid.T_bit:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bool:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oidext.T_box2d:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bytea:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_date:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bit:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bool:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oidext.T_box2d: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bytea:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_date: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "NAME to DATE casts depend on session DateStyle; use parse_date(string) instead",
+		},
 		oid.T_float4:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_float8:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oidext.T_geography: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
@@ -427,7 +543,12 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_int2:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int4:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int8:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_interval:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_interval: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "NAME to INTERVAL casts depend on session IntervalStyle; use parse_interval(string) instead",
+		},
 		oid.T_jsonb:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_numeric:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_oid:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
@@ -437,13 +558,29 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_time:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_time: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "NAME to TIME casts depend on session DateStyle; use parse_time(string) instead",
+		},
+		oid.T_timestamp: {
+			maxContext: CastContextExplicit,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "NAME to TIMESTAMP casts are context-dependent because of relative timestamp strings " +
+				"like 'now' and session settings such as DateStyle; use parse_timestamp(string) instead.",
+		},
+		oid.T_timestamptz: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_timetz: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "NAME to TIMETZ casts depend on session DateStyle; use parse_timetz(string) instead",
+		},
+		oid.T_uuid:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_varbit: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_void:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 	},
 	oid.T_numeric: {
 		oid.T_float4:  {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
@@ -563,11 +700,16 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_text:    {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		oid.T_varchar: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		// Automatic I/O conversions from TEXT to other types.
-		oid.T_bit:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bool:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oidext.T_box2d:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bytea:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_date:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bit:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bool:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oidext.T_box2d: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bytea:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_date: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "TEXT to DATE casts depend on session DateStyle; use parse_date(string) instead",
+		},
 		oid.T_float4:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_float8:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oidext.T_geography: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
@@ -575,7 +717,12 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_int2:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int4:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int8:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_interval:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_interval: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "TEXT to INTERVAL casts depend on session IntervalStyle; use parse_interval(string) instead",
+		},
 		oid.T_jsonb:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_numeric:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_oid:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
@@ -584,13 +731,29 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_time:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_time: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "TEXT to TIME casts depend on session DateStyle; use parse_time(string) instead",
+		},
+		oid.T_timestamp: {
+			maxContext: CastContextExplicit,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TEXT to TIMESTAMP casts are context-dependent because of relative timestamp strings " +
+				"like 'now' and session settings such as DateStyle; use parse_timestamp(string) instead.",
+		},
+		oid.T_timestamptz: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_timetz: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "TEXT to TIMETZ casts depend on session DateStyle; use parse_timetz(string) instead",
+		},
+		oid.T_uuid:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_varbit: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_void:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 	},
 	oid.T_time: {
 		oid.T_interval: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
@@ -609,24 +772,89 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_timestamp:   {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		oid.T_timestamptz: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		// Automatic I/O conversions to string types.
-		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bpchar: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TIMESTAMP to CHAR casts are dependent on DateStyle; consider " +
+				"using to_char(timestamp) instead.",
+		},
+		oid.T_char: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: `TIMESTAMP to "char" casts are dependent on DateStyle; consider ` +
+				"using to_char(timestamp) instead.",
+		},
+		oid.T_name: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TIMESTAMP to NAME casts are dependent on DateStyle; consider " +
+				"using to_char(timestamp) instead.",
+		},
+		oid.T_text: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TIMESTAMP to TEXT casts are dependent on DateStyle; consider " +
+				"using to_char(timestamp) instead.",
+		},
+		oid.T_varchar: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TIMESTAMP to VARCHAR casts are dependent on DateStyle; consider " +
+				"using to_char(timestamp) instead.",
+		},
 	},
 	oid.T_timestamptz: {
-		oid.T_date:        {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: volatilityTODO},
-		oid.T_time:        {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: volatilityTODO},
-		oid.T_timestamp:   {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: volatilityTODO},
+		oid.T_date: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: volatilityTODO},
+		oid.T_time: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: volatilityTODO},
+		oid.T_timestamp: {
+			maxContext:     CastContextAssignment,
+			origin:         contextOriginPgCast,
+			volatility:     volatilityTODO,
+			volatilityHint: "TIMESTAMPTZ to TIMESTAMP casts depend on the current timezone; consider using AT TIME ZONE 'UTC' instead",
+		},
 		oid.T_timestamptz: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		oid.T_timetz:      {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: volatilityTODO},
 		// Automatic I/O conversions to string types.
-		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bpchar: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TIMESTAMPTZ to CHAR casts depend on the current timezone; consider " +
+				"using to_char(t AT TIME ZONE 'UTC') instead.",
+		},
+		oid.T_char: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: `TIMESTAMPTZ to "char" casts depend on the current timezone; consider ` +
+				"using to_char(t AT TIME ZONE 'UTC') instead.",
+		},
+		oid.T_name: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TIMESTAMPTZ to NAME casts depend on the current timezone; consider " +
+				"using to_char(t AT TIME ZONE 'UTC') instead.",
+		},
+		oid.T_text: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TIMESTAMPTZ to TEXT casts depend on the current timezone; consider " +
+				"using to_char(t AT TIME ZONE 'UTC') instead.",
+		},
+		oid.T_varchar: {
+			maxContext: CastContextAssignment,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "TIMESTAMPTZ to VARCHAR casts depend on the current timezone; consider " +
+				"using to_char(t AT TIME ZONE 'UTC') instead.",
+		},
 	},
 	oid.T_timetz: {
 		oid.T_time:   {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: volatilityTODO},
@@ -664,11 +892,16 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_text:     {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		oid.T_varchar:  {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: volatilityTODO},
 		// Automatic I/O conversions from VARCHAR to other types.
-		oid.T_bit:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bool:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oidext.T_box2d:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_bytea:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_date:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bit:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bool:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oidext.T_box2d: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_bytea:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_date: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "VARCHAR to DATE casts depend on session DateStyle; use parse_date(string) instead",
+		},
 		oid.T_float4:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_float8:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oidext.T_geography: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
@@ -677,7 +910,12 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_int2:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int4:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_int8:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_interval:     {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_interval: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "VARCHAR to INTERVAL casts depend on session IntervalStyle; use parse_interval(string) instead",
+		},
 		oid.T_jsonb:        {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_numeric:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 		oid.T_oid:          {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
@@ -686,13 +924,29 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_time:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamp:    {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timestamptz:  {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_timetz:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_varbit:       {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
-		oid.T_void:         {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_time: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "VARCHAR to TIME casts depend on session DateStyle; use parse_time(string) instead",
+		},
+		oid.T_timestamp: {
+			maxContext: CastContextExplicit,
+			origin:     contextOriginAutomaticIOConversion,
+			volatility: volatilityTODO,
+			volatilityHint: "VARCHAR to TIMESTAMP casts are context-dependent because of relative timestamp strings " +
+				"like 'now' and session settings such as DateStyle; use parse_timestamp(string) instead.",
+		},
+		oid.T_timestamptz: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_timetz: {
+			maxContext:     CastContextExplicit,
+			origin:         contextOriginAutomaticIOConversion,
+			volatility:     volatilityTODO,
+			volatilityHint: "VARCHAR to TIMETZ casts depend on session DateStyle; use parse_timetz(string) instead",
+		},
+		oid.T_uuid:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_varbit: {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
+		oid.T_void:   {maxContext: CastContextExplicit, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
 	},
 	oid.T_void: {
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: volatilityTODO},
@@ -1013,7 +1267,7 @@ var validCasts = []castInfo{
 		from:           types.IntervalFamily,
 		to:             types.StringFamily,
 		volatility:     VolatilityImmutable,
-		volatilityHint: "INTERVAL to STRING casts depends on IntervalStyle; consider using to_char(interval)",
+		volatilityHint: "INTERVAL to STRING casts depend on IntervalStyle; consider using to_char(interval)",
 	},
 	{from: types.UuidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{
@@ -1298,8 +1552,8 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 		}
 		maxVolatility := VolatilityLeakProof
 		for i := range fromTypes {
-			v, ok := LookupCastVolatility(fromTypes[i], toTypes[i], sd)
-			if !ok {
+			v, lookupOk := LookupCastVolatility(fromTypes[i], toTypes[i], sd)
+			if !lookupOk {
 				return 0, false
 			}
 			if v > maxVolatility {
