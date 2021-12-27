@@ -490,16 +490,24 @@ func resolveCast(
 		return nil
 
 	default:
-		// TODO(mgartner): Use OID cast map.
-		cast := lookupCastInfo(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled)
-		if cast == nil {
+		var v Volatility
+		var hint string
+		if cast, ok := lookupCast(castFrom.Oid(), castTo.Oid()); ok && cast.volatility != volatilityTODO {
+			// If the volatility has been set in castMap, use it.
+			// TODO(mgartner): Add hints to castMap and use them here.
+			v = cast.volatility
+		} else if cast := lookupCastInfo(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled); cast != nil {
+			// Otherwise, fallback to the volatility in castInfo.
+			v = cast.volatility
+			hint = cast.volatilityHint
+		} else {
 			return invalidCastError(castFrom, castTo)
 		}
-		if !allowStable && cast.volatility >= VolatilityStable {
+		if !allowStable && v >= VolatilityStable {
 			err := NewContextDependentOpsNotAllowedError(context)
 			err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, castTo)
-			if cast.volatilityHint != "" {
-				err = errors.WithHint(err, cast.volatilityHint)
+			if hint != "" {
+				err = errors.WithHint(err, hint)
 			}
 			return err
 		}
