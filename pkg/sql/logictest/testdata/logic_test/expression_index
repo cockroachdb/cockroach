@@ -919,3 +919,13 @@ INSERT INTO t72012 VALUES (NULL)
 
 statement error validation of NOT NULL constraint failed: validation of CHECK "col IS NOT NULL" failed on row: col=NULL, rowid=\d+
 ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
+
+# Regression test for #74216. Do not allow expressions with mutable casts
+# between string types and reg* types.
+subtest 74216
+
+statement error context-dependent operators are not allowed in index element
+CREATE TABLE t74216 (
+    a REGTYPE,
+    UNIQUE ((a::STRING))
+)
