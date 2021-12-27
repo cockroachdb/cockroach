@@ -1318,7 +1318,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /noncover/b/2/1 -> NULL
+fetched: /noncover/b/?/1 -> NULL
 fetched: /noncover/noncover_pkey/1 -> NULL
 fetched: /noncover/noncover_pkey/1/b -> 2
 fetched: /noncover/noncover_pkey/1/c -> 3
@@ -1355,7 +1355,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /noncover/c/7 -> /5
+fetched: /noncover/c/? -> /5
 fetched: /noncover/noncover_pkey/5 -> NULL
 fetched: /noncover/noncover_pkey/5/b -> 6
 fetched: /noncover/noncover_pkey/5/c -> 7
@@ -1635,8 +1635,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t2/bc/2/1/4 -> NULL
-fetched: /t2/bc/2/3/6 -> NULL
+fetched: /t2/bc/?/?/4 -> NULL
+fetched: /t2/bc/?/?/6 -> NULL
 fetched: /t2/t2_pkey/4 -> NULL
 fetched: /t2/t2_pkey/4/b -> 2
 fetched: /t2/t2_pkey/4/c -> 1
@@ -1657,8 +1657,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t2/bc/2/1/4 -> NULL
-fetched: /t2/bc/2/3/6 -> NULL
+fetched: /t2/bc/?/?/4 -> NULL
+fetched: /t2/bc/?/?/6 -> NULL
 fetched: /t2/t2_pkey/4 -> NULL
 fetched: /t2/t2_pkey/4/b -> 2
 fetched: /t2/t2_pkey/4/c -> 1
@@ -1806,8 +1806,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t4/t4_pkey/10/20 -> NULL
-fetched: /t4/t4_pkey/10/20/c -> 30
+fetched: /t4/t4_pkey/?/? -> NULL
+fetched: /t4/t4_pkey/?/?/c -> 30
 output row: [30]
 
 # Point lookup on d does not touch the c or e families.
@@ -1830,8 +1830,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t4/t4_pkey/10/20 -> NULL
-fetched: /t4/t4_pkey/10/20/d -> 40
+fetched: /t4/t4_pkey/?/? -> NULL
+fetched: /t4/t4_pkey/?/?/d -> 40
 output row: [40]
 
 # Point lookup on both d and e uses a single span for the two adjacent column
