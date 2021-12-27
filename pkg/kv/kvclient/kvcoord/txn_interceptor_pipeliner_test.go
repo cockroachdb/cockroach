@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1571,7 +1570,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		}
 		return resp, nil
 	}
-	ambient := testutils.MakeAmbientCtx()
+	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx: ambient,
 		Clock:      s.Clock,

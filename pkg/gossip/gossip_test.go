@@ -486,7 +486,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	}
 
 	for _, peer := range peers {
-		c := newClient(testutils.MakeAmbientCtx(), local.GetNodeAddr(), makeMetrics())
+		c := newClient(log.MakeTestingAmbientCtxWithNewTracer(), local.GetNodeAddr(), makeMetrics())
 
 		testutils.SucceedsSoon(t, func() error {
 			conn, err := peer.rpcContext.GRPCUnvalidatedDial(c.addr.String()).Connect(ctx)
@@ -522,7 +522,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 
 		for {
 			localAddr := local.GetNodeAddr()
-			c := newClient(testutils.MakeAmbientCtx(), localAddr, makeMetrics())
+			c := newClient(log.MakeTestingAmbientCtxWithNewTracer(), localAddr, makeMetrics())
 			peer.mu.Lock()
 			c.startLocked(peer, disconnectedCh, peer.rpcContext, stopper, peer.rpcContext.NewBreaker(""))
 			peer.mu.Unlock()

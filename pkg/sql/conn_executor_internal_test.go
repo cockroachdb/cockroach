@@ -268,7 +268,7 @@ func startConnExecutor(
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			return nil, nil
 		})
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
+	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
@@ -278,7 +278,7 @@ func startConnExecutor(
 		return nil, nil, nil, nil, nil, err
 	}
 	defer tempEngine.Close()
-	ambientCtx := testutils.MakeAmbientCtx()
+	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	cfg := &ExecutorConfig{
 		AmbientCtx:      ambientCtx,
 		Settings:        st,

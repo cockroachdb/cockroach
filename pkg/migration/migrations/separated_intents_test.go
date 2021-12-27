@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -207,7 +207,7 @@ func TestRunSeparatedIntentsMigration(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db := kv.NewDB(testutils.MakeAmbientCtx(), mockSender, hlcClock, stopper)
+	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), mockSender, hlcClock, stopper)
 
 	datadriven.RunTest(t, "testdata/separated_intents",
 		func(t *testing.T, d *datadriven.TestData) string {

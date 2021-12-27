@@ -128,7 +128,7 @@ func TestFlowScheduler(t *testing.T) {
 	)
 	defer stopper.Stop(ctx)
 
-	scheduler := NewFlowScheduler(testutils.MakeAmbientCtx(), stopper, settings)
+	scheduler := NewFlowScheduler(log.MakeTestingAmbientCtxWithNewTracer(), stopper, settings)
 	scheduler.Init(&metrics)
 	scheduler.Start()
 	getNumRunning := func() int {
