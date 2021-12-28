@@ -25,11 +25,12 @@ func _() {
 	_ = x[PreSeedTenantSpanConfigs-14]
 	_ = x[SeedTenantSpanConfigs-15]
 	_ = x[PublicSchemasWithDescriptors-16]
+	_ = x[SCRAMAuthentication-17]
 }
 
-const _Key_name = "V21_2Start22_1AvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptors"
+const _Key_name = "V21_2Start22_1AvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptorsSCRAMAuthentication"
 
-var _Key_index = [...]uint16{0, 5, 14, 32, 54, 91, 130, 153, 167, 208, 234, 253, 287, 299, 330, 354, 375, 403}
+var _Key_index = [...]uint16{0, 5, 14, 32, 54, 91, 130, 153, 167, 208, 234, 253, 287, 299, 330, 354, 375, 403, 422}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

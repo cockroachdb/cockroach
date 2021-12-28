@@ -220,6 +220,8 @@ const (
 	SeedTenantSpanConfigs
 	// Public schema is backed by a descriptor.
 	PublicSchemasWithDescriptors
+	// SCRAM authentication is available.
+	SCRAMAuthentication
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -319,6 +321,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PublicSchemasWithDescriptors,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
+	},
+	{
+		Key:     SCRAMAuthentication,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
 	},
 
 	// *************************************************
