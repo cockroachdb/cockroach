@@ -215,6 +215,10 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 	var available [][2]tree.TypedExpr
 	for _, leftCol := range leftRefs {
 		for _, rightCol := range rightRefs {
+			// You can't compare voids.
+			if leftCol.typ.Oid() == oid.T_void || rightCol.typ.Oid() == oid.T_void {
+				continue
+			}
 			if leftCol.typ.Equivalent(rightCol.typ) {
 				available = append(available, [2]tree.TypedExpr{
 					typedParen(leftCol.item, leftCol.typ),
@@ -236,10 +240,6 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 	for (cond == nil || s.coin()) && len(available) > 0 {
 		v := available[0]
 		available = available[1:]
-		// You can't compare voids.
-		if v[0].ResolvedType().Oid() == oid.T_void || v[1].ResolvedType().Oid() == oid.T_void {
-			continue
-		}
 		expr := tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(tree.EQ), v[0], v[1])
 		if cond == nil {
 			cond = expr
@@ -254,7 +254,10 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 		Cond:  &tree.OnJoinCond{Expr: cond},
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
-	return joinExpr, joinRefs, true
+	// If we have a nil cond, then we didn't succeed in generating this join
+	// expr.
+	ok = cond != nil
+	return joinExpr, joinRefs, ok
 }
 
 func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -304,13 +307,19 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					if !tree.MustBeStaticallyKnownType(rightCol.Type).Equivalent(tree.MustBeStaticallyKnownType(leftCol.Type)) {
 						break
 					}
+					leftType := tree.MustBeStaticallyKnownType(leftCol.Type)
+					rightType := tree.MustBeStaticallyKnownType(rightCol.Type)
+					// You can't compare voids.
+					if leftType.Oid() == oid.T_void || rightType.Oid() == oid.T_void {
+						break
+					}
 					cols = append(cols, [2]colRef{
 						{
-							typ:  tree.MustBeStaticallyKnownType(leftCol.Type),
+							typ:  leftType,
 							item: tree.NewColumnItem(leftAliasName, leftColElem.Column),
 						},
 						{
-							typ:  tree.MustBeStaticallyKnownType(rightCol.Type),
+							typ:  rightType,
 							item: tree.NewColumnItem(rightAliasName, rightColElem.Column),
 						},
 					})
@@ -364,7 +373,10 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 		},
 		Cond: &tree.OnJoinCond{Expr: cond},
 	}
-	return joinExpr, joinRefs, true
+	// If we have a nil cond, then we didn't succeed in generating this join
+	// expr.
+	ok = cond != nil
+	return joinExpr, joinRefs, ok
 }
 
 // STATEMENTS
