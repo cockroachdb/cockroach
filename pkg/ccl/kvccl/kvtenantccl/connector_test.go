@@ -176,7 +176,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
+		AmbientCtx:      log.MakeTestingAmbientContext(),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -301,7 +301,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
+		AmbientCtx:      log.MakeTestingAmbientContext(),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -400,7 +400,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 
 	// Add listen address into list of other bogus addresses.
 	cfg := kvtenant.ConnectorConfig{
-		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
+		AmbientCtx:      log.MakeTestingAmbientContext(),
 		RPCContext:      rpcContext,
 		RPCRetryOptions: rpcRetryOpts,
 	}
@@ -509,7 +509,7 @@ func TestConnectorRetriesError(t *testing.T) {
 
 			// Add listen address into list of other bogus addresses.
 			cfg := kvtenant.ConnectorConfig{
-				AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
+				AmbientCtx:      log.MakeTestingAmbientContext(),
 				RPCContext:      rpcContext,
 				RPCRetryOptions: rpcRetryOpts,
 			}

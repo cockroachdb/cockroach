@@ -395,7 +395,7 @@ func (r *Registry) runJob(
 	// TODO(ajwerner): Move this writing up the trace ID down into
 	// stepThroughStateMachine where we're already often (and soon with
 	// exponential backoff, always) updating the job in that call.
-	ctx, span := r.ac.Tracer.StartSpanCtx(ctx, typ.String(), spanOptions...)
+	ctx, span := r.stopper.Tracer().StartSpanCtx(ctx, typ.String(), spanOptions...)
 	span.SetTag("job-id", attribute.Int64Value(int64(job.ID())))
 	defer span.Finish()
 	if span.TraceID() != 0 {

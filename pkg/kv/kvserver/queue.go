@@ -920,7 +920,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		return nil
 	}
 
-	ctx, span := tracing.EnsureChildSpan(ctx, bq.Tracer, bq.processOpName())
+	ctx, span := tracing.EnsureChildSpan(ctx, bq.store.stopper.Tracer(), bq.processOpName())
 	defer span.Finish()
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
 		bq.processTimeoutFunc(bq.store.ClusterSettings(), repl), func(ctx context.Context) error {

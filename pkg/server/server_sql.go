@@ -921,6 +921,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	reporter := &diagnostics.Reporter{
 		StartTime:     timeutil.Now(),
 		AmbientCtx:    &cfg.AmbientCtx,
+		Stopper:       cfg.stopper,
 		Config:        cfg.BaseConfig.Config,
 		Settings:      cfg.Settings,
 		ClusterID:     cfg.rpcContext.ClusterID.Get,
@@ -1204,7 +1205,7 @@ func (s *SQLServer) SQLInstanceID() base.SQLInstanceID {
 // NOTE: This is not called in preStart so that it's disabled by default for
 // testing.
 func (s *SQLServer) StartDiagnostics(ctx context.Context) {
-	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
+	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx)
 }
 
 // AnnotateCtx annotates the given context with the server tracer and tags.

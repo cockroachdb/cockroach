@@ -486,7 +486,8 @@ func (tc *TxnCoordSender) Send(
 		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
 
-	ctx, sp := tc.AnnotateCtxWithSpan(ctx, OpTxnCoordSender)
+	ctx = tc.AnnotateCtx(ctx)
+	ctx, sp := tc.stopper.Tracer().EnsureChildSpan(ctx, OpTxnCoordSender)
 	defer sp.Finish()
 
 	// Associate the txnID with the trace.

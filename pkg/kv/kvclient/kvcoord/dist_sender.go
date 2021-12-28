@@ -376,8 +376,8 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	}
 
 	ds.AmbientContext = cfg.AmbientCtx
-	if ds.AmbientContext.Tracer == nil {
-		panic("no tracer set in AmbientCtx")
+	if cfg.RPCContext.Stopper.Tracer() == nil {
+		panic("no tracer set in stopper")
 	}
 
 	if cfg.nodeDescriptor != nil {
@@ -398,7 +398,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		return rangeDescriptorCacheSize.Get(&ds.st.SV)
 	}
 	ds.rangeCache = rangecache.NewRangeCache(ds.st, rdb, getRangeDescCacheSize,
-		cfg.RPCContext.Stopper, cfg.AmbientCtx.Tracer)
+		cfg.RPCContext.Stopper)
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
 		ds.transportFactory = tf
 	} else {
@@ -456,6 +456,11 @@ func (ds *DistSender) DisableFirstRangeUpdates() {
 // transmission of partial batch requests across ranges.
 func (ds *DistSender) DisableParallelBatches() {
 	ds.disableParallelBatches = true
+}
+
+// Tracer returns this distributer sender's tracer.
+func (ds *DistSender) Tracer() *tracing.Tracer {
+	return ds.rpcContext.Stopper.Tracer()
 }
 
 // Metrics returns a struct which contains metrics related to the distributed
@@ -732,7 +737,7 @@ func (ds *DistSender) Send(
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
+	ctx, sp := tracing.EnsureChildSpan(ctx, ds.Tracer(), "dist sender send")
 	defer sp.Finish()
 
 	var reqInfo tenantcostmodel.RequestInfo

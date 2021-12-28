@@ -61,7 +61,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 )
 
 var leaseStatusLogLimiter = func() *log.EveryN {
@@ -319,7 +319,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// cancel function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
 	const opName = "request range lease"
-	tr := p.repl.AmbientContext.Tracer
+	tr := p.repl.store.stopper.Tracer()
 	tagsOpt := tracing.WithLogTags(logtags.FromContext(parentCtx))
 	var sp *tracing.Span
 	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {

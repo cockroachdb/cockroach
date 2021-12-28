@@ -47,13 +47,11 @@ import (
 //   })
 //
 //   // start a background operation
-//   ctx, span := s.AnnotateCtxWithSpan(context.Background(), "some-op")
+//   ctx := s.AnnotateCtx(context.Background())
+//   ctx, span := tracer.EnsureChildSpan(ctx, "some-op")
 //   defer span.Finish()
 //   ...
 type AmbientContext struct {
-	// Tracer is used to open spans (see AnnotateCtxWithSpan).
-	Tracer *tracing.Tracer
-
 	// ServerIDs will be embedded into contexts that don't already have
 	// one.
 	ServerIDs ServerIdentificationPayload
@@ -106,7 +104,8 @@ func (ac *AmbientContext) refreshCache() {
 //
 // For background operations, context.Background() should be passed; however, in
 // that case it is strongly recommended to open a span if possible (using
-// AnnotateCtxWithSpan).
+// tracing.EnsureChildSpan or the EnsureChildSpan on the nearest Tracer instance,
+// usually available via a Stopper).
 func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 	switch ctx {
 	case context.TODO(), context.Background():
@@ -160,64 +159,20 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 	return ctx
 }
 
-// AnnotateCtxWithSpan annotates the given context with the information in
-// AmbientContext (see AnnotateCtx) and opens a span.
-//
-// If the given context has a span, the new span is a child of that span.
-// Otherwise, the Tracer in AmbientContext is used to create a new root span.
-//
-// The caller is responsible for closing the span (via Span.Finish).
-func (ac *AmbientContext) AnnotateCtxWithSpan(
-	ctx context.Context, opName string,
-) (context.Context, *tracing.Span) {
-	switch ctx {
-	case context.TODO(), context.Background():
-		// NB: context.TODO and context.Background are identical except for their
-		// names.
-		if ac.backgroundCtx != nil {
-			ctx = ac.backgroundCtx
-		}
-	default:
-		if ac.tags != nil {
-			ctx = logtags.AddTags(ctx, ac.tags)
-		}
-		if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
-			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
-		}
-	}
-
-	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
-}
-
 // MakeTestingAmbientContext creates an AmbientContext for use in tests,
 // when a test does not have sufficient details to instantiate a fully
 // fledged server AmbientContext.
-func MakeTestingAmbientContext(tracer *tracing.Tracer) AmbientContext {
-	return AmbientContext{Tracer: tracer}
+func MakeTestingAmbientContext() AmbientContext {
+	return AmbientContext{}
 }
 
-// MakeTestingAmbientCtxWithNewTracer is like MakeTestingAmbientContext() but it
-// also instantiates a new tracer.
-//
-// TODO(andrei): Remove this API.
-//
-// This is generally a bad idea because it creates a Tracer under the
-// hood, and if this Tracer ends up actually being used, chances are
-// it's going to crash because it'll end up mixing with some other
-// Tracer. When a test uses multiple tracers and does not crash,
-// either it's because one of the tracers is not being used (in which
-// case it'd be clearer to share the one being used using
-// MakeTestingAmbientContext), or, by happenstance, the trace in
-// question doesn't end up having more than one span. This is very
-// brittle.
+// MakeTestingAmbientCtxWithNewTracer should be removed.
 func MakeTestingAmbientCtxWithNewTracer() AmbientContext {
-	return MakeTestingAmbientContext(tracing.NewTracer())
+	return AmbientContext{}
 }
 
 // MakeServerAmbientContext creates an AmbientContext for use by
 // server processes.
-func MakeServerAmbientContext(
-	tracer *tracing.Tracer, idProvider ServerIdentificationPayload,
-) AmbientContext {
-	return AmbientContext{Tracer: tracer, ServerIDs: idProvider}
+func MakeServerAmbientContext(idProvider ServerIdentificationPayload) AmbientContext {
+	return AmbientContext{ServerIDs: idProvider}
 }

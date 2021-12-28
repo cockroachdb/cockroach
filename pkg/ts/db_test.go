@@ -777,7 +777,7 @@ func TestPollSource(t *testing.T) {
 			},
 		}
 
-		ambient := log.MakeTestingAmbientContext(tr)
+		ambient := log.MakeTestingAmbientContext()
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		<-testSource.stopper.IsStopped()
 		if a, e := testSource.calledCount, 2; a != e {
