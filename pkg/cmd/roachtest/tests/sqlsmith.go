@@ -305,12 +305,9 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 			register(setup, setting)
 		}
 	}
-	setups["seed-vec"] = sqlsmith.Setups["seed-vec"]
 	setups["seed-multi-region"] = sqlsmith.Setups["seed-multi-region"]
 	settings["ddl-nodrop"] = sqlsmith.Settings["ddl-nodrop"]
-	settings["vec"] = sqlsmith.SettingVectorize
 	settings["multi-region"] = sqlsmith.Settings["multi-region"]
-	register("seed-vec", "vec")
 	register("tpcc", "ddl-nodrop")
 	register("seed-multi-region", "multi-region")
 }
