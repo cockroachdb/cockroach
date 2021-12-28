@@ -1020,14 +1020,6 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
 	},
-	oid.T__uuid: {
-		// Automatic I/O conversions to string types.
-		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
-	},
 	oid.T_varbit: {
 		oid.T_bit:    {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
 		oid.T_varbit: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
@@ -1316,6 +1308,24 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 				volatility: VolatilityImmutable,
 			}, true
 		}
+	}
+
+	// Casts from array types to string types are stable and allowed in
+	// assignment contexts.
+	if srcFamily == types.ArrayFamily && tgtFamily == types.StringFamily {
+		return cast{
+			maxContext: CastContextAssignment,
+			volatility: VolatilityStable,
+		}, true
+	}
+
+	// Casts from string types to array types are stable and allowed in
+	// explicit contexts.
+	if srcFamily == types.StringFamily && tgtFamily == types.ArrayFamily {
+		return cast{
+			maxContext: CastContextExplicit,
+			volatility: VolatilityStable,
+		}, true
 	}
 
 	if tgts, ok := castMap[src.Oid()]; ok {
