@@ -1,0 +1,5 @@
+# LogicTest: local-mixed-21.2-22.1
+
+# Check that the new HBA syntax is not accepted during the upgrade.
+statement error HBA authentication method "scram-sha-256" requires all nodes to be upgraded to 21.2-
+set cluster setting server.host_based_authentication.configuration = 'host all all all scram-sha-256'
