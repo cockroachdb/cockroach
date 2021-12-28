@@ -236,7 +236,7 @@ func TestSchedulerLoop(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
+	s := newRaftScheduler(log.MakeTestingAmbientContext(), m, p, 1)
 
 	s.Start(stopper)
 	s.EnqueueRaftTicks(1, 2, 3)
@@ -264,7 +264,7 @@ func TestSchedulerBuffering(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
+	s := newRaftScheduler(log.MakeTestingAmbientContext(), m, p, 1)
 	s.Start(stopper)
 
 	testCases := []struct {

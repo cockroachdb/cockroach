@@ -584,7 +584,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	tr := tc.store.cfg.AmbientCtx.Tracer
+	tr := stopper.Tracer()
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer getRecAndFinish()

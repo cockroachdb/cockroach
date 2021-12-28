@@ -143,13 +143,13 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
 			// the remote span and start a server-side span that follows from it.
-			spanMeta, err := d.r.AmbientContext.Tracer.ExtractMetaFrom(tracing.MapCarrier{
+			spanMeta, err := d.r.store.stopper.Tracer().ExtractMetaFrom(tracing.MapCarrier{
 				Map: cmd.raftCmd.TraceData,
 			})
 			if err != nil {
 				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
 			} else {
-				cmd.ctx, cmd.sp = d.r.AmbientContext.Tracer.StartSpanCtx(
+				cmd.ctx, cmd.sp = d.r.store.stopper.Tracer().StartSpanCtx(
 					ctx,
 					opName,
 					// NB: Nobody is collecting the recording of this span; we have no

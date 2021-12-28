@@ -123,9 +123,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	// Tracers store their stack trace in NewTracer, and this wouldn't match.
 	cfg.Tracer = nil
-	cfg.AmbientCtx.Tracer = nil
 	cfgExpected.Tracer = nil
-	cfgExpected.AmbientCtx.Tracer = nil
 	require.Equal(t, cfgExpected, cfg)
 
 	// Set all the environment variables to valid values and ensure they are set

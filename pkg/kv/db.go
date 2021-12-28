@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -265,6 +266,11 @@ type DB struct {
 	SQLKVResponseAdmissionQ *admission.WorkQueue
 }
 
+// Tracer retrieves the Tracer instance for this DB handle.
+func (db *DB) Tracer() *tracing.Tracer {
+	return db.ctx.Stopper.Tracer()
+}
+
 // NonTransactionalSender returns a Sender that can be used for sending
 // non-transactional requests. The Sender is capable of transparently wrapping
 // non-transactional requests that span ranges in transactions.
@@ -296,8 +302,8 @@ func NewDB(
 func NewDBWithContext(
 	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, ctx DBContext,
 ) *DB {
-	if actx.Tracer == nil {
-		panic("no tracer set in AmbientCtx")
+	if ctx.Stopper.Tracer() == nil {
+		panic("no tracer set in stopper")
 	}
 	db := &DB{
 		AmbientContext: actx,

@@ -106,7 +106,7 @@ func TestTraceAnalyzer(t *testing.T) {
 		colexecTraceAnalyzer *execstats.TraceAnalyzer
 	)
 	for _, vectorizeMode := range []sessiondatapb.VectorizeExecMode{sessiondatapb.VectorizeOff, sessiondatapb.VectorizeOn} {
-		execCtx, finishAndCollect := tracing.ContextWithRecordingSpan(ctx, execCfg.AmbientCtx.Tracer, t.Name())
+		execCtx, finishAndCollect := tracing.ContextWithRecordingSpan(ctx, execCfg.Tracer(), t.Name())
 		defer finishAndCollect()
 		ie := execCfg.InternalExecutor
 		ie.SetSessionData(

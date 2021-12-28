@@ -131,7 +131,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		stopper.AddCloser(memEngine)
 
 		cfg := TestStoreConfig(clock)
-		cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+		cfg.Transport = NewDummyRaftTransport(cfg.Settings, stopper.Tracer())
 
 		store := NewStore(ctx, cfg, memEngine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Fake-set an ident. This is usually read from the engine on store.Start()
@@ -222,7 +222,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	// Create two stores with ranges we care about.
 	stores := []*Store{}
 	for i := 0; i < count; i++ {
-		cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+		cfg.Transport = NewDummyRaftTransport(cfg.Settings, stopper.Tracer())
 		eng := storage.NewDefaultInMemForTesting()
 		stopper.AddCloser(eng)
 		s := NewStore(context.Background(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})

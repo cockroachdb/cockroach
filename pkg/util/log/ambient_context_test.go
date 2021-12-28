@@ -42,7 +42,7 @@ func TestAnnotateCtxTags(t *testing.T) {
 func TestAnnotateCtxSpan(t *testing.T) {
 	tracer := tracing.NewTracer()
 
-	ac := AmbientContext{Tracer: tracer}
+	ac := AmbientContext{}
 	ac.AddLogTag("ambient", nil)
 
 	// Annotate a context that has an open span.
@@ -51,7 +51,8 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	ctx1 := tracing.ContextWithSpan(context.Background(), sp1)
 	Event(ctx1, "a")
 
-	ctx2, sp2 := ac.AnnotateCtxWithSpan(ctx1, "child")
+	ctx2 := ac.AnnotateCtx(ctx1)
+	ctx2, sp2 := tracer.EnsureChildSpan(ctx2, "child")
 	Event(ctx2, "b")
 
 	Event(ctx1, "c")
@@ -70,11 +71,11 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	}
 
 	// Annotate a context that has no span. The tracer will create a non-recordable
-	// span. We just check here that AnnotateCtxWithSpan properly returns it to the
+	// span. We just check here that EnsureChildSpan properly returns it to the
 	// caller.
 
-	ac.Tracer = tracer
-	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s")
+	ctx := ac.AnnotateCtx(context.Background())
+	ctx, sp := tracer.EnsureChildSpan(ctx, "s")
 	require.Equal(t, sp, tracing.SpanFromContext(ctx))
 	require.NotNil(t, sp)
 	require.False(t, sp.IsVerbose())

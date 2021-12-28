@@ -651,7 +651,7 @@ func (ie *InternalExecutor) execInternal(
 	// an iterator is returned, then we transfer the responsibility of closing
 	// the span to the iterator. This is necessary so that the connExecutor
 	// exits before the span is finished.
-	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
+	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.Tracer(), opName)
 	stmtBuf := NewStmtBuf()
 	var wg sync.WaitGroup
 

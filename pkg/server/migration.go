@@ -42,7 +42,8 @@ var _ serverpb.MigrationServer = &migrationServer{}
 func (m *migrationServer) ValidateTargetClusterVersion(
 	ctx context.Context, req *serverpb.ValidateTargetClusterVersionRequest,
 ) (*serverpb.ValidateTargetClusterVersionResponse, error) {
-	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "validate-cluster-version")
+	ctx = m.server.AnnotateCtx(ctx)
+	ctx, span := m.server.stopper.Tracer().EnsureChildSpan(ctx, "validate-cluster-version")
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, "validate-cluster-version", nil)
 
@@ -89,7 +90,8 @@ func (m *migrationServer) BumpClusterVersion(
 	ctx context.Context, req *serverpb.BumpClusterVersionRequest,
 ) (*serverpb.BumpClusterVersionResponse, error) {
 	const opName = "bump-cluster-version"
-	ctx, span := m.server.AnnotateCtxWithSpan(ctx, opName)
+	ctx = m.server.AnnotateCtx(ctx)
+	ctx, span := m.server.stopper.Tracer().EnsureChildSpan(ctx, opName)
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, opName, nil)
 
@@ -156,7 +158,8 @@ func (m *migrationServer) SyncAllEngines(
 	ctx context.Context, _ *serverpb.SyncAllEnginesRequest,
 ) (*serverpb.SyncAllEnginesResponse, error) {
 	const opName = "sync-all-engines"
-	ctx, span := m.server.AnnotateCtxWithSpan(ctx, opName)
+	ctx = m.server.AnnotateCtx(ctx)
+	ctx, span := m.server.stopper.Tracer().EnsureChildSpan(ctx, opName)
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, opName, nil)
 
@@ -188,7 +191,8 @@ func (m *migrationServer) PurgeOutdatedReplicas(
 	ctx context.Context, req *serverpb.PurgeOutdatedReplicasRequest,
 ) (*serverpb.PurgeOutdatedReplicasResponse, error) {
 	const opName = "purged-outdated-replicas"
-	ctx, span := m.server.AnnotateCtxWithSpan(ctx, opName)
+	ctx = m.server.AnnotateCtx(ctx)
+	ctx, span := m.server.stopper.Tracer().EnsureChildSpan(ctx, opName)
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, opName, nil)
 
@@ -215,7 +219,8 @@ func (m *migrationServer) DeprecateBaseEncryptionRegistry(
 	ctx context.Context, req *serverpb.DeprecateBaseEncryptionRegistryRequest,
 ) (*serverpb.DeprecateBaseEncryptionRegistryResponse, error) {
 	const opName = "deprecate-base-encryption-registry"
-	ctx, span := m.server.AnnotateCtxWithSpan(ctx, opName)
+	ctx = m.server.AnnotateCtx(ctx)
+	ctx, span := m.server.stopper.Tracer().EnsureChildSpan(ctx, opName)
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, opName, nil)
 

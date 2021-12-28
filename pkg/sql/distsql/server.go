@@ -246,17 +246,17 @@ func (ds *ServerImpl) setupFlow(
 
 	const opName = "flow"
 	if parentSpan == nil {
-		ctx, sp = ds.Tracer.StartSpanCtx(ctx, opName)
+		ctx, sp = ds.Stopper.Tracer().StartSpanCtx(ctx, opName)
 	} else if localState.IsLocal {
 		// If we're a local flow, we don't need a "follows from" relationship: we're
 		// going to run this flow synchronously.
 		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
 		//  If that field is unset, we might still want to create a child span if
 		//  this flow is run synchronously.
-		ctx, sp = ds.Tracer.StartSpanCtx(ctx, opName, tracing.WithParent(parentSpan))
+		ctx, sp = ds.Stopper.Tracer().StartSpanCtx(ctx, opName, tracing.WithParent(parentSpan))
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		ctx, sp = ds.Tracer.StartSpanCtx(
+		ctx, sp = ds.Stopper.Tracer().StartSpanCtx(
 			ctx,
 			opName,
 			tracing.WithParent(parentSpan),
@@ -344,7 +344,7 @@ func (ds *ServerImpl) setupFlow(
 			ReCache:          ds.regexpCache,
 			Mon:              monitor,
 			Locality:         ds.ServerConfig.Locality,
-			Tracer:           ds.ServerConfig.Tracer,
+			Tracer:           ds.ServerConfig.Stopper.Tracer(),
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:                   ctx,
@@ -575,7 +575,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 func (ds *ServerImpl) setupSpanForIncomingRPC(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (context.Context, *tracing.Span) {
-	tr := ds.ServerConfig.AmbientContext.Tracer
+	tr := ds.ServerConfig.Stopper.Tracer()
 	parentSpan := tracing.SpanFromContext(ctx)
 	if parentSpan != nil {
 		// It's not expected to have a span in the context since the gRPC server

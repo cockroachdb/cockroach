@@ -163,7 +163,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			// still handle an unexpected split, so we make our own range cache and
 			// only populate it with one of our two splits.
 			mockCache := rangecache.NewRangeCache(s.ClusterSettings(), nil,
-				func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer))
+				func() int64 { return 2 << 10 }, s.Stopper())
 			addr, err := keys.Addr(key(0))
 			if err != nil {
 				t.Fatal(err)

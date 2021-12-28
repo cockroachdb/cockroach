@@ -68,6 +68,7 @@ var reportFrequency = settings.RegisterDurationSetting(
 type Reporter struct {
 	StartTime  time.Time
 	AmbientCtx *log.AmbientContext
+	Stopper    *stop.Stopper
 	Config     *base.Config
 	Settings   *cluster.Settings
 
@@ -93,8 +94,8 @@ type Reporter struct {
 
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
-func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
+func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context) {
+	_ = r.Stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
 
@@ -112,7 +113,7 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 
 			timer.Reset(addJitter(nextReport.Sub(timeutil.Now())))
 			select {
-			case <-stopper.ShouldQuiesce():
+			case <-r.Stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
 				timer.Read = true
@@ -126,7 +127,8 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 // NOTE: This can be slow because of cloud detection; use cloudinfo.Disable() in
 // tests to avoid that.
 func (r *Reporter) ReportDiagnostics(ctx context.Context) {
-	ctx, span := r.AmbientCtx.AnnotateCtxWithSpan(ctx, "usageReport")
+	ctx = r.AmbientCtx.AnnotateCtx(ctx)
+	ctx, span := r.Stopper.Tracer().EnsureChildSpan(ctx, "usageReport")
 	defer span.Finish()
 
 	report := r.CreateReport(ctx, telemetry.ResetCounts)
