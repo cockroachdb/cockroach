@@ -37,6 +37,13 @@ const (
 	// authCleartextPassword is the pgwire auth response code to request
 	// a plaintext password during the connection handshake.
 	authCleartextPassword int32 = 3
+
+	// authReqSASL is the begin request for a SCRAM handshake.
+	authReqSASL int32 = 10
+	// authReqSASLContinue is the continue request for a SCRAM handshake.
+	authReqSASLContinue int32 = 11
+	// authReqSASLFin is the final message for a SCRAM handshake.
+	authReqSASLFin int32 = 12
 )
 
 type authOptions struct {
