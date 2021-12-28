@@ -490,25 +490,15 @@ func resolveCast(
 		return nil
 
 	default:
-		var v Volatility
-		var hint string
-		c, ok := lookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
-		if ok && c.volatility != volatilityTODO {
-			// If the volatility has been set in castMap, use it.
-			v = c.volatility
-			hint = c.volatilityHint
-		} else if cast := lookupCastInfo(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled); cast != nil {
-			// Otherwise, fallback to the volatility in castInfo.
-			v = cast.volatility
-			hint = cast.volatilityHint
-		} else {
+		cast, ok := lookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
+		if !ok {
 			return invalidCastError(castFrom, castTo)
 		}
-		if !allowStable && v >= VolatilityStable {
+		if !allowStable && cast.volatility >= VolatilityStable {
 			err := NewContextDependentOpsNotAllowedError(context)
 			err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, castTo)
-			if hint != "" {
-				err = errors.WithHint(err, hint)
+			if cast.volatilityHint != "" {
+				err = errors.WithHint(err, cast.volatilityHint)
 			}
 			return err
 		}
