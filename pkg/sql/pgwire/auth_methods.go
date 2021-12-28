@@ -14,18 +14,23 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/xdg/scram"
 )
 
 // This file contains the methods that are accepted to perform
@@ -173,10 +178,10 @@ func passwordString(pwdData []byte) (string, error) {
 }
 
 func authScram(
-	_ context.Context,
+	ctx context.Context,
 	c AuthConn,
 	_ tls.ConnectionState,
-	_ *sql.ExecutorConfig,
+	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
 	_ *identmap.Conf,
 ) (*AuthBehaviors, error) {
@@ -188,7 +193,122 @@ func authScram(
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
-		return unimplemented.NewWithIssue(42519, "scram auth not yet available")
+		// This scram auth credential was generated on pg with:
+		//      create user abc with password 'abc'
+		// const testPassword = "SCRAM-SHA-256$4096:pAlYy62NTdETKb291V/Wow==$OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=:r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ="
+		salt, err := base64.StdEncoding.DecodeString("pAlYy62NTdETKb291V/Wow==")
+		if err != nil {
+			panic(err)
+		}
+		storedKey, err := base64.StdEncoding.DecodeString("OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=")
+		if err != nil {
+			panic(err)
+		}
+		serverKey, err := base64.StdEncoding.DecodeString("r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ=")
+		if err != nil {
+			panic(err)
+		}
+		scramServer, _ := scram.SHA256.NewServer(func(user string) (scram.StoredCredentials, error) {
+			if user == "abc" {
+				return scram.StoredCredentials{
+					KeyFactors: scram.KeyFactors{
+						Salt:  string(salt),
+						Iters: 4096,
+					},
+					StoredKey: storedKey,
+					ServerKey: serverKey,
+				}, nil
+			}
+			return scram.StoredCredentials{}, errors.New("no scram cookie for you")
+		})
+
+		handshake := scramServer.NewConversation()
+
+		// NB: SCRAM-SHA-256-PLUS is not supported, see
+		// https://github.com/cockroachdb/cockroach/issues/74300
+		// There is one nul byte to terminate the first string,
+		// then another nul byte to terminate the list.
+		const supportedMethods = "SCRAM-SHA-256\x00\x00"
+		if err := c.SendAuthRequest(authReqSASL, []byte(supportedMethods)); err != nil {
+			return err
+		}
+
+		initial := true
+		for {
+			if handshake.Done() {
+				break
+			}
+
+			// Receive a response from the client.
+			resp, err := c.GetPwdData()
+			if err != nil {
+				return err
+			}
+			var input []byte
+			if initial {
+				// Quoth postgres, backend/auth.go:
+				//
+				// The first SASLInitialResponse message is different from the others.
+				// It indicates which SASL mechanism the client selected, and contains
+				// an optional Initial Client Response payload. The subsequent
+				// SASLResponse messages contain just the SASL payload.
+				//
+				rb := pgwirebase.ReadBuffer{Msg: resp}
+				reqMethod, err := rb.GetString()
+				if err != nil {
+					return err
+				}
+				if reqMethod != "SCRAM-SHA-256" {
+					c.LogAuthInfof(ctx, "client requests unknown scram method %q", reqMethod)
+					err := unimplemented.NewWithIssue(74300, "channel binding not supported")
+					// We need to manually report the unimplemented error because it is not
+					// passed through to the client as-is (authn errors are hidden behind
+					// a generic "authn failed" error).
+					sqltelemetry.RecordError(ctx, err, &execCfg.Settings.SV)
+					return err
+				}
+				inputLen, err := rb.GetUint32()
+				if err != nil {
+					return err
+				}
+				// PostgreSQL ignores input from clients that pass -1 as length,
+				// but does not treat it as invalid.
+				if inputLen < math.MaxUint32 {
+					input, err = rb.GetBytes(int(inputLen))
+					if err != nil {
+						return err
+					}
+				}
+				initial = false
+			} else {
+				input = resp
+			}
+
+			// Feed the client message to the state machine.
+			got, err := handshake.Step(string(input))
+			if err != nil {
+				c.LogAuthInfof(ctx, "scram handshake error: %v", err)
+				break
+			}
+			// Decide which response to send to the client.
+			reqType := authReqSASLContinue
+			if handshake.Done() {
+				// This is the last message.
+				reqType = authReqSASLFin
+			}
+			// Send the response to the client.
+			if err := c.SendAuthRequest(reqType, []byte(got)); err != nil {
+				return err
+			}
+		}
+
+		// Was the authentication for the right username?
+
+		// Did authentication succeed?
+		if !handshake.Valid() {
+			return errors.Errorf(security.ErrPasswordUserAuthFailed, systemIdentity)
+		}
+		return nil // auth success!
 	})
 	return b, nil
 }
