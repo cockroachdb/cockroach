@@ -123,11 +123,6 @@ var (
 		{1, makeValuesTable},
 		{2, makeSelectTable},
 	}
-	vectorizableTableExprs = []tableExprWeight{
-		{20, makeEquiJoinExpr},
-		{20, makeMergeJoinExpr},
-		{20, makeSchemaTable},
-	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
 	selectStmts = []selectStatementWeight{
@@ -518,7 +513,7 @@ func (s *Smither) makeSelectClause(
 
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
-	requireFrom := s.vectorizable || s.d6() != 1
+	requireFrom := s.d6() != 1
 	for (requireFrom && len(clause.From.Tables) < 1) || s.canRecurse() {
 		var from tree.TableExpr
 		if len(withTables) == 0 || s.coin() {
@@ -558,10 +553,7 @@ func (s *Smither) makeSelectClause(
 		orderByRefs = fromRefs
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
-		// TODO(mjibson): vec only supports GROUP BYs on fully-ordered
-		// columns, which we could support here. Also see #39240 which
-		// will support this more generally.
-		if !s.vectorizable && s.d6() <= 2 && s.canRecurse() {
+		if s.d6() <= 2 && s.canRecurse() {
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
@@ -606,17 +598,6 @@ func (s *Smither) makeSelectClause(
 		return nil, nil, nil, false
 	}
 	clause.Exprs = selectList
-
-	// TODO(mjibson): Vectorized only supports ordered distinct, and so
-	// this often produces queries that won't vec. However since it will
-	// also sometimes produce vec queries with the distinctChainOps node,
-	// we allow this here. Teach this how to correctly limit itself to
-	// distinct only on ordered columns.
-	if s.d100() == 1 {
-		clause.Distinct = true
-		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
-		orderByRefs = selectRefs
-	}
 
 	return clause, selectRefs, orderByRefs, true
 }
