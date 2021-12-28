@@ -239,6 +239,8 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
+	// SCRAM authentication is available.
+	SCRAMAuthentication
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -358,6 +360,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 42},
+	},
+	{
+		Key:     SCRAMAuthentication,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 44},
 	},
 
 	// *************************************************
