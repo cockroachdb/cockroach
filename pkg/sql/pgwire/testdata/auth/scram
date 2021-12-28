@@ -1,0 +1,83 @@
+config secure
+----
+
+sql
+CREATE USER foo WITH PASSWORD 'abc';
+----
+ok
+
+subtest only_scram
+
+set_hba
+host all foo all scram-sha-256
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all foo all scram-sha-256
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      foo  all     scram-sha-256
+
+subtest only_scram/conn_scram
+
+connect user=foo password=abc
+----
+ERROR: unimplemented: scram auth not yet available (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/42519/v22.1
+
+authlog 6
+.*client_connection_end
+----
+4 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
+5 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+6 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+7 {"Detail":"unimplemented: scram auth not yet available","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+8 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+9 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+
+subtest end
+
+subtest end
+
+subtest scram_cert
+
+set_hba
+host all all all cert-scram-sha-256
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all all all cert-scram-sha-256
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD             OPTIONS
+host   all      root all     cert-password
+host   all      all  all     cert-scram-sha-256
+
+subtest scram_cert/cert
+
+# testuser is presenting a valid TLS client cert.
+
+connect user=testuser
+----
+ok defaultdb
+
+subtest end
+
+subtest scram_cert/scram
+
+connect user=foo password=abc
+----
+ERROR: unimplemented: scram auth not yet available (SQLSTATE 0A000)
+HINT: You have attempted to use a feature that is not yet implemented.
+See: https://go.crdb.dev/issue-v/42519/v22.1
+
+
+subtest end
+
+subtest end

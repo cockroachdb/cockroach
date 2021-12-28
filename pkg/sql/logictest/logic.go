@@ -757,6 +757,15 @@ var logicTestConfigs = []testClusterConfig{
 		localities:        multiregion9node3region3azsLocalities,
 		overrideVectorize: "off",
 	},
+	{
+		name:                "local-mixed-21.2-22.1",
+		numNodes:            1,
+		overrideDistSQLMode: "off",
+		overrideAutoStats:   "false",
+		bootstrapVersion:    roachpb.Version{Major: 21, Minor: 2},
+		binaryVersion:       roachpb.Version{Major: 22, Minor: 1},
+		disableUpgrade:      true,
+	},
 }
 
 // An index in the above slice.
