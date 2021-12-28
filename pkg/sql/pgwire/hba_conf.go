@@ -17,11 +17,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -180,7 +183,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		}
 		// Run the per-method validation.
 		if check := hbaCheckHBAEntries[entry.Method.Value]; check != nil {
-			if err := check(entry); err != nil {
+			if err := check(values, entry); err != nil {
 				return err
 			}
 		}
@@ -331,15 +334,49 @@ type methodInfo struct {
 
 // CheckHBAEntry defines a method for validating an hba Entry upon
 // configuration of the cluster setting by a SQL client.
-type CheckHBAEntry func(hba.Entry) error
+type CheckHBAEntry func(*settings.Values, hba.Entry) error
 
 // NoOptionsAllowed is a CheckHBAEntry that returns an error if any
 // options are present in the entry.
-var NoOptionsAllowed CheckHBAEntry = func(e hba.Entry) error {
+var NoOptionsAllowed CheckHBAEntry = func(sv *settings.Values, e hba.Entry) error {
 	if len(e.Options) != 0 {
 		return errors.Newf("the HBA method %q does not accept options", e.Method)
 	}
 	return nil
+}
+
+// chainOptions is an option that combines its argument options.
+func chainOptions(opts ...CheckHBAEntry) CheckHBAEntry {
+	return func(values *settings.Values, e hba.Entry) error {
+		for _, o := range opts {
+			if err := o(values, e); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+// requireClusterVersion is an HBA option check function that verifies
+// that the given cluster version key has been enabled before allowing
+// a client to use this authentication method.
+func requireClusterVersion(versionkey clusterversion.Key) CheckHBAEntry {
+	return func(values *settings.Values, e hba.Entry) error {
+		// Retrieve the cluster version handle. We'll need to check the current cluster version.
+		var vh clusterversion.Handle
+		if values != nil {
+			vh = values.Opaque().(clusterversion.Handle)
+		}
+		if vh != nil &&
+			!vh.IsActive(context.TODO(), versionkey) {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`HBA authentication method %q requires all nodes to be upgraded to %s`,
+				e.Method,
+				clusterversion.ByKey(versionkey),
+			)
+		}
+		return nil
+	}
 }
 
 // HBADebugFn exposes the computed HBA configuration via the debug

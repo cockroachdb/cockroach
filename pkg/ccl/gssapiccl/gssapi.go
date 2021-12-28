@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -113,7 +114,7 @@ func authGSS(
 
 // checkEntry validates that the HBA entry contains exactly one of the
 // include_realm=0 directive or an identity-mapping configuration.
-func checkEntry(entry hba.Entry) error {
+func checkEntry(_ *settings.Values, entry hba.Entry) error {
 	hasInclude0 := false
 	hasMap := false
 	for _, op := range entry.Options {
