@@ -380,6 +380,8 @@ type flowCreatorHelper interface {
 	accumulateAsyncComponent(runFn)
 	// addMaterializer adds a materializer to the flow.
 	addMaterializer(*colexec.Materializer)
+	// getCtxDone returns done channel of the context of this flow.
+	getFlowCtxDone() <-chan struct{}
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -405,7 +407,12 @@ type remoteComponentCreator interface {
 		metadataSources []execinfrapb.MetadataSource,
 		toClose []colexecop.Closer,
 	) (*colrpc.Outbox, error)
-	newInbox(ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(
+		allocator *colmem.Allocator,
+		typs []*types.T,
+		streamID execinfrapb.StreamID,
+		flowCtxDone <-chan struct{},
+	) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
@@ -422,9 +429,12 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator,
+	typs []*types.T,
+	streamID execinfrapb.StreamID,
+	flowCtxDone <-chan struct{},
 ) (*colrpc.Inbox, error) {
-	return colrpc.NewInbox(ctx, allocator, typs, streamID)
+	return colrpc.NewInboxWithFlowCtxDone(allocator, typs, streamID, flowCtxDone)
 }
 
 // vectorizedFlowCreator performs all the setup of vectorized flows. Depending
@@ -451,10 +461,6 @@ type vectorizedFlowCreator struct {
 	numOutboxes       int32
 	materializerAdded bool
 
-	// numOutboxesExited is an atomic that keeps track of how many outboxes have exited.
-	// When numOutboxesExited equals numOutboxes, the cancellation function for the flow
-	// is called.
-	numOutboxesExited int32
 	// numOutboxesDrained is an atomic that keeps track of how many outboxes have
 	// been drained. When numOutboxesDrained equals numOutboxes, flow-level metadata is
 	// added to a flow-level span.
@@ -666,17 +672,6 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			flowCtxCancel,
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
 		)
-		// When the last Outbox on this node exits, we want to make sure that
-		// everything is shutdown; namely, we need to call cancelFn if:
-		// - it is the last Outbox
-		// - there is no root materializer on this node (if it were, it would take
-		// care of the cancellation itself)
-		// - cancelFn is non-nil (it can be nil in tests).
-		// Calling cancelFn will cancel the context that all infrastructure on this
-		// node is listening on, so it will shut everything down.
-		if atomic.AddInt32(&s.numOutboxesExited, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.materializerAdded && flowCtxCancel != nil {
-			flowCtxCancel()
-		}
 	}
 	s.accumulateAsyncComponent(run)
 	return outbox, nil
@@ -843,7 +838,8 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 
 			inbox, err := s.remoteComponentCreator.newInbox(
-				ctx, colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory), input.ColumnTypes, inputStream.StreamID,
+				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
+				input.ColumnTypes, inputStream.StreamID, s.flowCreatorHelper.getFlowCtxDone(),
 			)
 
 			if err != nil {
@@ -1332,6 +1328,10 @@ func (r *vectorizedFlowCreatorHelper) addMaterializer(m *colexec.Materializer) {
 	r.f.SetProcessors(r.processors)
 }
 
+func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
+	return r.f.GetCtxDone()
+}
+
 func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return r.f.GetCancelFlowFn()
 }
@@ -1386,6 +1386,10 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
 func (r *noopFlowCreatorHelper) addMaterializer(*colexec.Materializer) {}
+
+func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
+	return nil
+}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil
