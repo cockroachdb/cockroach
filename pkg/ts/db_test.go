@@ -830,7 +830,7 @@ func TestDisableStorage(t *testing.T) {
 			},
 		}
 
-		ambient := log.MakeTestingAmbientCtxWithNewTracer()
+		ambient := log.MakeTestingAmbientContext()
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		select {
 		case <-testSource.stopper.IsStopped():

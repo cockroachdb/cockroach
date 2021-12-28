@@ -144,7 +144,7 @@ func newTestProcessorWithTxnPusher(
 	}
 
 	p := NewProcessor(Config{
-		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		AmbientContext:       log.MakeTestingAmbientContext(),
 		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		TxnPusher:            txnPusher,

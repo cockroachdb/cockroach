@@ -36,7 +36,7 @@ func newStores(ambientCtx log.AmbientContext, clock *hlc.Clock) *Stores {
 func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.MakeTestingAmbientContext(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	store := Store{
 		Ident: &roachpb.StoreIdent{StoreID: 123},
 	}
@@ -52,7 +52,7 @@ func TestStoresAddStore(t *testing.T) {
 func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.MakeTestingAmbientContext(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 
 	storeID := roachpb.StoreID(89)
 
@@ -68,7 +68,7 @@ func TestStoresRemoveStore(t *testing.T) {
 func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.MakeTestingAmbientContext(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
 	}
@@ -85,7 +85,7 @@ func TestStoresGetStoreCount(t *testing.T) {
 func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.MakeTestingAmbientContext(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	numStores := 10
 	for i := 0; i < numStores; i++ {
 		ls.AddStore(&Store{Ident: &roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
@@ -120,7 +120,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
-	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), clock)
+	ls := newStores(log.MakeTestingAmbientContext(), clock)
 	numStores := 10
 	for i := 1; i <= numStores; i++ {
 		storeID := roachpb.StoreID(i)
@@ -190,7 +190,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.MakeTestingAmbientContext(), hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	store := Store{Ident: &roachpb.StoreIdent{StoreID: 1}}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, pErr := ls.GetStore(replica.StoreID)
@@ -217,7 +217,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
 	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), cfg.Clock)
+	ls := newStores(log.MakeTestingAmbientContext(), cfg.Clock)
 
 	// Create two stores with ranges we care about.
 	stores := []*Store{}
@@ -272,7 +272,7 @@ func TestStoresGossipStorage(t *testing.T) {
 	ls.AddStore(stores[1])
 
 	// Create a new stores object to verify read.
-	ls2 := newStores(log.MakeTestingAmbientCtxWithNewTracer(), ls.clock)
+	ls2 := newStores(log.MakeTestingAmbientContext(), ls.clock)
 	ls2.AddStore(stores[1])
 	var verifyBI gossip.BootstrapInfo
 	if err := ls2.ReadBootstrapInfo(&verifyBI); err != nil {
@@ -313,7 +313,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 	// Create a new stores object to freshly read. Should get latest
 	// version from store 1.
 	manual.Increment(1)
-	ls2 := newStores(log.MakeTestingAmbientCtxWithNewTracer(), ls.clock)
+	ls2 := newStores(log.MakeTestingAmbientContext(), ls.clock)
 	ls2.AddStore(stores[0])
 	ls2.AddStore(stores[1])
 	var verifyBI gossip.BootstrapInfo
@@ -326,7 +326,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 
 	// Verify that stores[0], which had old info, was updated with
 	// latest bootstrap info during the read.
-	ls3 := newStores(log.MakeTestingAmbientCtxWithNewTracer(), ls.clock)
+	ls3 := newStores(log.MakeTestingAmbientContext(), ls.clock)
 	ls3.AddStore(stores[0])
 	verifyBI.Reset()
 	if err := ls3.ReadBootstrapInfo(&verifyBI); err != nil {
@@ -353,7 +353,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	minV := v1_0
 
 	makeStores := func() *Stores {
-		ls := NewStores(log.MakeTestingAmbientCtxWithNewTracer(), stores[0].Clock())
+		ls := NewStores(log.MakeTestingAmbientContext(), stores[0].Clock())
 		return ls
 	}
 

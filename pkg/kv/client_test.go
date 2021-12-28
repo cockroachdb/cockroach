@@ -768,7 +768,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 				})
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
+			db := kv.NewDB(log.MakeTestingAmbientContext(), factory, clock, stopper)
 
 			prepWithRC := func() *kv.Batch {
 				b := &kv.Batch{}
@@ -918,7 +918,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 		}
 		dbCtx.NodeID = base.NewSQLIDContainerForNode(&c)
 
-		db := kv.NewDBWithContext(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, dbCtx)
+		db := kv.NewDBWithContext(log.MakeTestingAmbientContext(), factory, clock, dbCtx)
 		return db
 	}
 

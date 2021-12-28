@@ -127,7 +127,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			}
 
 			ds := NewDistSender(DistSenderConfig{
-				AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
+				AmbientCtx:      log.MakeTestingAmbientContext(),
 				Clock:           clock,
 				NodeDescs:       g,
 				RPCRetryOptions: &retry.Options{MaxRetries: 10},

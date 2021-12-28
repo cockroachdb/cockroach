@@ -166,11 +166,6 @@ func MakeTestingAmbientContext() AmbientContext {
 	return AmbientContext{}
 }
 
-// MakeTestingAmbientCtxWithNewTracer should be removed.
-func MakeTestingAmbientCtxWithNewTracer() AmbientContext {
-	return AmbientContext{}
-}
-
 // MakeServerAmbientContext creates an AmbientContext for use by
 // server processes.
 func MakeServerAmbientContext(idProvider ServerIdentificationPayload) AmbientContext {

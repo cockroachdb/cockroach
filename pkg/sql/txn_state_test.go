@@ -57,7 +57,7 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 		})
 
 	settings := cluster.MakeTestingClusterSettings()
-	ambient := log.MakeTestingAmbientCtxWithNewTracer()
+	ambient := log.MakeTestingAmbientContext()
 	return testContext{
 		manualClock: manual,
 		clock:       clock,

@@ -1570,7 +1570,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		}
 		return resp, nil
 	}
-	ambient := log.MakeTestingAmbientCtxWithNewTracer()
+	ambient := log.MakeTestingAmbientContext()
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx: ambient,
 		Clock:      s.Clock,
