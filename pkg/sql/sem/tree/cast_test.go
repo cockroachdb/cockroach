@@ -86,58 +86,8 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 		})
 	}
 
-	oidToFamily := func(o oid.Oid) (_ types.Family, ok bool) {
-		t, ok := types.OidToType[o]
-		if !ok {
-			return 0, false
-		}
-		return t.Family(), true
-	}
-
-	oidStr := func(o oid.Oid) string {
-		res, ok := oidext.TypeName(o)
-		if !ok {
-			res = fmt.Sprintf("%d", o)
-		}
-		return res
-	}
-
-	for _, c := range validCasts {
-		if c.volatility == 0 {
-			t.Errorf("cast %s::%s has no volatility set", c.from.Name(), c.to.Name())
-
-		}
-		if c.ignoreVolatilityCheck {
-			continue
-		}
-
-		// Look through all pg casts and find any where the Oids map to these
-		// families.
-		found := false
-		for i := range pgCasts {
-			fromFamily, fromOk := oidToFamily(pgCasts[i].from)
-			toFamily, toOk := oidToFamily(pgCasts[i].to)
-			if fromOk && toOk && fromFamily == c.from && toFamily == c.to {
-				found = true
-				if c.volatility != pgCasts[i].volatility {
-					t.Errorf("cast %s::%s has volatility %s; corresponding pg cast %s::%s has volatility %s",
-						c.from.Name(), c.to.Name(), c.volatility,
-						oidStr(pgCasts[i].from), oidStr(pgCasts[i].to), pgCasts[i].volatility,
-					)
-				}
-			}
-		}
-		if !found && testing.Verbose() {
-			t.Logf("cast %s::%s has no corresponding pg cast", c.from.Name(), c.to.Name())
-		}
-	}
-
 	for src := range castMap {
 		for tgt, c := range castMap[src] {
-			if c.volatility == volatilityTODO {
-				continue
-			}
-
 			// Find the corresponding pg cast.
 			found := false
 			for _, pgCast := range pgCasts {
@@ -230,16 +180,68 @@ func TestCastsFromUnknown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for v := range types.Family_name {
-		switch fam := types.Family(v); fam {
-		case types.UnknownFamily, types.AnyFamily:
-			// These type families are exceptions.
+	typs := []*types.T{
+		types.MakeBit(2),
+		types.MakeArray(types.MakeBit(2)),
+		types.Bool,
+		types.BoolArray,
+		types.MakeChar(2),
+		types.MakeArray(types.MakeChar(2)),
+		types.Bytes,
+		types.BytesArray,
+		types.QChar,
+		types.MakeArray(types.QChar),
+		types.Date,
+		types.DateArray,
+		types.AnyEnum,
+		types.MakeArray(types.AnyEnum),
+		types.Float4,
+		types.MakeArray(types.Float4),
+		types.Float,
+		types.FloatArray,
+		types.Geography,
+		types.MakeArray(types.Geography),
+		types.Geometry,
+		types.MakeArray(types.Geometry),
+		types.INet,
+		types.INetArray,
+		types.Int2,
+		types.MakeArray(types.Int2),
+		types.Int4,
+		types.MakeArray(types.Int4),
+		types.Int,
+		types.IntArray,
+		types.Interval,
+		types.IntervalArray,
+		types.Jsonb,
+		types.MakeArray(types.Jsonb),
+		types.Name,
+		types.MakeArray(types.Name),
+		types.Decimal,
+		types.DecimalArray,
+		types.String,
+		types.StringArray,
+		types.Time,
+		types.TimeArray,
+		types.Timestamp,
+		types.TimestampArray,
+		types.TimestampTZ,
+		types.TimestampTZArray,
+		types.TimeTZ,
+		types.TimeTZArray,
+		types.Uuid,
+		types.UUIDArray,
+		types.VarBit,
+		types.VarBitArray,
+		types.VarChar,
+		types.MakeArray(types.VarChar),
+		types.Void,
+	}
 
-		default:
-			cast := lookupCastInfo(types.UnknownFamily, fam, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
-			if cast == nil {
-				t.Errorf("cast from Unknown to %s does not exist", fam)
-			}
+	for _, typ := range typs {
+		_, ok := lookupCast(types.Unknown, typ, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
+		if !ok {
+			t.Errorf("cast from unknown to %s does not exist", typ.Name())
 		}
 	}
 }
@@ -298,4 +300,12 @@ func TestTupleCastVolatility(t *testing.T) {
 			t.Errorf("from: %s  to: %s  expected: %s  got: %s", &from, &to, tc.exp, res)
 		}
 	}
+}
+
+func oidStr(o oid.Oid) string {
+	res, ok := oidext.TypeName(o)
+	if !ok {
+		res = fmt.Sprintf("%d", o)
+	}
+	return res
 }
