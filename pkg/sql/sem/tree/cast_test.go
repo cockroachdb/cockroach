@@ -86,58 +86,8 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 		})
 	}
 
-	oidToFamily := func(o oid.Oid) (_ types.Family, ok bool) {
-		t, ok := types.OidToType[o]
-		if !ok {
-			return 0, false
-		}
-		return t.Family(), true
-	}
-
-	oidStr := func(o oid.Oid) string {
-		res, ok := oidext.TypeName(o)
-		if !ok {
-			res = fmt.Sprintf("%d", o)
-		}
-		return res
-	}
-
-	for _, c := range validCasts {
-		if c.volatility == 0 {
-			t.Errorf("cast %s::%s has no volatility set", c.from.Name(), c.to.Name())
-
-		}
-		if c.ignoreVolatilityCheck {
-			continue
-		}
-
-		// Look through all pg casts and find any where the Oids map to these
-		// families.
-		found := false
-		for i := range pgCasts {
-			fromFamily, fromOk := oidToFamily(pgCasts[i].from)
-			toFamily, toOk := oidToFamily(pgCasts[i].to)
-			if fromOk && toOk && fromFamily == c.from && toFamily == c.to {
-				found = true
-				if c.volatility != pgCasts[i].volatility {
-					t.Errorf("cast %s::%s has volatility %s; corresponding pg cast %s::%s has volatility %s",
-						c.from.Name(), c.to.Name(), c.volatility,
-						oidStr(pgCasts[i].from), oidStr(pgCasts[i].to), pgCasts[i].volatility,
-					)
-				}
-			}
-		}
-		if !found && testing.Verbose() {
-			t.Logf("cast %s::%s has no corresponding pg cast", c.from.Name(), c.to.Name())
-		}
-	}
-
 	for src := range castMap {
 		for tgt, c := range castMap[src] {
-			if c.volatility == volatilityTODO {
-				continue
-			}
-
 			// Find the corresponding pg cast.
 			found := false
 			for _, pgCast := range pgCasts {
@@ -158,79 +108,19 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	}
 }
 
-func TestCastMapIncludesValidCasts(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// familyToType returns the first type found of the given family.
-	familyToTypes := func(f types.Family) []*types.T {
-		var typs []*types.T
-		for _, typ := range types.OidToType {
-			if f == typ.Family() {
-				typs = append(typs, typ)
-			}
-		}
-		return typs
-	}
-
-	// findCast returns the first cast found from a type in srcTypes to a type
-	// in tgtTypes.
-	findCast := func(srcTypes, tgtTypes []*types.T) (_ cast, ok bool) {
-		for _, src := range srcTypes {
-			for _, tgt := range tgtTypes {
-				c, ok := lookupCast(
-					src,
-					tgt,
-					false, /* intervalStyleEnabled */
-					false, /* dateStyleEnabled */
-				)
-				if ok {
-					return c, true
-				}
-			}
-		}
-		return cast{}, false
-	}
-
-	// Validate that there is at least one cast in castMap for each cast in
-	// validCasts.
-	for _, c := range validCasts {
-		srcTypes := familyToTypes(c.from)
-		if len(srcTypes) == 0 {
-			continue
-		}
-
-		tgtTypes := familyToTypes(c.to)
-		if len(tgtTypes) == 0 {
-			continue
-		}
-
-		_, ok := findCast(srcTypes, tgtTypes)
-		if !ok {
-			t.Errorf(
-				"castMap should include at least one cast from family %s to family %s",
-				c.from.Name(), c.to.Name(),
-			)
-		}
 	}
 }
 
 // TestCastsFromUnknown verifies that there is a cast from Unknown defined for
-// all type families.
+// all types.
 func TestCastsFromUnknown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for v := range types.Family_name {
-		switch fam := types.Family(v); fam {
-		case types.UnknownFamily, types.AnyFamily:
-			// These type families are exceptions.
-
-		default:
-			cast := lookupCastInfo(types.UnknownFamily, fam, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
-			if cast == nil {
-				t.Errorf("cast from Unknown to %s does not exist", fam)
-			}
+	for _, typ := range types.OidToType {
+		_, ok := lookupCast(types.Unknown, typ, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
+		if !ok {
+			t.Errorf("cast from Unknown to %s does not exist", typ.String())
 		}
 	}
 }
@@ -289,4 +179,12 @@ func TestTupleCastVolatility(t *testing.T) {
 			t.Errorf("from: %s  to: %s  expected: %s  got: %s", &from, &to, tc.exp, res)
 		}
 	}
+}
+
+func oidStr(o oid.Oid) string {
+	res, ok := oidext.TypeName(o)
+	if !ok {
+		res = fmt.Sprintf("%d", o)
+	}
+	return res
 }
