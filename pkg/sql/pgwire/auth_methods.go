@@ -16,11 +16,13 @@ import (
 	"crypto/tls"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -54,6 +56,21 @@ func loadDefaultMethods() {
 	// certificate for the connecting user, or, if no cert is provided,
 	// a cleartext password.
 	RegisterAuthMethod("cert-password", authCertPassword, hba.ConnAny, nil)
+
+	// The "scram-sha-256" authentication method uses the 5-way SCRAM
+	// handshake to negotiate password authn with the client. It hides
+	// the password from the network connection and is non-replayable.
+	RegisterAuthMethod("scram-sha-256", authScram, hba.ConnAny,
+		chainOptions(
+			requireClusterVersion(clusterversion.SCRAMAuthentication),
+			NoOptionsAllowed))
+
+	// The "cert-scram-sha-256" method is alike to "cert-password":
+	// it allows either a client certificate, or a valid 5-way SCRAM handshake.
+	RegisterAuthMethod("cert-scram-sha-256", authCertScram, hba.ConnAny,
+		chainOptions(
+			requireClusterVersion(clusterversion.SCRAMAuthentication),
+			NoOptionsAllowed))
 
 	// The "reject" method rejects any connection attempt that matches
 	// the current rule.
@@ -155,6 +172,27 @@ func passwordString(pwdData []byte) (string, error) {
 	return string(pwdData[:len(pwdData)-1]), nil
 }
 
+func authScram(
+	_ context.Context,
+	c AuthConn,
+	_ tls.ConnectionState,
+	_ *sql.ExecutorConfig,
+	_ *hba.Entry,
+	_ *identmap.Conf,
+) (*AuthBehaviors, error) {
+	b := &AuthBehaviors{}
+	b.SetRoleMapper(UseProvidedIdentity)
+	b.SetAuthenticator(func(
+		ctx context.Context,
+		systemIdentity security.SQLUsername,
+		clientConnection bool,
+		pwRetrieveFn PasswordRetrievalFn,
+	) error {
+		return unimplemented.NewWithIssue(42519, "scram auth not yet available")
+	})
+	return b, nil
+}
+
 func authCert(
 	_ context.Context,
 	_ AuthConn,
@@ -199,6 +237,25 @@ func authCertPassword(
 	if len(tlsState.PeerCertificates) == 0 {
 		c.LogAuthInfof(ctx, "no client certificate, proceeding with password authentication")
 		fn = authPassword
+	} else {
+		c.LogAuthInfof(ctx, "client presented certificate, proceeding with certificate validation")
+		fn = authCert
+	}
+	return fn(ctx, c, tlsState, execCfg, entry, identMap)
+}
+
+func authCertScram(
+	ctx context.Context,
+	c AuthConn,
+	tlsState tls.ConnectionState,
+	execCfg *sql.ExecutorConfig,
+	entry *hba.Entry,
+	identMap *identmap.Conf,
+) (*AuthBehaviors, error) {
+	var fn AuthMethod
+	if len(tlsState.PeerCertificates) == 0 {
+		c.LogAuthInfof(ctx, "no client certificate, proceeding with SCRAM authentication")
+		fn = authScram
 	} else {
 		c.LogAuthInfof(ctx, "client presented certificate, proceeding with certificate validation")
 		fn = authCert
