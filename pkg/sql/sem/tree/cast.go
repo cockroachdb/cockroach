@@ -1310,6 +1310,24 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 		}
 	}
 
+	// Casts from array types to string types are stable and allowed in
+	// assignment contexts.
+	if srcFamily == types.ArrayFamily && tgtFamily == types.StringFamily {
+		return cast{
+			maxContext: CastContextAssignment,
+			volatility: VolatilityStable,
+		}, true
+	}
+
+	// Casts from string types to array types are stable and allowed in
+	// explicit contexts.
+	if srcFamily == types.StringFamily && tgtFamily == types.ArrayFamily {
+		return cast{
+			maxContext: CastContextExplicit,
+			volatility: VolatilityStable,
+		}, true
+	}
+
 	if tgts, ok := castMap[src.Oid()]; ok {
 		if c, ok := tgts[tgt.Oid()]; ok {
 			if intervalStyleEnabled && c.intervalStyleAffected ||
