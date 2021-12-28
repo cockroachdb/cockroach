@@ -795,7 +795,7 @@ func newIntentResolverWithSendFuncs(
 			f := sf.popLocked()
 			return f(ba)
 		})
-	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), txnSenderFactory, c.Clock, stopper)
+	db := kv.NewDB(log.MakeTestingAmbientContext(), txnSenderFactory, c.Clock, stopper)
 	c.DB = db
 	c.MaxGCBatchWait = time.Nanosecond
 	return New(c)

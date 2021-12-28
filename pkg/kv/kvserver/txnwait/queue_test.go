@@ -175,7 +175,7 @@ func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {
 		factory := kv.NonTransactionalFactoryFunc(s)
-		cfg.DB = kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, cfg.Clock, stopper)
+		cfg.DB = kv.NewDB(log.MakeTestingAmbientContext(), factory, cfg.Clock, stopper)
 	}
 	return cfg
 }

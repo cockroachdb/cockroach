@@ -187,7 +187,7 @@ func TestClientGossip(t *testing.T) {
 	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
 	remote := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
-	c := newClient(log.MakeTestingAmbientCtxWithNewTracer(), remote.GetNodeAddr(), makeMetrics())
+	c := newClient(log.MakeTestingAmbientContext(), remote.GetNodeAddr(), makeMetrics())
 
 	defer func() {
 		stopper.Stop(ctx)
@@ -239,7 +239,7 @@ func TestClientGossipMetrics(t *testing.T) {
 	gossipSucceedsSoon(
 		t, stopper, clusterID, make(chan *client, 2),
 		map[*client]*Gossip{
-			newClient(log.MakeTestingAmbientCtxWithNewTracer(), local.GetNodeAddr(), remote.nodeMetrics): remote,
+			newClient(log.MakeTestingAmbientContext(), local.GetNodeAddr(), remote.nodeMetrics): remote,
 		},
 		func() error {
 			// Infos/Bytes Sent/Received should not be zero.
@@ -297,7 +297,7 @@ func TestClientNodeID(t *testing.T) {
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
-	c := newClient(log.MakeTestingAmbientCtxWithNewTracer(), &remote.nodeAddr, makeMetrics())
+	c := newClient(log.MakeTestingAmbientContext(), &remote.nodeAddr, makeMetrics())
 	disconnected <- c
 
 	defer func() {
@@ -521,7 +521,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	local := startGossip(uuid.Nil, nodeID, stopper, t, metric.NewRegistry())
 	addr := local.GetNodeAddr()
 
-	client := newClient(log.MakeTestingAmbientCtxWithNewTracer(), addr, makeMetrics()) // never started
+	client := newClient(log.MakeTestingAmbientContext(), addr, makeMetrics()) // never started
 
 	newAddr := util.UnresolvedAddr{
 		NetworkField: "tcp",

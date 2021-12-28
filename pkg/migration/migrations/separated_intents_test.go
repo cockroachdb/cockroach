@@ -207,7 +207,7 @@ func TestRunSeparatedIntentsMigration(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), mockSender, hlcClock, stopper)
+	db := kv.NewDB(log.MakeTestingAmbientContext(), mockSender, hlcClock, stopper)
 
 	datadriven.RunTest(t, "testdata/separated_intents",
 		func(t *testing.T, d *datadriven.TestData) string {

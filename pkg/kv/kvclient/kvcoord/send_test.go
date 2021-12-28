@@ -340,7 +340,7 @@ func sendBatch(
 	}
 
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:         log.MakeTestingAmbientCtxWithNewTracer(),
+		AmbientCtx:         log.MakeTestingAmbientContext(),
 		Settings:           cluster.MakeTestingClusterSettings(),
 		NodeDescs:          g,
 		RPCContext:         rpcContext,
