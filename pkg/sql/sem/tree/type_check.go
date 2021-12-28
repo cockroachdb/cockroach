@@ -493,7 +493,7 @@ func resolveCast(
 		var v Volatility
 		var hint string
 		var counter telemetry.Counter
-		c, ok := lookupCast(castFrom.Oid(), castTo.Oid(), intervalStyleEnabled, dateStyleEnabled)
+		c, ok := lookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
 		if ok && c.volatility != volatilityTODO {
 			// If the volatility has been set in castMap, use it.
 			v = c.volatility
@@ -515,7 +515,9 @@ func resolveCast(
 			}
 			return err
 		}
-		telemetry.Inc(counter)
+		if counter != nil {
+			telemetry.Inc(counter)
+		}
 		return nil
 	}
 }

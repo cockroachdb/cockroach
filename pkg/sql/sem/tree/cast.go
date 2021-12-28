@@ -1025,6 +1025,14 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
 		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityImmutable},
 	},
+	oid.T__uuid: {
+		// Automatic I/O conversions to string types.
+		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
+		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
+		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
+		oid.T_text:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
+		oid.T_varchar: {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
+	},
 	oid.T_varbit: {
 		oid.T_bit:    {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
 		oid.T_varbit: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
@@ -1233,12 +1241,6 @@ func ValidCast(src, tgt *types.T, ctx CastContext) bool {
 		return true
 	}
 
-	// Unknown is the type given to an expression that statically evaluates to
-	// NULL. NULL can be cast to any type in any context.
-	if src.Oid() == oid.T_unknown {
-		return true
-	}
-
 	srcFamily := src.Family()
 	tgtFamily := tgt.Family()
 
@@ -1267,12 +1269,7 @@ func ValidCast(src, tgt *types.T, ctx CastContext) bool {
 
 	// If src and tgt are not both array or tuple types, check castMap for a
 	// valid cast.
-	c, ok := lookupCast(
-		src.Oid(),
-		tgt.Oid(),
-		false, /* intervalStyleEnabled */
-		false, /* dateStyleEnabled */
-	)
+	c, ok := lookupCast(src, tgt, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
 	if ok {
 		return c.maxContext >= ctx
 	}
@@ -1280,11 +1277,71 @@ func ValidCast(src, tgt *types.T, ctx CastContext) bool {
 	return false
 }
 
-// lookupCast returns a cast that describes the cast from src to tgt if
-// it exists. If it does not exist, ok=false is returned.
-func lookupCast(src, tgt oid.Oid, intervalStyleEnabled, dateStyleEnabled bool) (cast, bool) {
-	if tgts, ok := castMap[src]; ok {
-		if c, ok := tgts[tgt]; ok {
+var stringToEnumCounter = sqltelemetry.CastOpCounter(types.StringFamily.Name(), types.EnumFamily.Name())
+var bytesToEnumCounter = sqltelemetry.CastOpCounter(types.BytesFamily.Name(), types.EnumFamily.Name())
+var enumToStringCounter = sqltelemetry.CastOpCounter(types.EnumFamily.Name(), types.StringFamily.Name())
+var unknownToEnumCounter = sqltelemetry.CastOpCounter(types.UnknownFamily.Name(), types.EnumFamily.Name())
+
+// lookupCast returns a cast that describes the cast from src to tgt if it
+// exists. If it does not exist, ok=false is returned.
+func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) (cast, bool) {
+	srcFamily := src.Family()
+	tgtFamily := tgt.Family()
+	srcFamily.Name()
+
+	// Unknown is the type given to an expression that statically evaluates
+	// to NULL. NULL can be immutably cast to any type in any context.
+	if srcFamily == types.UnknownFamily {
+		return cast{
+			maxContext: CastContextImplicit,
+			volatility: VolatilityImmutable,
+		}, true
+	}
+
+	// Enums have dynamic OIDs, so they can't be populated in castMap. Instead,
+	// we dynamically create cast structs for valid enum casts.
+	// lookups for valid enum casts
+	if srcFamily == types.StringFamily && tgtFamily == types.EnumFamily {
+		// Casts from string types to enums are immutable and allowed in
+		// explicit contexts.
+		return cast{
+			maxContext: CastContextExplicit,
+			volatility: VolatilityImmutable,
+			counter:    stringToEnumCounter,
+		}, true
+	}
+	if srcFamily == types.BytesFamily && tgtFamily == types.EnumFamily {
+		// Casts from byte types to enums are immutable and allowed in explicit
+		// contexts. TODO(mgartner): We may not want to support the cast from
+		// BYTES to ENUM because Postgres does not support it, and it's been the
+		// source of at least one minor bug (see #74316).
+		return cast{
+			maxContext: CastContextExplicit,
+			volatility: VolatilityImmutable,
+			counter:    bytesToEnumCounter,
+		}, true
+	}
+	if srcFamily == types.EnumFamily && tgtFamily == types.StringFamily {
+		// Casts from enum types to strings are immutable and allowed in
+		// assignment contexts.
+		return cast{
+			maxContext: CastContextAssignment,
+			volatility: VolatilityImmutable,
+			counter:    enumToStringCounter,
+		}, true
+	}
+	if srcFamily == types.UnknownFamily && tgtFamily == types.EnumFamily {
+		// Casts from unknown to enums are immutable and allowed in implicit
+		// contexts.
+		return cast{
+			maxContext: CastContextImplicit,
+			volatility: VolatilityImmutable,
+			counter:    unknownToEnumCounter,
+		}, true
+	}
+
+	if tgts, ok := castMap[src.Oid()]; ok {
+		if c, ok := tgts[tgt.Oid()]; ok {
 			if intervalStyleEnabled && c.intervalStyleAffected ||
 				dateStyleEnabled && c.dateStyleAffected {
 				c.volatility = VolatilityStable
@@ -1751,7 +1808,7 @@ func LookupCastVolatility(from, to *types.T, sd *sessiondata.SessionData) (_ Vol
 	}
 
 	// If the volatility has been set in castMap, return it.
-	c, ok := lookupCast(from.Oid(), to.Oid(), sd.IntervalStyleEnabled, sd.DateStyleEnabled)
+	c, ok := lookupCast(from, to, sd.IntervalStyleEnabled, sd.DateStyleEnabled)
 	if ok && c.volatility != volatilityTODO {
 		return c.volatility, true
 	}
