@@ -722,9 +722,10 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 	_ = opts.Stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "liveness-hb", SpanOpt: stop.SterileRootSpan}, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("liveness-hb", nil)
+		ctx = ambient.AnnotateCtx(ctx)
 		ctx, cancel := opts.Stopper.WithCancelOnQuiesce(context.Background())
 		defer cancel()
-		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+		ctx, sp := opts.Stopper.Tracer().EnsureChildSpan(ctx, "liveness heartbeat loop")
 		defer sp.Finish()
 
 		incrementEpoch := true

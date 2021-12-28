@@ -7359,7 +7359,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	mockNodeLiveness := newMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE)
 	sp := NewStorePool(
-		log.MakeTestingAmbientContext(tr),
+		log.MakeTestingAmbientContext(),
 		st,
 		g,
 		clock,
@@ -7483,7 +7483,7 @@ func Example_rebalancing() {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
+	ambientCtx := log.MakeTestingAmbientContext()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster,

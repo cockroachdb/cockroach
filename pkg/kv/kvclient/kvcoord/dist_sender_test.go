@@ -1722,7 +1722,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	}
 	n.Start()
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx:         log.MakeTestingAmbientContext(stopper.Tracer()),
+		AmbientCtx:         log.MakeTestingAmbientContext(),
 		NodeDescs:          n.Nodes[0].Gossip,
 		RPCContext:         n.RPCContext,
 		NodeDialer:         nodedialer.New(n.RPCContext, gossip.AddressResolver(n.Nodes[0].Gossip)),
@@ -2164,7 +2164,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 	})
 
 	cfg := DistSenderConfig{
-		AmbientCtx:        log.MakeTestingAmbientContext(stopper.Tracer()),
+		AmbientCtx:        log.MakeTestingAmbientContext(),
 		Clock:             clock,
 		NodeDescs:         g,
 		RPCContext:        rpcContext,
@@ -2492,7 +2492,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: log.MakeTestingAmbientContext(stopper.Tracer()),
+		AmbientCtx: log.MakeTestingAmbientContext(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -2619,7 +2619,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	}
 
 	cfg := DistSenderConfig{
-		AmbientCtx: log.MakeTestingAmbientContext(stopper.Tracer()),
+		AmbientCtx: log.MakeTestingAmbientContext(),
 		Clock:      clock,
 		NodeDescs:  g,
 		RPCContext: rpcContext,
@@ -3461,7 +3461,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 				}
 
 				cfg := DistSenderConfig{
-					AmbientCtx: log.MakeTestingAmbientContext(stopper.Tracer()),
+					AmbientCtx: log.MakeTestingAmbientContext(),
 					Clock:      clock,
 					NodeDescs:  g,
 					RPCContext: rpcContext,
@@ -4644,7 +4644,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			}
 
 			cfg := DistSenderConfig{
-				AmbientCtx: log.MakeTestingAmbientContext(tr),
+				AmbientCtx: log.MakeTestingAmbientContext(),
 				Clock:      clock,
 				NodeDescs:  ns,
 				RPCContext: rpcContext,

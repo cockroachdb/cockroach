@@ -421,8 +421,9 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// infrastructure below.  This span concludes when the startup
 	// goroutine started below has completed.  TODO(andrei): we don't
 	// close the span on the early returns below.
+	ctx = ambientCtx.AnnotateCtx(ctx)
 	var startupSpan *tracing.Span
-	ctx, startupSpan = ambientCtx.AnnotateCtxWithSpan(ctx, "server start")
+	ctx, startupSpan = ambientCtx.Tracer.EnsureChildSpan(ctx, "server start")
 
 	// Set up the logging and profiling output.
 	//
@@ -701,7 +702,8 @@ If problems persist, please see %s.`
 	// We'll want to log any shutdown activity against a separate span.
 	// We cannot use s.AnnotateCtx here because s might not have
 	// been assigned yet (the goroutine above runs asynchronously).
-	shutdownCtx, shutdownSpan := ambientCtx.AnnotateCtxWithSpan(context.Background(), "server shutdown")
+	shutdownCtx := ambientCtx.AnnotateCtx(context.Background())
+	shutdownCtx, shutdownSpan := ambientCtx.Tracer.EnsureChildSpan(shutdownCtx, "server shutdown")
 	defer shutdownSpan.Finish()
 
 	stopWithoutDrain := make(chan struct{}) // closed if interrupted very early

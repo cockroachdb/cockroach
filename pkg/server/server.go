@@ -688,6 +688,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	updates := &diagnostics.UpdateChecker{
 		StartTime:     timeutil.Now(),
 		AmbientCtx:    &cfg.AmbientCtx,
+		Stopper:       stopper,
 		Config:        cfg.BaseConfig.Config,
 		Settings:      cfg.Settings,
 		ClusterID:     cfg.ClusterIDContainer.Get,
@@ -891,13 +892,6 @@ func (s *Server) ClusterSettings() *cluster.Settings {
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
 func (s *Server) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
-}
-
-// AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
-func (s *Server) AnnotateCtxWithSpan(
-	ctx context.Context, opName string,
-) (context.Context, *tracing.Span) {
-	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
 // ClusterID returns the ID of the cluster this server is a part of.
@@ -2805,7 +2799,7 @@ func (s *Server) PGServer() *pgwire.Server {
 // NOTE: This is not called in PreStart so that it's disabled by default for
 // testing.
 func (s *Server) StartDiagnostics(ctx context.Context) {
-	s.updates.PeriodicallyCheckForUpdates(ctx, s.stopper)
+	s.updates.PeriodicallyCheckForUpdates(ctx)
 	s.sqlServer.StartDiagnostics(ctx)
 }
 
