@@ -118,13 +118,16 @@ B''::string
 ----
 ''
 
+# TODO(#74580): The cast to BIT(4) is necessary because B'1001' is parsed as a
+# VARBIT and there is no valid cast from VARBIT to INT. B'1001' should be parsed
+# as a BIT(4) rather than a VARBIT.
 eval
-B'1001'::int
+B'1001'::bit(4)::int
 ----
 9
 
 eval
-B''::int
+B''::bit(1)::int
 ----
 0
 
@@ -169,12 +172,12 @@ eval
 B'01'
 
 eval
-B'1110000101'::int
+B'1110000101'::bit(10)::int
 ----
 901
 
 eval
-B'11111111111111111111111110000101'::int4
+B'11111111111111111111111110000101'::bit(32)::int4
 ----
 -123
 

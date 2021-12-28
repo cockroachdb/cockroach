@@ -777,3 +777,26 @@ query T
 EXECUTE s73450_c('foo')
 ----
 f
+
+# Regression test for #74577. Casts between integer types and VARBIT should not
+# be allowed.
+statement error invalid cast: int -> varbit
+SELECT 1::VARBIT
+
+statement error invalid cast: int2 -> varbit
+SELECT 1::INT2::VARBIT
+
+statement error invalid cast: int4 -> varbit
+SELECT 1::INT4::VARBIT
+
+statement error invalid cast: int -> varbit
+SELECT 1::INT8::VARBIT
+
+statement error invalid cast: varbit -> int2
+SELECT '1'::VARBIT::INT2
+
+statement error invalid cast: varbit -> int4
+SELECT '1'::VARBIT::INT4
+
+statement error invalid cast: varbit -> int
+SELECT '1'::VARBIT::INT8
