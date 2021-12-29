@@ -178,7 +178,7 @@ func CheckPasswordHashValidity(
 		return true, true, 0, "crdb-bcrypt", hashedPassword, err
 	}
 	if isSCRAMHash(inputPassword) {
-		return true, false /* unsupported yet */, 42519 /* issueNum */, "scram-sha-256", inputPassword, nil
+		return true, true, 0, "scram-sha-256", inputPassword, nil
 	}
 	if isMD5Hash(inputPassword) {
 		// See: https://github.com/cockroachdb/cockroach/issues/73337
