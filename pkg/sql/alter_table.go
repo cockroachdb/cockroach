@@ -1142,6 +1142,9 @@ func applyColumnMutation(
 	case *tree.AlterTableAlterColumnType:
 		return AlterColumnType(ctx, tableDesc, col, t, params, cmds, tn)
 
+	case *tree.AlterTableAlterColumnAfter:
+		return AlterColumnAfter()
+
 	case *tree.AlterTableSetDefault:
 		if err := updateNonComputedColExpr(
 			params,

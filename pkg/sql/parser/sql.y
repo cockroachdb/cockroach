@@ -1547,6 +1547,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
+// 	 ALTER TABLE ... ALTER [COLUMN] <colname> AFTER <colname>
 //   ALTER TABLE ... ALTER PRIMARY KEY USING INDEX <name>
 //   ALTER TABLE ... RENAME TO <newname>
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
@@ -2276,6 +2277,11 @@ alter_table_cmd:
       Using: $8.expr(),
     }
   }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> AFTER <colname>
+| ALTER opt_column column_name AFTER column_name
+ {
+    $$.val = &tree.AlterTableAlterColumnAfter{Column: tree.Name($3), ColumnAfter: tree.Name($5) }
+ }
   // ALTER TABLE <name> ADD CONSTRAINT ...
 | ADD table_constraint opt_validate_behavior
   {
