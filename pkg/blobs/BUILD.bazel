@@ -12,7 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/blobs",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/blobs/blobspb:blobspb_go_proto",
+        "//pkg/blobs/blobspb",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
@@ -36,7 +36,7 @@ go_test(
     ],
     embed = [":blobs"],
     deps = [
-        "//pkg/blobs/blobspb:blobspb_go_proto",
+        "//pkg/blobs/blobspb",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

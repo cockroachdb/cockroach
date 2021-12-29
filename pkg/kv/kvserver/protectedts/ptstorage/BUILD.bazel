@@ -15,7 +15,7 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",
@@ -43,7 +43,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",

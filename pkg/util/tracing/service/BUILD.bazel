@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/tracing",
-        "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
+        "//pkg/util/tracing/tracingservicepb",
     ],
 )
 
@@ -19,7 +19,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
-        "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
+        "//pkg/util/tracing/tracingservicepb",
         "@com_github_stretchr_testify//require",
     ],
 )
