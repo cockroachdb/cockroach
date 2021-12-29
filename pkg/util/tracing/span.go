@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/petermattis/goid"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
@@ -286,6 +287,16 @@ func (sp *Span) OperationName() string {
 // being a root span.
 func (sp *Span) IsSterile() bool {
 	return sp.i.sterile
+}
+
+// UpdateGoroutineIDToCurrent updates the span's goroutine ID to the current
+// goroutine. This should be called when a different goroutine takes ownership
+// of a span.
+func (sp *Span) UpdateGoroutineIDToCurrent() {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.crdb.setGoroutineID(goid.Get())
 }
 
 // SpanMeta is information about a Span that is not local to this
