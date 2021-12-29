@@ -12,7 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/baseccl",
-        "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
+        "//pkg/ccl/storageccl/engineccl/enginepbccl",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
@@ -42,7 +42,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/baseccl",
-        "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
+        "//pkg/ccl/storageccl/engineccl/enginepbccl",
         "//pkg/keys",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",

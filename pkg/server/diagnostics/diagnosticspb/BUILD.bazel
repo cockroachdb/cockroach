@@ -1,3 +1,4 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
@@ -29,4 +30,11 @@ go_proto_library(
         "//pkg/sql/catalog/descpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
+)
+
+go_library(
+    name = "diagnosticspb",
+    embed = [":diagnosticspb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb",
+    visibility = ["//visibility:public"],
 )
