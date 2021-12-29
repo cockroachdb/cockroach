@@ -239,6 +239,8 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 			log.Infof(ctx, "outbox: calling FlowStream")
 		}
 		// The context used here escapes, so it has to be a background context.
+		// TODO(yuzefovich): the usage of the TODO context here is suspicious.
+		// Investigate this.
 		m.stream, err = client.FlowStream(context.TODO())
 		if err != nil {
 			if log.V(1) {
