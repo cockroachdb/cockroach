@@ -172,7 +172,15 @@ func (r *RemoteClockMonitor) UpdateOffset(
 			latencyAvg = ewma.NewMovingAverage(avgLatencyMeasurementAge)
 			r.mu.latenciesNanos[addr] = latencyAvg
 		}
-		latencyAvg.Add(float64(roundTripLatency.Nanoseconds()))
+
+		// If the roundtrip jumps by 50% beyond the previously recorded average, report it in logs.
+		newLatencyf := float64(roundTripLatency.Nanoseconds())
+		if prevAvg := latencyAvg.Value(); prevAvg != 0 && newLatencyf > prevAvg*1.50 {
+			log.Health.Warningf(ctx, "latency jump (prev avg %.2fms, current %.2fms)",
+				prevAvg/1e6, newLatencyf/1e6)
+		}
+
+		latencyAvg.Add(newLatencyf)
 		r.metrics.LatencyHistogramNanos.RecordValue(roundTripLatency.Nanoseconds())
 	}
 
