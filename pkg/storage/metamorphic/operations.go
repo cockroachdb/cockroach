@@ -682,7 +682,7 @@ func (c clearRangeOp) run(ctx context.Context) string {
 	if err != nil {
 		return fmt.Sprintf("error: %s", err.Error())
 	}
-	return "ok"
+	return fmt.Sprintf("deleted range = %s - %s", c.key, c.endKey)
 }
 
 type compactOp struct {
@@ -887,11 +887,20 @@ var opGenerators = []opGenerator{
 			if endKey.Compare(key) < 0 {
 				key, endKey = endKey, key
 			}
-			// forEachConflict is guaranteed to iterate
+			// forEachConflict is guaranteed to iterate over conflicts in key order,
+			// with the lowest conflicting key first. Find the first conflict and
+			// truncate the span to that range.
 			m.txnGenerator.forEachConflict(writer, txn, key, endKey, func(conflict roachpb.Span) bool {
+				if conflict.ContainsKey(key) {
+					key = append([]byte(nil), conflict.EndKey...)
+					return true
+				}
 				endKey = conflict.Key
 				return false
 			})
+			if endKey.Compare(key) < 0 {
+				endKey = key.Next()
+			}
 
 			// Track this write in the txn generator. This ensures the batch will be
 			// committed before the transaction is committed
@@ -1335,6 +1344,21 @@ var opGenerators = []opGenerator{
 				// treats it as a nonexistent tombstone. For the purposes of this test,
 				// standardize behavior.
 				endKey = endKey.Next()
+			}
+
+			// forEachConflict is guaranteed to iterate over conflicts in key order,
+			// with the lowest conflicting key first. Find the first conflict and
+			// truncate the span to that range.
+			m.txnGenerator.forEachConflict("engine", "", key, endKey, func(conflict roachpb.Span) bool {
+				if conflict.ContainsKey(key) {
+					key = append([]byte(nil), conflict.EndKey...)
+					return true
+				}
+				endKey = conflict.Key
+				return false
+			})
+			if endKey.Compare(key) < 0 {
+				endKey = key.Next()
 			}
 
 			return &clearRangeOp{

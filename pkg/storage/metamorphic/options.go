@@ -17,7 +17,7 @@ import (
 )
 
 const numStandardOptions = 18
-const numRandomOptions = 10
+const numRandomOptions = 5
 
 func standardOptions(i int) *pebble.Options {
 	stdOpts := []string{
