@@ -444,7 +444,8 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		}
 	}
 
-	return security.CompareHashAndPassword(ctx, hashedPassword, password) == nil, false, nil
+	ok, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, password)
+	return ok, false, err
 }
 
 // CreateAuthSecret creates a secret, hash pair to populate a session auth token.

@@ -164,10 +164,13 @@ func TestVerifyPassword(t *testing.T) {
 				)
 			}
 
-			err = security.CompareHashAndPassword(ctx, hashedPassword, tc.password)
-			if err != nil {
-				valid = false
-				validDBConsole = false
+			if valid {
+				valid, err = security.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
+				if err != nil {
+					t.Error(err)
+					valid = false
+					validDBConsole = false
+				}
 			}
 
 			if validUntil != nil {
