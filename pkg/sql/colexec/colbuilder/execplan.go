@@ -1320,6 +1320,11 @@ func NewColOperator(
 					PeersColIdx:     peersColIdx,
 				}
 
+				// Some window functions always return an INT result, so we use
+				// it as default and will update whenever necessary. We cannot
+				// use execinfrapb.GetWindowFunctionInfo because that function
+				// doesn't distinguish integers with different widths.
+				returnType := types.Int
 				if wf.Func.WindowFunc != nil {
 					// This is a 'pure' window function (e.g. not an aggregation).
 					windowFn := *wf.Func.WindowFunc
@@ -1340,6 +1345,7 @@ func NewColOperator(
 							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, false /* needsBuffer */)
 						result.Root, err = colexecwindow.NewRelativeRankOperator(
 							windowArgs, windowFn, wf.Ordering.Columns)
+						returnType = types.Float
 					case execinfrapb.WindowerSpec_NTILE:
 						opName := opNamePrefix + "ntile"
 						result.finishBufferedWindowerArgs(
@@ -1351,30 +1357,35 @@ func NewColOperator(
 							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 						result.Root, err = colexecwindow.NewLagOperator(
 							windowArgs, argIdxs[0], argIdxs[1], argIdxs[2])
+						returnType = typs[argIdxs[0]]
 					case execinfrapb.WindowerSpec_LEAD:
 						opName := opNamePrefix + "lead"
 						result.finishBufferedWindowerArgs(
 							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 						result.Root, err = colexecwindow.NewLeadOperator(
 							windowArgs, argIdxs[0], argIdxs[1], argIdxs[2])
+						returnType = typs[argIdxs[0]]
 					case execinfrapb.WindowerSpec_FIRST_VALUE:
 						opName := opNamePrefix + "first_value"
 						result.finishBufferedWindowerArgs(
 							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 						result.Root, err = colexecwindow.NewFirstValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
+						returnType = typs[argIdxs[0]]
 					case execinfrapb.WindowerSpec_LAST_VALUE:
 						opName := opNamePrefix + "last_value"
 						result.finishBufferedWindowerArgs(
 							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 						result.Root, err = colexecwindow.NewLastValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
+						returnType = typs[argIdxs[0]]
 					case execinfrapb.WindowerSpec_NTH_VALUE:
 						opName := opNamePrefix + "nth_value"
 						result.finishBufferedWindowerArgs(
 							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 						result.Root, err = colexecwindow.NewNthValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
+						returnType = typs[argIdxs[0]]
 					default:
 						return r, errors.AssertionFailedf("window function %s is not supported", wf.String())
 					}
@@ -1424,6 +1435,7 @@ func NewColOperator(
 						result.Root = colexecwindow.NewWindowAggregatorOperator(
 							windowArgs, aggType, wf.Frame, &wf.Ordering, argIdxs,
 							aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+						returnType = aggArgs.OutputTypes[0]
 					}
 				} else {
 					colexecerror.InternalError(errors.AssertionFailedf("window function spec is nil"))
@@ -1444,10 +1456,6 @@ func NewColOperator(
 					result.Root = colexecbase.NewSimpleProjectOp(result.Root, int(wf.OutputColIdx+tempColOffset), projection)
 				}
 
-				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, argTypes...)
-				if err != nil {
-					return r, err
-				}
 				result.ColumnTypes = appendOneType(result.ColumnTypes, returnType)
 				input = result.Root
 			}
