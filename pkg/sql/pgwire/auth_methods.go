@@ -147,7 +147,7 @@ func authPassword(
 			return err
 		}
 		// Inform operators looking at logs if there's something amiss.
-		if len(hashedPassword) == 0 {
+		if hashedPassword.Method() == security.HashMissingPassword {
 			c.LogAuthInfof(ctx, "user has no password defined")
 			// NB: the failure reason will be automatically handled by the fallback
 			// in auth.go (and report CREDENTIALS_INVALID).
@@ -306,7 +306,7 @@ func authScram(
 
 		// Did authentication succeed?
 		if !handshake.Valid() {
-			return errors.Errorf(security.ErrPasswordUserAuthFailed, systemIdentity)
+			return security.NewErrPasswordUserAuthFailed(systemIdentity)
 		}
 		return nil // auth success!
 	})
