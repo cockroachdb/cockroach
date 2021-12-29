@@ -857,7 +857,6 @@ child operation: %s, tracer created at:
 		traceID = tracingpb.TraceID(randutil.FastInt63())
 	}
 	spanID := tracingpb.SpanID(randutil.FastInt63())
-	goroutineID := uint64(goid.Get())
 
 	// Now allocate the main *Span and contained crdbSpan.
 	// Allocate these together to save on individual allocs.
@@ -876,15 +875,15 @@ child operation: %s, tracer created at:
 	}{}
 
 	helper.crdbSpan = crdbSpan{
-		tracer:      t,
-		traceID:     traceID,
-		spanID:      spanID,
-		goroutineID: goroutineID,
-		startTime:   startTime,
-		logTags:     opts.LogTags,
+		tracer:    t,
+		traceID:   traceID,
+		spanID:    spanID,
+		startTime: startTime,
+		logTags:   opts.LogTags,
 		mu: crdbSpanMu{
-			duration: -1, // unfinished
-			tags:     helper.tagsAlloc[:0],
+			duration:    -1, // unfinished
+			tags:        helper.tagsAlloc[:0],
+			goroutineID: uint64(goid.Get()),
 		},
 	}
 	helper.crdbSpan.operation = opName
