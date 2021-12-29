@@ -4301,3 +4301,34 @@ SELECT x, y, first_value(y) OVER (PARTITION BY x ROWS BETWEEN CURRENT ROW AND CU
 2  NotNull  NotNull
 2  NotNull  NotNull
 2  NotNull  NotNull
+
+# Regression test for incorrect type schema setup in the vectorized engine with
+# multiple window functions (#74087).
+statement ok
+CREATE TABLE t74087 AS
+  SELECT
+    g::INT2 AS _int2, g::INT4 AS _int4
+  FROM
+    ROWS FROM (generate_series(1, 5)) AS g;
+
+query IIIIIIIIIRRI rowsort
+SELECT
+  lag(_int2, _int4, _int2) OVER w,
+  lead(_int4, _int2, _int4) OVER w,
+  first_value(_int2) OVER w,
+  last_value(_int4) OVER w,
+  nth_value(_int2, _int4) OVER w,
+  min(_int4) OVER w,
+  row_number() OVER w,
+  rank() OVER w,
+  dense_rank() OVER w,
+  percent_rank() OVER w,
+  cume_dist() OVER w,
+  ntile(_int2) OVER w
+FROM t74087 WINDOW w AS (ORDER BY _int4);
+----
+1  2  1  1  1  1  1  1  1  0     0.2  1
+2  4  1  2  2  1  2  2  2  0.25  0.4  1
+3  3  1  3  3  1  3  3  3  0.5   0.6  1
+4  4  1  4  4  1  4  4  4  0.75  0.8  1
+5  5  1  5  5  1  5  5  5  1     1    1
