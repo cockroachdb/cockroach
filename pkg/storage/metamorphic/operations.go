@@ -669,22 +669,6 @@ func (i iterPrevOp) run(ctx context.Context) string {
 	return printIterState(iter)
 }
 
-type clearRangeOp struct {
-	m      *metaTestRunner
-	key    roachpb.Key
-	endKey roachpb.Key
-}
-
-func (c clearRangeOp) run(ctx context.Context) string {
-	// ClearRange calls in Cockroach usually happen with boundaries demarcated
-	// using unversioned keys, so mimic the same behavior here.
-	err := c.m.engine.ClearMVCCRangeAndIntents(c.key, c.endKey)
-	if err != nil {
-		return fmt.Sprintf("error: %s", err.Error())
-	}
-	return "ok"
-}
-
 type compactOp struct {
 	m      *metaTestRunner
 	key    roachpb.Key
@@ -1318,36 +1302,6 @@ var opGenerators = []opGenerator{
 			operandIterator,
 		},
 		weight: 100,
-	},
-	{
-		// Note that this is not an MVCC* operation; unlike MVCC{Put,Get,Scan}, etc,
-		// it does not respect transactions. This often yields interesting
-		// behavior.
-		name: "delete_range",
-		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
-			key := m.keyGenerator.parse(args[0]).Key
-			endKey := m.keyGenerator.parse(args[1]).Key
-			if endKey.Compare(key) < 0 {
-				key, endKey = endKey, key
-			} else if endKey.Equal(key) {
-				// Range tombstones where start = end can exhibit different behavior on
-				// different engines; rocks treats it as a point delete, while pebble
-				// treats it as a nonexistent tombstone. For the purposes of this test,
-				// standardize behavior.
-				endKey = endKey.Next()
-			}
-
-			return &clearRangeOp{
-				m:      m,
-				key:    key,
-				endKey: endKey,
-			}
-		},
-		operands: []operandType{
-			operandMVCCKey,
-			operandMVCCKey,
-		},
-		weight: 20,
 	},
 	{
 		name: "compact",

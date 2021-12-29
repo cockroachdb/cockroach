@@ -31,7 +31,7 @@ import (
 var (
 	keep    = flag.Bool("keep", false, "keep temp directories after test")
 	check   = flag.String("check", "", "run operations in specified file and check output for equality")
-	opCount = flag.Int("operations", 100000, "number of MVCC operations to generate and run")
+	opCount = flag.Int("operations", 50000, "number of MVCC operations to generate and run")
 )
 
 type testRun struct {
