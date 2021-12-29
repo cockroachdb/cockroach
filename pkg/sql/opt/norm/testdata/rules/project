@@ -1188,6 +1188,49 @@ project
  └── projections
       └── column1:1 + 10 [as="?column?":2, outer=(1), immutable]
 
+# Regression test for #74241. Do not push assignment casts into values when the
+# casted column is also a passthrough column.
+exec-ddl
+CREATE TABLE t74241 (
+  a INT2,
+  b INT,
+  c INT2,
+  d INT
+)
+----
+
+norm
+INSERT INTO t74241 (a, b, c)
+SELECT tmp.b, tmp.b, tmp.d FROM t74241 AS tmp
+WHERE false
+----
+insert t74241
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column15:15 => t74241.a:1
+ │    ├── tmp.b:9 => t74241.b:2
+ │    ├── column16:16 => t74241.c:3
+ │    ├── d_default:17 => t74241.d:4
+ │    └── rowid_default:18 => t74241.rowid:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: d_default:17 rowid_default:18 column15:15!null tmp.b:9!null column16:16!null
+      ├── cardinality: [0 - 0]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(9,15-18)
+      ├── values
+      │    ├── columns: tmp.b:9!null column16:16!null
+      │    ├── cardinality: [0 - 0]
+      │    ├── key: ()
+      │    └── fd: ()-->(9,16)
+      └── projections
+           ├── CAST(NULL AS INT8) [as=d_default:17]
+           ├── unique_rowid() [as=rowid_default:18, volatile]
+           └── assignment-cast: INT2 [as=column15:15, outer=(9), immutable]
+                └── tmp.b:9
+
 # --------------------------------------------------
 # FoldJSONAccessIntoValues
 # --------------------------------------------------
