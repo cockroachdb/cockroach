@@ -461,6 +461,11 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 	}
 
 	// If the caller has a span, the task gets a child span.
+	//
+	// Note that we have to create the child in this parent goroutine; we can't
+	// defer the creation to the spawned async goroutine since the parent span
+	// might get Finish()ed by then. However, we'll update the child'd goroutine
+	// ID.
 	var sp *tracing.Span
 	switch opt.SpanOpt {
 	case FollowsFromSpan:
@@ -480,6 +485,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 		defer s.runPostlude()
 		if sp != nil {
 			defer sp.Finish()
+			sp.UpdateGoroutineIDToCurrent()
 		}
 		if alloc != nil {
 			defer alloc.Release()

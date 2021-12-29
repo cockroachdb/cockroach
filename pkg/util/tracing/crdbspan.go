@@ -35,7 +35,6 @@ type crdbSpan struct {
 	traceID      tracingpb.TraceID // probabilistically unique
 	spanID       tracingpb.SpanID  // probabilistically unique
 	parentSpanID tracingpb.SpanID
-	goroutineID  uint64
 	operation    string // name of operation associated with the span
 
 	startTime time.Time
@@ -65,6 +64,10 @@ type childRef struct {
 
 type crdbSpanMu struct {
 	syncutil.Mutex
+
+	// goroutineID is the ID of the goroutine that created this span, or the goroutine that
+	// subsequently adopted it through Span.UpdateGoroutineIDToCurrent()).
+	goroutineID uint64
 
 	// parent is the span's local parent, if any. parent is not set if the span is
 	// a root or the parent span is remote.
@@ -531,7 +534,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		TraceID:        s.traceID,
 		SpanID:         s.spanID,
 		ParentSpanID:   s.parentSpanID,
-		GoroutineID:    s.goroutineID,
+		GoroutineID:    s.mu.goroutineID,
 		Operation:      s.operation,
 		StartTime:      s.startTime,
 		Duration:       s.mu.duration,
@@ -729,6 +732,13 @@ func (s *crdbSpan) withLock(f func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	f()
+}
+
+// setGoroutineID updates the span's goroutine ID.
+func (s *crdbSpan) setGoroutineID(gid int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.goroutineID = uint64(gid)
 }
 
 var sortPool = sync.Pool{
