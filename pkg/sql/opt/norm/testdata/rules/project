@@ -1188,6 +1188,49 @@ project
  └── projections
       └── column1:1 + 10 [as="?column?":2, outer=(1), immutable]
 
+exec-ddl
+CREATE TABLE assn_cast_ints (
+  a INT2,
+  b INT,
+  c INT2,
+  d INT
+)
+----
+
+# Do not push assignment casts into values when the casted column is also a
+# passthrough column.
+norm
+INSERT INTO assn_cast_ints (a, b, c)
+SELECT tmp.b, tmp.b, tmp.d FROM assn_cast_ints AS tmp
+WHERE false
+----
+insert assn_cast_ints
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column15:15 => assn_cast_ints.a:1
+ │    ├── tmp.b:9 => assn_cast_ints.b:2
+ │    ├── column16:16 => assn_cast_ints.c:3
+ │    ├── d_default:17 => assn_cast_ints.d:4
+ │    └── rowid_default:18 => assn_cast_ints.rowid:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: d_default:17 rowid_default:18 column15:15!null tmp.b:9!null column16:16!null
+      ├── cardinality: [0 - 0]
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(9,15-18)
+      ├── values
+      │    ├── columns: tmp.b:9!null column16:16!null
+      │    ├── cardinality: [0 - 0]
+      │    ├── key: ()
+      │    └── fd: ()-->(9,16)
+      └── projections
+           ├── CAST(NULL AS INT8) [as=d_default:17]
+           ├── unique_rowid() [as=rowid_default:18, volatile]
+           └── assignment-cast: INT2 [as=column15:15, outer=(9), immutable]
+                └── tmp.b:9
+
 # --------------------------------------------------
 # FoldJSONAccessIntoValues
 # --------------------------------------------------

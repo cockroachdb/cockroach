@@ -184,7 +184,10 @@ $input
     $passthrough:* &
         ^(ColsAreEmpty
             $castCols:(IntersectionCols
-                (AssignmentCastCols $projections)
+                (DifferenceCols
+                    (AssignmentCastCols $projections)
+                    $passthrough
+                )
                 (OutputCols $input)
             )
         )
