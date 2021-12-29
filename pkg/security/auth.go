@@ -157,7 +157,9 @@ func IsTenantCertificate(cert *x509.Certificate) bool {
 
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
-func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
+func UserAuthPasswordHook(
+	insecureMode bool, password string, hashedPassword PasswordHash,
+) UserAuthHook {
 	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) error {
 		if systemIdentity.Undefined() {
 			return errors.New("user is missing")
@@ -172,15 +174,24 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 		}
 
 		// If the requested user has an empty password, disallow authentication.
-		if len(password) == 0 || CompareHashAndPassword(ctx, hashedPassword, password) != nil {
-			return errors.Errorf(ErrPasswordUserAuthFailed, systemIdentity)
+		if len(password) == 0 {
+			return NewErrPasswordUserAuthFailed(systemIdentity)
+		}
+		ok, err := CompareHashAndCleartextPassword(ctx, hashedPassword, password)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return NewErrPasswordUserAuthFailed(systemIdentity)
 		}
 
 		return nil
 	}
 }
 
-// ErrPasswordUserAuthFailed is the error template for failed password auth
-// of a user. It should be used when the password is incorrect or the user
-// does not exist.
-const ErrPasswordUserAuthFailed = "password authentication failed for user %s"
+// NewErrPasswordUserAuthFailed constructs an error that represents
+// failed password authentication for a user. It should be used when
+// the password is incorrect or the user does not exist.
+func NewErrPasswordUserAuthFailed(username SQLUsername) error {
+	return errors.Newf("password authentication failed for user %s", username)
+}
