@@ -80,7 +80,7 @@ func GetUserSessionInitInfo(
 	isSuperuser bool,
 	validUntil *tree.DTimestamp,
 	defaultSettings []sessioninit.SettingsCacheEntry,
-	pwRetrieveFn func(ctx context.Context) (hashedPassword []byte, err error),
+	pwRetrieveFn func(ctx context.Context) (hashedPassword security.PasswordHash, err error),
 	err error,
 ) {
 	// We may be operating with a timeout.
@@ -103,19 +103,20 @@ func GetUserSessionInitInfo(
 		// As explained above, for root we report that the user exists
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
-		rootFn := func(ctx context.Context) ([]byte, error) {
-			var ret []byte
-			if err := runFn(func(ctx context.Context) error {
+		rootFn := func(ctx context.Context) (security.PasswordHash, error) {
+			var ret security.PasswordHash
+			err := runFn(func(ctx context.Context) error {
 				authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, ie, username, databaseName)
 				if err != nil {
 					return err
 				}
 				ret = authInfo.HashedPassword
 				return nil
-			}); err != nil {
-				return nil, err
+			})
+			if ret == nil {
+				ret = security.MissingPasswordHash
 			}
-			return ret, nil
+			return ret, err
 		}
 
 		// Root user cannot have password expiry and must have login.
@@ -167,8 +168,12 @@ func GetUserSessionInitInfo(
 		isSuperuser,
 		authInfo.ValidUntil,
 		settingsEntries,
-		func(ctx context.Context) ([]byte, error) {
-			return authInfo.HashedPassword, nil
+		func(ctx context.Context) (security.PasswordHash, error) {
+			ret := authInfo.HashedPassword
+			if ret == nil {
+				ret = security.MissingPasswordHash
+			}
+			return ret, nil
 		},
 		err
 }
@@ -227,17 +232,19 @@ func retrieveAuthInfo(
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getHashedPassword, username)
 	if err != nil {
-		return sessioninit.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", username)
+		return aInfo, errors.Wrapf(err, "error looking up user %s", username)
 	}
+	var hashedPassword []byte
 	if values != nil {
 		aInfo.UserExists = true
 		if v := values[0]; v != tree.DNull {
-			aInfo.HashedPassword = []byte(*(v.(*tree.DBytes)))
+			hashedPassword = []byte(*(v.(*tree.DBytes)))
 		}
 	}
+	aInfo.HashedPassword = security.LoadPasswordHash(ctx, hashedPassword)
 
 	if !aInfo.UserExists {
-		return sessioninit.AuthInfo{}, nil
+		return aInfo, nil
 	}
 
 	// None of the rest of the role options are relevant for root.
@@ -256,7 +263,7 @@ func retrieveAuthInfo(
 		username,
 	)
 	if err != nil {
-		return sessioninit.AuthInfo{}, errors.Wrapf(err, "error looking up user %s", username)
+		return aInfo, errors.Wrapf(err, "error looking up user %s", username)
 	}
 	// We have to make sure to close the iterator since we might return from
 	// the for loop early (before Next() returns false).
@@ -283,7 +290,7 @@ func retrieveAuthInfo(
 				timeCtx := tree.NewParseTimeContext(timeutil.Now())
 				aInfo.ValidUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
 				if err != nil {
-					return sessioninit.AuthInfo{}, errors.Wrap(err,
+					return aInfo, errors.Wrap(err,
 						"error trying to parse timestamp while retrieving password valid until value")
 				}
 			}
