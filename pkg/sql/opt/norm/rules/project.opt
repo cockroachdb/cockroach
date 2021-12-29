@@ -177,6 +177,11 @@ $input
 # This allows other rules to fire, with the ultimate goal of eliminating the
 # project so that the insert fast-path optimization is used in more cases and
 # uniqueness checks for gen_random_uuid() values are eliminated in more cases.
+#
+# Assignment casts in projections cannot be pushed into values expressions if
+# the casted column is referenced in another projection expression
+# (AssignmentCastCols ensures this) or if the casted column also a passthrough
+# column (notice the DifferenceCols function).
 [PushAssignmentCastsIntoValues, Normalize]
 (Project
     $input:(Values)
@@ -184,7 +189,10 @@ $input
     $passthrough:* &
         ^(ColsAreEmpty
             $castCols:(IntersectionCols
-                (AssignmentCastCols $projections)
+                (DifferenceCols
+                    (AssignmentCastCols $projections)
+                    $passthrough
+                )
                 (OutputCols $input)
             )
         )
