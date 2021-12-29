@@ -130,31 +130,38 @@ func isMD5Hash(hashedPassword []byte) bool {
 // Return values:
 // - isPreHashed indicates whether the password is already hashed.
 // - supportedScheme indicates whether the scheme is currently supported
-//   for authentication.
+//   for authentication. If false, issueLink indicates which github
+//   issue to report in the error message.
 // - schemeName is the name of the hashing scheme, for inclusion
 //   in error messages (no guarantee is made of stability of this string).
 // - hashedPassword is a translated version from the input,
 //   suitable for storage in the password database.
 func CheckPasswordHashValidity(
 	ctx context.Context, inputPassword []byte,
-) (isPreHashed, supportedScheme bool, schemeName string, hashedPassword []byte, err error) {
+) (
+	isPreHashed, supportedScheme bool,
+	issueLink int,
+	schemeName string,
+	hashedPassword []byte,
+	err error,
+) {
 	if isBcryptHash(inputPassword) {
 		// Trim the "CRDB-BCRYPT" prefix. We trim this because previous version
 		// CockroachDB nodes do not understand the prefix when stored.
 		hashedPassword = inputPassword[len(crdbBcryptPrefix):]
 		// The bcrypt.Cost() function parses the hash and checks its syntax.
 		_, err = bcrypt.Cost(hashedPassword)
-		return true, true, "crdb-bcrypt", hashedPassword, err
+		return true, true, 0, "crdb-bcrypt", hashedPassword, err
 	}
 	if isSCRAMHash(inputPassword) {
-		return true, false /* unsupported yet */, "scram-sha-256", inputPassword, nil
+		return true, false /* unsupported yet */, 42519, "scram-sha-256", inputPassword, nil
 	}
 	if isMD5Hash(inputPassword) {
 		// See: https://github.com/cockroachdb/cockroach/issues/73337
-		return true, false /* not supported */, "md5", inputPassword, nil
+		return true, false /* not supported */, 73337 /* issueLink */, "md5", inputPassword, nil
 	}
 
-	return false, false, "", inputPassword, nil
+	return false, false, 0, "", inputPassword, nil
 }
 
 // MinPasswordLength is the cluster setting that configures the
