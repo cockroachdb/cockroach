@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"regexp"
 	"runtime"
+	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -57,6 +58,9 @@ var BcryptCost = settings.RegisterIntSetting(
 
 // BcryptCostSettingName is the name of the cluster setting BcryptCost.
 const BcryptCostSettingName = "server.user_login.password_hashes.default_cost.crdb_bcrypt"
+
+const scramMinCost = 4096         // as per RFC 5802.
+const scramMaxCost = 240000000000 // arbitrary value to prevent unreasonably long logins.
 
 // ErrEmptyPassword indicates that an empty password was attempted to be set.
 var ErrEmptyPassword = errors.New("empty passwords are not permitted")
@@ -123,8 +127,20 @@ const crdbBcryptPrefix = "CRDB-BCRYPT"
 // "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 var bcryptHashRe = regexp.MustCompile(`^` + crdbBcryptPrefix + `\$\d[a-z]?\$\d\d\$[0-9A-Za-z\./]{22}[0-9A-Za-z\./]+$`)
 
-func isBcryptHash(hashedPassword []byte) bool {
-	return bcryptHashRe.Match(hashedPassword)
+func isBcryptHash(inputPassword []byte) bool {
+	return bcryptHashRe.Match(inputPassword)
+}
+
+func checkBcryptHash(inputPassword []byte) (ok bool, hashedPassword []byte, err error) {
+	if !isBcryptHash(inputPassword) {
+		return false, nil, nil
+	}
+	// Trim the "CRDB-BCRYPT" prefix. We trim this because previous version
+	// CockroachDB nodes do not understand the prefix when stored.
+	hashedPassword = inputPassword[len(crdbBcryptPrefix):]
+	// The bcrypt.Cost() function parses the hash and checks its syntax.
+	_, err = bcrypt.Cost(hashedPassword)
+	return true, hashedPassword, err
 }
 
 // scramHashRe matches the lexical structure of PostgreSQL's
@@ -135,10 +151,27 @@ func isBcryptHash(hashedPassword []byte) bool {
 // "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 // The salt must have size >0; the server key pair is two times 32 bytes,
 // which always encode to 44 base64 characters.
-var scramHashRe = regexp.MustCompile(`^SCRAM-SHA-256\$\d+:[A-Za-z0-9+/]+=*\$[A-Za-z0-9+/]{43}=:[A-Za-z0-9+/]{43}=$`)
+var scramHashRe = regexp.MustCompile(`^SCRAM-SHA-256\$(\d+):([A-Za-z0-9+/]+=*)\$([A-Za-z0-9+/]{43}=):([A-Za-z0-9+/]{43}=)$`)
 
-func isSCRAMHash(hashedPassword []byte) bool {
-	return scramHashRe.Match(hashedPassword)
+func isSCRAMHash(inputPassword []byte) (bool, [][]byte) {
+	parts := scramHashRe.FindSubmatch(inputPassword)
+	return parts != nil, parts
+}
+
+func checkSCRAMHash(inputPassword []byte) (ok bool, hashedPassword []byte, err error) {
+	ok, parts := isSCRAMHash(inputPassword)
+	if !ok {
+		return false, nil, nil
+	}
+	iters, err := strconv.ParseInt(string(parts[1]), 10, 64)
+	if err != nil {
+		return true, nil, errors.Wrap(err, "invalid scram-sha-256 iteration count")
+	}
+
+	if iters < scramMinCost || iters > scramMaxCost {
+		return true, nil, errors.Newf("scram-sha-256 iteration count not in allowed range (%d,%d)", scramMinCost, scramMaxCost)
+	}
+	return true, inputPassword, nil
 }
 
 func isMD5Hash(hashedPassword []byte) bool {
@@ -169,16 +202,12 @@ func CheckPasswordHashValidity(
 	hashedPassword []byte,
 	err error,
 ) {
-	if isBcryptHash(inputPassword) {
-		// Trim the "CRDB-BCRYPT" prefix. We trim this because previous version
-		// CockroachDB nodes do not understand the prefix when stored.
-		hashedPassword = inputPassword[len(crdbBcryptPrefix):]
-		// The bcrypt.Cost() function parses the hash and checks its syntax.
-		_, err = bcrypt.Cost(hashedPassword)
+	if ok, hashedPassword, err := checkBcryptHash(inputPassword); ok {
 		return true, true, 0, "crdb-bcrypt", hashedPassword, err
 	}
-	if isSCRAMHash(inputPassword) {
-		return true, false /* unsupported yet */, 42519 /* issueNum */, "scram-sha-256", inputPassword, nil
+	if ok, hashedPassword, err := checkSCRAMHash(inputPassword); ok {
+
+		return true, true, 0, "scram-sha-256", hashedPassword, err
 	}
 	if isMD5Hash(inputPassword) {
 		// See: https://github.com/cockroachdb/cockroach/issues/73337
