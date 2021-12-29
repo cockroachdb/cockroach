@@ -61,6 +61,7 @@ type AlterTableCmd interface {
 
 func (*AlterTableAddColumn) alterTableCmd()          {}
 func (*AlterTableAddConstraint) alterTableCmd()      {}
+func (*AlterTableAlterColumnAfter) alterTableCmd()   {}
 func (*AlterTableAlterColumnType) alterTableCmd()    {}
 func (*AlterTableAlterPrimaryKey) alterTableCmd()    {}
 func (*AlterTableDropColumn) alterTableCmd()         {}
@@ -81,6 +82,7 @@ func (*AlterTableInjectStats) alterTableCmd()        {}
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
 var _ AlterTableCmd = &AlterTableAlterColumnType{}
+var _ AlterTableCmd = &AlterTableAlterColumnAfter{}
 var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
@@ -251,6 +253,30 @@ func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
 // GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableAlterColumnType) GetColumn() Name {
 	return node.Column
+}
+
+// AlterTableAlterColumnAfter represents an ALTER TABLE ALTER COLUMN [COLUMN] AFTER [COLUMN]
+type AlterTableAlterColumnAfter struct {
+	Column      Name
+	ColumnAfter Name
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableAlterColumnAfter) GetColumn() Name {
+	return node.Column
+}
+
+// TelemetryCounter implements the AlterTableCmd interface.
+func (node *AlterTableAlterColumnAfter) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "alter_column_after")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableAlterColumnAfter) Format(ctx *FmtCtx) {
+	ctx.WriteString(" MOVE COLUMN ")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" AFTER ")
+	ctx.FormatNode(&node.ColumnAfter)
 }
 
 // AlterTableAlterPrimaryKey represents an ALTER TABLE ALTER PRIMARY KEY command.
