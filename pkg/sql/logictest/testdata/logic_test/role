@@ -1428,8 +1428,7 @@ CREATE USER hash2 WITH PASSWORD 'md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 let $scram_pw
 SELECT 'SCRAM-SHA-256$'||'4096:B5VaTCvCLDzZxSYL829oVA==$'||'3Ako3mNxNtdsaSOJl0Av3i6vyV2OiSP9Ly7famdFSbw=:d7BfSmrtjwbF74mSoOhQiDSpoIvlakXKdpBNb3Meunc='
 
-# Refers to https://github.com/cockroachdb/cockroach/issues/42519
-statement error pgcode 0A000 hash scheme "scram-sha-256" is not supported.*\nHINT.*\n.*42519
+statement ok
 CREATE USER hash3 WITH PASSWORD '$scram_pw'
 
 
@@ -1452,6 +1451,7 @@ query TTB
 SELECT username, substr("hashedPassword", 1, 7), 'CRDB-BCRYPT'||"hashedPassword" = '$bcrypt_pw' FROM system.users WHERE username LIKE 'hash%' ORDER BY 1
 ----
 hash1  $2a$10$  true
+hash3  SCRAM-S  false
 hash4  $2a$10$  false
 hash5  $2a$10$  false
 hash6  $2a$10$  false
