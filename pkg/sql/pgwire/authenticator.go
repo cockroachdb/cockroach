@@ -31,7 +31,7 @@ type Authenticator = func(
 // and expiration time for a user logging in with password-based
 // authentication.
 type PasswordRetrievalFn = func(context.Context) (
-	pwHash []byte,
+	pwHash security.PasswordHash,
 	pwExpiration *tree.DTimestamp,
 	_ error,
 )

@@ -164,10 +164,17 @@ func TestVerifyPassword(t *testing.T) {
 				)
 			}
 
-			err = security.CompareHashAndPassword(ctx, hashedPassword, tc.password)
-			if err != nil {
-				valid = false
-				validDBConsole = false
+			if exists && (canLoginSQL || canLoginDBConsole) {
+				pwCheck, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
+				if err != nil {
+					t.Error(err)
+					valid = false
+					validDBConsole = false
+				}
+				if !pwCheck {
+					valid = false
+					validDBConsole = false
+				}
 			}
 
 			if validUntil != nil {
@@ -190,7 +197,7 @@ func TestVerifyPassword(t *testing.T) {
 					"db console credentials %s/%s valid = %t, wanted %t",
 					tc.username,
 					tc.password,
-					valid,
+					validDBConsole,
 					tc.shouldAuthenticateDBConsole,
 				)
 			}

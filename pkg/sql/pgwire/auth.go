@@ -163,10 +163,9 @@ func (c *conn) handleAuthentication(
 
 	if !exists {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, nil)
-		return connClose, sendError(pgerror.Newf(
+		return connClose, sendError(pgerror.WithCandidateCode(
+			security.NewErrPasswordUserAuthFailed(dbUser),
 			pgcode.InvalidAuthorizationSpecification,
-			security.ErrPasswordUserAuthFailed,
-			dbUser,
 		))
 	}
 
@@ -180,7 +179,7 @@ func (c *conn) handleAuthentication(
 	}
 
 	// Set up lazy provider for password or cert-password methods.
-	pwDataFn := func(ctx context.Context) ([]byte, *tree.DTimestamp, error) {
+	pwDataFn := func(ctx context.Context) (security.PasswordHash, *tree.DTimestamp, error) {
 		pwHash, err := pwRetrievalFn(ctx)
 		return pwHash, validUntil, err
 	}
