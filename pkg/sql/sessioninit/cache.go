@@ -62,7 +62,7 @@ type AuthInfo struct {
 	// CanLogin is set to false if the user has the NOLOGIN role option.
 	CanLogin bool
 	// HashedPassword is the hashed password and can be nil.
-	HashedPassword []byte
+	HashedPassword security.PasswordHash
 	// ValidUntil is the VALID UNTIL role option.
 	ValidUntil *tree.DTimestamp
 }
@@ -221,8 +221,14 @@ func (a *Cache) writeAuthInfoBackToCache(
 	const sizeOfUsername = int(unsafe.Sizeof(security.SQLUsername{}))
 	const sizeOfAuthInfo = int(unsafe.Sizeof(AuthInfo{}))
 	const sizeOfTimestamp = int(unsafe.Sizeof(tree.DTimestamp{}))
+
+	hpSize := 0
+	if aInfo.HashedPassword != nil {
+		hpSize = aInfo.HashedPassword.Size()
+	}
+
 	sizeOfEntry := sizeOfUsername + len(username.Normalized()) +
-		sizeOfAuthInfo + len(aInfo.HashedPassword) +
+		sizeOfAuthInfo + hpSize +
 		sizeOfTimestamp
 	if err := a.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
 		// If there is no memory available to cache the entry, we can still
