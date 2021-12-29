@@ -50,6 +50,7 @@ type versionInfo struct {
 type UpdateChecker struct {
 	StartTime  time.Time
 	AmbientCtx *log.AmbientContext
+	Stopper    *stop.Stopper
 	Config     *base.Config
 	Settings   *cluster.Settings
 
@@ -71,8 +72,8 @@ type UpdateChecker struct {
 
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates.
-func (u *UpdateChecker) PeriodicallyCheckForUpdates(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
+func (u *UpdateChecker) PeriodicallyCheckForUpdates(ctx context.Context) {
+	_ = u.Stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: "update-checker",
 		SpanOpt:  stop.SterileRootSpan,
 	}, func(ctx context.Context) {
@@ -89,7 +90,7 @@ func (u *UpdateChecker) PeriodicallyCheckForUpdates(ctx context.Context, stopper
 
 			timer.Reset(addJitter(nextUpdateCheck.Sub(timeutil.Now())))
 			select {
-			case <-stopper.ShouldQuiesce():
+			case <-u.Stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
 				timer.Read = true
@@ -103,7 +104,8 @@ func (u *UpdateChecker) PeriodicallyCheckForUpdates(ctx context.Context, stopper
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
 func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
-	ctx, span := u.AmbientCtx.AnnotateCtxWithSpan(ctx, "version update check")
+	ctx = u.AmbientCtx.AnnotateCtx(ctx)
+	ctx, span := u.Stopper.Tracer().EnsureChildSpan(ctx, "version update check")
 	defer span.Finish()
 
 	url := u.buildUpdatesURL(ctx)

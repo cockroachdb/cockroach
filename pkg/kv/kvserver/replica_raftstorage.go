@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -412,6 +412,7 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 func (r *Replica) GetSnapshot(
 	ctx context.Context, snapType SnapshotRequest_Type, recipientStore roachpb.StoreID,
 ) (_ *OutgoingSnapshot, err error) {
+	ctx = r.AnnotateCtx(ctx)
 	snapUUID := uuid.MakeV4()
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
@@ -442,7 +443,7 @@ func (r *Replica) GetSnapshot(
 	rangeID := r.RangeID
 
 	startKey := r.mu.state.Desc.StartKey
-	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
+	ctx, sp := r.store.stopper.Tracer().EnsureChildSpan(ctx, "snapshot")
 	defer sp.Finish()
 
 	log.Eventf(ctx, "new engine snapshot for replica %s", r)

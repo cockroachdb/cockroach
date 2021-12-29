@@ -1247,6 +1247,11 @@ type VersionUpgradeHook func(
 	updateSystemVersionSetting UpdateVersionSystemSettingHook,
 ) error
 
+// Tracer returns the tracer for this config.
+func (cfg *ExecutorConfig) Tracer() *tracing.Tracer {
+	return cfg.RPCContext.Stopper.Tracer()
+}
+
 // Organization returns the value of cluster.organization.
 func (cfg *ExecutorConfig) Organization() string {
 	return ClusterOrganization.Get(&cfg.Settings.SV)
@@ -2100,7 +2105,7 @@ func (st *SessionTracing) StartTracing(
 		opName := "session recording"
 		newConnCtx, st.connSpan = tracing.EnsureChildSpan(
 			connCtx,
-			st.ex.server.cfg.AmbientCtx.Tracer,
+			st.ex.server.cfg.Tracer(),
 			opName,
 			tracing.WithForceRealSpan(),
 		)
@@ -2121,7 +2126,7 @@ func (st *SessionTracing) StartTracing(
 		sp.Finish()
 
 		st.ex.state.Ctx, _ = tracing.EnsureChildSpan(
-			newConnCtx, st.ex.server.cfg.AmbientCtx.Tracer, "session tracing")
+			newConnCtx, st.ex.server.cfg.Tracer(), "session tracing")
 	}
 
 	st.enabled = true

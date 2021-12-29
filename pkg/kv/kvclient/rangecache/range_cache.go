@@ -176,13 +176,9 @@ func makeLookupRequestKey(
 // NewRangeCache returns a new RangeCache which uses the given RangeDescriptorDB
 // as the underlying source of range descriptors.
 func NewRangeCache(
-	st *cluster.Settings,
-	db RangeDescriptorDB,
-	size func() int64,
-	stopper *stop.Stopper,
-	tracer *tracing.Tracer,
+	st *cluster.Settings, db RangeDescriptorDB, size func() int64, stopper *stop.Stopper,
 ) *RangeCache {
-	rdc := &RangeCache{st: st, db: db, stopper: stopper, tracer: tracer}
+	rdc := &RangeCache{st: st, db: db, stopper: stopper, tracer: stopper.Tracer()}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {

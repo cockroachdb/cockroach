@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -182,6 +183,7 @@ type HeartbeatCallback func(context.Context)
 // TODO(bdarnell): Also document interaction with draining and decommissioning.
 type NodeLiveness struct {
 	ambientCtx        log.AmbientContext
+	tracer            *tracing.Tracer
 	clock             *hlc.Clock
 	db                *kv.DB
 	gossip            *gossip.Gossip
@@ -262,6 +264,7 @@ type Record struct {
 // be moved back and forth.
 type NodeLivenessOptions struct {
 	AmbientCtx              log.AmbientContext
+	Tracer                  *tracing.Tracer
 	Settings                *cluster.Settings
 	Gossip                  *gossip.Gossip
 	Clock                   *hlc.Clock
@@ -282,6 +285,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 	nl := &NodeLiveness{
 		ambientCtx:           opts.AmbientCtx,
 		clock:                opts.Clock,
+		tracer:               opts.Tracer,
 		db:                   opts.DB,
 		gossip:               opts.Gossip,
 		livenessThreshold:    opts.LivenessThreshold,
@@ -722,9 +726,10 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 	_ = opts.Stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "liveness-hb", SpanOpt: stop.SterileRootSpan}, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("liveness-hb", nil)
+		ctx = ambient.AnnotateCtx(ctx)
 		ctx, cancel := opts.Stopper.WithCancelOnQuiesce(context.Background())
 		defer cancel()
-		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+		ctx, sp := opts.Stopper.Tracer().EnsureChildSpan(ctx, "liveness heartbeat loop")
 		defer sp.Finish()
 
 		incrementEpoch := true
@@ -860,7 +865,9 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness livenesspb.Liven
 func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, oldLiveness livenesspb.Liveness, incrementEpoch bool,
 ) (err error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
+	ctx = nl.ambientCtx.AnnotateCtx(ctx)
+	ctx = logtags.AddTag(ctx, "node-liveness-heartbeat", nil)
+	ctx, sp := nl.tracer.EnsureChildSpan(ctx, "liveness heartbeat")
 	defer sp.Finish()
 	defer func(start time.Time) {
 		dur := timeutil.Since(start)

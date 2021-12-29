@@ -257,8 +257,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	st := cfg.Settings
 
-	if cfg.AmbientCtx.Tracer == nil {
-		panic(errors.New("no tracer set in AmbientCtx"))
+	if cfg.Tracer == nil {
+		panic(errors.New("no tracer set in BaseConfig"))
 	}
 
 	var clock *hlc.Clock
@@ -278,8 +278,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	registry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
-	stopper.SetTracer(cfg.AmbientCtx.Tracer)
-	stopper.AddCloser(cfg.AmbientCtx.Tracer)
+	stopper.SetTracer(cfg.Tracer)
+	stopper.AddCloser(cfg.Tracer)
 
 	// Add a dynamic log tag value for the node ID.
 	//
@@ -511,6 +511,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
+		Tracer:                  stopper.Tracer(),
 		Clock:                   clock,
 		DB:                      db,
 		Gossip:                  g,
@@ -688,6 +689,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	updates := &diagnostics.UpdateChecker{
 		StartTime:     timeutil.Now(),
 		AmbientCtx:    &cfg.AmbientCtx,
+		Stopper:       stopper,
 		Config:        cfg.BaseConfig.Config,
 		Settings:      cfg.Settings,
 		ClusterID:     cfg.ClusterIDContainer.Get,
@@ -777,7 +779,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	kvProber := kvprober.NewProber(kvprober.Opts{
-		Tracer:                  cfg.AmbientCtx.Tracer,
+		Tracer:                  stopper.Tracer(),
 		DB:                      db,
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
@@ -891,13 +893,6 @@ func (s *Server) ClusterSettings() *cluster.Settings {
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
 func (s *Server) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
-}
-
-// AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
-func (s *Server) AnnotateCtxWithSpan(
-	ctx context.Context, opName string,
-) (context.Context, *tracing.Span) {
-	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
 // ClusterID returns the ID of the cluster this server is a part of.
@@ -2805,7 +2800,7 @@ func (s *Server) PGServer() *pgwire.Server {
 // NOTE: This is not called in PreStart so that it's disabled by default for
 // testing.
 func (s *Server) StartDiagnostics(ctx context.Context) {
-	s.updates.PeriodicallyCheckForUpdates(ctx, s.stopper)
+	s.updates.PeriodicallyCheckForUpdates(ctx)
 	s.sqlServer.StartDiagnostics(ctx)
 }
 

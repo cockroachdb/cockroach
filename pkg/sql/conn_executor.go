@@ -794,7 +794,7 @@ func (s *Server) newConnExecutor(
 			clock:        s.cfg.Clock,
 			// Future transaction's monitors will inherits from sessionRootMon.
 			connMon:          sessionRootMon,
-			tracer:           s.cfg.AmbientCtx.Tracer,
+			tracer:           s.cfg.Tracer(),
 			settings:         s.cfg.Settings,
 			execTestingKnobs: s.GetExecutorConfig().TestingKnobs,
 		},
@@ -1700,7 +1700,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 
 	// Ensure that every statement has a tracing span set up.
 	ctx, sp := tracing.EnsureChildSpan(
-		ctx, ex.server.cfg.AmbientCtx.Tracer,
+		ctx, ex.server.cfg.Tracer(),
 		// We print the type of command, not the String() which includes long
 		// statements.
 		cmd.command())

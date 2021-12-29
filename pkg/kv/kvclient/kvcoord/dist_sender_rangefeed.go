@@ -59,7 +59,7 @@ func (ds *DistSender) RangeFeed(
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
+	ctx, sp := tracing.EnsureChildSpan(ctx, ds.rpcContext.Stopper.Tracer(), "dist sender")
 	defer sp.Finish()
 
 	rr := newRangeFeedRegistry(ctx, startFrom, withDiff)

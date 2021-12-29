@@ -238,11 +238,10 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
-	tracer := tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV))
 	sc := StoreConfig{
 		DefaultSpanConfig:           zonepb.DefaultZoneConfigRef().AsSpanConfig(),
 		Settings:                    st,
-		AmbientCtx:                  log.MakeTestingAmbientContext(tracer),
+		AmbientCtx:                  log.MakeTestingAmbientContext(),
 		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		ScanInterval:                10 * time.Minute,
@@ -1091,7 +1090,7 @@ func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval >= 0 &&
-		sc.AmbientCtx.Tracer != nil
+		sc.RPCContext.Stopper.Tracer() != nil
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
@@ -3228,7 +3227,8 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 // carrying out any changes, returning all trace messages collected along the way.
 // Intended to help power a debug endpoint.
 func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Recording, error) {
-	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator dry run")
+	tr := s.cfg.RPCContext.Stopper.Tracer()
+	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "allocator dry run")
 	defer collectAndFinish()
 	canTransferLease := func(ctx context.Context, repl *Replica) bool { return true }
 	_, err := s.replicateQueue.processOneChange(
@@ -3287,7 +3287,7 @@ func (s *Store) ManuallyEnqueue(
 	}
 
 	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(
-		ctx, s.cfg.AmbientCtx.Tracer, fmt.Sprintf("manual %s queue run", queueName))
+		ctx, s.cfg.RPCContext.Stopper.Tracer(), fmt.Sprintf("manual %s queue run", queueName))
 	defer collectAndFinish()
 
 	if !skipShouldQueue {

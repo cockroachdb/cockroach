@@ -67,7 +67,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 			Metrics:  &mt,
 			NodeID:   base.TestingIDContainer,
 		},
-		flowinfra.NewFlowScheduler(log.MakeTestingAmbientCtxWithNewTracer(), stopper, st),
+		flowinfra.NewFlowScheduler(log.MakeTestingAmbientContext(), stopper, st),
 	)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)

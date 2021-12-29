@@ -8434,7 +8434,7 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	}
 	r.mu.Unlock()
 
-	tr := tc.store.cfg.AmbientCtx.Tracer
+	tr := tc.store.stopper.Tracer()
 	opCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 	defer getRecAndFinish()
 
@@ -12564,9 +12564,8 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// applied at a time, which makes it easier to line up the timing of reproposals.
 	cfg.RaftMaxCommittedSizePerReady = 1
 	// Set up tracing.
-	tracer := tracing.NewTracer()
+	tracer := stopper.Tracer()
 	tracer.Configure(ctx, &cfg.Settings.SV)
-	cfg.AmbientCtx.Tracer = tracer
 
 	// Below we set txnID to the value of the transaction we're going to force to
 	// be proposed multiple times.
@@ -12637,7 +12636,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// the proposal map. Entries are only removed from that map underneath raft.
 	tc.repl.RaftLock()
 	_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	sp := cfg.AmbientCtx.Tracer.StartSpan("replica send", tracing.WithForceRealSpan())
+	sp := stopper.Tracer().StartSpan("replica send", tracing.WithForceRealSpan())
 	tracedCtx := tracing.ContextWithSpan(ctx, sp)
 	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), st, uncertainty.Interval{}, tok)
 	if pErr != nil {

@@ -195,7 +195,7 @@ func (p *poller) poll() {
 		}
 
 		const opName = "ts-poll"
-		ctx, span := p.AnnotateCtxWithSpan(ctx, opName)
+		ctx, span := p.stopper.Tracer().EnsureChildSpan(ctx, opName)
 		defer span.Finish()
 		if err := contextutil.RunWithTimeout(ctx, opName, storeDataTimeout,
 			func(ctx context.Context) error {

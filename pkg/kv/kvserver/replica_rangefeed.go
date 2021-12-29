@@ -660,7 +660,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 		// Ignore the result of DoChan since, to keep this all async, it always
 		// returns nil and any errors are logged by the closure passed to the
 		// `DoChan` call.
-		taskCtx, sp := tracing.EnsureForkSpan(ctx, r.AmbientContext.Tracer, key)
+		taskCtx, sp := tracing.EnsureForkSpan(ctx, r.store.stopper.Tracer(), key)
 		_, leader := m.RangeFeedSlowClosedTimestampNudge.DoChan(key, func() (interface{}, error) {
 			defer sp.Finish()
 			// Also ignore the result of RunTask, since it only returns errors when

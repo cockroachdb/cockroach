@@ -751,7 +751,7 @@ func TestStoreTimeSeries(t *testing.T) {
 func TestPollSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
-		tr := tm.Cfg.AmbientCtx.Tracer
+		tr := tm.Stopper().Tracer()
 		testSource := modelDataSource{
 			model:   tm,
 			r:       Resolution10s,
@@ -777,7 +777,7 @@ func TestPollSource(t *testing.T) {
 			},
 		}
 
-		ambient := log.MakeTestingAmbientContext(tr)
+		ambient := log.MakeTestingAmbientContext()
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		<-testSource.stopper.IsStopped()
 		if a, e := testSource.calledCount, 2; a != e {
@@ -830,7 +830,7 @@ func TestDisableStorage(t *testing.T) {
 			},
 		}
 
-		ambient := log.MakeTestingAmbientCtxWithNewTracer()
+		ambient := log.MakeTestingAmbientContext()
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		select {
 		case <-testSource.stopper.IsStopped():

@@ -30,7 +30,7 @@ import (
 )
 
 func makeAmbCtx() log.AmbientContext {
-	return log.MakeTestingAmbientCtxWithNewTracer()
+	return log.MakeTestingAmbientContext()
 }
 
 // Test implementation of a range set backed by btree.BTree.

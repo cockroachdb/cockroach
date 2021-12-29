@@ -1269,6 +1269,14 @@ func EnsureChildSpan(
 	return ctx, sp
 }
 
+// EnsureChildSpan is a helper method that calls the
+// package-level EnsureChildSpan() with this tracer.
+func (t *Tracer) EnsureChildSpan(
+	ctx context.Context, name string, os ...SpanOption,
+) (context.Context, *Span) {
+	return EnsureChildSpan(ctx, t, name, os...)
+}
+
 var optsPool = sync.Pool{
 	New: func() interface{} {
 		// It is unusual to pass more than 5 SpanOptions.

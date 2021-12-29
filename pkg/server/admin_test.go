@@ -318,7 +318,8 @@ func TestAdminAPIDatabases(t *testing.T) {
 	ts := s.(*TestServer)
 
 	ac := ts.AmbientCtx()
-	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	ctx := ac.AnnotateCtx(context.Background())
+	ctx, span := s.Stopper().Tracer().EnsureChildSpan(ctx, "test")
 	defer span.Finish()
 
 	const testdb = "test"
@@ -656,7 +657,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 			schemaName := "testschema"
 
 			ac := ts.AmbientCtx()
-			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+			ctx := ac.AnnotateCtx(context.Background())
+			ctx, span := s.Stopper().Tracer().EnsureChildSpan(ctx, "test")
 			defer span.Finish()
 
 			tableSchema := `nulls_allowed INT8,
@@ -802,7 +804,8 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 
 	// Create database and table.
 	ac := ts.AmbientCtx()
-	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	ctx := ac.AnnotateCtx(context.Background())
+	ctx, span := s.Stopper().Tracer().EnsureChildSpan(ctx, "test")
 	defer span.Finish()
 	setupQueries := []string{
 		"CREATE DATABASE test",

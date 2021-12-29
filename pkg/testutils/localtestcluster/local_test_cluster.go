@@ -110,8 +110,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	manualClock := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manualClock.UnixNano, 50*time.Millisecond)
 	cfg := kvserver.TestStoreConfigWithRandomizedClusterSeparatedIntentsMigration(clock)
-	tr := cfg.AmbientCtx.Tracer
-	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
+	ltc.stopper = stop.NewStopper()
+	tr := ltc.stopper.Tracer()
 	ltc.Manual = manualClock
 	ltc.Clock = clock
 	ambient := cfg.AmbientCtx
@@ -154,7 +154,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
 
-	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
+	factory := initFactory(ctx, cfg.Settings, nodeDesc, tr, ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
 
 	var nodeIDContainer base.NodeIDContainer
 	nodeIDContainer.Set(context.Background(), nodeID)
@@ -165,7 +165,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		NodeID:       base.NewSQLIDContainerForNode(&nodeIDContainer),
 	}
 	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.dbContext)
-	transport := kvserver.NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	transport := kvserver.NewDummyRaftTransport(cfg.Settings, tr)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
 	if ltc.StoreTestingKnobs == nil {
@@ -180,6 +180,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
+		Tracer:                  ltc.stopper.Tracer(),
 		Clock:                   cfg.Clock,
 		DB:                      cfg.DB,
 		Gossip:                  cfg.Gossip,

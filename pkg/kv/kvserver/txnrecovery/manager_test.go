@@ -26,7 +26,7 @@ import (
 )
 
 func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
-	ac := log.MakeTestingAmbientCtxWithNewTracer()
+	ac := log.MakeTestingAmbientContext()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	db := kv.NewDB(ac, kv.NonTransactionalFactoryFunc(func(

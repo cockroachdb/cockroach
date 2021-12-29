@@ -1354,7 +1354,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
 		}
-		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
+		return p.ExecCfg().Tracer().VisitSpans(func(span tracing.RegistrySpan) error {
 			for _, rec := range span.GetFullRecording(tracing.RecordingVerbose) {
 				traceID := rec.TraceID
 				parentSpanID := rec.ParentSpanID
