@@ -717,7 +717,7 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 		// In particular, r.redirectOnOrAcquireLease() doesn't work because, if the
 		// current lease is invalid and the current replica is not a leader, the
 		// current replica will not take a lease.
-		log.VEventf(ctx, 2, "ensuring lease for rangefeed range. current lease invalid: %s", lease.Lease)
+		log.VEventf(ctx, 2, "ensuring lease for rangefeed range. current lease invalid: %s", &lease.Lease)
 		err := contextutil.RunWithTimeout(ctx, "read forcing lease acquisition", 5*time.Second,
 			func(ctx context.Context) error {
 				var b kv.Batch
