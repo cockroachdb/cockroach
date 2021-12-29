@@ -508,7 +508,7 @@ func (e *LeaseRejectedError) Error() string {
 }
 
 func (e *LeaseRejectedError) message(_ *Error) string {
-	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested.String(), e.Message)
+	return fmt.Sprintf("cannot replace lease %s with %s: %s", &e.Existing, e.Requested.String(), e.Message)
 }
 
 var _ ErrorDetailInterface = &LeaseRejectedError{}
