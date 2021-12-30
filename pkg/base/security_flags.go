@@ -130,6 +130,16 @@ func (o *SecurityOverrides) Set(v string) error {
 	return nil
 }
 
+// SetFlag sets a flag using a boolean.
+func (o *SecurityOverrides) SetFlag(flag SecurityOverrides, value bool) {
+	if value {
+		*o = *o | flag
+	} else {
+		*o = *o & ^flag
+	}
+	o.Validate()
+}
+
 // IsSet checks whether the given flags are all set.
 func (o SecurityOverrides) IsSet(flag SecurityOverrides) bool {
 	return o&flag == flag

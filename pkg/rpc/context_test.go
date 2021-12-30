@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1492,7 +1493,7 @@ func TestClusterNameMismatch(t *testing.T) {
 
 			serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
 			serverCtx.Config.ClusterName = c.serverName
-			serverCtx.Config.DisableClusterNameVerification = c.serverDisablePeerCheck
+			serverCtx.Config.SecurityOverrides.SetFlag(base.DisableClusterNameVerification, c.serverDisablePeerCheck)
 
 			s := newTestServer(t, serverCtx)
 			RegisterHeartbeatServer(s, &HeartbeatService{
@@ -1502,7 +1503,7 @@ func TestClusterNameMismatch(t *testing.T) {
 				nodeID:                         serverCtx.NodeID,
 				settings:                       serverCtx.Settings,
 				clusterName:                    serverCtx.Config.ClusterName,
-				disableClusterNameVerification: serverCtx.Config.DisableClusterNameVerification,
+				disableClusterNameVerification: serverCtx.Config.SecurityOverrides.IsSet(base.DisableClusterNameVerification),
 			})
 
 			ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1513,7 +1514,7 @@ func TestClusterNameMismatch(t *testing.T) {
 
 			clientCtx := newTestContext(serverCtx.ClusterID.Get(), clock, stopper)
 			clientCtx.Config.ClusterName = c.clientName
-			clientCtx.Config.DisableClusterNameVerification = c.clientDisablePeerCheck
+			clientCtx.Config.SecurityOverrides.SetFlag(base.DisableClusterNameVerification, c.clientDisablePeerCheck)
 
 			var wg sync.WaitGroup
 			for i := 0; i < 10; i++ {

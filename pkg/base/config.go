@@ -192,14 +192,6 @@ type Config struct {
 	// negotiated on both sides, the cluster name is not used any more.
 	ClusterName string
 
-	// DisableClusterNameVerification, when set, alters the cluster name
-	// verification to only verify that a non-empty cluster name on
-	// both sides match. This is meant for use while rolling an
-	// existing cluster into using a new cluster name.
-	//
-	// TODO(knz): Remove this once the SecurityOverrides are used throughout.
-	DisableClusterNameVerification bool
-
 	// SplitListenSQL indicates whether to listen for SQL
 	// clients on a separate address from RPC requests.
 	SplitListenSQL bool
@@ -278,7 +270,6 @@ func (cfg *Config) InitDefaults() {
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""
-	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
 	cfg.AcceptSQLWithoutTLS = false
 }
