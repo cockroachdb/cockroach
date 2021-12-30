@@ -145,6 +145,11 @@ type joinReader struct {
 	batchSizeBytes    int64
 	curBatchSizeBytes int64
 
+	// pendingRow tracks the row that has already been read from the input but
+	// was not included into the lookup batch because it would make the batch
+	// exceed batchSizeBytes.
+	pendingRow rowenc.EncDatumRow
+
 	// rowsRead is the total number of rows that this fetcher read from
 	// disk.
 	rowsRead int64
@@ -704,28 +709,48 @@ func (jr *joinReader) readInput() (
 	}
 
 	// Read the next batch of input rows.
-	for jr.curBatchSizeBytes < jr.batchSizeBytes {
-		row, meta := jr.input.Next()
-		if meta != nil {
-			if meta.Err != nil {
-				jr.MoveToDraining(nil /* err */)
-				return jrStateUnknown, nil, meta
-			}
+	for {
+		var encDatumRow rowenc.EncDatumRow
+		var rowSize int64
+		if jr.pendingRow == nil {
+			// There is no pending row, so we have to get the next one from the
+			// input.
+			var meta *execinfrapb.ProducerMetadata
+			encDatumRow, meta = jr.input.Next()
+			if meta != nil {
+				if meta.Err != nil {
+					jr.MoveToDraining(nil /* err */)
+					return jrStateUnknown, nil, meta
+				}
 
-			if err := jr.performMemoryAccounting(); err != nil {
-				jr.MoveToDraining(err)
-				return jrStateUnknown, nil, meta
-			}
+				if err := jr.performMemoryAccounting(); err != nil {
+					jr.MoveToDraining(err)
+					return jrStateUnknown, nil, meta
+				}
 
-			return jrReadingInput, nil, meta
+				return jrReadingInput, nil, meta
+			}
+			if encDatumRow == nil {
+				break
+			}
+			rowSize = int64(encDatumRow.Size())
+			if jr.curBatchSizeBytes > 0 && jr.curBatchSizeBytes+rowSize > jr.batchSizeBytes {
+				// Adding this row to the current batch will make the batch
+				// exceed jr.batchSizeBytes. Additionally, the batch is not
+				// empty, so we'll store this row as "pending" and will include
+				// it into the next batch.
+				jr.pendingRow = encDatumRow
+				break
+			}
+		} else {
+			encDatumRow = jr.pendingRow
+			jr.pendingRow = nil
+			rowSize = int64(encDatumRow.Size())
 		}
-		if row == nil {
-			break
-		}
-		jr.curBatchSizeBytes += int64(row.Size())
+		jr.curBatchSizeBytes += rowSize
 		if jr.groupingState != nil {
 			// Lookup Join.
-			if err := jr.processContinuationValForRow(row); err != nil {
+			if err := jr.processContinuationValForRow(encDatumRow); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, nil, jr.DrainHelper()
 			}
@@ -734,12 +759,11 @@ func (jr *joinReader) readInput() (
 		//
 		// We need to subtract the EncDatumRowOverhead because that is already
 		// tracked in jr.accountedFor.scratchInputRows.
-		rowSize := int64(row.Size() - rowenc.EncDatumRowOverhead)
-		if err := jr.memAcc.Grow(jr.Ctx, rowSize); err != nil {
+		if err := jr.memAcc.Grow(jr.Ctx, rowSize-int64(rowenc.EncDatumRowOverhead)); err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
-		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(row))
+		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(encDatumRow))
 	}
 
 	if err := jr.performMemoryAccounting(); err != nil {
