@@ -250,7 +250,7 @@ func allRangeSpans(
 
 	ranges := make([]roachpb.Span, 0, len(spans))
 
-	it := kvcoord.NewRangeIterator(ds)
+	it := kvcoord.MakeRangeIterator(ds)
 
 	for i := range spans {
 		rSpan, err := keys.SpanAddr(spans[i])
