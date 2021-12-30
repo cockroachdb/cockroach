@@ -53,7 +53,7 @@ func (b buildCtx) ResolveSchema(
 		if p.IsExistenceOptional {
 			return db, nil
 		}
-		panic(sqlerrors.NewUndefinedSchemaError(name.String()))
+		panic(sqlerrors.NewUndefinedSchemaError(name.Schema()))
 	}
 	switch sc.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
