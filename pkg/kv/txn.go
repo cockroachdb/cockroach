@@ -978,23 +978,24 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		}
 
 		var retryable bool
-		if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
-			if txn.typ == RootTxn {
-				// We sent transactional requests, so the TxnCoordSender was supposed to
-				// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
-				// applies only in the case where this is the root transaction.
-				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
+		if err != nil {
+			if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
+				if txn.typ == RootTxn {
+					// We sent transactional requests, so the TxnCoordSender was supposed to
+					// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
+					// applies only in the case where this is the root transaction.
+					log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
+				}
+			} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
+				if !txn.IsRetryableErrMeantForTxn(*t) {
+					// Make sure the txn record that err carries is for this txn.
+					// If it's not, we terminate the "retryable" character of the error. We
+					// might get a TransactionRetryWithProtoRefreshError if the closure ran another
+					// transaction internally and let the error propagate upwards.
+					return errors.Wrapf(err, "retryable error from another txn")
+				}
+				retryable = true
 			}
-
-		} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
-			if !txn.IsRetryableErrMeantForTxn(*t) {
-				// Make sure the txn record that err carries is for this txn.
-				// If it's not, we terminate the "retryable" character of the error. We
-				// might get a TransactionRetryWithProtoRefreshError if the closure ran another
-				// transaction internally and let the error propagate upwards.
-				return errors.Wrapf(err, "retryable error from another txn")
-			}
-			retryable = true
 		}
 
 		if !retryable {
