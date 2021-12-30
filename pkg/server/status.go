@@ -784,8 +784,10 @@ func (s *statusServer) Certificates(
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
-	if s.cfg.Insecure {
-		return nil, errors.New("server is in insecure mode, cannot examine certificates")
+	if s.cfg.SecurityOverrides.IsSet(base.DisableRemoteCertsRetrieval) {
+		// If some other part of TLS security was disabled, this flag will
+		// be set automatically.
+		return nil, errors.New("certificate retrieval disabled by configuration")
 	}
 
 	if !local {
