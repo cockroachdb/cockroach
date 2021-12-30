@@ -14,7 +14,6 @@ import (
 	"context"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -257,11 +256,6 @@ func (a *Cache) GetDefaultSettings(
 		databaseID descpb.ID,
 	) ([]SettingsCacheEntry, error),
 ) (settingsEntries []SettingsCacheEntry, err error) {
-	// TODO(rafi): remove this flag in v21.2.
-	if !settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
-		return nil, nil
-	}
-
 	err = f.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {

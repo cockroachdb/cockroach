@@ -595,15 +595,6 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade:      true,
 	},
 	{
-		name:                "local-mixed-21.1-21.2",
-		numNodes:            1,
-		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
-		bootstrapVersion:    roachpb.Version{Major: 21, Minor: 1},
-		binaryVersion:       roachpb.Version{Major: 21, Minor: 2},
-		disableUpgrade:      true,
-	},
-	{
 		name:                                "local-spec-planning",
 		numNodes:                            1,
 		overrideDistSQLMode:                 "off",

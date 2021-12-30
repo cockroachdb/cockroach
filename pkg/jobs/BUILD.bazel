@@ -26,7 +26,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
@@ -107,7 +106,6 @@ go_test(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",

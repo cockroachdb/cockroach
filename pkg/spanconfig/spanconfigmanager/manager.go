@@ -132,8 +132,7 @@ func (m *Manager) run(ctx context.Context) {
 			fn()
 		}
 
-		if !jobEnabledSetting.Get(&m.settings.SV) ||
-			!m.settings.Version.IsActive(ctx, clusterversion.AutoSpanConfigReconciliationJob) {
+		if !jobEnabledSetting.Get(&m.settings.SV) {
 			return
 		}
 

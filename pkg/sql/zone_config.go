@@ -510,18 +510,3 @@ func deleteRemovedPartitionZoneConfigs(
 	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, update)
 	return err
 }
-
-// ZonesTableExists returns true if `system.zones` exists. `system.zones` was
-// always present for the system tenant. It was added as a migration in 21.2 and
-// does not exist for secondary tenants prior to the migration being run.
-// TODO(arul): All usages of this function can be removed in 22.1 as then all
-// all secondary tenants would have `system.zones`.
-func ZonesTableExists(
-	ctx context.Context, codec keys.SQLCodec, versionHandle clusterversion.Handle,
-) bool {
-	if codec.ForSystemTenant() ||
-		versionHandle.IsActive(ctx, clusterversion.ZonesTableForSecondaryTenants) {
-		return true
-	}
-	return false
-}

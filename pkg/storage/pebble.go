@@ -1561,13 +1561,9 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		if formatVers < pebble.FormatBlockPropertyCollector {
 			formatVers = pebble.FormatBlockPropertyCollector
 		}
-	case !version.Less(clusterversion.ByKey(clusterversion.PebbleSetWithDelete)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODOPreV21_2)):
 		if formatVers < pebble.FormatSetWithDelete {
 			formatVers = pebble.FormatSetWithDelete
-		}
-	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatVersioned)):
-		if formatVers < pebble.FormatVersioned {
-			formatVers = pebble.FormatVersioned
 		}
 	}
 	if p.db.FormatMajorVersion() < formatVers {
@@ -1577,16 +1573,14 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	}
 
 	if p.fileRegistry != nil {
-		recordsRegistryCV := clusterversion.ByKey(clusterversion.RecordsBasedRegistry)
-		if !version.Less(recordsRegistryCV) {
+		if !version.Less(clusterversion.ByKey(clusterversion.TODOPreV21_2)) {
 			if err := p.fileRegistry.StopUsingOldRegistry(); err != nil {
 				return err
 			}
 		}
 	}
 	if p.encryption != nil {
-		markerDataKeysRegistryCV := clusterversion.ByKey(clusterversion.MarkerDataKeysRegistry)
-		if !version.Less(markerDataKeysRegistryCV) {
+		if !version.Less(clusterversion.ByKey(clusterversion.TODOPreV21_2)) {
 			if err := p.encryption.UpgradeVersion(); err != nil {
 				return err
 			}

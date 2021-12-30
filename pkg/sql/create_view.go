@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -387,9 +386,6 @@ func makeViewTableDesc(
 		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 	}
 
-	// If we're in 21.1, then sequences in views should be referenced
-	// by IDs, so walk the tree and replace sequence names with IDs.
-	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if sc != nil {
 		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
 		if err != nil {
@@ -398,14 +394,11 @@ func makeViewTableDesc(
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	// Serialize user defined types used in the view if in 21.2.
-	if version != (clusterversion.ClusterVersion{}) && version.IsActive(clusterversion.SerializeViewUDTs) {
-		typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery)
-		if err != nil {
-			return tabledesc.Mutable{}, err
-		}
-		desc.ViewQuery = typeReplacedQuery
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery)
+	if err != nil {
+		return tabledesc.Mutable{}, err
 	}
+	desc.ViewQuery = typeReplacedQuery
 
 	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err

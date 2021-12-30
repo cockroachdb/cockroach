@@ -32,7 +32,7 @@ func TestIsAtLeastVersionBuiltin(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: 1,
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.Start21_2),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V21_2),
 				},
 			},
 		},
@@ -48,11 +48,11 @@ func TestIsAtLeastVersionBuiltin(t *testing.T) {
 
 	// Check that the builtin returns false when comparing against 21.2 version
 	// because we are still on 21.1.
-	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.is_at_least_version('21.2')", [][]string{{"false"}})
+	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.is_at_least_version('21.2-10')", [][]string{{"false"}})
 
 	// Run the migration.
-	sqlDB.Exec(t, "SET CLUSTER SETTING version = $1", clusterversion.ByKey(clusterversion.V21_2).String())
+	sqlDB.Exec(t, "SET CLUSTER SETTING version = $1", clusterversion.ByKey(clusterversion.TraceIDDoesntImplyStructuredRecording).String())
 
 	// It should now return true.
-	sqlDB.CheckQueryResultsRetry(t, "SELECT crdb_internal.is_at_least_version('21.2')", [][]string{{"true"}})
+	sqlDB.CheckQueryResultsRetry(t, "SELECT crdb_internal.is_at_least_version('21.2-10')", [][]string{{"true"}})
 }

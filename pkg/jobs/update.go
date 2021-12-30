@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -146,7 +145,6 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 	var status Status
 	var runStats *RunStats
 
-	backoffIsActive := j.registry.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
 		payload, progress, runStats = nil, nil, nil
 		var err error
@@ -154,7 +152,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 		row, err = j.registry.ex.QueryRowEx(
 			ctx, "log-job", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			getSelectStmtForJobUpdate(j.sessionID != "", useReadLock, backoffIsActive), j.ID(),
+			getSelectStmtForJobUpdate(j.sessionID != "", useReadLock), j.ID(),
 		)
 		if err != nil {
 			return err
@@ -195,26 +193,24 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 			Progress: progress,
 		}
 
-		if backoffIsActive {
-			offset := 0
-			if j.sessionID != "" {
-				offset = 1
-			}
-			var lastRun *tree.DTimestamp
-			var ok bool
-			lastRun, ok = row[3+offset].(*tree.DTimestamp)
-			if !ok {
-				return errors.AssertionFailedf("expected timestamp last_run, but got %T", lastRun)
-			}
-			var numRuns *tree.DInt
-			numRuns, ok = row[4+offset].(*tree.DInt)
-			if !ok {
-				return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
-			}
-			md.RunStats = &RunStats{
-				NumRuns: int(*numRuns),
-				LastRun: lastRun.Time,
-			}
+		offset := 0
+		if j.sessionID != "" {
+			offset = 1
+		}
+		var lastRun *tree.DTimestamp
+		var ok bool
+		lastRun, ok = row[3+offset].(*tree.DTimestamp)
+		if !ok {
+			return errors.AssertionFailedf("expected timestamp last_run, but got %T", lastRun)
+		}
+		var numRuns *tree.DInt
+		numRuns, ok = row[4+offset].(*tree.DInt)
+		if !ok {
+			return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
+		}
+		md.RunStats = &RunStats{
+			NumRuns: int(*numRuns),
+			LastRun: lastRun.Time,
 		}
 
 		var ju JobUpdater
@@ -272,7 +268,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 			addSetter("progress", progressBytes)
 		}
 
-		if backoffIsActive && ju.md.RunStats != nil {
+		if ju.md.RunStats != nil {
 			runStats = ju.md.RunStats
 			addSetter("last_run", ju.md.RunStats.LastRun)
 			addSetter("num_runs", ju.md.RunStats.NumRuns)
@@ -315,7 +311,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 }
 
 // getSelectStmtForJobUpdate constructs the select statement used in Job.update.
-func getSelectStmtForJobUpdate(hasSessionID, useReadLock, backoffIsActive bool) string {
+func getSelectStmtForJobUpdate(hasSessionID, useReadLock bool) string {
 	const (
 		selectWithoutSession = `SELECT status, payload, progress`
 		selectWithSession    = selectWithoutSession + `, claim_session_id`
@@ -327,9 +323,7 @@ func getSelectStmtForJobUpdate(hasSessionID, useReadLock, backoffIsActive bool) 
 	if hasSessionID {
 		stmt = selectWithSession
 	}
-	if backoffIsActive {
-		stmt = stmt + backoffColumns
-	}
+	stmt = stmt + backoffColumns
 	if useReadLock {
 		return stmt + fromForUpdate
 	}

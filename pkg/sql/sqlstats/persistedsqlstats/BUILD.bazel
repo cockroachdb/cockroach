@@ -23,7 +23,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
@@ -58,7 +57,6 @@ go_test(
         "controller_test.go",
         "datadriven_test.go",
         "flush_test.go",
-        "job_monitor_test.go",
         "main_test.go",
         "reader_test.go",
         "scheduled_sql_stats_compaction_test.go",
@@ -67,7 +65,6 @@ go_test(
     deps = [
         ":persistedsqlstats",
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",

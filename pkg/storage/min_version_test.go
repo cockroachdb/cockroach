@@ -96,32 +96,20 @@ func TestSetMinVersion(t *testing.T) {
 	defer p.Close()
 	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
 
+	// The earliest supported Cockroach version advances the pebble version.
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.V21_2))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatSetWithDelete, p.db.FormatMajorVersion())
+
+	// Setting the same min version twice is okay.
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.V21_2))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatSetWithDelete, p.db.FormatMajorVersion())
+
 	// Advancing the store cluster version to another cluster version
 	// that does not advance the Pebble format major version should
 	// leave the format major version unchanged.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.DateAndIntervalStyle))
-	require.NoError(t, err)
-	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
-
-	// Setting the same min version twice is okay.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.DateAndIntervalStyle))
-	require.NoError(t, err)
-	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
-
-	// Advancing the store cluster version to PebbleFormatVersioned
-	// should also advance the store's format major version.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleFormatVersioned))
-	require.NoError(t, err)
-	require.Equal(t, pebble.FormatVersioned, p.db.FormatMajorVersion())
-
-	// Ensure the format version ratcheting is idempotent.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleFormatVersioned))
-	require.NoError(t, err)
-	require.Equal(t, pebble.FormatVersioned, p.db.FormatMajorVersion())
-
-	// Advancing the store cluster version to PebbleSetWithDelete
-	// should also advance the store's format major version.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleSetWithDelete))
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	require.NoError(t, err)
 	require.Equal(t, pebble.FormatSetWithDelete, p.db.FormatMajorVersion())
 

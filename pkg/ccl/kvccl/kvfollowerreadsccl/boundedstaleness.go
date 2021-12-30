@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -24,13 +23,6 @@ import (
 
 func checkBoundedStalenessEnabled(ctx *tree.EvalContext) error {
 	st := ctx.Settings
-	if !st.Version.IsActive(ctx.Ctx(), clusterversion.BoundedStaleness) {
-		return pgerror.Newf(
-			pgcode.ObjectNotInPrerequisiteState,
-			`bounded staleness reads requires all nodes to be upgraded to %s`,
-			clusterversion.ByKey(clusterversion.BoundedStaleness),
-		)
-	}
 	return utilccl.CheckEnterpriseEnabled(
 		st,
 		ctx.ClusterID,
