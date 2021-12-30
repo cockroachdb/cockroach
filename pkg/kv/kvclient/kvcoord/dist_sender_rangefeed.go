@@ -208,7 +208,7 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 	// boundaries. So, as we go, keep track of the remaining uncovered part of
 	// `rs` in `nextRS`.
 	nextRS := rs
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	for ri.Seek(ctx, nextRS.Key, Ascending); ri.Valid(); ri.Next(ctx) {
 		desc := ri.Desc()
 		partialRS, err := nextRS.Intersect(desc)

@@ -69,7 +69,7 @@ func TestRangeIterForward(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	i := 0
 	span := roachpb.RSpan{
 		Key:    testMetaEndKey,
@@ -105,7 +105,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	i := 0
 	for ri.Seek(ctx, testMetaEndKey, Ascending); ri.Valid(); {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], *ri.Desc()) {
@@ -144,7 +144,7 @@ func TestRangeIterReverse(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	i := len(alphaRangeDescriptors) - 1
 	span := roachpb.RSpan{
 		Key:    testMetaEndKey,
@@ -180,7 +180,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})
 
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	i := len(alphaRangeDescriptors) - 1
 	for ri.Seek(ctx, roachpb.RKey([]byte{'z'}), Descending); ri.Valid(); {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], *ri.Desc()) {

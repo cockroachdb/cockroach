@@ -250,7 +250,8 @@ func (f rangeIteratorFactory) newRangeIterator() condensableSpanSetRangeIterator
 		return f.factory()
 	}
 	if f.ds != nil {
-		return NewRangeIterator(f.ds)
+		ri := MakeRangeIterator(f.ds)
+		return &ri
 	}
 	panic("no iterator factory configured")
 }
