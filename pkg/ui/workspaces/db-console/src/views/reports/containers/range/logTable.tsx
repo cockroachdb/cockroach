@@ -41,6 +41,9 @@ function printLogEventType(
       return "Split";
     case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType.merge:
       return "Merge";
+    case protos.cockroach.kv.kvserver.storagepb.RangeLogEventType
+      .unsafe_quorum_recovery:
+      return "Unsafe Quorum Recovery";
     default:
       return "Unknown";
   }

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -200,4 +201,17 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	var replicas string
 	r.Scan(&replicas)
 	require.Equal(t, "{1,4,5}", replicas, "Replicas after loss of quorum recovery")
+
+	// Validate that rangelog is updated by recovery records after cluster restarts.
+	testutils.SucceedsSoon(t, func() error {
+		r := s.QueryRow(t,
+			`select count(*) from system.rangelog where "eventType" = 'unsafe_quorum_recovery'`)
+		var recoveries int
+		r.Scan(&recoveries)
+		if recoveries != len(plan.Updates) {
+			return errors.Errorf("found %d recovery events while expecting %d", recoveries,
+				len(plan.Updates))
+		}
+		return nil
+	})
 }

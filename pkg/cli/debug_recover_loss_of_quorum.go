@@ -444,7 +444,8 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, r := range prepReport.SkippedReplicas {
-		_, _ = fmt.Fprintf(stderr, "Replica %s for range r%d is already updated.\n", r.Replica, r.RangeID)
+		_, _ = fmt.Fprintf(stderr, "Replica %s for range r%d is already updated.\n",
+			r.Replica, r.RangeID())
 	}
 
 	if len(prepReport.UpdatedReplicas) == 0 {
@@ -459,7 +460,7 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 	for _, r := range prepReport.UpdatedReplicas {
 		message := fmt.Sprintf(
 			"Replica %s for range %d:%s will be updated to %s with peer replica(s) removed: %s",
-			r.OldReplica, r.RangeID, r.StartKey, r.Replica, r.RemovedReplicas)
+			r.OldReplica, r.RangeID(), r.StartKey(), r.Replica, r.RemovedReplicas)
 		if r.AbortedTransaction {
 			message += fmt.Sprintf(", and range update transaction %s aborted.",
 				r.AbortedTransactionID.Short())
