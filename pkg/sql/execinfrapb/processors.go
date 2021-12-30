@@ -541,3 +541,9 @@ func (spec *BackfillerSpec) BuildTableDescriptor() catalog.TableDescriptor {
 func (spec *BulkRowWriterSpec) BuildTableDescriptor() catalog.TableDescriptor {
 	return tabledesc.NewUnsafeImmutable(&spec.Table)
 }
+
+// IsIndexJoin returns true if spec defines an index join (as opposed to a
+// lookup join).
+func (spec *JoinReaderSpec) IsIndexJoin() bool {
+	return len(spec.LookupColumns) == 0 && spec.LookupExpr.Empty()
+}
