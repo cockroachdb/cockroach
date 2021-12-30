@@ -302,7 +302,7 @@ func GetLeafTxnFinalState(ctx context.Context, txn *kv.Txn) *roachpb.LeafTxnFina
 	if txnMeta.Txn.ID == uuid.Nil {
 		return nil
 	}
-	return &txnMeta
+	return txnMeta
 }
 
 // DrainAndClose is a version of DrainAndForwardMetadata that drains multiple
