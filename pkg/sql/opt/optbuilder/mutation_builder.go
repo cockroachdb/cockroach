@@ -1441,7 +1441,7 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 		// two columns with different names but the same ID. To get the correct
 		// column, we perform a lookup with the ID and the name. See #61520.
 		scopeCol := projectionScope.getColumnWithIDAndReferenceName(colID, targetCol.ColName())
-		scopeCol.name = scopeCol.name.WithMetadataName("")
+		scopeCol.name = scopeCol.name.WithMetadataName(fmt.Sprintf("%s_cast", targetCol.ColName()))
 		mb.b.populateSynthesizedColumn(scopeCol, cast)
 
 		// Replace old source column with the new one.

@@ -752,12 +752,12 @@ root
  │    ├── columns: <none>
  │    ├── fetch columns: p:4
  │    ├── update-mapping:
- │    │    └── column8:8 => p:1
+ │    │    └── p_cast:8 => p:1
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── child_assn_cast_p_fkey
  │    └── project
- │         ├── columns: column8:8!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── columns: p_cast:8!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── project
  │         │    ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    ├── select
@@ -769,17 +769,17 @@ root
  │         │    └── projections
  │         │         └── 1.45 [as=p_new:7]
  │         └── projections
- │              └── assignment-cast: DECIMAL(10,2) [as=column8:8]
+ │              └── assignment-cast: DECIMAL(10,2) [as=p_cast:8]
  │                   └── p_new:7
  └── cascade
       └── update child_assn_cast
            ├── columns: <none>
            ├── fetch columns: c:13 child_assn_cast.p:14
            ├── update-mapping:
-           │    └── column19:19 => child_assn_cast.p:10
+           │    └── p_cast:19 => child_assn_cast.p:10
            ├── input binding: &2
            ├── project
-           │    ├── columns: column19:19!null c:13!null child_assn_cast.p:14!null p_old:17!null p_new:18!null
+           │    ├── columns: p_cast:19!null c:13!null child_assn_cast.p:14!null p_old:17!null p_new:18!null
            │    ├── inner-join (hash)
            │    │    ├── columns: c:13!null child_assn_cast.p:14!null p_old:17!null p_new:18!null
            │    │    ├── scan child_assn_cast
@@ -790,13 +790,13 @@ root
            │    │    │    │    ├── columns: p_old:17!null p_new:18!null
            │    │    │    │    └── mapping:
            │    │    │    │         ├──  parent_assn_cast.p:4 => p_old:17
-           │    │    │    │         └──  column8:8 => p_new:18
+           │    │    │    │         └──  p_cast:8 => p_new:18
            │    │    │    └── filters
            │    │    │         └── p_old:17 IS DISTINCT FROM p_new:18
            │    │    └── filters
            │    │         └── child_assn_cast.p:14 = p_old:17
            │    └── projections
-           │         └── assignment-cast: DECIMAL(10) [as=column19:19]
+           │         └── assignment-cast: DECIMAL(10) [as=p_cast:19]
            │              └── p_new:18
            └── f-k-checks
                 └── f-k-checks-item: child_assn_cast(p) -> parent_assn_cast(p)
@@ -805,7 +805,7 @@ root
                           ├── with-scan &2
                           │    ├── columns: p:20!null
                           │    └── mapping:
-                          │         └──  column19:19 => p:20
+                          │         └──  p_cast:19 => p:20
                           ├── scan parent_assn_cast
                           │    └── columns: parent_assn_cast.p:21!null
                           └── filters
@@ -1326,13 +1326,13 @@ root
            ├── columns: <none>
            ├── fetch columns: t.public.child_diff_type.c:12(int) t.public.child_diff_type.p:13(int2)
            ├── update-mapping:
-           │    └── column18:18 => t.public.child_diff_type.p:9
+           │    └── p_cast:18 => t.public.child_diff_type.p:9
            ├── input binding: &2
            ├── cardinality: [0 - 0]
            ├── volatile, mutations
            ├── stats: [rows=0]
            ├── project
-           │    ├── columns: column18:18(int2!null) t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2!null) p_old:16(int!null) p_new:17(int!null)
+           │    ├── columns: p_cast:18(int2!null) t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2!null) p_old:16(int!null) p_new:17(int!null)
            │    ├── immutable
            │    ├── stats: [rows=3.3, distinct(18)=0.333317413, null(18)=0]
            │    ├── key: (12)
@@ -1376,7 +1376,7 @@ root
            │    │              ├── variable: t.public.child_diff_type.p:13 [type=int2]
            │    │              └── variable: p_old:16 [type=int]
            │    └── projections
-           │         └── assignment-cast: INT2 [as=column18:18, type=int2, outer=(17), immutable]
+           │         └── assignment-cast: INT2 [as=p_cast:18, type=int2, outer=(17), immutable]
            │              └── variable: p_new:17 [type=int]
            └── f-k-checks
                 └── f-k-checks-item: child_diff_type(p) -> parent_diff_type(p)
@@ -1389,7 +1389,7 @@ root
                           ├── with-scan &2
                           │    ├── columns: p:19(int2!null)
                           │    ├── mapping:
-                          │    │    └──  column18:18(int2) => p:19(int2)
+                          │    │    └──  p_cast:18(int2) => p:19(int2)
                           │    ├── stats: [rows=3.3, distinct(19)=0.333317413, null(19)=0]
                           │    ├── fd: ()-->(19)
                           │    └── cte-uses

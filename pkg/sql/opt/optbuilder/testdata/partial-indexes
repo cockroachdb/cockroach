@@ -557,13 +557,13 @@ project
       ├── columns: a:1!null rowid:2!null column1:9
       ├── fetch columns: a:5 rowid:6
       ├── update-mapping:
-      │    └── column10:10 => a:1
+      │    └── a_cast:10 => a:1
       ├── partial index put columns: partial_index_put1:11
       ├── partial index del columns: partial_index_del1:12
       └── project
-           ├── columns: partial_index_put1:11!null partial_index_del1:12!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null column10:10!null
+           ├── columns: partial_index_put1:11!null partial_index_del1:12!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null a_cast:10!null
            ├── project
-           │    ├── columns: column10:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    ├── columns: a_cast:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    ├── select
            │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    │    ├── inner-join (cross)
@@ -580,10 +580,10 @@ project
            │    │    └── filters
            │    │         └── a:5 = column1:9
            │    └── projections
-           │         └── assignment-cast: DECIMAL(10,2) [as=column10:10]
+           │         └── assignment-cast: DECIMAL(10,2) [as=a_cast:10]
            │              └── column1:9
            └── projections
-                ├── column10:10 > 0 [as=partial_index_put1:11]
+                ├── a_cast:10 > 0 [as=partial_index_put1:11]
                 └── a:5 > 0 [as=partial_index_del1:12]
 
 # -- UPSERT / INSERT ON CONFLICT tests --
