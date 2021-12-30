@@ -508,7 +508,7 @@ func (e *LeaseRejectedError) Error() string {
 }
 
 func (e *LeaseRejectedError) message(_ *Error) string {
-	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested.String(), e.Message)
+	return fmt.Sprintf("cannot replace lease %s with %s: %s", &e.Existing, e.Requested.String(), e.Message)
 }
 
 var _ ErrorDetailInterface = &LeaseRejectedError{}
@@ -622,7 +622,7 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(
 ) {
 	if !l.Empty() {
 		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
-			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", l, desc)
+			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", &l, desc)
 		}
 	}
 	e.Ranges = append(e.Ranges, RangeInfo{
