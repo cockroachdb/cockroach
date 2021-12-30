@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -281,7 +282,7 @@ func (a ArgTypes) Types() []*types.T {
 }
 
 func (a ArgTypes) String() string {
-	var s bytes.Buffer
+	var s strings.Builder
 	for i, arg := range a {
 		if i > 0 {
 			s.WriteString(", ")
