@@ -53,7 +53,7 @@ type SessionData struct {
 // Clone returns a clone of SessionData.
 func (s *SessionData) Clone() *SessionData {
 	var newCustomOptions map[string]string
-	if s.CustomOptions != nil {
+	if len(s.CustomOptions) > 0 {
 		newCustomOptions = make(map[string]string, len(s.CustomOptions))
 		for k, v := range s.CustomOptions {
 			newCustomOptions[k] = v
