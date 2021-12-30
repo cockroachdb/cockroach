@@ -43,12 +43,13 @@ type PrepareStoreReport struct {
 }
 
 // PrepareReplicaReport contains information about prepared change for a replica.
-// Its purpose is to inform user about actions to be performed.
+// Its purpose is to inform user about actions to be performed. And create a record
+// that would be applied to structured log, rangelog and other downstream systems
+// for audit purposes.
 type PrepareReplicaReport struct {
 	// Replica identification data.
-	RangeID    roachpb.RangeID
-	StartKey   roachpb.RKey
 	Replica    roachpb.ReplicaDescriptor
+	Descriptor roachpb.RangeDescriptor
 	OldReplica roachpb.ReplicaDescriptor
 
 	// AlreadyUpdated is true if state of replica in store already matches desired
@@ -64,6 +65,16 @@ type PrepareReplicaReport struct {
 	// part or recovery preparation.
 	AbortedTransaction   bool
 	AbortedTransactionID uuid.UUID
+}
+
+// RangeID of underlying range.
+func (r PrepareReplicaReport) RangeID() roachpb.RangeID {
+	return r.Descriptor.RangeID
+}
+
+// StartKey of underlying range.
+func (r PrepareReplicaReport) StartKey() roachpb.RKey {
+	return r.Descriptor.StartKey
 }
 
 // PrepareUpdateReplicas prepares all changes to be committed to provided stores
@@ -131,9 +142,7 @@ func applyReplicaUpdate(
 ) (PrepareReplicaReport, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	report := PrepareReplicaReport{
-		RangeID:  update.RangeID,
-		Replica:  update.NewReplica,
-		StartKey: update.StartKey.AsRKey(),
+		Replica: update.NewReplica,
 	}
 
 	// Write the rewritten descriptor to the range-local descriptor
@@ -275,6 +284,7 @@ func applyReplicaUpdate(
 		nil /* txn */, &newDesc); err != nil {
 		return PrepareReplicaReport{}, err
 	}
+	report.Descriptor = newDesc
 	report.RemovedReplicas = localDesc.Replicas()
 	report.OldReplica, _ = report.RemovedReplicas.RemoveReplica(
 		update.NewReplica.NodeID, update.NewReplica.StoreID)
