@@ -304,6 +304,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	f.formatColumns(e, tp, colList, required.Presentation)
 
 	switch t := e.(type) {
+	case *DistributeExpr:
+		if !f.HasFlags(ExprFmtHidePhysProps) {
+			tp.Childf("input distribution: %s", t.Input.ProvidedPhysical().Distribution.String())
+		}
+
 	// Special-case handling for GroupBy private; print grouping columns
 	// and internal ordering in addition to full set of columns.
 	case *GroupByExpr, *ScalarGroupByExpr, *DistinctOnExpr, *EnsureDistinctOnExpr,
@@ -816,6 +821,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		if required.LimitHint != 0 {
 			tp.Childf("limit hint: %.2f", required.LimitHint)
+		}
+		if !required.Distribution.Any() {
+			tp.Childf("distribution: %s", required.Distribution.String())
 		}
 	}
 
