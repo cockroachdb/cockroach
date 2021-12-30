@@ -244,6 +244,10 @@ const (
 	ScanWholeRows
 	// SCRAM authentication is available.
 	SCRAMAuthentication
+	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason
+	// that correspond to range descriptor changes resulting from recovery
+	// procedures.
+	UnsafeLossOfQuorumRecoveryRangeLog
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -371,6 +375,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SCRAMAuthentication,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 46},
+	},
+	{
+		Key:     UnsafeLossOfQuorumRecoveryRangeLog,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 48},
 	},
 
 	// *************************************************
