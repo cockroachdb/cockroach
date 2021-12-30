@@ -2311,19 +2311,20 @@ func MVCCDeleteRange(
 	return keys, res.ResumeSpan, res.NumKeys, nil
 }
 
+var scanStatsPool = sync.Pool{
+	New: func() interface{} { return &roachpb.ScanStats{} },
+}
+
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
 	stats := iteratorStats.Stats
 	if traceSpan != nil {
-		steps := stats.ReverseStepCount[pebble.InterfaceCall] + stats.ForwardStepCount[pebble.InterfaceCall]
-		seeks := stats.ReverseSeekCount[pebble.InterfaceCall] + stats.ForwardSeekCount[pebble.InterfaceCall]
-		internalSteps := stats.ReverseStepCount[pebble.InternalIterCall] + stats.ForwardStepCount[pebble.InternalIterCall]
-		internalSeeks := stats.ReverseSeekCount[pebble.InternalIterCall] + stats.ForwardSeekCount[pebble.InternalIterCall]
-		traceSpan.RecordStructured(&roachpb.ScanStats{
-			NumInterfaceSeeks: uint64(seeks),
-			NumInternalSeeks:  uint64(internalSeeks),
-			NumInterfaceSteps: uint64(steps),
-			NumInternalSteps:  uint64(internalSteps),
-		})
+		ss := scanStatsPool.Get().(*roachpb.ScanStats)
+		defer scanStatsPool.Put(ss)
+		ss.NumInterfaceSteps = uint64(stats.ReverseStepCount[pebble.InterfaceCall] + stats.ForwardStepCount[pebble.InterfaceCall])
+		ss.NumInternalSeeks = uint64(stats.ReverseSeekCount[pebble.InterfaceCall] + stats.ForwardSeekCount[pebble.InterfaceCall])
+		ss.NumInterfaceSteps = uint64(stats.ReverseStepCount[pebble.InternalIterCall] + stats.ForwardStepCount[pebble.InternalIterCall])
+		ss.NumInternalSteps = uint64(stats.ReverseSeekCount[pebble.InternalIterCall] + stats.ForwardSeekCount[pebble.InternalIterCall])
+		traceSpan.RecordStructured(ss)
 	}
 }
 

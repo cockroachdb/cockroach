@@ -247,7 +247,7 @@ func (sp *Span) Recordf(format string, args ...interface{}) {
 // if the underlying Span has been optimized out (i.e. is a noop span). Payloads
 // may also be dropped due to sizing constraints.
 //
-// The caller must not mutate the item once RecordStructured has been called.
+// The caller is free to mutate the item once RecordStructured returns.
 func (sp *Span) RecordStructured(item Structured) {
 	if sp.detectUseAfterFinish() {
 		return
