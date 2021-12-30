@@ -1254,3 +1254,26 @@ subtest empty-database
 
 statement error empty database name
 DROP DATABASE ""
+
+subtest schema-permission-error
+
+user root
+
+statement ok
+CREATE SCHEMA sc1;
+
+statement ok
+CREATE DATABASE db1;
+
+user testuser
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement error must be owner of schema \"sc1\"
+DROP SCHEMA sc1;
+
+statement error user testuser does not have DROP privilege on database db1
+DROP DATABASE db1;
+
+user root
