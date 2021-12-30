@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -48,11 +49,6 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		p.ExecCfg(),
 		"DROP SCHEMA",
 	); err != nil {
-		return nil, err
-	}
-
-	isAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
 		return nil, err
 	}
 
@@ -96,13 +92,8 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)
 		case catalog.SchemaUserDefined:
-			hasOwnership, err := p.HasOwnership(ctx, sc)
-			if err != nil {
+			if err := p.CheckPrivilege(ctx, sc, privilege.DROP); err != nil {
 				return nil, err
-			}
-			if !(isAdmin || hasOwnership) {
-				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"permission denied to drop schema %q", sc.GetName())
 			}
 			namesBefore := len(d.objectNamesToDelete)
 			if err := d.collectObjectsInSchema(ctx, p, db, sc); err != nil {

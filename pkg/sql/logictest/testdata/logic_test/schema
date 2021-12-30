@@ -423,7 +423,7 @@ CREATE TYPE privs.denied AS ENUM ('denied')
 statement error pq: must be owner of schema "privs"
 ALTER SCHEMA privs RENAME TO denied
 
-statement error pq: permission denied to drop schema "privs"
+statement error user testuser does not have DROP privilege on schema privs
 DROP SCHEMA privs
 
 # Test the usage privilege.
