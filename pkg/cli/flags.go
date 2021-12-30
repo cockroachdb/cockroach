@@ -1226,7 +1226,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		serverHTTPAddr = "localhost"
 		// We then also tell the server to disable TLS for the HTTP
 		// listener.
-		serverCfg.DisableTLSForHTTP = true
+		serverCfg.SecurityOverrides.SetFlag(base.DisableHTTPTLS, true)
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 

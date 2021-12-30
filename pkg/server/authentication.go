@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -293,7 +294,7 @@ func (s *authenticationServer) createSessionFor(
 		ID:     id,
 		Secret: secret,
 	}
-	return EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
+	return EncodeSessionCookie(cookieValue, !s.server.cfg.SecurityOverrides.IsSet(base.DisableHTTPTLS))
 }
 
 // UserLogout allows a user to terminate their currently active session.

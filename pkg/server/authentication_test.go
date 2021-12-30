@@ -110,7 +110,7 @@ func TestSSLEnforcement(t *testing.T) {
 	noCertsContext := insecureCtx{}
 	// Plain http.
 	plainHTTPCfg := testutils.NewTestBaseContext(security.TestUserName())
-	plainHTTPCfg.Insecure = true
+	plainHTTPCfg.SecurityOverrides.SetFlag(base.DisableHTTPTLS, true)
 	insecureContext := newRPCContext(plainHTTPCfg)
 
 	kvGet := &roachpb.GetRequest{}

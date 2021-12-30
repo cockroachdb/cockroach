@@ -229,7 +229,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
 	}
-	cfg.DisableTLSForHTTP = params.DisableTLSForHTTP
+	cfg.SecurityOverrides.SetFlag(base.DisableHTTPTLS, params.DisableTLSForHTTP)
 	if params.DisableWebSessionAuthentication {
 		cfg.EnableWebSessionAuthentication = false
 	}

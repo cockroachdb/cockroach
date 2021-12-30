@@ -208,7 +208,7 @@ func (ctx *SecurityContext) getUIClientTLSConfig() (*tls.Config, error) {
 // `Server.Start`. Move it.
 func (ctx *SecurityContext) GetUIServerTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if ctx.config.Insecure || ctx.config.DisableTLSForHTTP {
+	if ctx.config.SecurityOverrides.IsSet(base.DisableHTTPTLS) {
 		return nil, nil
 	}
 

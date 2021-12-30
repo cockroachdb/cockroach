@@ -198,11 +198,6 @@ type Config struct {
 	// HTTPAddr is the configured HTTP listen address.
 	HTTPAddr string
 
-	// DisableTLSForHTTP, if set, disables TLS for the HTTP listener.
-	//
-	// TODO(knz): Remove this once the SecurityOverrides are used throughout.
-	DisableTLSForHTTP bool
-
 	// HTTPAdvertiseAddr is the advertised HTTP address.
 	// This is computed from HTTPAddr if specified otherwise Addr.
 	HTTPAdvertiseAddr string
@@ -253,7 +248,6 @@ func (cfg *Config) InitDefaults() {
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr
 	cfg.HTTPAddr = defaultHTTPAddr
-	cfg.DisableTLSForHTTP = false
 	cfg.HTTPAdvertiseAddr = ""
 	cfg.SplitListenSQL = false
 	cfg.SQLAddr = defaultSQLAddr
@@ -267,7 +261,7 @@ func (cfg *Config) InitDefaults() {
 // HTTPRequestScheme returns "http" or "https" based on the value of
 // Insecure and DisableTLSForHTTP.
 func (cfg *Config) HTTPRequestScheme() string {
-	if cfg.Insecure || cfg.DisableTLSForHTTP {
+	if cfg.SecurityOverrides.IsSet(DisableHTTPTLS) {
 		return httpScheme
 	}
 	return httpsScheme
