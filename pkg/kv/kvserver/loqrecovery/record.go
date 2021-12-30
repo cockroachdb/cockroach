@@ -12,11 +12,18 @@ package loqrecovery
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -37,12 +44,13 @@ func writeReplicaRecoveryStoreRecord(
 	updater *replicaPrepareBatch,
 ) error {
 	record := loqrecoverypb.ReplicaRecoveryRecord{
-		Timestamp:    timestamp,
-		RangeID:      report.RangeID,
-		StartKey:     update.StartKey,
-		EndKey:       update.StartKey,
-		OldReplicaID: report.OldReplica.ReplicaID,
-		NewReplica:   update.NewReplica,
+		Timestamp:       timestamp,
+		RangeID:         report.RangeID(),
+		StartKey:        update.StartKey,
+		EndKey:          update.StartKey,
+		OldReplicaID:    report.OldReplica.ReplicaID,
+		NewReplica:      update.NewReplica,
+		RangeDescriptor: report.Descriptor,
 	}
 
 	data, err := protoutil.Marshal(&record)
@@ -50,7 +58,8 @@ func writeReplicaRecoveryStoreRecord(
 		return errors.Wrap(err, "failed to marshal update record entry")
 	}
 	if err := updater.readWriter.PutUnversioned(
-		keys.StoreReplicaUnsafeRecoveryKey(uuid.GetBytes(), updater.nextUpdateRecordIndex), data); err != nil {
+		keys.StoreReplicaUnsafeRecoveryKey(uuid.GetBytes(), updater.nextUpdateRecordIndex),
+		data); err != nil {
 		return err
 	}
 	updater.nextUpdateRecordIndex++
@@ -100,4 +109,54 @@ func RegisterOfflineRecoveryEvents(
 		iter.Next()
 	}
 	return eventCount, nil
+}
+
+// UpdateRangeLogWithRecovery writes a range log update to system.rangelog using
+// recovery event.
+func UpdateRangeLogWithRecovery(
+	ctx context.Context, exec sqlutil.InternalExecutor, event loqrecoverypb.ReplicaRecoveryRecord,
+) bool {
+	const insertEventTableStmt = `
+	INSERT INTO system.rangelog (
+		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
+	)
+	VALUES(
+		$1, $2, $3, $4, $5, $6
+	)
+	`
+	updateInfo := kvserverpb.RangeLogEvent_Info{
+		UpdatedDesc:  &event.RangeDescriptor,
+		AddedReplica: &event.NewReplica,
+		Reason:       kvserverpb.ReasonAdminRequest,
+		Details:      "Performed unsafe range loss of quorum recovery",
+	}
+	infoBytes, err := json.Marshal(updateInfo)
+	if err != nil {
+		log.Errorf(ctx,
+			"Failed to serialize a rangelog info entry for offline loss of quorum recovery: %s", err)
+		return false
+	}
+	args := []interface{}{
+		timeutil.Unix(0, event.Timestamp),
+		event.RangeID,
+		event.NewReplica.StoreID,
+		kvserverpb.RangeLogEventType_remove_voter.String(),
+		nil, // otherRangeID
+		string(infoBytes),
+	}
+
+	rows, err := exec.ExecEx(ctx, "", nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		insertEventTableStmt, args...)
+	if err != nil {
+		log.Errorf(ctx, "Failed to insert a rangelog entry for offline loss of quorum recovery: %s",
+			err)
+		return false
+	}
+	if rows != 1 {
+		log.Errorf(ctx,
+			"%d row affected by rangelog update for offline loss of quorum recovery. Expected 1.", rows)
+		return false
+	}
+	return true
 }

@@ -1760,7 +1760,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 				event := record.AsStructuredLog()
 				log.StructuredEvent(ctx, &event)
 				s.Metrics().RangeLossOfQuorumRecoveries.Inc(1)
-				return true
+				// We are returning false here to prevent entries from being deleted from
+				// store. We need those entries at the end of startup to populate rangelog
+				// and possibly other durable cluster-replicated destinations.
+				return false
 			})
 		if eventCount > 0 {
 			log.Infof(
@@ -1960,6 +1963,24 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	if err := s.kvProber.Start(ctx, s.stopper); err != nil {
 		return errors.Wrapf(err, "failed to start KV prober")
+	}
+
+	// As final stage of loss of quorum recovery, write events into corresponding range logs.
+	// We do it as a separate stage to log events early just in case startup fails, and write
+	// to range log once the server is running as we need to run sql statements to update
+	// rangelog.
+	if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
+		_, err := loqrecovery.RegisterOfflineRecoveryEvents(
+			ctx,
+			s.Engine(),
+			func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) bool {
+				return loqrecovery.UpdateRangeLogWithRecovery(ctx, s.GetStoreConfig().SQLExecutor, record)
+			})
+		return err
+	}); err != nil {
+		// We don't want to abort server if we can't record recovery events
+		// as it is the last thing we need if cluster is already unhealthy.
+		log.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
 	}
 
 	log.Event(ctx, "server initialized")
