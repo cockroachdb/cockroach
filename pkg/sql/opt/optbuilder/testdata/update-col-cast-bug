@@ -17,9 +17,9 @@ with &1 (cte)
       ├── fetch columns: a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int)
       ├── update-mapping:
       │    ├── a_new:16 => a:1
-      │    └── column18:18 => t.c:3
+      │    └── c_cast:18 => t.c:3
       └── project
-           ├── columns: column18:18(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
+           ├── columns: c_cast:18(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
            ├── project
            │    ├── columns: c_comp:17(int) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
            │    ├── project
@@ -53,5 +53,5 @@ with &1 (cte)
            │    └── projections
            │         └── a_new:16::INT8 + b:8::INT8 [as=c_comp:17, type=int]
            └── projections
-                └── assignment-cast: INT2 [as=column18:18, type=int2]
+                └── assignment-cast: INT2 [as=c_cast:18, type=int2]
                      └── c_comp:17 [type=int]

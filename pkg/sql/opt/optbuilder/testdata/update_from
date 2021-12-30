@@ -368,9 +368,9 @@ update abc
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8
  ├── update-mapping:
- │    └── column15:15 => b:2
+ │    └── b_cast:15 => b:2
  └── project
-      ├── columns: column15:15 a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
+      ├── columns: b_cast:15 a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
       ├── inner-join (merge)
       │    ├── columns: a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
       │    ├── left ordering: +6
@@ -383,7 +383,7 @@ update abc
       │    │    └── ordering: +11
       │    └── filters (true)
       └── projections
-           └── assignment-cast: INT8 [as=column15:15]
+           └── assignment-cast: INT8 [as=b_cast:15]
                 └── d:12
 
 # Regression test for #61520. The new value for column a should be in-scope when
@@ -406,12 +406,12 @@ project
       ├── columns: a:1!null rowid:2!null column1:9
       ├── fetch columns: a:5 rowid:6
       ├── update-mapping:
-      │    └── column10:10 => a:1
+      │    └── a_cast:10 => a:1
       ├── check columns: check1:11
       └── project
-           ├── columns: check1:11!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null column10:10!null
+           ├── columns: check1:11!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null a_cast:10!null
            ├── project
-           │    ├── columns: column10:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    ├── columns: a_cast:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    ├── select
            │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    │    ├── inner-join (cross)
@@ -425,7 +425,7 @@ project
            │    │    └── filters
            │    │         └── a:5 = column1:9
            │    └── projections
-           │         └── assignment-cast: DECIMAL(10,2) [as=column10:10]
+           │         └── assignment-cast: DECIMAL(10,2) [as=a_cast:10]
            │              └── column1:9
            └── projections
-                └── column10:10 > 0 [as=check1:11]
+                └── a_cast:10 > 0 [as=check1:11]
