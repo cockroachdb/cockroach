@@ -110,7 +110,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
     visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

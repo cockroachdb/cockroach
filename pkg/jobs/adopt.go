@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -137,14 +136,12 @@ COALESCE(last_run, created) + least(
 	processQueryBase      = `SELECT id FROM system.jobs`
 	processQueryWhereBase = ` status IN ` + processQueryStatusTupleString + ` AND (claim_session_id = $1 AND claim_instance_id = $2)`
 
-	processQueryWithoutBackoff = processQueryBase + " WHERE " + processQueryWhereBase
-	processQueryWithBackoff    = processQueryBase + ", " + canRunArgs +
+	processQueryWithBackoff = processQueryBase + ", " + canRunArgs +
 		" WHERE " + processQueryWhereBase + " AND " + canRunClause
 
-	resumeQueryBaseCols       = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
-	resumeQueryWhereBase      = `id = $1 AND claim_session_id = $2`
-	resumeQueryWithoutBackoff = `SELECT ` + resumeQueryBaseCols + ` FROM system.jobs WHERE ` + resumeQueryWhereBase
-	resumeQueryWithBackoff    = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run` +
+	resumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
+	resumeQueryWhereBase   = `id = $1 AND claim_session_id = $2`
+	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run` +
 		` FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
 )
 
@@ -153,15 +150,11 @@ COALESCE(last_run, created) + least(
 func getProcessQuery(
 	ctx context.Context, s sqlliveness.Session, r *Registry,
 ) (string, []interface{}) {
-	// Select the running or reverting jobs that this node has claimed.
-	query := processQueryWithoutBackoff
-	args := []interface{}{s.ID().UnsafeBytes(), r.ID()}
-	// Gating the version that introduced job retries with exponential backoff.
-	if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
-		// Select only those jobs that can be executed right now.
-		query = processQueryWithBackoff
-		args = append(args, r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay())
-	}
+	// Select the running or reverting jobs that this node has claimed that can be
+	// executed right now.
+	query := processQueryWithBackoff
+	args := []interface{}{s.ID().UnsafeBytes(), r.ID(),
+		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	return query, args
 }
 
@@ -245,13 +238,9 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 // resumeJob resumes a claimed job.
 func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session) error {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
-	resumeQuery := resumeQueryWithoutBackoff
-	args := []interface{}{jobID, s.ID().UnsafeBytes()}
-	backoffIsActive := r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff)
-	if backoffIsActive {
-		resumeQuery = resumeQueryWithBackoff
-		args = append(args, r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay())
-	}
+	resumeQuery := resumeQueryWithBackoff
+	args := []interface{}{jobID, s.ID().UnsafeBytes(),
+		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	row, err := r.ex.QueryRowEx(
 		ctx, "get-job-row", nil,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, resumeQuery, args...,
@@ -277,24 +266,22 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 		return errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
 	}
 
-	if backoffIsActive {
-		// It's too soon to run the job.
-		//
-		// We need this check to address a race between adopt-loop and an existing
-		// resumer, e.g., in the following schedule:
-		// Adopt loop: Cl(j,n1) St(r1)     Cl(j, n1)                       St(r2)
-		// Resumer 1:                Rg(j)          Up(n1->n2) Fl(j) Ur(j)
-		// Resumer 2:                                                            x-| Starting too soon
-		// Where:
-		//  - Cl(j,nx): claim job j when num_runs is x
-		//  - St(r1): start resumer r1
-		//  - Rg(j): Add jobID of j in adoptedJobs, disabling further resumers
-		//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
-		//  - Up(n1->2): Update number of runs from 1 to 2
-		//  - Fl(j): Job j fails
-		if !(*row[4].(*tree.DBool)) {
-			return nil
-		}
+	// It's too soon to run the job.
+	//
+	// We need this check to address a race between adopt-loop and an existing
+	// resumer, e.g., in the following schedule:
+	// Adopt loop: Cl(j,n1) St(r1)     Cl(j, n1)                       St(r2)
+	// Resumer 1:                Rg(j)          Up(n1->n2) Fl(j) Ur(j)
+	// Resumer 2:                                                            x-| Starting too soon
+	// Where:
+	//  - Cl(j,nx): claim job j when num_runs is x
+	//  - St(r1): start resumer r1
+	//  - Rg(j): Add jobID of j in adoptedJobs, disabling further resumers
+	//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
+	//  - Up(n1->2): Update number of runs from 1 to 2
+	//  - Fl(j): Job j fails
+	if !(*row[4].(*tree.DBool)) {
+		return nil
 	}
 
 	payload, err := UnmarshalPayload(row[1])
@@ -473,12 +460,10 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr
 					ju.UpdatePayload(md.Payload)
-					if r.settings.Version.IsActive(ctx, clusterversion.RetryJobsWithExponentialBackoff) {
-						// When we cancel a job, we want to reset its last_run and num_runs
-						// so that the job can be picked-up in the next adopt-loop, sooner
-						// than its current next-retry time.
-						ju.UpdateRunStats(0 /* numRuns */, r.clock.Now().GoTime() /* lastRun */)
-					}
+					// When we cancel a job, we want to reset its last_run and num_runs
+					// so that the job can be picked-up in the next adopt-loop, sooner
+					// than its current next-retry time.
+					ju.UpdateRunStats(0 /* numRuns */, r.clock.Now().GoTime() /* lastRun */)
 					return nil
 				}); err != nil {
 					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", id)

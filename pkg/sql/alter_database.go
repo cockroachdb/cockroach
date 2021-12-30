@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1102,12 +1101,6 @@ type alterDatabasePlacementNode struct {
 func (p *planner) AlterDatabasePlacement(
 	ctx context.Context, n *tree.AlterDatabasePlacement,
 ) (planNode, error) {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.DatabasePlacementPolicy) {
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to use PLACEMENT",
-			clusterversion.ByKey(clusterversion.DatabasePlacementPolicy))
-	}
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),

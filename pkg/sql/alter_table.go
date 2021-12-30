@@ -177,15 +177,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"UNIQUE WITHOUT INDEX constraint on the column",
 				)
 			}
-			if t.ColumnDef.GeneratedIdentity.IsGeneratedAsIdentity {
-				evalCtx := params.EvalContext()
-				ctx := params.ctx
-				if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.GeneratedAsIdentity) {
-					return pgerror.Newf(pgcode.FeatureNotSupported,
-						"version %v must be finalized to use GENERATED {ALWAYS | BY DEFAULT} AS IDENTITY expression",
-						clusterversion.GeneratedAsIdentity)
-				}
-			}
 			var err error
 			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
 				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t)
@@ -1123,12 +1114,6 @@ func applyColumnMutation(
 		}
 
 	case *tree.AlterTableSetOnUpdate:
-		if !params.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.OnUpdateExpressions) {
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"version %v must be finalized to use ON UPDATE",
-				clusterversion.ByKey(clusterversion.OnUpdateExpressions))
-		}
-
 		// We want to reject uses of ON UPDATE where there is also a foreign key ON
 		// UPDATE.
 		for _, fk := range tableDesc.OutboundFKs {

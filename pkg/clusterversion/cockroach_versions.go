@@ -156,109 +156,6 @@ type Key int
 const (
 	_ Key = iota - 1 // want first named one to start at zero
 
-	// v21.1 versions.
-	//
-	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
-	//
-	// TODO(irfansharif): This can be removed as part of #71708 (bump
-	// min-supported version to 21.2).
-	V21_1
-
-	// v21.1PLUS release. This is a special v21.1.x release with extra changes,
-	// used internally for the 2021 serverless offering.
-	Start21_1PLUS
-
-	// v21.2 versions.
-	//
-	// Start21_2 demarcates work towards CockroachDB v21.2.
-	Start21_2
-	// JoinTokensTable adds the system table for storing ephemeral generated
-	// join tokens.
-	JoinTokensTable
-	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
-	// include the type of lease acquisition event that resulted in that replica's
-	// current lease.
-	AcquisitionTypeInLeaseHistory
-	// SerializeViewUDTs serializes user defined types used in views to allow
-	// for renaming of the referenced types.
-	SerializeViewUDTs
-	// ExpressionIndexes is when expression indexes are supported.
-	ExpressionIndexes
-	// DeleteDeprecatedNamespaceTableDescriptorMigration deletes the descriptor at ID=2.
-	DeleteDeprecatedNamespaceTableDescriptorMigration
-	// FixDescriptors is for the migration to fix all descriptors.
-	FixDescriptors
-	// DatabaseRoleSettings adds the system table for storing per-user and
-	// per-role default session settings.
-	DatabaseRoleSettings
-	// TenantUsageTable adds the system table for tracking tenant usage.
-	TenantUsageTable
-	// SQLInstancesTable adds the system table for storing SQL instance information
-	// per tenant.
-	SQLInstancesTable
-	// Can return new retryable rangefeed errors without crashing the client
-	NewRetryableRangefeedErrors
-	// AlterSystemWebSessionsCreateIndexes creates indexes on the columns revokedAt and
-	// lastUsedAt for the system.web_sessions table.
-	AlterSystemWebSessionsCreateIndexes
-	// SeparatedIntentsMigration adds the migration to move over all remaining
-	// intents to the separated lock table space.
-	SeparatedIntentsMigration
-	// PostSeparatedIntentsMigration runs a cleanup migration after the main
-	// SeparatedIntentsMigration.
-	PostSeparatedIntentsMigration
-	// RetryJobsWithExponentialBackoff retries failed jobs with exponential delays.
-	RetryJobsWithExponentialBackoff
-	// RecordsBasedRegistry replaces the existing monolithic protobuf-based
-	// encryption-at-rest file registry with the new incremental records-based registry.
-	RecordsBasedRegistry
-	// AutoSpanConfigReconciliationJob adds the AutoSpanConfigReconciliationJob
-	// type.
-	AutoSpanConfigReconciliationJob
-	// DefaultPrivileges default privileges are supported in this version.
-	DefaultPrivileges
-	// ZonesTableForSecondaryTenants adds system.zones for all secondary tenants.
-	ZonesTableForSecondaryTenants
-	// UseKeyEncodeForHashShardedIndexes changes the expression used in hash
-	// sharded indexes from string casts to crdb_internal.datums_to_bytes.
-	UseKeyEncodeForHashShardedIndexes
-	// DatabasePlacementPolicy setting PLACEMENT for databases is supported in this
-	// version.
-	DatabasePlacementPolicy
-	// GeneratedAsIdentity is the syntax support for `GENERATED {ALWAYS | BY
-	// DEFAULT} AS IDENTITY` under `CREATE TABLE` syntax.
-	GeneratedAsIdentity
-	// OnUpdateExpressions setting ON UPDATE column expressions is supported in
-	// this version.
-	OnUpdateExpressions
-	// SpanConfigurationsTable adds the span configurations system table, to
-	// store all KV span configs.
-	SpanConfigurationsTable
-	// BoundedStaleness adds capabilities to perform bounded staleness reads.
-	BoundedStaleness
-	// DateAndIntervalStyle enables DateStyle and IntervalStyle to be changed.
-	DateAndIntervalStyle
-	// PebbleFormatVersioned ratchets Pebble's format major version to
-	// the version FormatVersioned.
-	PebbleFormatVersioned
-	// MarkerDataKeysRegistry switches to using an atomic marker file
-	// for denoting which data keys registry is active.
-	MarkerDataKeysRegistry
-	// PebbleSetWithDelete switches to a backwards incompatible Pebble version
-	// that provides SingleDelete semantics that are cleaner and robust to
-	// programming error. See https://github.com/cockroachdb/pebble/issues/1255
-	// and #69891.
-	PebbleSetWithDelete
-	// TenantUsageSingleConsumptionColumn changes the tenant_usage system table to
-	// use a single consumption column (encoding a proto).
-	TenantUsageSingleConsumptionColumn
-	// SQLStatsTables adds the system table for storing persisted SQL statistics
-	// for statements.
-	SQLStatsTables
-	// SQLStatsCompactionScheduledJob creates a ScheduledJob for SQL Stats
-	// compaction on cluster startup and ensures that there is only one entry for
-	// the schedule.
-	SQLStatsCompactionScheduledJob
 	// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 	V21_2
 
@@ -267,11 +164,6 @@ const (
 	// Start22_1 demarcates work towards CockroachDB v22.1.
 	Start22_1
 
-	// TargetBytesAvoidExcess prevents exceeding BatchRequest.Header.TargetBytes
-	// except when there is a single value in the response. 21.2 DistSender logic
-	// requires the limit to always be overshot in order to properly enforce
-	// limits when splitting requests.
-	TargetBytesAvoidExcess
 	// AvoidDrainingNames avoids using the draining_names field when renaming or
 	// dropping descriptors.
 	AvoidDrainingNames
@@ -335,6 +227,10 @@ const (
 	// *************************************************
 )
 
+// TODOPreV21_2 is an alias for V21_2 for use in any version gate/check that
+// previously referenced a < 21.2 version until that check/gate can be removed.
+const TODOPreV21_2 = V21_2
+
 // versionsSingleton lists all historical versions here in chronological order,
 // with comments describing what backwards-incompatible features were
 // introduced.
@@ -353,155 +249,6 @@ const (
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions{
-	// v21.1 versions.
-	{
-		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
-		Key:     V21_1,
-		Version: roachpb.Version{Major: 21, Minor: 1},
-	},
-
-	// Internal versions must be even.
-
-	// v21.1PLUS version. This is a special v21.1.x release with extra changes,
-	// used internally for the 2021 Serverless offering.
-	//
-	// Any v21.1PLUS change that needs a migration will have a v21.2 version on
-	// master but a v21.1PLUS version on the v21.1PLUS branch.
-	{
-		Key: Start21_1PLUS,
-		// The Internal version starts out at 14 for historic reasons: at the time
-		// this was added, v21.2 versions were already defined up to 12.
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 14},
-	},
-
-	// v21.2 versions.
-	{
-		Key:     Start21_2,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1102},
-	},
-	{
-		Key:     JoinTokensTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1104},
-	},
-	{
-		Key:     AcquisitionTypeInLeaseHistory,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1106},
-	},
-	{
-		Key:     SerializeViewUDTs,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1108},
-	},
-	{
-		Key:     ExpressionIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1110},
-	},
-	{
-		Key:     DeleteDeprecatedNamespaceTableDescriptorMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1112},
-	},
-	{
-		Key:     FixDescriptors,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1114},
-	},
-	{
-		Key:     DatabaseRoleSettings,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1118},
-	},
-	{
-		Key:     TenantUsageTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1120},
-	},
-	{
-		Key:     SQLInstancesTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1122},
-	},
-	{
-		Key:     NewRetryableRangefeedErrors,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1124},
-	},
-	{
-		Key:     AlterSystemWebSessionsCreateIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1126},
-	},
-	{
-		Key:     SeparatedIntentsMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1128},
-	},
-	{
-		Key:     PostSeparatedIntentsMigration,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1130},
-	},
-	{
-		Key:     RetryJobsWithExponentialBackoff,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1132},
-	},
-	{
-		Key:     RecordsBasedRegistry,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1134},
-	}, {
-		Key:     AutoSpanConfigReconciliationJob,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1136},
-	},
-	{
-		Key:     DefaultPrivileges,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1142},
-	},
-	{
-		Key:     ZonesTableForSecondaryTenants,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1144},
-	},
-	{
-		Key:     UseKeyEncodeForHashShardedIndexes,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1146},
-	},
-	{
-		Key:     DatabasePlacementPolicy,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1148},
-	},
-	{
-		Key:     GeneratedAsIdentity,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1150},
-	},
-	{
-		Key:     OnUpdateExpressions,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1152},
-	},
-	{
-		Key:     SpanConfigurationsTable,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1154},
-	},
-	{
-		Key:     BoundedStaleness,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1156},
-	},
-	{
-		Key:     DateAndIntervalStyle,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1160},
-	},
-	{
-		Key:     PebbleFormatVersioned,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1162},
-	},
-	{
-		Key:     MarkerDataKeysRegistry,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1164},
-	},
-	{
-		Key:     PebbleSetWithDelete,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1166},
-	},
-	{
-		Key:     TenantUsageSingleConsumptionColumn,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1168},
-	},
-	{
-		Key:     SQLStatsTables,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1170},
-	},
-	{
-		Key:     SQLStatsCompactionScheduledJob,
-		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 1172},
-	},
 	{
 		// V21_2 is CockroachDB v21.2. It's used for all v21.2.x patch releases.
 		Key:     V21_2,
@@ -512,10 +259,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     Start22_1,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 2},
-	},
-	{
-		Key:     TargetBytesAvoidExcess,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 4},
 	},
 	{
 		Key:     AvoidDrainingNames,
@@ -593,7 +336,7 @@ var (
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(V21_1)
+	binaryMinSupportedVersion = ByKey(V21_2)
 
 	// binaryVersion is the version of this binary.
 	//

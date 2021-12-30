@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -290,13 +289,6 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 		if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 			return nil, err
 		}
-	}
-
-	// TODO(rafi): Remove this condition in 21.2.
-	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			`altering per-role defaults requires all nodes to be upgraded to %s`,
-			clusterversion.ByKey(clusterversion.DatabaseRoleSettings))
 	}
 
 	var roleName security.SQLUsername
