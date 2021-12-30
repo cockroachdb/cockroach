@@ -10,6 +10,7 @@ go_library(
         "constants.go",
         "license.go",
         "node_id.go",
+        "security_flags.go",
         "store_spec.go",
         "test_server_args.go",
         "testing_knobs.go",
@@ -53,10 +54,11 @@ go_test(
         "cluster_id_test.go",
         "main_test.go",
         "node_id_test.go",
+        "security_flags_test.go",
         "store_spec_test.go",
     ],
+    embed = [":base"],
     deps = [
-        ":base",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -65,6 +67,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

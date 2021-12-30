@@ -32,11 +32,13 @@ import (
 func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Context {
 	nc := &base.NodeIDContainer{}
 	ctx = logtags.AddTag(ctx, "n", nc)
+	cfg := &base.Config{Insecure: true}
+	_ = cfg.SecurityOverrides.Set("disable-all")
 	return rpc.NewContext(ctx,
 		rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
 			NodeID:   nc,
-			Config:   &base.Config{Insecure: true},
+			Config:   cfg,
 			Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 			Stopper:  stopper,
 			Settings: cluster.MakeTestingClusterSettings(),

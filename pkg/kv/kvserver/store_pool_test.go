@@ -103,10 +103,12 @@ func createTestStorePool(
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	st := cluster.MakeTestingClusterSettings()
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
+	cfg := &base.Config{Insecure: true}
+	_ = cfg.SecurityOverrides.Set("disable-all")
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
+			Config:   cfg,
 			Clock:    clock,
 			Stopper:  stopper,
 			Settings: st,

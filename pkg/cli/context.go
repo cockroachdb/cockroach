@@ -429,10 +429,11 @@ func setDebugContextDefaults() {
 // See below for defaults.
 var startCtx struct {
 	// server-specific values of some flags.
-	serverInsecure         bool
-	serverSSLCertsDir      string
-	serverCertPrincipalMap []string
-	serverListenAddr       string
+	serverInsecure          bool
+	serverSecurityOverrides base.SecurityOverrides
+	serverSSLCertsDir       string
+	serverCertPrincipalMap  []string
+	serverListenAddr        string
 
 	// The TLS auto-handshake parameters.
 	initToken             string
@@ -471,6 +472,7 @@ var startCtx struct {
 // test that exercises command-line parsing.
 func setStartContextDefaults() {
 	startCtx.serverInsecure = baseCfg.Insecure
+	startCtx.serverSecurityOverrides = baseCfg.SecurityOverrides
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.serverCertPrincipalMap = nil
 	startCtx.serverListenAddr = ""

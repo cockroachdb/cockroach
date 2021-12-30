@@ -651,7 +651,8 @@ This makes the client-server connection vulnerable to MITM attacks. Use with car
 	ServerInsecure = FlagInfo{
 		Name: "insecure",
 		Description: `
-Start a node with all security controls disabled.
+Alias for --security-overrides=disable-all.
+
 There is no encryption, no authentication and internal security
 checks are also disabled. This makes any client able to take
 over the entire cluster.
@@ -668,8 +669,34 @@ is likely to cause the entire host server to become compromised.
 
 </PRE>
 To simply accept non-TLS connections for SQL clients while keeping
-the cluster secure, consider using --accept-sql-without-tls instead.
+the cluster secure, consider using
+--security-overrides=disable-sql-require-tls instead.
 Also see: ` + build.MakeIssueURL(53404) + `
+`,
+	}
+
+	ServerSecurityOverrides = FlagInfo{
+		Name: "security-overrides",
+		Description: `
+Disable some security protections:
+<PRE>
+- disable-tls
+- disable-rpc-tls (implied by disable-tls; implies disable-rpc-authn)
+- disable-rpc-authn (implied by disable-rpc-tls; implies disable-rpc-tls)
+- disable-sql-authn
+- disable-sql-tls (implied by disable-tls)
+- disable-sql-require-tls (implied by disable-sql-tls)
+- disable-sql-set-credentials
+- disable-http-tls (implied by disable-tls)
+- disable-http-authn
+- disable-remote-cert-retrieval (implied by any of disable-{rpc,http}-{tls,authn})
+- disable-cluster-name-verification
+- disable-all (implies all of the above)
+</PRE>
+
+See the documentation for details about these options.
+Note that each of these options, in isolation, can be sufficient
+to fully compromise an entire cluster's security. Proceed with care.
 `,
 	}
 

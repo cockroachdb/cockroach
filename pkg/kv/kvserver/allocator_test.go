@@ -7340,9 +7340,11 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	// Model a set of stores in a cluster doing rebalancing, with ranges being
 	// randomly added occasionally.
+	cfg := &base.Config{Insecure: true}
+	_ = cfg.SecurityOverrides.Set("disable-all")
 	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
 		TenantID: roachpb.SystemTenantID,
-		Config:   &base.Config{Insecure: true},
+		Config:   cfg,
 		Clock:    clock,
 		Stopper:  stopper,
 		Settings: st,
@@ -7488,9 +7490,11 @@ func Example_rebalancing() {
 
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.
+	cfg := &base.Config{Insecure: true}
+	_ = cfg.SecurityOverrides.Set("disable-all")
 	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
 		TenantID: roachpb.SystemTenantID,
-		Config:   &base.Config{Insecure: true},
+		Config:   cfg,
 		Clock:    clock,
 		Stopper:  stopper,
 		Settings: st,

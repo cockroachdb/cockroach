@@ -157,10 +157,13 @@ func createTestStoreWithoutStart(
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 
+	cfg := &base.Config{Insecure: true}
+	_ = cfg.SecurityOverrides.Set("disable-all")
+
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
+			Config:   cfg,
 			Clock:    cfg.Clock,
 			Stopper:  stopper,
 			Settings: cfg.Settings,

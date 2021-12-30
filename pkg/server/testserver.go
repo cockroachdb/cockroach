@@ -285,6 +285,12 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
 	}
 
+	if cfg.Insecure {
+		// We do this override at the end, after the other override
+		// flags above have been applied.
+		_ = cfg.SecurityOverrides.Set("disable-all")
+	}
+
 	return cfg
 }
 
@@ -682,6 +688,9 @@ func (ts *TestServer) StartTenant(
 	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
+	if baseCfg.Insecure {
+		_ = baseCfg.SecurityOverrides.Set("disable-all")
+	}
 	baseCfg.Locality = params.Locality
 	if params.SSLCertsDir != "" {
 		baseCfg.SSLCertsDir = params.SSLCertsDir

@@ -443,6 +443,7 @@ func newTestServer(
 func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
+	_ = cfg.SecurityOverrides.Set("disable-all")
 	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
 	ctx := context.Background()
 	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
