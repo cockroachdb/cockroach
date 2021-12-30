@@ -328,6 +328,10 @@ const (
 	SeedTenantSpanConfigs
 	// Public schema is backed by a descriptor.
 	PublicSchemasWithDescriptors
+	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason
+	// that correspond to range descriptor changes resulting from recovery
+	// procedures.
+	UnsafeLossOfQuorumRecoveryRangeLog
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -576,6 +580,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PublicSchemasWithDescriptors,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
+	},
+	{
+		Key:     UnsafeLossOfQuorumRecoveryRangeLog,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
 	},
 
 	// *************************************************

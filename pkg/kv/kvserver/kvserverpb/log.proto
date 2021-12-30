@@ -31,6 +31,10 @@ enum RangeLogEventType {
   add_non_voter = 4;
   // RemoveNonVoter is the event type recorded when a range removes an existing non-voting replica.
   remove_non_voter = 5;
+  // UnsafeQuorumRecovery is the event type recorded when all replicas are
+  // replaced by a new one that acts as the source of truth possibly losing
+  // latest updates.
+  unsafe_quorum_recovery = 6;
 }
 
 message RangeLogEvent {
