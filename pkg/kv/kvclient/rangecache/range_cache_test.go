@@ -1014,7 +1014,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), &CacheEntry{desc: *defDesc})
+	cache.addEntryLocked(&CacheEntry{desc: *defDesc})
 
 	// Now, add a new, overlapping set of descriptors.
 	minToBDesc := &roachpb.RangeDescriptor{
@@ -1029,13 +1029,13 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 	curGeneration := roachpb.RangeGeneration(1)
 	require.True(t, clearOlderOverlapping(ctx, cache, minToBDesc))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), &CacheEntry{desc: *minToBDesc})
+	cache.addEntryLocked(&CacheEntry{desc: *minToBDesc})
 	if desc := cache.GetCached(ctx, roachpb.RKey("b"), false); desc != nil {
 		t.Errorf("descriptor unexpectedly non-nil: %s", desc)
 	}
 
 	require.True(t, clearOlderOverlapping(ctx, cache, bToMaxDesc))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), &CacheEntry{desc: *bToMaxDesc})
+	cache.addEntryLocked(&CacheEntry{desc: *bToMaxDesc})
 	ri := cache.GetCached(ctx, roachpb.RKey("b"), false)
 	require.Equal(t, bToMaxDesc, ri.Desc())
 
@@ -1044,7 +1044,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	curGeneration++
 	defDescCpy.Generation = curGeneration
 	require.True(t, clearOlderOverlapping(ctx, cache, &defDescCpy))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), &CacheEntry{desc: defDescCpy})
+	cache.addEntryLocked(&CacheEntry{desc: defDescCpy})
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
 		ri = cache.GetCached(ctx, key, false)
 		require.Equal(t, &defDescCpy, ri.Desc())
@@ -1058,7 +1058,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		Generation: curGeneration,
 	}
 	require.True(t, clearOlderOverlapping(ctx, cache, bToCDesc))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("c"))), &CacheEntry{desc: *bToCDesc})
+	cache.addEntryLocked(&CacheEntry{desc: *bToCDesc})
 	ri = cache.GetCached(ctx, roachpb.RKey("c"), true)
 	require.Equal(t, bToCDesc, ri.Desc())
 
@@ -1069,7 +1069,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		Generation: curGeneration,
 	}
 	require.True(t, clearOlderOverlapping(ctx, cache, aToBDesc))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("b"))), ri)
+	cache.addEntryLocked(ri)
 	ri = cache.GetCached(ctx, roachpb.RKey("c"), true)
 	require.Equal(t, bToCDesc, ri.Desc())
 }
