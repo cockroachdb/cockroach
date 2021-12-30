@@ -47,7 +47,7 @@ scan a,rev
 memo
 SELECT k,f FROM a ORDER BY k DESC LIMIT 10
 ----
-memo (optimized, ~5KB, required=[presentation: k:1,f:3] [ordering: -1])
+memo (optimized, ~4KB, required=[presentation: k:1,f:3] [ordering: -1])
  ├── G1: (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev)) (top-k G2 &{10 -1 })
  │    ├── [presentation: k:1,f:3] [ordering: -1]
  │    │    ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
@@ -526,6 +526,7 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3)
+ ├── distribution: east
  └── locality-optimized-search
       ├── columns: a:3!null b:4!null
       ├── left columns: a:11 b:12
@@ -533,6 +534,7 @@ project
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(3,4)
+      ├── distribution: east
       ├── scan abc_part@b_idx
       │    ├── columns: a:11!null b:12!null
       │    ├── constraint: /9/12: [/'east'/1 - /'east'/1]
@@ -556,6 +558,7 @@ index-join abc_part
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-6)
+ ├── distribution: west
  └── locality-optimized-search
       ├── columns: r:1!null a:3!null b:4!null
       ├── left columns: r:9 a:11 b:12
@@ -563,6 +566,7 @@ index-join abc_part
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,3,4)
+      ├── distribution: west
       ├── scan abc_part@b_idx
       │    ├── columns: r:9!null a:11!null b:12!null
       │    ├── constraint: /9/12: [/'west'/1 - /'west'/1]
@@ -586,6 +590,7 @@ index-join abc_part
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-6)
+ ├── distribution: central
  └── locality-optimized-search
       ├── columns: r:1!null a:3!null b:4!null
       ├── left columns: r:9 a:11 b:12
@@ -593,6 +598,7 @@ index-join abc_part
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,3,4)
+      ├── distribution: central
       ├── scan abc_part@b_idx
       │    ├── columns: r:9!null a:11!null b:12!null
       │    ├── constraint: /9/12: [/'central'/1 - /'central'/1]
@@ -616,6 +622,7 @@ index-join abc_part
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-6)
+ ├── distribution: east
  └── locality-optimized-search
       ├── columns: r:1!null t:2!null a:3!null c:5!null
       ├── left columns: r:9 t:10 a:11 c:13
@@ -623,6 +630,7 @@ index-join abc_part
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
+      ├── distribution: east
       ├── scan abc_part@c_idx
       │    ├── columns: r:9!null t:10!null a:11!null c:13!null
       │    ├── constraint: /9/10/13
@@ -653,6 +661,7 @@ index-join abc_part
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-6)
+ ├── distribution: west
  └── locality-optimized-search
       ├── columns: r:1!null t:2!null a:3!null c:5!null
       ├── left columns: r:9 t:10 a:11 c:13
@@ -660,6 +669,7 @@ index-join abc_part
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
+      ├── distribution: west
       ├── scan abc_part@c_idx
       │    ├── columns: r:9!null t:10!null a:11!null c:13!null
       │    ├── constraint: /9/10/13
@@ -690,6 +700,7 @@ index-join abc_part
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-6)
+ ├── distribution: central
  └── locality-optimized-search
       ├── columns: r:1!null t:2!null a:3!null c:5!null
       ├── left columns: r:9 t:10 a:11 c:13
@@ -697,6 +708,7 @@ index-join abc_part
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
+      ├── distribution: central
       ├── scan abc_part@c_idx
       │    ├── columns: r:9!null t:10!null a:11!null c:13!null
       │    ├── constraint: /9/10/13
@@ -727,6 +739,7 @@ project
  ├── columns: a:3!null
  ├── cardinality: [0 - 2]
  ├── key: (3)
+ ├── distribution: east
  └── locality-optimized-search
       ├── columns: a:3!null b:4!null
       ├── left columns: a:11 b:12
@@ -734,6 +747,7 @@ project
       ├── cardinality: [0 - 2]
       ├── key: (3)
       ├── fd: (3)-->(4), (4)-->(3)
+      ├── distribution: east
       ├── scan abc_part@b_idx
       │    ├── columns: a:11!null b:12!null
       │    ├── constraint: /9/12: [/'east'/1 - /'east'/2]
@@ -753,65 +767,85 @@ project
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
 SELECT a FROM abc_part WHERE b >= 0 AND b < 100001
 ----
-project
+distribute
  ├── columns: a:3!null
+ ├── input distribution: east,west
  ├── cardinality: [0 - 100001]
  ├── key: (3)
- └── select
-      ├── columns: a:3!null b:4!null
+ ├── distribution: east
+ └── project
+      ├── columns: a:3!null
       ├── cardinality: [0 - 100001]
       ├── key: (3)
-      ├── fd: (3)-->(4), (4)-->(3)
-      ├── index-join abc_part
-      │    ├── columns: a:3!null b:4
-      │    ├── key: (3)
-      │    ├── fd: (3)-->(4), (4)~~>(3)
-      │    └── scan abc_part@c_idx
-      │         ├── columns: a:3!null
-      │         ├── constraint: /1/2/5
-      │         │    ├── [/'central'/1 - /'central'/3]
-      │         │    ├── [/'east'/1 - /'east'/3]
-      │         │    └── [/'west'/1 - /'west'/3]
-      │         └── key: (3)
-      └── filters
-           └── (b:4 >= 0) AND (b:4 < 100001) [outer=(4), constraints=(/4: [/0 - /100000]; tight)]
+      └── select
+           ├── columns: a:3!null b:4!null
+           ├── cardinality: [0 - 100001]
+           ├── key: (3)
+           ├── fd: (3)-->(4), (4)-->(3)
+           ├── index-join abc_part
+           │    ├── columns: a:3!null b:4
+           │    ├── key: (3)
+           │    ├── fd: (3)-->(4), (4)~~>(3)
+           │    └── scan abc_part@c_idx
+           │         ├── columns: a:3!null
+           │         ├── constraint: /1/2/5
+           │         │    ├── [/'central'/1 - /'central'/3]
+           │         │    ├── [/'east'/1 - /'east'/3]
+           │         │    └── [/'west'/1 - /'west'/3]
+           │         └── key: (3)
+           └── filters
+                └── (b:4 >= 0) AND (b:4 < 100001) [outer=(4), constraints=(/4: [/0 - /100000]; tight)]
 
 # The spans target all remote partitions.
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
 SELECT a FROM abc_part WHERE b = 1 AND r IN ('west', 'central')
 ----
-project
+distribute
  ├── columns: a:3!null
+ ├── input distribution: central,west
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3)
- └── scan abc_part@b_idx
-      ├── columns: r:1!null a:3!null b:4!null
-      ├── constraint: /1/4
-      │    ├── [/'central'/1 - /'central'/1]
-      │    └── [/'west'/1 - /'west'/1]
+ ├── distribution: east
+ └── project
+      ├── columns: a:3!null
       ├── cardinality: [0 - 1]
       ├── key: ()
-      └── fd: ()-->(1,3,4)
+      ├── fd: ()-->(3)
+      └── scan abc_part@b_idx
+           ├── columns: r:1!null a:3!null b:4!null
+           ├── constraint: /1/4
+           │    ├── [/'central'/1 - /'central'/1]
+           │    └── [/'west'/1 - /'west'/1]
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(1,3,4)
 
 # The scan is limited.
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
 SELECT a FROM abc_part WHERE d = 1 LIMIT 1
 ----
-project
+distribute
  ├── columns: a:3!null
+ ├── input distribution: central,east,west
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3)
- └── scan abc_part@d_idx
-      ├── columns: a:3!null d:6!null
-      ├── constraint: /1/6/3
-      │    ├── [/'central'/1 - /'central'/1]
-      │    ├── [/'east'/1 - /'east'/1]
-      │    └── [/'west'/1 - /'west'/1]
-      ├── limit: 1
+ ├── distribution: east
+ └── project
+      ├── columns: a:3!null
+      ├── cardinality: [0 - 1]
       ├── key: ()
-      └── fd: ()-->(3,6)
+      ├── fd: ()-->(3)
+      └── scan abc_part@d_idx
+           ├── columns: a:3!null d:6!null
+           ├── constraint: /1/6/3
+           │    ├── [/'central'/1 - /'central'/1]
+           │    ├── [/'east'/1 - /'east'/1]
+           │    └── [/'west'/1 - /'west'/1]
+           ├── limit: 1
+           ├── key: ()
+           └── fd: ()-->(3,6)
 
 # The scan is limited, but b is known to be a key, so the limit is discarded.
 opt locality=(region=east) expect=GenerateLocalityOptimizedScan
@@ -822,6 +856,7 @@ project
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3)
+ ├── distribution: east
  └── locality-optimized-search
       ├── columns: a:3!null b:4!null
       ├── left columns: a:11 b:12
@@ -829,6 +864,7 @@ project
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(3,4)
+      ├── distribution: east
       ├── scan abc_part@b_idx
       │    ├── columns: a:11!null b:12!null
       │    ├── constraint: /9/12: [/'east'/1 - /'east'/1]

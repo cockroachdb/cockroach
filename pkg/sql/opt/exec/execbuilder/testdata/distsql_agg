@@ -993,6 +993,7 @@ group-by (streaming)
  ├── cost: 25.1456179
  ├── key: (2)
  ├── fd: (2)-->(5)
+ ├── distribution: test
  ├── prune: (5)
  ├── scan data2
  │    ├── columns: a:1 b:2
@@ -1002,6 +1003,7 @@ group-by (streaming)
  │    ├── key: (2)
  │    ├── fd: ()-->(1)
  │    ├── ordering: +2 opt(1) [actual: +2]
+ │    ├── distribution: test
  │    ├── prune: (2)
  │    └── interesting orderings: (+2 opt(1))
  └── aggregations

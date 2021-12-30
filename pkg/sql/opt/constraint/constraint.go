@@ -320,6 +320,25 @@ func (c *Constraint) ContainsSpan(evalCtx *tree.EvalContext, sp *Span) bool {
 	return false
 }
 
+// IntersectsSpan returns true if the constraint overlaps the given span.
+func (c *Constraint) IntersectsSpan(evalCtx *tree.EvalContext, sp *Span) bool {
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	// Binary search to find an overlapping span.
+	for l, r := 0, c.Spans.Count()-1; l <= r; {
+		m := (l + r) / 2
+		cSpan := c.Spans.Get(m)
+		if sp.StartsAfter(&keyCtx, cSpan) {
+			l = m + 1
+		} else if cSpan.StartsAfter(&keyCtx, sp) {
+			r = m - 1
+		} else {
+			// The spans must overlap.
+			return true
+		}
+	}
+	return false
+}
+
 // Combine refines the receiver constraint using constraints on a suffix of the
 // same list of columns. For example:
 //  c:      /a/b: [/1 - /2] [/4 - /4]

@@ -182,7 +182,7 @@ inner-join (merge)
 memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
-memo (optimized, ~42KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
+memo (optimized, ~41KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+7) (merge-join G3 G2 G10 inner-join,+7,+1) (lookup-join G3 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G5 G6 G10 inner-join,+7,+12) (merge-join G6 G5 G10 inner-join,+12,+7) (lookup-join G6 G10 stu,keyCols=[12],outCols=(1-3,7-9,12-14)) (merge-join G8 G9 G10 inner-join,+7,+12) (lookup-join G8 G10 xyz@xy,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G9 G8 G10 inner-join,+12,+7)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14]
  │         ├── best: (merge-join G5="[ordering: +7]" G6="[ordering: +(1|12)]" G10 inner-join,+7,+12)
@@ -244,7 +244,7 @@ memo (optimized, ~42KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
 memo
 SELECT * FROM abc, stu, xyz, pqr WHERE a = 1
 ----
-memo (optimized, ~28KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~27KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (inner-join G3 G2 G4)
@@ -1823,7 +1823,7 @@ inner-join (lookup xyz@xy)
 memo
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
-memo (optimized, ~18KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
+memo (optimized, ~17KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+6,+7,+8) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+8,+7,+6) (lookup-join G2 G5 stu [as=r],keyCols=[1 2 3],outCols=(1-3,6-8)) (lookup-join G2 G5 stu@uts [as=r],keyCols=[3 2 1],outCols=(1-3,6-8)) (merge-join G3 G2 G5 inner-join,+6,+7,+8,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+8,+7,+6,+3,+2,+1) (lookup-join G3 G5 stu [as=l],keyCols=[6 7 8],outCols=(1-3,6-8)) (lookup-join G3 G5 stu@uts [as=l],keyCols=[8 7 6],outCols=(1-3,6-8))
  │    └── [presentation: s:1,t:2,u:3,s:6,t:7,u:8]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +6,+7,+8]" G5 inner-join,+1,+2,+3,+6,+7,+8)
@@ -2030,7 +2030,7 @@ left-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=b
 ----
-memo (optimized, ~16KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~15KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G3 G2 G4)
@@ -5346,7 +5346,7 @@ WHERE n.name = 'Upper West Side'
 OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
-memo (optimized, ~33KB, required=[presentation: name:16,popn_per_sqkm:22])
+memo (optimized, ~32KB, required=[presentation: name:16,popn_per_sqkm:22])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:16,popn_per_sqkm:22]
  │         ├── best: (project G2 G3 name)
@@ -8205,7 +8205,7 @@ SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
 UNION ALL
 SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
 ----
-memo (optimized, ~21KB, required=[presentation: ?column?:7])
+memo (optimized, ~20KB, required=[presentation: ?column?:7])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: ?column?:7]
  │         ├── best: (union-all G2 G3)
@@ -8851,6 +8851,7 @@ anti-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8861,6 +8862,7 @@ anti-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8868,6 +8870,7 @@ anti-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -8899,6 +8902,7 @@ anti-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: west
  ├── anti-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8909,6 +8913,7 @@ anti-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: west
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8916,6 +8921,7 @@ anti-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: west
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'west'/1 - /'west'/1]
@@ -8947,6 +8953,7 @@ anti-join (lookup abc_part@b_idx)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part@b_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8957,6 +8964,7 @@ anti-join (lookup abc_part@b_idx)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8964,6 +8972,7 @@ anti-join (lookup abc_part@b_idx)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -8995,6 +9004,7 @@ anti-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -9005,6 +9015,7 @@ anti-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9012,6 +9023,7 @@ anti-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -9035,38 +9047,44 @@ anti-join (lookup abc_part)
 opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
 SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE e = a) AND f = 10
 ----
-anti-join (lookup abc_part)
+distribute
  ├── columns: r:1!null d:2!null e:3 f:4!null
- ├── lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
- ├── lookup columns are key
+ ├── input distribution: central,east,west
  ├── key: (2)
  ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
- ├── anti-join (lookup abc_part)
- │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
- │    ├── lookup expression
- │    │    └── filters
- │    │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │    │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- │    ├── lookup columns are key
- │    ├── key: (2)
- │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
- │    ├── index-join def_part
- │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
- │    │    ├── key: (2)
- │    │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
- │    │    └── scan def_part@f_idx
- │    │         ├── columns: def_part.r:1!null d:2!null f:4!null
- │    │         ├── constraint: /1/4/2
- │    │         │    ├── [/'central'/10 - /'central'/10]
- │    │         │    ├── [/'east'/10 - /'east'/10]
- │    │         │    └── [/'west'/10 - /'west'/10]
- │    │         ├── key: (2)
- │    │         └── fd: ()-->(4), (2)-->(1)
- │    └── filters (true)
- └── filters (true)
+ ├── distribution: east
+ └── anti-join (lookup abc_part)
+      ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+      ├── lookup expression
+      │    └── filters
+      │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+      ├── lookup columns are key
+      ├── key: (2)
+      ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+      ├── anti-join (lookup abc_part)
+      │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+      │    ├── lookup expression
+      │    │    └── filters
+      │    │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      │    │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
+      │    ├── lookup columns are key
+      │    ├── key: (2)
+      │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+      │    ├── index-join def_part
+      │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+      │    │    ├── key: (2)
+      │    │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+      │    │    └── scan def_part@f_idx
+      │    │         ├── columns: def_part.r:1!null d:2!null f:4!null
+      │    │         ├── constraint: /1/4/2
+      │    │         │    ├── [/'central'/10 - /'central'/10]
+      │    │         │    ├── [/'east'/10 - /'east'/10]
+      │    │         │    └── [/'west'/10 - /'west'/10]
+      │    │         ├── key: (2)
+      │    │         └── fd: ()-->(4), (2)-->(1)
+      │    └── filters (true)
+      └── filters (true)
 
 # Optimization applies even though the lookup join may have more than one
 # matching row.
@@ -9082,6 +9100,7 @@ anti-join (lookup abc_part@c_idx)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part@c_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -9091,6 +9110,7 @@ anti-join (lookup abc_part@c_idx)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9098,6 +9118,7 @@ anti-join (lookup abc_part@c_idx)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -9130,6 +9151,7 @@ anti-join (lookup abc_part@c_idx)
  ├── immutable
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part@c_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -9140,6 +9162,7 @@ anti-join (lookup abc_part@c_idx)
  │    ├── immutable
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9147,6 +9170,7 @@ anti-join (lookup abc_part@c_idx)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -9184,6 +9208,7 @@ semi-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: central
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9191,6 +9216,7 @@ semi-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: central
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'central'/1 - /'central'/1]
@@ -9229,6 +9255,7 @@ inner-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4,7-10), (8)==(3), (3)==(8)
+ ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9236,6 +9263,7 @@ inner-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -9270,6 +9298,7 @@ left-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4,7-10)
+ ├── distribution: west
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9277,6 +9306,7 @@ left-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: west
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'west'/1 - /'west'/1]
@@ -9311,6 +9341,7 @@ semi-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: central
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9318,6 +9349,7 @@ semi-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: central
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'central'/1 - /'central'/1]
@@ -9352,6 +9384,7 @@ semi-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: west
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9359,6 +9392,7 @@ semi-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: west
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'west'/1 - /'west'/1]
@@ -9387,6 +9421,7 @@ inner-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4,7-10), (9)==(4), (4)==(9)
+ ├── distribution: east
  ├── inner-join (lookup abc_part@b_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null abc_part.r:7!null a:8!null b:9!null
  │    ├── lookup expression
@@ -9401,6 +9436,7 @@ inner-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4,7-9), (9)==(4), (4)==(9)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9408,6 +9444,7 @@ inner-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -9443,6 +9480,7 @@ inner-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4,7-10), (8)==(3), (3)==(8)
+ ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9450,6 +9488,7 @@ inner-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -9471,32 +9510,38 @@ inner-join (lookup abc_part)
 opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part INNER JOIN abc_part ON e = a WHERE f = 10
 ----
-inner-join (lookup abc_part)
+distribute
  ├── columns: r:1!null d:2!null e:3!null f:4!null r:7!null a:8!null b:9 c:10
- ├── lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
- ├── lookup columns are key
+ ├── input distribution: central,east,west
  ├── key: (2)
  ├── fd: ()-->(4), (2)-->(1,3), (3)-->(1,2), (8)-->(7,9,10), (9)~~>(7,8,10), (3)==(8), (8)==(3)
- ├── index-join def_part
- │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
- │    ├── key: (2)
- │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
- │    └── scan def_part@f_idx
- │         ├── columns: def_part.r:1!null d:2!null f:4!null
- │         ├── constraint: /1/4/2
- │         │    ├── [/'central'/10 - /'central'/10]
- │         │    ├── [/'east'/10 - /'east'/10]
- │         │    └── [/'west'/10 - /'west'/10]
- │         ├── key: (2)
- │         └── fd: ()-->(4), (2)-->(1)
- └── filters (true)
+ ├── distribution: east
+ └── inner-join (lookup abc_part)
+      ├── columns: def_part.r:1!null d:2!null e:3!null f:4!null abc_part.r:7!null a:8!null b:9 c:10
+      ├── lookup expression
+      │    └── filters
+      │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
+      ├── remote lookup expression
+      │    └── filters
+      │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+      ├── lookup columns are key
+      ├── key: (2)
+      ├── fd: ()-->(4), (2)-->(1,3), (3)-->(1,2), (8)-->(7,9,10), (9)~~>(7,8,10), (3)==(8), (8)==(3)
+      ├── index-join def_part
+      │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+      │    ├── key: (2)
+      │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+      │    └── scan def_part@f_idx
+      │         ├── columns: def_part.r:1!null d:2!null f:4!null
+      │         ├── constraint: /1/4/2
+      │         │    ├── [/'central'/10 - /'central'/10]
+      │         │    ├── [/'east'/10 - /'east'/10]
+      │         │    └── [/'west'/10 - /'west'/10]
+      │         ├── key: (2)
+      │         └── fd: ()-->(4), (2)-->(1)
+      └── filters (true)
 
 # Optimization applies for a semi join even though the lookup join may have more
 # than one matching row.
@@ -9516,6 +9561,7 @@ semi-join (lookup abc_part@c_idx)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9523,6 +9569,7 @@ semi-join (lookup abc_part@c_idx)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -9554,6 +9601,7 @@ semi-join (lookup abc_part@c_idx)
  ├── immutable
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9561,6 +9609,7 @@ semi-join (lookup abc_part@c_idx)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -9589,6 +9638,7 @@ inner-join (lookup abc_part)
  ├── lookup columns are key
  ├── key: (8)
  ├── fd: ()-->(1-4,10), (8)-->(7,9), (9)~~>(7,8), (4)==(10), (10)==(4)
+ ├── distribution: east
  ├── inner-join (lookup abc_part@c_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null abc_part.r:7!null a:8!null c:10!null
  │    ├── lookup expression
@@ -9597,6 +9647,7 @@ inner-join (lookup abc_part)
  │    │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  │    ├── key: (8)
  │    ├── fd: ()-->(1-4,10), (8)-->(7), (4)==(10), (10)==(4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9604,6 +9655,7 @@ inner-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -9635,6 +9687,7 @@ anti-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -9645,6 +9698,7 @@ anti-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -9652,6 +9706,7 @@ anti-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]

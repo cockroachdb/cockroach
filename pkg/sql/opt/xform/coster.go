@@ -466,6 +466,9 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.SortOp:
 		cost = c.computeSortCost(candidate.(*memo.SortExpr), required)
 
+	case opt.DistributeOp:
+		cost = c.computeDistributeCost(candidate.(*memo.DistributeExpr), required)
+
 	case opt.ScanOp:
 		cost = c.computeScanCost(candidate.(*memo.ScanExpr), required)
 
@@ -640,6 +643,14 @@ func (c *coster) computeSortCost(sort *memo.SortExpr, required *physical.Require
 	// TODO(harding): Add the CPU cost of emitting the output rows. This should be
 	// done in conjunction with computeTopKCost.
 	return cost
+}
+
+func (c *coster) computeDistributeCost(
+	distribute *memo.DistributeExpr, required *physical.Required,
+) memo.Cost {
+	// TODO(rytaft): Compute a real cost here. Currently we just add a tiny cost
+	// as a placeholder.
+	return cpuCostFactor
 }
 
 func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Required) memo.Cost {
