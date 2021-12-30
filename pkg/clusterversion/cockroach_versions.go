@@ -229,6 +229,10 @@ const (
 	// system.protected_ts_records table that describes what is protected by the
 	// record.
 	AlterSystemProtectedTimestampAddColumn
+	// UnsafeLossOfQuorumRecoveryRangeLog adds a new value to RangeLogEventReason
+	// that correspond to range descriptor changes resulting from recovery
+	// procedures.
+	UnsafeLossOfQuorumRecoveryRangeLog
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -336,6 +340,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemProtectedTimestampAddColumn,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
+	},
+	{
+		Key:     UnsafeLossOfQuorumRecoveryRangeLog,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 38},
 	},
 
 	// *************************************************

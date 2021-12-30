@@ -12,11 +12,14 @@ package loqrecovery
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -35,12 +38,13 @@ func writeReplicaRecoveryStoreRecord(
 	readWriter storage.ReadWriter,
 ) error {
 	record := loqrecoverypb.ReplicaRecoveryRecord{
-		Timestamp:    timestamp,
-		RangeID:      report.RangeID,
-		StartKey:     update.StartKey,
-		EndKey:       update.StartKey,
-		OldReplicaID: report.OldReplica.ReplicaID,
-		NewReplica:   update.NewReplica,
+		Timestamp:       timestamp,
+		RangeID:         report.RangeID(),
+		StartKey:        update.StartKey,
+		EndKey:          update.StartKey,
+		OldReplicaID:    report.OldReplica.ReplicaID,
+		NewReplica:      update.NewReplica,
+		RangeDescriptor: report.Descriptor,
 	}
 
 	data, err := protoutil.Marshal(&record)
@@ -117,4 +121,51 @@ func RegisterOfflineRecoveryEvents(
 			"failed to fully process replica recovery records, successfully processed %d", successCount)
 	}
 	return successCount, nil
+}
+
+// UpdateRangeLogWithRecovery inserts a range log update to system.rangelog
+// using information from recovery event.
+// useOldRangeLogEvents is enabling new reason that we can only use in upgraded
+// clusters.
+func UpdateRangeLogWithRecovery(
+	ctx context.Context,
+	sqlExec func(ctx context.Context, stmt string, args ...interface{}) (int, error),
+	event loqrecoverypb.ReplicaRecoveryRecord,
+) error {
+	const insertEventTableStmt = `
+	INSERT INTO system.rangelog (
+		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
+	)
+	VALUES(
+		$1, $2, $3, $4, $5, $6
+	)
+	`
+	updateInfo := kvserverpb.RangeLogEvent_Info{
+		UpdatedDesc:  &event.RangeDescriptor,
+		AddedReplica: &event.NewReplica,
+		Reason:       kvserverpb.ReasonUnsafeRecovery,
+		Details:      "Performed unsafe range loss of quorum recovery",
+	}
+	infoBytes, err := json.Marshal(updateInfo)
+	if err != nil {
+		return errors.Wrap(err, "failed to serialize a RangeLog info entry")
+	}
+	args := []interface{}{
+		timeutil.Unix(0, event.Timestamp),
+		event.RangeID,
+		event.NewReplica.StoreID,
+		kvserverpb.RangeLogEventType_unsafe_quorum_recovery.String(),
+		nil, // otherRangeID
+		string(infoBytes),
+	}
+
+	rows, err := sqlExec(ctx, insertEventTableStmt, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to insert a RangeLog entry")
+	}
+	if rows != 1 {
+		return errors.Errorf("%d row(s) affected by RangeLog insert while expected 1",
+			rows)
+	}
+	return nil
 }
