@@ -607,24 +607,23 @@ func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bo
 // stored (old STORING encoding)) column IDs for non-unique indexes. It also
 // returns the direction with which each column was encoded.
 func FullIndexColumnIDs(idx Index) ([]descpb.ColumnID, []descpb.IndexDescriptor_Direction) {
-	n := idx.NumKeyColumns()
-	if !idx.IsUnique() {
-		n += idx.NumKeySuffixColumns()
+	if idx.IsUnique() {
+		idxDesc := idx.IndexDesc()
+		return idxDesc.KeyColumnIDs, idxDesc.KeyColumnDirections
 	}
+	// Non-unique indexes have some of the primary-key columns appended to
+	// their key.
+	n := idx.NumKeyColumns() + idx.NumKeySuffixColumns()
 	ids := make([]descpb.ColumnID, 0, n)
 	dirs := make([]descpb.IndexDescriptor_Direction, 0, n)
 	for i := 0; i < idx.NumKeyColumns(); i++ {
 		ids = append(ids, idx.GetKeyColumnID(i))
 		dirs = append(dirs, idx.GetKeyColumnDirection(i))
 	}
-	// Non-unique indexes have some of the primary-key columns appended to
-	// their key.
-	if !idx.IsUnique() {
-		for i := 0; i < idx.NumKeySuffixColumns(); i++ {
-			// Extra columns are encoded in ascending order.
-			ids = append(ids, idx.GetKeySuffixColumnID(i))
-			dirs = append(dirs, descpb.IndexDescriptor_ASC)
-		}
+	for i := 0; i < idx.NumKeySuffixColumns(); i++ {
+		// Extra columns are encoded in ascending order.
+		ids = append(ids, idx.GetKeySuffixColumnID(i))
+		dirs = append(dirs, descpb.IndexDescriptor_ASC)
 	}
 	return ids, dirs
 }
