@@ -473,7 +473,10 @@ func init() {
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
 
 		// The following flag is planned to become non-experimental in 21.1.
-		boolFlag(f, &serverCfg.AcceptSQLWithoutTLS, cliflags.AcceptSQLWithoutTLS)
+		varFlag(f, secOverrideSetter{
+			dst:  &baseCfg.SecurityOverrides,
+			flag: base.DisableSQLRequireTLS}, cliflags.AcceptSQLWithoutTLS)
+		f.Lookup(cliflags.AcceptSQLWithoutTLS.Name).NoOptDefVal = "false"
 		_ = f.MarkHidden(cliflags.AcceptSQLWithoutTLS.Name)
 
 		// More server flags.

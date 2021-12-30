@@ -159,15 +159,6 @@ type Config struct {
 	// SecurityOverrides indicates which security mechanisms to disable.
 	SecurityOverrides SecurityOverrides
 
-	// AcceptSQLWithoutTLS, when set, makes it possible for SQL
-	// clients to authenticate without TLS on a secure cluster.
-	//
-	// Authentication is, as usual, subject to the HBA configuration: in
-	// the default case, password authentication is still mandatory.
-	//
-	// TODO(knz): Remove this once the SecurityOverrides are used throughout.
-	AcceptSQLWithoutTLS bool
-
 	// SSLCAKey is used to sign new certs.
 	SSLCAKey string
 	// SSLCertsDir is the path to the certificate/key directory.
@@ -271,7 +262,6 @@ func (cfg *Config) InitDefaults() {
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""
 	cfg.ClockDevicePath = ""
-	cfg.AcceptSQLWithoutTLS = false
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of
