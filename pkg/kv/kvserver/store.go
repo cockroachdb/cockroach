@@ -1501,10 +1501,10 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 						if transferStatus != transferOK {
 							if err != nil {
 								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
-									drainingLeaseStatus.Lease, desc, err)
+									&drainingLeaseStatus.Lease, desc, err)
 							} else {
 								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
-									drainingLeaseStatus.Lease, desc, transferStatus)
+									&drainingLeaseStatus.Lease, desc, transferStatus)
 							}
 						}
 					}

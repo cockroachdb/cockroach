@@ -1110,7 +1110,7 @@ type CacheEntry struct {
 }
 
 func (e CacheEntry) String() string {
-	return fmt.Sprintf("desc:%s, lease:%s", e.Desc(), e.lease)
+	return fmt.Sprintf("desc:%s, lease:%s", e.Desc(), &e.lease)
 }
 
 // Desc returns the cached descriptor. Note that, besides being possibly stale,
