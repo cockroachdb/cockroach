@@ -89,4 +89,6 @@ message ReplicaRecoveryRecord {
     (gogoproto.moretags) = 'yaml:"OldReplicaID"'];
   roachpb.ReplicaDescriptor new_replica = 6 [(gogoproto.nullable) = false,
     (gogoproto.moretags) = 'yaml:"NewReplica"'];
+  roachpb.RangeDescriptor range_descriptor = 7 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = 'yaml:"RangeDescriptor"'];
 }
