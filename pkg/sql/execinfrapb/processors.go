@@ -499,3 +499,9 @@ func (spec *WindowerSpec_Frame) ConvertToAST() (*tree.WindowFrame, error) {
 		Exclusion: exclusion,
 	}, nil
 }
+
+// IsIndexJoin returns true if spec defines an index join (as opposed to a
+// lookup join).
+func (spec *JoinReaderSpec) IsIndexJoin() bool {
+	return len(spec.LookupColumns) == 0 && spec.LookupExpr.Empty()
+}
