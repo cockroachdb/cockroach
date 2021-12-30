@@ -93,5 +93,5 @@ sudo systemd-run --unit cockroach \
   --service-type=notify -p NotifyAccess=all \
   -p "MemoryMax=${MEMORY_MAX}" \
   -p LimitCORE=infinity \
-  -p LimitNOFILE=65536 \
+  -p LimitNOFILE=655360 \
   bash "${0}" run
