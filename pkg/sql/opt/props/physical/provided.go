@@ -36,14 +36,22 @@ type Provided struct {
 	// See the documentation for the opt/ordering package for some examples.
 	Ordering opt.Ordering
 
-	// Note: we store a Provided structure in-place within each group because the
-	// struct is very small (see memo.bestProps). If we add more fields here, that
-	// decision needs to be revisited.
+	// Distribution is a distribution that needs to maintained on the rows
+	// produced by this operator in order to satisfy its required distribution. If
+	// there is a required distribution, the provided distribution must match it
+	// exactly.
+	//
+	// The provided distribution is not yet used when building the DistSQL plan,
+	// but eventually it should inform the decision about whether to plan
+	// processors locally or remotely. Currently, it is used to determine whether
+	// a Distribute operator is needed between this operator and its parent, which
+	// can affect the cost of a plan.
+	Distribution Distribution
 }
 
 // Equals returns true if the two sets of provided properties are identical.
 func (p *Provided) Equals(other *Provided) bool {
-	return p.Ordering.Equals(other.Ordering)
+	return p.Ordering.Equals(other.Ordering) && p.Distribution.Equals(other.Distribution)
 }
 
 func (p *Provided) String() string {
@@ -52,6 +60,19 @@ func (p *Provided) String() string {
 	if len(p.Ordering) > 0 {
 		buf.WriteString("[ordering: ")
 		p.Ordering.Format(&buf)
+		if p.Distribution.Any() {
+			buf.WriteByte(']')
+		} else {
+			buf.WriteString(", ")
+		}
+	}
+
+	if !p.Distribution.Any() {
+		if len(p.Ordering) == 0 {
+			buf.WriteByte('[')
+		}
+		buf.WriteString("distribution: ")
+		p.Distribution.format(&buf)
 		buf.WriteByte(']')
 	}
 

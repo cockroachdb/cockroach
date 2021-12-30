@@ -630,6 +630,9 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	}
 	h.HashOrderingChoice(val.Ordering)
 	h.HashFloat64(val.LimitHint)
+	for _, region := range val.Distribution.Regions {
+		h.HashString(region)
+	}
 }
 
 func (h *hasher) HashLockingItem(val *tree.LockingItem) {
