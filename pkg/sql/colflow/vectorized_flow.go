@@ -991,6 +991,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				s.batchReceiver,
 				s.getCancelFlowFn(),
 			)
+			s.releasables = append(s.releasables, s.batchFlowCoordinator)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, s.batchFlowCoordinator)
 		} else {
