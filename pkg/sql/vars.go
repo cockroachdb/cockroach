@@ -106,6 +106,11 @@ type sessionVar struct {
 	// during session initialization when no default value was provided
 	// by the client.
 	GlobalDefault func(sv *settings.Values) string
+
+	// Equal returns whether the value of the given variable is equal between the
+	// two SessionData references. This is only required if the variable is
+	// expected to send updates through ParamStatusUpdate in pgwire.
+	Equal func(a, b *sessiondata.SessionData) bool
 }
 
 func formatBoolAsPostgresSetting(b bool) string {
@@ -161,7 +166,12 @@ var varGen = map[string]sessionVar{
 		GetFromSessionData: func(sd *sessiondata.SessionData) string {
 			return sd.ApplicationName
 		},
-		GlobalDefault: func(_ *settings.Values) string { return "" },
+		GlobalDefault: func(_ *settings.Values) string {
+			return ""
+		},
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.ApplicationName == b.ApplicationName
+		},
 	},
 
 	// CockroachDB extension.
@@ -327,6 +337,9 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return dateStyleEnumMap[dateStyle.Get(sv)]
+		},
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.GetDateStyle() == b.GetDateStyle()
 		},
 	},
 	`datestyle_enabled`: {
@@ -945,6 +958,9 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(sv *settings.Values) string {
 			return strings.ToLower(duration.IntervalStyle_name[int32(intervalStyle.Get(sv))])
 		},
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.GetIntervalStyle() == b.GetIntervalStyle()
+		},
 	},
 	`intervalstyle_enabled`: {
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
@@ -973,6 +989,9 @@ var varGen = map[string]sessionVar{
 		},
 		GetStringVal:  makePostgresBoolGetStringValFn("is_superuser"),
 		GlobalDefault: globalFalse,
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			return a.IsSuperuser == b.IsSuperuser
+		},
 	},
 
 	// CockroachDB extension.
@@ -1289,6 +1308,10 @@ var varGen = map[string]sessionVar{
 		GetStringVal:  timeZoneVarGetStringVal,
 		Set:           timeZoneVarSet,
 		GlobalDefault: func(_ *settings.Values) string { return "UTC" },
+		Equal: func(a, b *sessiondata.SessionData) bool {
+			// NB: (*time.Location).String does not heap allocate.
+			return a.GetLocation().String() == b.GetLocation().String()
+		},
 	},
 
 	// This is not directly documented in PG's docs but does indeed behave this way.
