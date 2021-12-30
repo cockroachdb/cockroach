@@ -232,7 +232,7 @@ func (dbc *dbAdapter) divideAndSendScanRequests(
 
 	currentScanLimit := parallelismFn()
 	exportLim := limit.MakeConcurrentRequestLimiter("rangefeedScanLimiter", parallelismFn())
-	ri := kvcoord.NewRangeIterator(dbc.distSender)
+	ri := kvcoord.MakeRangeIterator(dbc.distSender)
 
 	for _, sp := range sg.Slice() {
 		nextRS, err := keys.SpanAddr(sp)

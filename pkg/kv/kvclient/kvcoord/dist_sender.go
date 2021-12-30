@@ -555,7 +555,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // CountRanges returns the number of ranges that encompass the given key span.
 func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64, error) {
 	var count int64
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	for ri.Seek(ctx, rs.Key, Ascending); ri.Valid(); ri.Next(ctx) {
 		count++
 		if !ri.NeedAnother(rs) {
@@ -1165,7 +1165,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		scanDir = Descending
 		seekKey = rs.EndKey
 	}
-	ri := NewRangeIterator(ds)
+	ri := MakeRangeIterator(ds)
 	ri.Seek(ctx, seekKey, scanDir)
 	if !ri.Valid() {
 		return nil, roachpb.NewError(ri.Error())
