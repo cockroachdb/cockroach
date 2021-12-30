@@ -247,7 +247,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					}
 
 				case "accept_sql_without_tls":
-					testServer.Cfg.AcceptSQLWithoutTLS = true
+					testServer.Cfg.SecurityOverrides.SetFlag(base.DisableSQLRequireTLS, true)
 
 				case "set_hba":
 					_, err := conn.ExecContext(context.Background(),

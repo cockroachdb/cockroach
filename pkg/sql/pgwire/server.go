@@ -1035,7 +1035,7 @@ func (s *Server) maybeUpgradeToSecureConn(
 
 		// Secure mode: disallow if TCP and the user did not opt into
 		// non-TLS SQL conns.
-		if !s.cfg.AcceptSQLWithoutTLS && connType != hba.ConnLocal {
+		if !s.cfg.SecurityOverrides.IsSet(base.DisableSQLRequireTLS) && connType != hba.ConnLocal {
 			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
 		}
 		return

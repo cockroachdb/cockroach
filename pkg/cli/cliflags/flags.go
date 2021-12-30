@@ -563,10 +563,7 @@ local testing without requiring certificate setups in web browsers.`,
 	AcceptSQLWithoutTLS = FlagInfo{
 		Name: "accept-sql-without-tls",
 		Description: `
-When specified, this node will accept SQL client connections that do not wish
-to negotiate a TLS handshake. Authentication is still otherwise required
-as per the HBA configuration and all other security mechanisms continue to
-apply. This flag is experimental.
+Alias for --security-overrides=disable-sql-require-tls.
 `,
 	}
 
