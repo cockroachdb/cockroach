@@ -23,4 +23,5 @@ const (
 	ReasonRebalance            RangeLogEventReason = "rebalance"
 	ReasonAdminRequest         RangeLogEventReason = "admin request"
 	ReasonAbandonedLearner     RangeLogEventReason = "abandoned learner replica"
+	ReasonUnsafeRecovery       RangeLogEventReason = "unsafe loss of quorum recovery"
 )
