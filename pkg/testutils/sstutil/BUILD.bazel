@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sstutil",
+    srcs = [
+        "kv.go",
+        "sstutil.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/sstutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)

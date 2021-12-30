@@ -2111,6 +2111,9 @@ func TestLint(t *testing.T) {
 			`pkg/testutils/.*\.go`,
 			`pkg/workload/.*\.go`,
 		}, "|") + `)`
+		unkeyedLiteralExceptions := `pkg/.*_test\.go:.*(` + strings.Join([]string{
+			`pkg/testutils/sstutil\.KV`,
+		}, "|") + `)`
 		filters := []stream.Filter{
 			// Ignore generated files.
 			stream.GrepNot(`pkg/.*\.pb\.go:`),
@@ -2168,6 +2171,10 @@ func TestLint(t *testing.T) {
 			// pooling, etc, then test code needs to adhere as well.
 			stream.GrepNot(nakedGoroutineExceptions + `:.*Use of go keyword not allowed`),
 			stream.GrepNot(nakedGoroutineExceptions + `:.*Illegal call to Group\.Go\(\)`),
+			// We allow unkeyed struct literals for certain internal test types.
+			// Ideally, go vet should not complain about this for types declared in
+			// the same module: https://github.com/golang/go/issues/43864
+			stream.GrepNot(unkeyedLiteralExceptions + `.*composite literal uses unkeyed fields`),
 		}
 
 		const vetTool = "roachvet"

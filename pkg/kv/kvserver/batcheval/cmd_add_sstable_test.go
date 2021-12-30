@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sstutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,26 +39,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-type mvccKV struct {
-	key   string
-	ts    int64  // 0 for inline
-	value string // "" for nil (tombstone)
-}
-
-func (kv mvccKV) Key() roachpb.Key         { return roachpb.Key(kv.key) }
-func (kv mvccKV) TS() hlc.Timestamp        { return hlc.Timestamp{WallTime: kv.ts} }
-func (kv mvccKV) MVCCKey() storage.MVCCKey { return storage.MVCCKey{Key: kv.Key(), Timestamp: kv.TS()} }
-func (kv mvccKV) ValueBytes() []byte       { return kv.Value().RawBytes }
-
-func (kv mvccKV) Value() roachpb.Value {
-	value := roachpb.MakeValueFromString(kv.value)
-	if kv.value == "" {
-		value = roachpb.Value{}
-	}
-	value.InitChecksum(kv.Key())
-	return value
-}
 
 // TestEvalAddSSTable tests EvalAddSSTable directly, using only an on-disk
 // Pebble engine. This allows precise manipulation of timestamps.
@@ -69,330 +50,331 @@ func TestEvalAddSSTable(t *testing.T) {
 	const intentTS = 100    // values with this timestamp are written as intents
 
 	// These are run with IngestAsWrites both disabled and enabled.
+	// nolint:composites
 	testcases := map[string]struct {
-		data           []mvccKV
-		sst            []mvccKV
+		data           []sstutil.KV
+		sst            []sstutil.KV
 		atReqTS        int64 // WriteAtRequestTimestamp with given timestamp
 		noConflict     bool  // DisallowConflicts
 		noShadow       bool  // DisallowShadowing
 		noShadowBelow  int64 // DisallowShadowingBelow
-		expect         []mvccKV
+		expect         []sstutil.KV
 		expectErr      interface{} // error type, substring, or true (any error)
 		expectStatsEst bool        // expect MVCCStats.ContainsEstimates, don't check stats
 	}{
 		// Blind writes.
 		"blind writes below existing": {
-			data:           []mvccKV{{"a", 5, "a5"}, {"b", 7, ""}},
-			sst:            []mvccKV{{"a", 3, "sst"}, {"b", 2, "sst"}},
-			expect:         []mvccKV{{"a", 5, "a5"}, {"a", 3, "sst"}, {"b", 7, ""}, {"b", 2, "sst"}},
+			data:           []sstutil.KV{{"a", 5, "a5"}, {"b", 7, ""}},
+			sst:            []sstutil.KV{{"a", 3, "sst"}, {"b", 2, "sst"}},
+			expect:         []sstutil.KV{{"a", 5, "a5"}, {"a", 3, "sst"}, {"b", 7, ""}, {"b", 2, "sst"}},
 			expectStatsEst: true,
 		},
 		"blind replaces existing": {
-			data:           []mvccKV{{"a", 2, "a2"}},
-			sst:            []mvccKV{{"a", 2, "sst"}},
-			expect:         []mvccKV{{"a", 2, "sst"}},
+			data:           []sstutil.KV{{"a", 2, "a2"}},
+			sst:            []sstutil.KV{{"a", 2, "sst"}},
+			expect:         []sstutil.KV{{"a", 2, "sst"}},
 			expectStatsEst: true,
 		},
 		"blind returns WriteIntentError on conflict": {
-			data:      []mvccKV{{"b", intentTS, "b0"}},
-			sst:       []mvccKV{{"b", 1, "sst"}},
+			data:      []sstutil.KV{{"b", intentTS, "b0"}},
+			sst:       []sstutil.KV{{"b", 1, "sst"}},
 			expectErr: &roachpb.WriteIntentError{},
 		},
 		"blind returns WriteIntentError in span": {
-			data:      []mvccKV{{"b", intentTS, "b0"}},
-			sst:       []mvccKV{{"a", 1, "sst"}, {"c", 1, "sst"}},
+			data:      []sstutil.KV{{"b", intentTS, "b0"}},
+			sst:       []sstutil.KV{{"a", 1, "sst"}, {"c", 1, "sst"}},
 			expectErr: &roachpb.WriteIntentError{},
 		},
 		"blind writes tombstones": { // unfortunately, for performance
-			sst:            []mvccKV{{"a", 1, ""}},
-			expect:         []mvccKV{{"a", 1, ""}},
+			sst:            []sstutil.KV{{"a", 1, ""}},
+			expect:         []sstutil.KV{{"a", 1, ""}},
 			expectStatsEst: true,
 		},
 		"blind writes SST inline values": { // unfortunately, for performance
-			sst:            []mvccKV{{"a", 0, "inline"}},
-			expect:         []mvccKV{{"a", 0, "inline"}},
+			sst:            []sstutil.KV{{"a", 0, "inline"}},
+			expect:         []sstutil.KV{{"a", 0, "inline"}},
 			expectStatsEst: true,
 		},
 		"blind writes above existing inline values": { // unfortunately, for performance
-			data:           []mvccKV{{"a", 0, "inline"}},
-			sst:            []mvccKV{{"a", 2, "sst"}},
-			expect:         []mvccKV{{"a", 0, "inline"}, {"a", 2, "sst"}},
+			data:           []sstutil.KV{{"a", 0, "inline"}},
+			sst:            []sstutil.KV{{"a", 2, "sst"}},
+			expect:         []sstutil.KV{{"a", 0, "inline"}, {"a", 2, "sst"}},
 			expectStatsEst: true,
 		},
 
 		// WriteAtRequestTimestamp
 		"WriteAtRequestTimestamp sets timestamp": {
 			atReqTS:        10,
-			sst:            []mvccKV{{"a", 1, "a1"}, {"b", 3, "b3"}},
-			expect:         []mvccKV{{"a", 10, "a1"}, {"b", 10, "b3"}},
+			sst:            []sstutil.KV{{"a", 1, "a1"}, {"b", 3, "b3"}},
+			expect:         []sstutil.KV{{"a", 10, "a1"}, {"b", 10, "b3"}},
 			expectStatsEst: true,
 		},
 		"WriteAtRequestTimestamp rejects tombstones": {
 			atReqTS:   10,
-			sst:       []mvccKV{{"a", 1, ""}},
+			sst:       []sstutil.KV{{"a", 1, ""}},
 			expectErr: "SST values cannot be tombstones",
 		},
 		"WriteAtRequestTimestamp rejects inline values": {
 			atReqTS:   10,
-			sst:       []mvccKV{{"a", 0, "inline"}},
+			sst:       []sstutil.KV{{"a", 0, "inline"}},
 			expectErr: "inline values or intents are not supported",
 		},
 		"WriteAtRequestTimestamp writes below and replaces": {
 			atReqTS:        5,
-			data:           []mvccKV{{"a", 5, "a5"}, {"b", 7, "b7"}},
-			sst:            []mvccKV{{"a", 1, "sst"}, {"b", 1, "sst"}},
-			expect:         []mvccKV{{"a", 5, "sst"}, {"b", 7, "b7"}, {"b", 5, "sst"}},
+			data:           []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
+			sst:            []sstutil.KV{{"a", 1, "sst"}, {"b", 1, "sst"}},
+			expect:         []sstutil.KV{{"a", 5, "sst"}, {"b", 7, "b7"}, {"b", 5, "sst"}},
 			expectStatsEst: true,
 		},
 		"WriteAtRequestTimestamp returns WriteIntentError for intents": {
 			atReqTS:   10,
-			data:      []mvccKV{{"a", intentTS, "intent"}},
-			sst:       []mvccKV{{"a", 1, "a@1"}},
+			data:      []sstutil.KV{{"a", intentTS, "intent"}},
+			sst:       []sstutil.KV{{"a", 1, "a@1"}},
 			expectErr: &roachpb.WriteIntentError{},
 		},
 		"WriteAtRequestTimestamp errors with DisallowConflicts below existing": {
 			atReqTS:    5,
 			noConflict: true,
-			data:       []mvccKV{{"a", 5, "a5"}, {"b", 7, "b7"}},
-			sst:        []mvccKV{{"a", 10, "sst"}, {"b", 10, "sst"}},
+			data:       []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
+			sst:        []sstutil.KV{{"a", 10, "sst"}, {"b", 10, "sst"}},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
 		"WriteAtRequestTimestamp succeeds with DisallowConflicts above existing": {
 			atReqTS:    8,
 			noConflict: true,
-			data:       []mvccKV{{"a", 5, "a5"}, {"b", 7, "b7"}},
-			sst:        []mvccKV{{"a", 1, "sst"}, {"b", 1, "sst"}},
-			expect:     []mvccKV{{"a", 8, "sst"}, {"a", 5, "a5"}, {"b", 8, "sst"}, {"b", 7, "b7"}},
+			data:       []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
+			sst:        []sstutil.KV{{"a", 1, "sst"}, {"b", 1, "sst"}},
+			expect:     []sstutil.KV{{"a", 8, "sst"}, {"a", 5, "a5"}, {"b", 8, "sst"}, {"b", 7, "b7"}},
 		},
 		"WriteAtRequestTimestamp errors with DisallowShadowing below existing": {
 			atReqTS:   5,
 			noShadow:  true,
-			data:      []mvccKV{{"a", 5, "a5"}, {"b", 7, "b7"}},
-			sst:       []mvccKV{{"a", 10, "sst"}, {"b", 10, "sst"}},
+			data:      []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
+			sst:       []sstutil.KV{{"a", 10, "sst"}, {"b", 10, "sst"}},
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
 		"WriteAtRequestTimestamp errors with DisallowShadowing above existing": {
 			atReqTS:   8,
 			noShadow:  true,
-			data:      []mvccKV{{"a", 5, "a5"}, {"b", 7, "b7"}},
-			sst:       []mvccKV{{"a", 1, "sst"}, {"b", 1, "sst"}},
+			data:      []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
+			sst:       []sstutil.KV{{"a", 1, "sst"}, {"b", 1, "sst"}},
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
 		"WriteAtRequestTimestamp succeeds with DisallowShadowing above tombstones": {
 			atReqTS:  8,
 			noShadow: true,
-			data:     []mvccKV{{"a", 5, ""}, {"b", 7, ""}},
-			sst:      []mvccKV{{"a", 1, "sst"}, {"b", 1, "sst"}},
-			expect:   []mvccKV{{"a", 8, "sst"}, {"a", 5, ""}, {"b", 8, "sst"}, {"b", 7, ""}},
+			data:     []sstutil.KV{{"a", 5, ""}, {"b", 7, ""}},
+			sst:      []sstutil.KV{{"a", 1, "sst"}, {"b", 1, "sst"}},
+			expect:   []sstutil.KV{{"a", 8, "sst"}, {"a", 5, ""}, {"b", 8, "sst"}, {"b", 7, ""}},
 		},
 		"WriteAtRequestTimestamp succeeds with DisallowShadowing and idempotent writes": {
 			atReqTS:  5,
 			noShadow: true,
-			data:     []mvccKV{{"a", 5, "a5"}, {"b", 5, "b5"}},
-			sst:      []mvccKV{{"a", 1, "a5"}, {"b", 1, "b5"}},
-			expect:   []mvccKV{{"a", 5, "a5"}, {"b", 5, "b5"}},
+			data:     []sstutil.KV{{"a", 5, "a5"}, {"b", 5, "b5"}},
+			sst:      []sstutil.KV{{"a", 1, "a5"}, {"b", 1, "b5"}},
+			expect:   []sstutil.KV{{"a", 5, "a5"}, {"b", 5, "b5"}},
 		},
 		"WriteAtRequestTimestamp errors with DisallowShadowingBelow equal value above existing below limit": {
 			atReqTS:       7,
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, "a3"}},
-			sst:           []mvccKV{{"a", 10, "a3"}},
+			data:          []sstutil.KV{{"a", 3, "a3"}},
+			sst:           []sstutil.KV{{"a", 10, "a3"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"WriteAtRequestTimestamp errors with DisallowShadowingBelow errors above existing above limit": {
 			atReqTS:       7,
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 6, "a6"}},
-			sst:           []mvccKV{{"a", 10, "sst"}},
+			data:          []sstutil.KV{{"a", 6, "a6"}},
+			sst:           []sstutil.KV{{"a", 10, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"WriteAtRequestTimestamp allows DisallowShadowingBelow equal value above existing above limit": {
 			atReqTS:       7,
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 6, "a6"}},
-			sst:           []mvccKV{{"a", 10, "a6"}},
-			expect:        []mvccKV{{"a", 7, "a6"}, {"a", 6, "a6"}},
+			data:          []sstutil.KV{{"a", 6, "a6"}},
+			sst:           []sstutil.KV{{"a", 10, "a6"}},
+			expect:        []sstutil.KV{{"a", 7, "a6"}, {"a", 6, "a6"}},
 		},
 
 		// DisallowConflicts
 		"DisallowConflicts allows above and beside": {
 			noConflict: true,
-			data:       []mvccKV{{"a", 3, "a3"}, {"b", 1, ""}},
-			sst:        []mvccKV{{"a", 4, "sst"}, {"b", 3, "sst"}, {"c", 1, "sst"}},
-			expect: []mvccKV{
+			data:       []sstutil.KV{{"a", 3, "a3"}, {"b", 1, ""}},
+			sst:        []sstutil.KV{{"a", 4, "sst"}, {"b", 3, "sst"}, {"c", 1, "sst"}},
+			expect: []sstutil.KV{
 				{"a", 4, "sst"}, {"a", 3, "a3"}, {"b", 3, "sst"}, {"b", 1, ""}, {"c", 1, "sst"},
 			},
 		},
 		"DisallowConflicts returns WriteTooOldError below existing": {
 			noConflict: true,
-			data:       []mvccKV{{"a", 3, "a3"}},
-			sst:        []mvccKV{{"a", 2, "sst"}},
+			data:       []sstutil.KV{{"a", 3, "a3"}},
+			sst:        []sstutil.KV{{"a", 2, "sst"}},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
 		"DisallowConflicts returns WriteTooOldError at existing": {
 			noConflict: true,
-			data:       []mvccKV{{"a", 3, "a3"}},
-			sst:        []mvccKV{{"a", 3, "sst"}},
+			data:       []sstutil.KV{{"a", 3, "a3"}},
+			sst:        []sstutil.KV{{"a", 3, "sst"}},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
 		"DisallowConflicts returns WriteTooOldError at existing tombstone": {
 			noConflict: true,
-			data:       []mvccKV{{"a", 3, ""}},
-			sst:        []mvccKV{{"a", 3, "sst"}},
+			data:       []sstutil.KV{{"a", 3, ""}},
+			sst:        []sstutil.KV{{"a", 3, "sst"}},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
 		"DisallowConflicts returns WriteIntentError below intent": {
 			noConflict: true,
-			data:       []mvccKV{{"a", intentTS, "intent"}},
-			sst:        []mvccKV{{"a", 3, "sst"}},
+			data:       []sstutil.KV{{"a", intentTS, "intent"}},
+			sst:        []sstutil.KV{{"a", 3, "sst"}},
 			expectErr:  &roachpb.WriteIntentError{},
 		},
 		"DisallowConflicts ignores intents in span": { // inconsistent with blind writes
 			noConflict: true,
-			data:       []mvccKV{{"b", intentTS, "intent"}},
-			sst:        []mvccKV{{"a", 3, "sst"}, {"c", 3, "sst"}},
-			expect:     []mvccKV{{"a", 3, "sst"}, {"b", intentTS, "intent"}, {"c", 3, "sst"}},
+			data:       []sstutil.KV{{"b", intentTS, "intent"}},
+			sst:        []sstutil.KV{{"a", 3, "sst"}, {"c", 3, "sst"}},
+			expect:     []sstutil.KV{{"a", 3, "sst"}, {"b", intentTS, "intent"}, {"c", 3, "sst"}},
 		},
 		"DisallowConflicts is not idempotent": {
 			noConflict: true,
-			data:       []mvccKV{{"a", 3, "a3"}},
-			sst:        []mvccKV{{"a", 3, "a3"}},
+			data:       []sstutil.KV{{"a", 3, "a3"}},
+			sst:        []sstutil.KV{{"a", 3, "a3"}},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
 		"DisallowConflicts allows new SST tombstones": { // unfortunately, for performance
 			noConflict: true,
-			sst:        []mvccKV{{"a", 3, ""}},
-			expect:     []mvccKV{{"a", 3, ""}},
+			sst:        []sstutil.KV{{"a", 3, ""}},
+			expect:     []sstutil.KV{{"a", 3, ""}},
 		},
 		"DisallowConflicts rejects SST tombstones when shadowing": {
 			noConflict: true,
-			data:       []mvccKV{{"a", 2, "a2"}},
-			sst:        []mvccKV{{"a", 3, ""}},
+			data:       []sstutil.KV{{"a", 2, "a2"}},
+			sst:        []sstutil.KV{{"a", 3, ""}},
 			expectErr:  "SST values cannot be tombstones",
 		},
 		"DisallowConflicts allows new SST inline values": { // unfortunately, for performance
 			noConflict: true,
-			sst:        []mvccKV{{"a", 0, "inline"}},
-			expect:     []mvccKV{{"a", 0, "inline"}},
+			sst:        []sstutil.KV{{"a", 0, "inline"}},
+			expect:     []sstutil.KV{{"a", 0, "inline"}},
 		},
 		"DisallowConflicts rejects SST inline values when shadowing": {
 			noConflict: true,
-			data:       []mvccKV{{"a", 2, "a2"}},
-			sst:        []mvccKV{{"a", 0, ""}},
+			data:       []sstutil.KV{{"a", 2, "a2"}},
+			sst:        []sstutil.KV{{"a", 0, ""}},
 			expectErr:  "SST keys must have timestamps",
 		},
 		"DisallowConflicts rejects existing inline values when shadowing": {
 			noConflict: true,
-			data:       []mvccKV{{"a", 0, "a0"}},
-			sst:        []mvccKV{{"a", 3, "sst"}},
+			data:       []sstutil.KV{{"a", 0, "a0"}},
+			sst:        []sstutil.KV{{"a", 3, "sst"}},
 			expectErr:  "inline values are unsupported",
 		},
 
 		// DisallowShadowing
 		"DisallowShadowing errors above existing": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 3, "a3"}},
-			sst:       []mvccKV{{"a", 4, "sst"}},
+			data:      []sstutil.KV{{"a", 3, "a3"}},
+			sst:       []sstutil.KV{{"a", 4, "sst"}},
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowing errors below existing": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 3, "a3"}},
-			sst:       []mvccKV{{"a", 2, "sst"}},
+			data:      []sstutil.KV{{"a", 3, "a3"}},
+			sst:       []sstutil.KV{{"a", 2, "sst"}},
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowing errors at existing": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 3, "a3"}},
-			sst:       []mvccKV{{"a", 3, "sst"}},
+			data:      []sstutil.KV{{"a", 3, "a3"}},
+			sst:       []sstutil.KV{{"a", 3, "sst"}},
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowing returns WriteTooOldError at existing tombstone": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 3, ""}},
-			sst:       []mvccKV{{"a", 3, "sst"}},
+			data:      []sstutil.KV{{"a", 3, ""}},
+			sst:       []sstutil.KV{{"a", 3, "sst"}},
 			expectErr: &roachpb.WriteTooOldError{},
 		},
 		"DisallowShadowing returns WriteTooOldError below existing tombstone": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 3, ""}},
-			sst:       []mvccKV{{"a", 2, "sst"}},
+			data:      []sstutil.KV{{"a", 3, ""}},
+			sst:       []sstutil.KV{{"a", 2, "sst"}},
 			expectErr: &roachpb.WriteTooOldError{},
 		},
 		"DisallowShadowing allows above existing tombstone": {
 			noShadow: true,
-			data:     []mvccKV{{"a", 3, ""}},
-			sst:      []mvccKV{{"a", 4, "sst"}},
-			expect:   []mvccKV{{"a", 4, "sst"}, {"a", 3, ""}},
+			data:     []sstutil.KV{{"a", 3, ""}},
+			sst:      []sstutil.KV{{"a", 4, "sst"}},
+			expect:   []sstutil.KV{{"a", 4, "sst"}, {"a", 3, ""}},
 		},
 		"DisallowShadowing returns WriteIntentError below intent": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", intentTS, "intent"}},
-			sst:       []mvccKV{{"a", 3, "sst"}},
+			data:      []sstutil.KV{{"a", intentTS, "intent"}},
+			sst:       []sstutil.KV{{"a", 3, "sst"}},
 			expectErr: &roachpb.WriteIntentError{},
 		},
 		"DisallowShadowing ignores intents in span": { // inconsistent with blind writes
 			noShadow: true,
-			data:     []mvccKV{{"b", intentTS, "intent"}},
-			sst:      []mvccKV{{"a", 3, "sst"}, {"c", 3, "sst"}},
-			expect:   []mvccKV{{"a", 3, "sst"}, {"b", intentTS, "intent"}, {"c", 3, "sst"}},
+			data:     []sstutil.KV{{"b", intentTS, "intent"}},
+			sst:      []sstutil.KV{{"a", 3, "sst"}, {"c", 3, "sst"}},
+			expect:   []sstutil.KV{{"a", 3, "sst"}, {"b", intentTS, "intent"}, {"c", 3, "sst"}},
 		},
 		"DisallowShadowing is idempotent": {
 			noShadow: true,
-			data:     []mvccKV{{"a", 3, "a3"}},
-			sst:      []mvccKV{{"a", 3, "a3"}},
-			expect:   []mvccKV{{"a", 3, "a3"}},
+			data:     []sstutil.KV{{"a", 3, "a3"}},
+			sst:      []sstutil.KV{{"a", 3, "a3"}},
+			expect:   []sstutil.KV{{"a", 3, "a3"}},
 		},
 		"DisallowShadowing allows new SST tombstones": { // unfortunately, for performance
 			noShadow: true,
-			sst:      []mvccKV{{"a", 3, ""}},
-			expect:   []mvccKV{{"a", 3, ""}},
+			sst:      []sstutil.KV{{"a", 3, ""}},
+			expect:   []sstutil.KV{{"a", 3, ""}},
 		},
 		"DisallowShadowing rejects SST tombstones when shadowing": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 2, "a2"}},
-			sst:       []mvccKV{{"a", 3, ""}},
+			data:      []sstutil.KV{{"a", 2, "a2"}},
+			sst:       []sstutil.KV{{"a", 3, ""}},
 			expectErr: "SST values cannot be tombstones",
 		},
 		"DisallowShadowing allows new SST inline values": { // unfortunately, for performance
 			noShadow: true,
-			sst:      []mvccKV{{"a", 0, "inline"}},
-			expect:   []mvccKV{{"a", 0, "inline"}},
+			sst:      []sstutil.KV{{"a", 0, "inline"}},
+			expect:   []sstutil.KV{{"a", 0, "inline"}},
 		},
 		"DisallowShadowing rejects SST inline values when shadowing": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 2, "a2"}},
-			sst:       []mvccKV{{"a", 0, "inline"}},
+			data:      []sstutil.KV{{"a", 2, "a2"}},
+			sst:       []sstutil.KV{{"a", 0, "inline"}},
 			expectErr: "SST keys must have timestamps",
 		},
 		"DisallowShadowing rejects existing inline values when shadowing": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 0, "a0"}},
-			sst:       []mvccKV{{"a", 3, "sst"}},
+			data:      []sstutil.KV{{"a", 0, "a0"}},
+			sst:       []sstutil.KV{{"a", 3, "sst"}},
 			expectErr: "inline values are unsupported",
 		},
 		"DisallowShadowing collision SST start, existing start, above": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 2, "a2"}},
-			sst:       []mvccKV{{"a", 7, "sst"}},
+			data:      []sstutil.KV{{"a", 2, "a2"}},
+			sst:       []sstutil.KV{{"a", 7, "sst"}},
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowing collision SST start, existing middle, below": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 2, "a2"}, {"a", 1, "a1"}, {"b", 2, "b2"}, {"c", 3, "c3"}},
-			sst:       []mvccKV{{"b", 1, "sst"}},
+			data:      []sstutil.KV{{"a", 2, "a2"}, {"a", 1, "a1"}, {"b", 2, "b2"}, {"c", 3, "c3"}},
+			sst:       []sstutil.KV{{"b", 1, "sst"}},
 			expectErr: `ingested key collides with an existing one: "b"`,
 		},
 		"DisallowShadowing collision SST end, existing end, above": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 2, "a2"}, {"a", 1, "a1"}, {"b", 2, "b2"}, {"d", 3, "d3"}},
-			sst:       []mvccKV{{"c", 3, "sst"}, {"d", 4, "sst"}},
+			data:      []sstutil.KV{{"a", 2, "a2"}, {"a", 1, "a1"}, {"b", 2, "b2"}, {"d", 3, "d3"}},
+			sst:       []sstutil.KV{{"c", 3, "sst"}, {"d", 4, "sst"}},
 			expectErr: `ingested key collides with an existing one: "d"`,
 		},
 		"DisallowShadowing collision after write above tombstone": {
 			noShadow:  true,
-			data:      []mvccKV{{"a", 2, ""}, {"a", 1, "a1"}, {"b", 2, "b2"}},
-			sst:       []mvccKV{{"a", 3, "sst"}, {"b", 1, "sst"}},
+			data:      []sstutil.KV{{"a", 2, ""}, {"a", 1, "a1"}, {"b", 2, "b2"}},
+			sst:       []sstutil.KV{{"a", 3, "sst"}, {"b", 1, "sst"}},
 			expectErr: `ingested key collides with an existing one: "b"`,
 		},
 
@@ -400,214 +382,214 @@ func TestEvalAddSSTable(t *testing.T) {
 		"DisallowShadowingBelow can be used with DisallowShadowing": {
 			noShadow:      true,
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 5, "123"}},
-			sst:           []mvccKV{{"a", 6, "123"}},
-			expect:        []mvccKV{{"a", 6, "123"}, {"a", 5, "123"}},
+			data:          []sstutil.KV{{"a", 5, "123"}},
+			sst:           []sstutil.KV{{"a", 6, "123"}},
+			expect:        []sstutil.KV{{"a", 6, "123"}, {"a", 5, "123"}},
 		},
 		"DisallowShadowingBelow errors above existing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, "a3"}},
-			sst:           []mvccKV{{"a", 4, "sst"}},
+			data:          []sstutil.KV{{"a", 3, "a3"}},
+			sst:           []sstutil.KV{{"a", 4, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow errors below existing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, "a3"}},
-			sst:           []mvccKV{{"a", 2, "sst"}},
+			data:          []sstutil.KV{{"a", 3, "a3"}},
+			sst:           []sstutil.KV{{"a", 2, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow errors at existing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, "a3"}},
-			sst:           []mvccKV{{"a", 3, "sst"}},
+			data:          []sstutil.KV{{"a", 3, "a3"}},
+			sst:           []sstutil.KV{{"a", 3, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow returns WriteTooOldError at existing tombstone": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, ""}},
-			sst:           []mvccKV{{"a", 3, "sst"}},
+			data:          []sstutil.KV{{"a", 3, ""}},
+			sst:           []sstutil.KV{{"a", 3, "sst"}},
 			expectErr:     &roachpb.WriteTooOldError{},
 		},
 		"DisallowShadowingBelow returns WriteTooOldError below existing tombstone": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, ""}},
-			sst:           []mvccKV{{"a", 2, "sst"}},
+			data:          []sstutil.KV{{"a", 3, ""}},
+			sst:           []sstutil.KV{{"a", 2, "sst"}},
 			expectErr:     &roachpb.WriteTooOldError{},
 		},
 		"DisallowShadowingBelow allows above existing tombstone": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, ""}},
-			sst:           []mvccKV{{"a", 4, "sst"}},
-			expect:        []mvccKV{{"a", 4, "sst"}, {"a", 3, ""}},
+			data:          []sstutil.KV{{"a", 3, ""}},
+			sst:           []sstutil.KV{{"a", 4, "sst"}},
+			expect:        []sstutil.KV{{"a", 4, "sst"}, {"a", 3, ""}},
 		},
 		"DisallowShadowingBelow returns WriteIntentError below intent": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", intentTS, "intent"}},
-			sst:           []mvccKV{{"a", 3, "sst"}},
+			data:          []sstutil.KV{{"a", intentTS, "intent"}},
+			sst:           []sstutil.KV{{"a", 3, "sst"}},
 			expectErr:     &roachpb.WriteIntentError{},
 		},
 		"DisallowShadowingBelow ignores intents in span": { // inconsistent with blind writes
 			noShadowBelow: 5,
-			data:          []mvccKV{{"b", intentTS, "intent"}},
-			sst:           []mvccKV{{"a", 3, "sst"}, {"c", 3, "sst"}},
-			expect:        []mvccKV{{"a", 3, "sst"}, {"b", intentTS, "intent"}, {"c", 3, "sst"}},
+			data:          []sstutil.KV{{"b", intentTS, "intent"}},
+			sst:           []sstutil.KV{{"a", 3, "sst"}, {"c", 3, "sst"}},
+			expect:        []sstutil.KV{{"a", 3, "sst"}, {"b", intentTS, "intent"}, {"c", 3, "sst"}},
 		},
 		"DisallowShadowingBelow is not generally idempotent": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, "a3"}},
-			sst:           []mvccKV{{"a", 3, "a3"}},
+			data:          []sstutil.KV{{"a", 3, "a3"}},
+			sst:           []sstutil.KV{{"a", 3, "a3"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow allows new SST tombstones": { // unfortunately, for performance
 			noShadowBelow: 5,
-			sst:           []mvccKV{{"a", 3, ""}},
-			expect:        []mvccKV{{"a", 3, ""}},
+			sst:           []sstutil.KV{{"a", 3, ""}},
+			expect:        []sstutil.KV{{"a", 3, ""}},
 		},
 		"DisallowShadowingBelow rejects SST tombstones when shadowing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 2, "a2"}},
-			sst:           []mvccKV{{"a", 3, ""}},
+			data:          []sstutil.KV{{"a", 2, "a2"}},
+			sst:           []sstutil.KV{{"a", 3, ""}},
 			expectErr:     "SST values cannot be tombstones",
 		},
 		"DisallowShadowingBelow allows new SST inline values": { // unfortunately, for performance
 			noShadowBelow: 5,
-			sst:           []mvccKV{{"a", 0, "inline"}},
-			expect:        []mvccKV{{"a", 0, "inline"}},
+			sst:           []sstutil.KV{{"a", 0, "inline"}},
+			expect:        []sstutil.KV{{"a", 0, "inline"}},
 		},
 		"DisallowShadowingBelow rejects SST inline values when shadowing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 2, "a2"}},
-			sst:           []mvccKV{{"a", 0, "inline"}},
+			data:          []sstutil.KV{{"a", 2, "a2"}},
+			sst:           []sstutil.KV{{"a", 0, "inline"}},
 			expectErr:     "SST keys must have timestamps",
 		},
 		"DisallowShadowingBelow rejects existing inline values when shadowing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 0, "a0"}},
-			sst:           []mvccKV{{"a", 3, "sst"}},
+			data:          []sstutil.KV{{"a", 0, "a0"}},
+			sst:           []sstutil.KV{{"a", 3, "sst"}},
 			expectErr:     "inline values are unsupported",
 		},
 		"DisallowShadowingBelow collision SST start, existing start, above": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 2, "a2"}},
-			sst:           []mvccKV{{"a", 7, "sst"}},
+			data:          []sstutil.KV{{"a", 2, "a2"}},
+			sst:           []sstutil.KV{{"a", 7, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow collision SST start, existing middle, below": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 2, "a2"}, {"a", 1, "a1"}, {"b", 2, "b2"}, {"c", 3, "c3"}},
-			sst:           []mvccKV{{"b", 1, "sst"}},
+			data:          []sstutil.KV{{"a", 2, "a2"}, {"a", 1, "a1"}, {"b", 2, "b2"}, {"c", 3, "c3"}},
+			sst:           []sstutil.KV{{"b", 1, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "b"`,
 		},
 		"DisallowShadowingBelow collision SST end, existing end, above": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 2, "a2"}, {"a", 1, "a1"}, {"b", 2, "b2"}, {"d", 3, "d3"}},
-			sst:           []mvccKV{{"c", 3, "sst"}, {"d", 4, "sst"}},
+			data:          []sstutil.KV{{"a", 2, "a2"}, {"a", 1, "a1"}, {"b", 2, "b2"}, {"d", 3, "d3"}},
+			sst:           []sstutil.KV{{"c", 3, "sst"}, {"d", 4, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "d"`,
 		},
 		"DisallowShadowingBelow collision after write above tombstone": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 2, ""}, {"a", 1, "a1"}, {"b", 2, "b2"}},
-			sst:           []mvccKV{{"a", 3, "sst"}, {"b", 1, "sst"}},
+			data:          []sstutil.KV{{"a", 2, ""}, {"a", 1, "a1"}, {"b", 2, "b2"}},
+			sst:           []sstutil.KV{{"a", 3, "sst"}, {"b", 1, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "b"`,
 		},
 		"DisallowShadowingBelow at limit writes": {
 			noShadowBelow: 5,
-			sst:           []mvccKV{{"a", 5, "sst"}},
-			expect:        []mvccKV{{"a", 5, "sst"}},
+			sst:           []sstutil.KV{{"a", 5, "sst"}},
+			expect:        []sstutil.KV{{"a", 5, "sst"}},
 		},
 		"DisallowShadowingBelow at limit errors above existing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, "a3"}},
-			sst:           []mvccKV{{"a", 5, "sst"}},
+			data:          []sstutil.KV{{"a", 3, "a3"}},
+			sst:           []sstutil.KV{{"a", 5, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow at limit errors above existing with same value": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 3, "a3"}},
-			sst:           []mvccKV{{"a", 5, "a3"}},
+			data:          []sstutil.KV{{"a", 3, "a3"}},
+			sst:           []sstutil.KV{{"a", 5, "a3"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow at limit errors on replacing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 5, "a3"}},
-			sst:           []mvccKV{{"a", 5, "sst"}},
+			data:          []sstutil.KV{{"a", 5, "a3"}},
+			sst:           []sstutil.KV{{"a", 5, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow at limit is idempotent": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 5, "a3"}},
-			sst:           []mvccKV{{"a", 5, "a3"}},
-			expect:        []mvccKV{{"a", 5, "a3"}},
+			data:          []sstutil.KV{{"a", 5, "a3"}},
+			sst:           []sstutil.KV{{"a", 5, "a3"}},
+			expect:        []sstutil.KV{{"a", 5, "a3"}},
 		},
 		"DisallowShadowingBelow above limit writes": {
 			noShadowBelow: 5,
-			sst:           []mvccKV{{"a", 7, "sst"}},
-			expect:        []mvccKV{{"a", 7, "sst"}},
+			sst:           []sstutil.KV{{"a", 7, "sst"}},
+			expect:        []sstutil.KV{{"a", 7, "sst"}},
 		},
 		"DisallowShadowingBelow above limit errors on existing below limit": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 4, "a4"}},
-			sst:           []mvccKV{{"a", 7, "sst"}},
+			data:          []sstutil.KV{{"a", 4, "a4"}},
+			sst:           []sstutil.KV{{"a", 7, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow above limit errors on existing below limit with same value": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 4, "a4"}},
-			sst:           []mvccKV{{"a", 7, "a3"}},
+			data:          []sstutil.KV{{"a", 4, "a4"}},
+			sst:           []sstutil.KV{{"a", 7, "a3"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow above limit errors on existing at limit": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 5, "a5"}},
-			sst:           []mvccKV{{"a", 7, "sst"}},
+			data:          []sstutil.KV{{"a", 5, "a5"}},
+			sst:           []sstutil.KV{{"a", 7, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow above limit allows equal value at limit": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 5, "a5"}},
-			sst:           []mvccKV{{"a", 7, "a5"}},
-			expect:        []mvccKV{{"a", 7, "a5"}, {"a", 5, "a5"}},
+			data:          []sstutil.KV{{"a", 5, "a5"}},
+			sst:           []sstutil.KV{{"a", 7, "a5"}},
+			expect:        []sstutil.KV{{"a", 7, "a5"}, {"a", 5, "a5"}},
 		},
 		"DisallowShadowingBelow above limit errors on existing above limit": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 6, "a6"}},
-			sst:           []mvccKV{{"a", 7, "sst"}},
+			data:          []sstutil.KV{{"a", 6, "a6"}},
+			sst:           []sstutil.KV{{"a", 7, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow above limit allows equal value above limit": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 6, "a6"}},
-			sst:           []mvccKV{{"a", 7, "a6"}},
-			expect:        []mvccKV{{"a", 7, "a6"}, {"a", 6, "a6"}},
+			data:          []sstutil.KV{{"a", 6, "a6"}},
+			sst:           []sstutil.KV{{"a", 7, "a6"}},
+			expect:        []sstutil.KV{{"a", 7, "a6"}, {"a", 6, "a6"}},
 		},
 		"DisallowShadowingBelow above limit errors on replacing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 7, "a7"}},
-			sst:           []mvccKV{{"a", 7, "sst"}},
+			data:          []sstutil.KV{{"a", 7, "a7"}},
+			sst:           []sstutil.KV{{"a", 7, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow above limit is idempotent": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 7, "a7"}},
-			sst:           []mvccKV{{"a", 7, "a7"}},
-			expect:        []mvccKV{{"a", 7, "a7"}},
+			data:          []sstutil.KV{{"a", 7, "a7"}},
+			sst:           []sstutil.KV{{"a", 7, "a7"}},
+			expect:        []sstutil.KV{{"a", 7, "a7"}},
 		},
 		"DisallowShadowingBelow above limit errors below existing": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 8, "a8"}},
-			sst:           []mvccKV{{"a", 7, "sst"}},
+			data:          []sstutil.KV{{"a", 8, "a8"}},
+			sst:           []sstutil.KV{{"a", 7, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow above limit errors below existing with same value": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 8, "a8"}},
-			sst:           []mvccKV{{"a", 7, "a8"}},
+			data:          []sstutil.KV{{"a", 8, "a8"}},
+			sst:           []sstutil.KV{{"a", 7, "a8"}},
 			expectErr:     &roachpb.WriteTooOldError{},
 		},
 		"DisallowShadowingBelow above limit errors below tombstone": {
 			noShadowBelow: 5,
-			data:          []mvccKV{{"a", 8, ""}},
-			sst:           []mvccKV{{"a", 7, "a8"}},
+			data:          []sstutil.KV{{"a", 8, ""}},
+			sst:           []sstutil.KV{{"a", 7, "a8"}},
 			expectErr:     &roachpb.WriteTooOldError{},
 		},
 	}
@@ -628,16 +610,16 @@ func TestEvalAddSSTable(t *testing.T) {
 				for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
 					kv := tc.data[i]
 					var txn *roachpb.Transaction
-					if kv.ts == intentTS {
+					if kv.WallTimestamp == intentTS {
 						txn = &intentTxn
 					}
-					require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.TS(), kv.Value(), txn))
+					require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), kv.Value(), txn))
 				}
 				require.NoError(t, b.Commit(false))
 				stats := engineStats(t, engine)
 
 				// Build and add SST.
-				sst, start, end := makeSST(t, tc.sst)
+				sst, start, end := sstutil.MakeSST(t, tc.sst)
 				reqTS := hlc.Timestamp{WallTime: defaultReqTS}
 				if tc.atReqTS != 0 {
 					reqTS.WallTime = tc.atReqTS
@@ -652,7 +634,7 @@ func TestEvalAddSSTable(t *testing.T) {
 					Args: &roachpb.AddSSTableRequest{
 						RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
 						Data:                    sst,
-						MVCCStats:               sstStats(t, sst),
+						MVCCStats:               sstutil.ComputeStats(t, sst),
 						DisallowConflicts:       tc.noConflict,
 						DisallowShadowing:       tc.noShadow,
 						DisallowShadowingBelow:  hlc.Timestamp{WallTime: tc.noShadowBelow},
@@ -695,7 +677,7 @@ func TestEvalAddSSTable(t *testing.T) {
 				})
 				defer iter.Close()
 				iter.SeekGE(storage.MVCCKey{Key: keys.SystemPrefix})
-				scan := []mvccKV{}
+				scan := []sstutil.KV{}
 				for {
 					ok, err := iter.Valid()
 					require.NoError(t, err)
@@ -721,7 +703,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						value, err = roachpb.Value{RawBytes: meta.RawBytes}.GetBytes()
 						require.NoError(t, err)
 					}
-					scan = append(scan, mvccKV{key: key, ts: ts, value: string(value)})
+					scan = append(scan, sstutil.KV{key, ts, string(value)})
 					iter.Next()
 				}
 				require.Equal(t, tc.expect, scan)
@@ -784,7 +766,7 @@ func runTestDBAddSSTable(
 	var noTS hlc.Timestamp
 
 	{
-		sst, start, end := makeSST(t, []mvccKV{{"bb", 2, "1"}})
+		sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"bb", 2, "1"}})
 
 		// Key is before the range in the request span.
 		err := db.AddSSTable(
@@ -826,7 +808,7 @@ func runTestDBAddSSTable(
 	// Check that ingesting a key with an earlier mvcc timestamp doesn't affect
 	// the value returned by Get.
 	{
-		sst, start, end := makeSST(t, []mvccKV{{"bb", 1, "2"}})
+		sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"bb", 1, "2"}})
 		require.NoError(t, db.AddSSTable(
 			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, writeAtSST))
 		r, err := db.Get(ctx, "bb")
@@ -840,7 +822,7 @@ func runTestDBAddSSTable(
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
 	{
-		sst, start, end := makeSST(t, []mvccKV{{"bc", 1, "3"}})
+		sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"bc", 1, "3"}})
 
 		var before int64
 		if store != nil {
@@ -876,7 +858,7 @@ func runTestDBAddSSTable(
 
 	// ... and doing the same thing but via write-batch works the same.
 	{
-		sst, start, end := makeSST(t, []mvccKV{{"bd", 1, "3"}})
+		sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"bd", 1, "3"}})
 
 		var before int64
 		if store != nil {
@@ -938,7 +920,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	require.NoError(t, err)
 	defer engine.Close()
 
-	for _, kv := range []mvccKV{
+	for _, kv := range []sstutil.KV{
 		{"A", 1, "A"},
 		{"a", 1, "a"},
 		{"a", 6, ""},
@@ -952,7 +934,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
 	}
 
-	sst, start, end := makeSST(t, []mvccKV{
+	sst, start, end := sstutil.MakeSST(t, []sstutil.KV{
 		{"a", 4, "aaaaaa"}, // mvcc-shadowed by existing delete.
 		{"a", 2, "aa"},     // mvcc-shadowed within SST.
 		{"c", 6, "ccc"},    // same TS as existing, LSM-shadows existing.
@@ -1004,7 +986,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	require.Equal(t, engineStats(t, engine), statsEvaled)
 
 	// Check stats for a single KV.
-	sst, start, end = makeSST(t, []mvccKV{{"zzzzzzz", ts.WallTime, "zzz"}})
+	sst, start, end = sstutil.MakeSST(t, []sstutil.KV{{"zzzzzzz", ts.WallTime, "zzz"}})
 	cArgsWithStats := batcheval.CommandArgs{
 		EvalCtx: evalCtx,
 		Header:  roachpb.Header{Timestamp: ts},
@@ -1033,7 +1015,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	engine := storage.NewDefaultInMemForTesting()
 	defer engine.Close()
 
-	for _, kv := range []mvccKV{
+	for _, kv := range []sstutil.KV{
 		{"a", 2, "aa"},
 		{"b", 1, "bb"},
 		{"b", 6, ""},
@@ -1056,11 +1038,11 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	// CommandArgs Stats field by using:
 	// cArgs.Stats + ingested_stats - skipped_stats.
 	// Successfully evaluate the first SST as there are no key collisions.
-	kvs := []mvccKV{
+	kvs := []sstutil.KV{
 		{"c", 2, "bb"},
 		{"h", 6, "hh"},
 	}
-	sst, start, end := makeSST(t, kvs)
+	sst, start, end := sstutil.MakeSST(t, kvs)
 
 	// Accumulate stats across SST ingestion.
 	commandStats := enginepb.MVCCStats{}
@@ -1074,7 +1056,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 			RequestHeader:     roachpb.RequestHeader{Key: start, EndKey: end},
 			Data:              sst,
 			DisallowShadowing: true,
-			MVCCStats:         sstStats(t, sst),
+			MVCCStats:         sstutil.ComputeStats(t, sst),
 		},
 		Stats: &commandStats,
 	}
@@ -1091,7 +1073,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 
 	// Evaluate the second SST. Both the KVs are perfectly shadowing and should
 	// not contribute to the stats.
-	sst, start, end = makeSST(t, []mvccKV{
+	sst, start, end = sstutil.MakeSST(t, []sstutil.KV{
 		{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
 		{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
 	})
@@ -1100,7 +1082,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		RequestHeader:     roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:              sst,
 		DisallowShadowing: true,
-		MVCCStats:         sstStats(t, sst),
+		MVCCStats:         sstutil.ComputeStats(t, sst),
 	}
 	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, nil)
 	require.NoError(t, err)
@@ -1110,7 +1092,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 
 	// Evaluate the third SST. Two of the three KVs are perfectly shadowing, but
 	// there is one valid KV which should contribute to the stats.
-	sst, start, end = makeSST(t, []mvccKV{
+	sst, start, end = sstutil.MakeSST(t, []sstutil.KV{
 		{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
 		{"e", 2, "ee"},
 		{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
@@ -1120,7 +1102,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		RequestHeader:     roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:              sst,
 		DisallowShadowing: true,
-		MVCCStats:         sstStats(t, sst),
+		MVCCStats:         sstutil.ComputeStats(t, sst),
 	}
 	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, nil)
 	require.NoError(t, err)
@@ -1159,7 +1141,7 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	// Generate an SSTable that covers keys a, b, and c, and submit it with high
 	// priority. This is going to abort the transaction above, encounter its
 	// intent, and resolve it.
-	sst, start, end := makeSST(t, []mvccKV{
+	sst, start, end := sstutil.MakeSST(t, []sstutil.KV{
 		{"a", 1, "1"},
 		{"b", 1, "2"},
 		{"c", 1, "3"},
@@ -1170,7 +1152,7 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	ba.Add(&roachpb.AddSSTableRequest{
 		RequestHeader:     roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:              sst,
-		MVCCStats:         sstStats(t, sst),
+		MVCCStats:         sstutil.ComputeStats(t, sst),
 		DisallowShadowing: true,
 	})
 	_, pErr := db.NonTransactionalSender().Send(ctx, ba)
@@ -1201,11 +1183,11 @@ func TestAddSSTableWriteAtRequestTimestampRespectsTSCache(t *testing.T) {
 	txnTS := txn.CommitTimestamp()
 
 	// Add an SST writing below the previous write.
-	sst, start, end := makeSST(t, []mvccKV{{"key", 1, "sst"}})
+	sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"key", 1, "sst"}})
 	sstReq := &roachpb.AddSSTableRequest{
 		RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:                    sst,
-		MVCCStats:               sstStats(t, sst),
+		MVCCStats:               sstutil.ComputeStats(t, sst),
 		WriteAtRequestTimestamp: true,
 	}
 	ba := roachpb.BatchRequest{
@@ -1261,11 +1243,11 @@ func TestAddSSTableWriteAtRequestTimestampRespectsClosedTS(t *testing.T) {
 
 	// Add an SST writing below the closed timestamp. It should get pushed above it.
 	reqTS := closedTS.Prev()
-	sst, start, end := makeSST(t, []mvccKV{{"key", 1, "sst"}})
+	sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"key", 1, "sst"}})
 	sstReq := &roachpb.AddSSTableRequest{
 		RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:                    sst,
-		MVCCStats:               sstStats(t, sst),
+		MVCCStats:               sstutil.ComputeStats(t, sst),
 		WriteAtRequestTimestamp: true,
 	}
 	ba := roachpb.BatchRequest{
@@ -1286,50 +1268,6 @@ func TestAddSSTableWriteAtRequestTimestampRespectsClosedTS(t *testing.T) {
 	v, err := roachpb.Value{RawBytes: kvs[0].Value}.GetBytes()
 	require.NoError(t, err)
 	require.Equal(t, "sst", string(v))
-}
-
-// makeSST builds a binary in-memory SST from the given data.
-func makeSST(t *testing.T, kvs []mvccKV) ([]byte, roachpb.Key, roachpb.Key) {
-	t.Helper()
-
-	sstFile := &storage.MemFile{}
-	writer := storage.MakeBackupSSTWriter(sstFile)
-	defer writer.Close()
-
-	start, end := keys.MaxKey, keys.MinKey
-	for _, kv := range kvs {
-		if kv.key < string(start) {
-			start = roachpb.Key(kv.key)
-		}
-		if kv.key > string(end) {
-			end = roachpb.Key(kv.key)
-		}
-		if kv.ts == 0 {
-			meta := &enginepb.MVCCMetadata{RawBytes: kv.ValueBytes()}
-			metaBytes, err := protoutil.Marshal(meta)
-			require.NoError(t, err)
-			require.NoError(t, writer.PutUnversioned(kv.Key(), metaBytes))
-		} else {
-			require.NoError(t, writer.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
-		}
-	}
-	require.NoError(t, writer.Finish())
-	writer.Close()
-
-	return sstFile.Data(), start, end.Next()
-}
-
-// sstStats computes the MVCC stats for the given binary SST.
-func sstStats(t *testing.T, sst []byte) *enginepb.MVCCStats {
-	t.Helper()
-
-	iter, err := storage.NewMemSSTIterator(sst, true)
-	require.NoError(t, err)
-	defer iter.Close()
-
-	stats, err := storage.ComputeStatsForRange(iter, keys.MinKey, keys.MaxKey, 0)
-	require.NoError(t, err)
-	return &stats
 }
 
 // engineStats computes the MVCC stats for the given engine.
