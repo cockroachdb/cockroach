@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/jackc/pgx/v4"
+	pgx "github.com/jackc/pgx/v4"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
@@ -500,7 +500,7 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop(context.Background())
 
-	errFail := "setting or updating a password is not supported in insecure mode"
+	errFail := "setting or updating passwords was disabled by configuration"
 
 	testCases := []struct {
 		sql       string

@@ -98,7 +98,7 @@ func Example_demo() {
 	// demo --multitenant=false -e CREATE USER test WITH PASSWORD 'testpass'
 	// CREATE ROLE
 	// demo --multitenant=false --insecure -e CREATE USER test WITH PASSWORD 'testpass'
-	// ERROR: setting or updating a password is not supported in insecure mode
+	// ERROR: setting or updating passwords was disabled by configuration
 	// SQLSTATE: 28P01
 	// demo --multitenant=false --geo-partitioned-replicas --disable-demo-license
 	// ERROR: enterprise features are needed for this demo (--geo-partitioned-replicas)
