@@ -116,11 +116,17 @@ func (ex *connExecutor) execStmt(
 			if rAddr := ex.sessionData().RemoteAddr; rAddr != nil {
 				remoteAddr = rAddr.String()
 			}
+			var stmtNoConstants string
+			if prepared != nil {
+				stmtNoConstants = prepared.StatementNoConstants
+			} else {
+				stmtNoConstants = formatStatementHideConstants(ast)
+			}
 			labels := pprof.Labels(
 				"appname", ex.sessionData().ApplicationName,
 				"addr", remoteAddr,
 				"stmt.tag", ast.StatementTag(),
-				"stmt.no.constants", formatStatementHideConstants(ast),
+				"stmt.no.constants", stmtNoConstants,
 			)
 			pprof.Do(ctx, labels, func(ctx context.Context) {
 				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
