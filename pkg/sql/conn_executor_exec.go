@@ -841,15 +841,16 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 			if err != nil {
 				return err
 			}
+			if v.Equal == nil {
+				return errors.AssertionFailedf("Equal for %s must be set", param.name)
+			}
 			if v.GetFromSessionData == nil {
 				return errors.AssertionFailedf("GetFromSessionData for %s must be set", param.name)
 			}
-			beforeVal := v.GetFromSessionData(before)
-			afterVal := v.GetFromSessionData(after)
-			if beforeVal != afterVal {
+			if !v.Equal(before, after) {
 				ex.dataMutatorIterator.paramStatusUpdater.BufferParamStatusUpdate(
 					param.name,
-					afterVal,
+					v.GetFromSessionData(after),
 				)
 			}
 		}
