@@ -176,7 +176,7 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.JoinReader != nil:
-		if spec.Core.JoinReader.LookupColumns != nil || !spec.Core.JoinReader.LookupExpr.Empty() {
+		if !spec.Core.JoinReader.IsIndexJoin() {
 			return errLookupJoinUnsupported
 		}
 		return nil
@@ -740,7 +740,7 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
 			}
-			if core.JoinReader.LookupColumns != nil || !core.JoinReader.LookupExpr.Empty() {
+			if !core.JoinReader.IsIndexJoin() {
 				return r, errors.AssertionFailedf("lookup join reader is unsupported in vectorized")
 			}
 			// We have to create a separate account in order for the cFetcher to
