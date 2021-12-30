@@ -12,7 +12,6 @@ CONSTANTS Nil
 CONSTANTS MaxAttempt
 
 
-
 \* Multi-version value of key.
 VARIABLES MVCCData
 \* Intent write of key.
@@ -43,6 +42,7 @@ vars == <<Unchangedvars,MVCCData,Record,System_ts,Read_result,Txn_exeid,Intent_w
 
 \* Keys in command.
 KEYS == {"A","B"}
+
 
 \* Initiate txn1.
 \* in this case:
@@ -357,7 +357,11 @@ CheckInflightAndCommit(tid) ==
             /\ \/ \* If all inflight write have been persisted.
                   /\ Record' = [Record EXCEPT ![tid].status = "committed"]
                   /\ UNCHANGED <<System_ts,Read_result,Txn_exeid>>
-               \/ \* If some inflight write fails persistence
+                  
+                  
+               \* For convenience, we assume that all inflight writes will be persisted. 
+               \* You can remove (**) below to add failure scenarios.
+               (*\/ \* If some inflight write fails persistence
                   /\ Record' = [Record EXCEPT ![tid] = [ts      |-> System_ts,
                                                         \* Set status according to attempt.
                                                         status  |-> IF @.attempt < MaxAttempt THEN "pending" ELSE "aborted",
@@ -365,7 +369,7 @@ CheckInflightAndCommit(tid) ==
                                                         command |-> @.command]]
                   /\ Txn_exeid' = [Txn_exeid EXCEPT ![tid] = 1]
                   /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
-                  /\ System_ts' = System_ts + 1
+                  /\ System_ts' = System_ts + 1 *)
             /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache>>
 
 
@@ -465,7 +469,7 @@ invCorrect ==\* When all txns are terminated and all intent write is written to 
                                                                  ELSE Read_result[txn3][i - RL1 - RL2]]
                 
                 IN  \* You can use the following statement to view an example. 
-                    \* /\ Assert(\E i \in 1..3: Record[i].status = "aborted",<<SerializeedTxn,SerializedRead,Len(SerializeedTxn)>>)
+                    \* /\ Assert(\E i \in 1..3: Record[i].status = "aborted",<<SerializedTxn,SerializedRead,Len(SerializedTxn)>>)
                     
                     /\ CheckInv(SerializedTxn,SerializedRead,Len(SerializedTxn))
     
@@ -493,14 +497,75 @@ invType ==  /\ \A i \in DOMAIN Record :  /\ Record[i].status \in {"pending","sta
                                                   => /\ Intent_write[i].ts < System_ts
                                                      /\ Intent_write[i].tid \in 1..3
                                              
-                      
+invMVCCData == \* Data must be written by comitted txn. 
+             /\ Cardinality({id \in DOMAIN Record : Record[id].status = "committed"}) +
+                Cardinality({id \in DOMAIN Record : Record[id].status = "aborted"}) = 3
+             /\ \A k \in KEYS : Intent_write[k] = Nil 
+           => LET comSet == {i \in 1..3 : Record[i].status = "committed"}
+                  tsSet  == {Record[i].ts : i \in comSet} \union {0}
+                  MVCCDataSet == [k \in KEYS |-> {MVCCData[k][i].ts : i \in 1..Len(MVCCData[k])}]
+              IN Assert(
+                  \A k \in KEYS : \A ele \in MVCCDataSet[k] : ele \in tsSet 
+                  ,"error MVCCData")
+           
+
+                               
 TxnInv == /\ invCorrect 
           /\ invTs
           /\ invOthers
           /\ invType
+          /\ invMVCCData
+          
+\* In a txn, when reads a value, the value must be the same as the value of the most recent operation on the key.
+\* On the other word : if most recent operation in same txn is Read, two result of read should be equal.
+\* If most recent operation in same txn is Write, the read operation should read the written value.
+ReadProperty == 
+       \A i \in 1..3: (Len(Read_result'[i]) > Len(Read_result[i]))
+                         =>    LET txn == Transactions[i]
+                                   Rr  == Read_result'[i]
+                                   
+                                   ReadIndexSet == {c \in 1..Len(txn) : /\ txn[c].op = Read
+                                                                        /\ Cardinality({t \in 1..c-1 : txn[t].op = Read}) = Len(Rr) - 1}
+                                   
+                                   ReadIndex == CHOOSE c \in ReadIndexSet: TRUE
+                                   ReadKey == txn[ReadIndex].key
+                                   ReadValue == txn[ReadIndex].value
+                                    
+                                   
+                                   sKeySet == {c \in 1..ReadIndex - 1: txn[c].key = ReadKey}
+                                   cmdIndex == Max(sKeySet)
+                                   cmd   == txn[cmdIndex]
+                                   
+                                   
+                                   thisReadResult == Rr[Len(Rr)]  
+                                   LastReadResultIndex == Cardinality({c \in 1..cmdIndex: txn[c].op = Read})
+                                   
+                                IN 
+                                   /\ Assert(Cardinality(ReadIndexSet) = 1 ,ReadIndexSet)
+                                   /\ (Cardinality(sKeySet) > 0) =>
+                                       \/ /\ cmd.op = Write
+                                          /\ Assert(cmd.value = thisReadResult,"do not equal")
+                                       \/ /\ cmd.op = Read 
+                                          /\ Assert(Rr[LastReadResultIndex] = thisReadResult,"do not equal")
+                                          
+\* After the Write operation, the content of the Write_intent will be modified accordingly                              
+WriteProperty == 
+    \A i \in 1..3 : (/\ Txn_exeid'[i] > Txn_exeid[i]
+                     /\ Transactions[i][Txn_exeid[i]].op = Write)
+                  => 
+                     LET cmd == Transactions[i][Txn_exeid[i]]
+                         key == cmd.key
+                         value == cmd.value
+                         ts == Record[i].ts
+                     IN Intent_write'[key] = [value |-> value,
+                                              ts    |-> ts,
+                                              tid   |-> i]
+                        
 
 
 Properties ==
+    /\ [][WriteProperty]_Txn_exeid
+    /\ [][ReadProperty]_Read_result
     \* The ts of each element of tscache increases monotonically.
     /\ [][\A k \in KEYS: Tscache'[k] >= Tscache[k]]_Tscache
     \* System_ts increases monotonically.
