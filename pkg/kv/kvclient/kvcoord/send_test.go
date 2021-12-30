@@ -245,8 +245,8 @@ func TestComplexScenarios(t *testing.T) {
 	}
 }
 
-// TestSplitHealthy tests that the splitHealthy helper function sorts healthy
-// nodes before unhealthy nodes.
+// TestSplitHealthy tests that the splitHealthy method sorts healthy nodes
+// before unhealthy nodes.
 func TestSplitHealthy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -299,8 +299,12 @@ func TestSplitHealthy(t *testing.T) {
 					health.Set(i, healthUnhealthy)
 				}
 			}
-			splitHealthy(replicas, health)
-			if !reflect.DeepEqual(replicas, td.out) {
+			gt := grpcTransport{
+				replicas:      replicas,
+				replicaHealth: health,
+			}
+			gt.splitHealthy()
+			if !reflect.DeepEqual(gt.replicas, td.out) {
 				t.Errorf("splitHealthy(...) = %+v not %+v", replicas, td.out)
 			}
 		})
