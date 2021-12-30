@@ -294,7 +294,7 @@ func (s *authenticationServer) createSessionFor(
 		ID:     id,
 		Secret: secret,
 	}
-	return EncodeSessionCookie(cookieValue, !s.cfg.DisableTLSForHTTP)
+	return EncodeSessionCookie(cookieValue, !s.cfg.SecurityOverrides.IsSet(base.DisableHTTPTLS))
 }
 
 // UserLogout allows a user to terminate their currently active session.
