@@ -151,15 +151,21 @@ var (
 type Config struct {
 	// Insecure specifies whether to disable security checks throughout
 	// the code base.
-	// This is really not recommended.
 	// See: https://github.com/cockroachdb/cockroach/issues/53404
+	//
+	// TODO(knz): Remove this once the SecurityOverrides are used throughout.
 	Insecure bool
+
+	// SecurityOverrides indicates which security mechanisms to disable.
+	SecurityOverrides SecurityOverrides
 
 	// AcceptSQLWithoutTLS, when set, makes it possible for SQL
 	// clients to authenticate without TLS on a secure cluster.
 	//
 	// Authentication is, as usual, subject to the HBA configuration: in
 	// the default case, password authentication is still mandatory.
+	//
+	// TODO(knz): Remove this once the SecurityOverrides are used throughout.
 	AcceptSQLWithoutTLS bool
 
 	// SSLCAKey is used to sign new certs.
@@ -190,6 +196,8 @@ type Config struct {
 	// verification to only verify that a non-empty cluster name on
 	// both sides match. This is meant for use while rolling an
 	// existing cluster into using a new cluster name.
+	//
+	// TODO(knz): Remove this once the SecurityOverrides are used throughout.
 	DisableClusterNameVerification bool
 
 	// SplitListenSQL indicates whether to listen for SQL
@@ -208,6 +216,8 @@ type Config struct {
 	HTTPAddr string
 
 	// DisableTLSForHTTP, if set, disables TLS for the HTTP listener.
+	//
+	// TODO(knz): Remove this once the SecurityOverrides are used throughout.
 	DisableTLSForHTTP bool
 
 	// HTTPAdvertiseAddr is the advertised HTTP address.
@@ -255,6 +265,7 @@ func (*Config) HistogramWindowInterval() time.Duration {
 // This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
 	cfg.Insecure = defaultInsecure
+	cfg.SecurityOverrides = 0
 	cfg.User = security.MakeSQLUsernameFromPreNormalizedString(defaultUser)
 	cfg.Addr = defaultAddr
 	cfg.AdvertiseAddr = cfg.Addr

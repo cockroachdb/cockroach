@@ -70,10 +70,12 @@ func NewNetwork(
 		Nodes:   []*Node{},
 		Stopper: stopper,
 	}
+	cfg := &base.Config{Insecure: true}
+	_ = cfg.SecurityOverrides.Set("disable-all")
 	n.RPCContext = rpc.NewContext(ctx,
 		rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
+			Config:   cfg,
 			Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 			Stopper:  n.Stopper,
 			Settings: cluster.MakeTestingClusterSettings(),

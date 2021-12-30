@@ -54,6 +54,11 @@ func TestClientSSLSettings(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
+			// TODO(knz): check the consequences of disable-http-tls and
+			// disable-rpc-tls separately in the test below.
+			if tc.insecure {
+				_ = cfg.SecurityOverrides.Set("disable-all")
+			}
 			if tc.hasCerts {
 				testutils.FillCerts(cfg)
 			} else {
@@ -116,6 +121,11 @@ func TestServerSSLSettings(t *testing.T) {
 	for tcNum, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUserName()}
+			// TODO(knz): check the consequences of disable-http-tls and
+			// disable-rpc-tls separately in the test below.
+			if tc.insecure {
+				_ = cfg.SecurityOverrides.Set("disable-all")
+			}
 			if tc.hasCerts {
 				testutils.FillCerts(cfg)
 			}

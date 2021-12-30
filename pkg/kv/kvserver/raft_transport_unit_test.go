@@ -42,10 +42,12 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
+	cfg := &base.Config{Insecure: true}
+	_ = cfg.SecurityOverrides.Set("disable-all")
 	rpcC := rpc.NewContext(ctx,
 		rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
+			Config:   cfg,
 			Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
 			Stopper:  stopper,
 			Settings: st,
