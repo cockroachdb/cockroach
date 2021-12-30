@@ -75,7 +75,7 @@ func TestServer(t *testing.T) {
 
 	req := &execinfrapb.SetupFlowRequest{
 		Version:           execinfra.Version,
-		LeafTxnInputState: &leafInputState,
+		LeafTxnInputState: leafInputState,
 	}
 	req.Flow = execinfrapb.FlowSpec{
 		Processors: []execinfrapb.ProcessorSpec{{
