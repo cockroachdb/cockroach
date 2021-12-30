@@ -267,7 +267,8 @@ func (it *spanResolverIterator) ReplicaInfo(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	it.queryState.RangesPerNode[repl.NodeID]++
+	prev := it.queryState.RangesPerNode.GetDefault(int(repl.NodeID))
+	it.queryState.RangesPerNode.Set(int(repl.NodeID), prev+1)
 	it.queryState.AssignedRanges[rngID] = repl
 	return repl, nil
 }
