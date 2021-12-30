@@ -353,23 +353,15 @@ or both, have not yet been initialized and do not yet know their cluster ID.
 
 </PRE>
 To introduce a cluster name into an already-initialized cluster, pair this flag
-with --disable-cluster-name-verification.
+with --security-overrides=disable-cluster-name-verification.
 `,
 	}
 
 	DisableClusterNameVerification = FlagInfo{
 		Name: "disable-cluster-name-verification",
 		Description: `
-Tell the server to ignore cluster name mismatches. This is meant for use when
-opting an existing cluster into starting to use cluster name verification, or
-when changing the cluster name.
-<PRE>
-
-</PRE>
-The cluster should be restarted once with --cluster-name and
---disable-cluster-name-verification combined, and once all nodes have
-been updated to know the new cluster name, the cluster can be
-restarted again with this flag removed.`,
+Alias for --security-overrides=disable-cluster-name-verification.
+`,
 	}
 
 	Join = FlagInfo{

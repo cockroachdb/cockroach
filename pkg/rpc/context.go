@@ -1441,7 +1441,7 @@ func (rpcCtx *Context) runHeartbeat(
 				// new node in a cluster and mistakenly joins the wrong
 				// cluster gets a chance to see the error message on their
 				// management console.
-				if !rpcCtx.Config.DisableClusterNameVerification && !response.DisableClusterNameVerification {
+				if !rpcCtx.Config.SecurityOverrides.IsSet(base.DisableClusterNameVerification) && !response.DisableClusterNameVerification {
 					err = errors.Wrap(
 						checkClusterName(rpcCtx.Config.ClusterName, response.ClusterName),
 						"cluster name check failed on ping response")
@@ -1513,7 +1513,7 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 		clock:                                 rpcCtx.Clock,
 		remoteClockMonitor:                    rpcCtx.RemoteClocks,
 		clusterName:                           rpcCtx.ClusterName(),
-		disableClusterNameVerification:        rpcCtx.Config.DisableClusterNameVerification,
+		disableClusterNameVerification:        rpcCtx.Config.SecurityOverrides.IsSet(base.DisableClusterNameVerification),
 		clusterID:                             rpcCtx.ClusterID,
 		nodeID:                                rpcCtx.NodeID,
 		settings:                              rpcCtx.Settings,

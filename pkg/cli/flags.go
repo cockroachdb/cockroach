@@ -511,7 +511,12 @@ func init() {
 
 		// Cluster name verification.
 		varFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
-		boolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
+		varFlag(f, secOverrideSetter{
+			dst:  &baseCfg.SecurityOverrides,
+			flag: base.DisableClusterNameVerification}, cliflags.DisableClusterNameVerification)
+		f.Lookup(cliflags.DisableClusterNameVerification.Name).NoOptDefVal = "false"
+		_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
+
 		if cmd == startSingleNodeCmd {
 			// Even though all server flags are supported for
 			// 'start-single-node', we intend that command to be used by
@@ -797,7 +802,13 @@ func init() {
 		varFlag(f, urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
 
 		varFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
-		boolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
+		varFlag(f, secOverrideSetter{
+			dst:  &baseCfg.SecurityOverrides,
+			flag: base.DisableClusterNameVerification}, cliflags.DisableClusterNameVerification)
+		f.Lookup(cliflags.DisableClusterNameVerification.Name).NoOptDefVal = "false"
+		// TODO(knz): hide the client-side flag, once we have set up a way to set the
+		// overrides for client commands.
+		// _ = f.MarkHidden(cliflags.DisableClusterNameVerification)
 	}
 
 	// Commands that print tables.
