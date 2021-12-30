@@ -1268,7 +1268,7 @@ func (txn *Txn) applyDeadlineToBoundedStaleness(
 // transaction for use with InitializeLeafTxn(), when distributing
 // the state of the current transaction to multiple distributed
 // transaction coordinators.
-func (txn *Txn) GetLeafTxnInputState(ctx context.Context) roachpb.LeafTxnInputState {
+func (txn *Txn) GetLeafTxnInputState(ctx context.Context) *roachpb.LeafTxnInputState {
 	if txn.typ != RootTxn {
 		panic(errors.WithContextTags(errors.AssertionFailedf("GetLeafTxnInputState() called on leaf txn"), ctx))
 	}
@@ -1290,10 +1290,10 @@ func (txn *Txn) GetLeafTxnInputState(ctx context.Context) roachpb.LeafTxnInputSt
 // retryable errors, it acts like Send()).
 func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	ctx context.Context,
-) (roachpb.LeafTxnInputState, error) {
+) (*roachpb.LeafTxnInputState, error) {
 	if txn.typ != RootTxn {
-		return roachpb.LeafTxnInputState{},
-			errors.WithContextTags(errors.AssertionFailedf("GetLeafTxnInputStateOrRejectClient() called on leaf txn"), ctx)
+		return nil, errors.WithContextTags(
+			errors.AssertionFailedf("GetLeafTxnInputStateOrRejectClient() called on leaf txn"), ctx)
 	}
 
 	txn.mu.Lock()
@@ -1301,7 +1301,7 @@ func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	tfs, err := txn.mu.sender.GetLeafTxnInputState(ctx, OnlyPending)
 	if err != nil {
 		txn.handleErrIfRetryableLocked(ctx, err)
-		return roachpb.LeafTxnInputState{}, err
+		return nil, err
 	}
 	return tfs, nil
 }
@@ -1310,21 +1310,19 @@ func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 // transaction for use with UpdateRootWithLeafFinalState(), when combining the
 // impact of multiple distributed transaction coordinators that are
 // all operating on the same transaction.
-func (txn *Txn) GetLeafTxnFinalState(ctx context.Context) (roachpb.LeafTxnFinalState, error) {
+func (txn *Txn) GetLeafTxnFinalState(ctx context.Context) (*roachpb.LeafTxnFinalState, error) {
 	if txn.typ != LeafTxn {
-		return roachpb.LeafTxnFinalState{},
-			errors.WithContextTags(
-				errors.AssertionFailedf("GetLeafTxnFinalState() called on root txn"), ctx)
+		return nil, errors.WithContextTags(
+			errors.AssertionFailedf("GetLeafTxnFinalState() called on root txn"), ctx)
 	}
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	tfs, err := txn.mu.sender.GetLeafTxnFinalState(ctx, AnyTxnStatus)
 	if err != nil {
-		return roachpb.LeafTxnFinalState{},
-			errors.WithContextTags(
-				errors.NewAssertionErrorWithWrappedErrf(err,
-					"unexpected error from GetLeafTxnFinalState(AnyTxnStatus)"), ctx)
+		return nil, errors.WithContextTags(
+			errors.NewAssertionErrorWithWrappedErrf(err,
+				"unexpected error from GetLeafTxnFinalState(AnyTxnStatus)"), ctx)
 	}
 	return tfs, nil
 }

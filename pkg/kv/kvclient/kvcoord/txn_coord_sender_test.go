@@ -852,7 +852,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 
 	// New create a second, leaf coordinator.
 	leafInputState := txn.GetLeafTxnInputState(ctx)
-	txn2 := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, &leafInputState)
+	txn2 := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState)
 
 	// Start the second transaction.
 	key2 := roachpb.Key("b")
@@ -865,7 +865,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := txn.UpdateRootWithLeafFinalState(ctx, &tfs); err != nil {
+	if err := txn.UpdateRootWithLeafFinalState(ctx, tfs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2426,7 +2426,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
 
 	// New create a second, leaf coordinator.
-	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, &leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState)
 
 	if _, err := leafTxn.Get(ctx, errKey); !testutils.IsError(err, "TransactionAbortedError") {
 		t.Fatalf("expected injected err, got: %v", err)
@@ -2455,14 +2455,14 @@ func TestUpdateRoootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 
 	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 	leafInputState := txn.GetLeafTxnInputState(ctx)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0, &leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0, leafInputState)
 
 	finalState, err := leafTxn.GetLeafTxnFinalState(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	finalState.Txn.Status = roachpb.ABORTED
-	if err := txn.UpdateRootWithLeafFinalState(ctx, &finalState); err != nil {
+	if err := txn.UpdateRootWithLeafFinalState(ctx, finalState); err != nil {
 		t.Fatal(err)
 	}
 
