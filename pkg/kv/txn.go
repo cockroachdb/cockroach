@@ -685,8 +685,8 @@ func (txn *Txn) commit(ctx context.Context) error {
 	// to reduce contention by releasing locks. In multi-tenant settings, it
 	// will be subject to admission control, and the zero CreateTime will give
 	// it preference within the tenant.
-	var ba roachpb.BatchRequest
-	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
+	et := endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger)
+	ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 	_, pErr := txn.Send(ctx, ba)
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
@@ -741,7 +741,9 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	if txn != b.txn {
 		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.appendReqs(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
+	et := endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger)
+	b.growReqs(1)
+	b.reqs[len(b.reqs)-1].Value = &et.union
 	b.initResult(1 /* calls */, 0, b.raw, nil)
 	return txn.Run(ctx, b)
 }
@@ -859,8 +861,8 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+		et := endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */)
+		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
 			return nil
@@ -885,8 +887,8 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+		et := endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */)
+		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
 			func(ctx context.Context) error {
 				if _, pErr := txn.Send(ctx, ba); pErr != nil {
@@ -920,19 +922,27 @@ func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
-func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Request {
-	req := &roachpb.EndTxnRequest{
-		Commit:   commit,
-		Deadline: deadline,
-	}
+// endTxnReqAlloc is used to batch the heap allocations of an EndTxn request.
+type endTxnReqAlloc struct {
+	req      roachpb.EndTxnRequest
+	union    roachpb.RequestUnion_EndTxn
+	unionArr [1]roachpb.RequestUnion
+}
+
+func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) *endTxnReqAlloc {
+	alloc := new(endTxnReqAlloc)
+	alloc.req.Commit = commit
+	alloc.req.Deadline = deadline
 	if hasTrigger {
-		req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
+		alloc.req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
 				SystemConfigSpan: true,
 			},
 		}
 	}
-	return req
+	alloc.union.EndTxn = &alloc.req
+	alloc.unionArr[0].Value = &alloc.union
+	return alloc
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
