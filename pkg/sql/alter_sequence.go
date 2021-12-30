@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -67,6 +69,10 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 
 	oldMinValue := desc.SequenceOpts.MinValue
 	oldMaxValue := desc.SequenceOpts.MaxValue
+	oldIncrement := desc.SequenceOpts.Increment
+	oldStart := desc.SequenceOpts.Start
+	// isAlterAfterInit : true incidate alter_sequence_stmt after create_sequence_stmt without use
+	isAlterWithOutUse := false
 
 	existingType := types.Int
 	if desc.GetSequenceOpts().AsIntegerType != "" {
@@ -103,6 +109,24 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		return kv.ValueInt(), nil
 	}
 
+	// getLastSequenceValue get the last valid sequence value when unavailable values are caused by increment
+	getLastSequenceValue := func(lastVal int64, oldIncrement int64, oldBound int64) (int64, error) {
+		if (lastVal > oldBound && oldIncrement > 0) || (lastVal < oldBound && oldIncrement < 0) {
+			lastValidVal := lastVal
+			figureBeyond := (lastVal - oldBound) % oldIncrement
+			// oldBound is the last valid sequence value
+			if figureBeyond == 0 {
+				lastValidVal = oldBound
+			} else {
+				lastValidVal = oldBound - (oldIncrement - figureBeyond)
+			}
+			return lastValidVal, nil
+		}
+		return 0, pgerror.Newf(
+			pgcode.SequenceGeneratorLimitExceeded,
+			"select currval or nextval please, it's abnormal")
+	}
+
 	// Due to the semantics of sequence caching (see sql.planner.incrementSequenceUsingCache()),
 	// it is possible for a sequence to have a value that exceeds its MinValue or MaxValue. Users
 	// do no see values extending the sequence's bounds, and instead see "bounds exceeded" errors.
@@ -112,33 +136,62 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	// value of the sequence must be restored to the original MinValue or MaxValue transactionally.
 	// The code below handles the second case.
 
-	// The sequence is decreasing and the minvalue is being decreased.
-	if opts.Increment < 0 && desc.SequenceOpts.MinValue < oldMinValue {
-		sequenceVal, err := getSequenceValue()
+	sequenceVal, err := getSequenceValue()
+	if err != nil {
+		return err
+	}
+
+	var lastValidSequence int64
+	// If the sequenceVal exceeded the old MinValue or MaxValue, we must set sequenceVal to the last valid one.
+	// 1. Values is just init, when the sequence is altered before it has ever been used
+	// In this case, last valid sequenceVal is oldStart.
+	// Set the initial value to the oldStartValue(just like pg), when last valid sequenceVal in [newMinValue, newMaxValue]
+	if sequenceVal == oldStart-oldIncrement {
+		isAlterWithOutUse = true
+		n.n.Options = append(n.n.Options, tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &oldStart})
+		err := assignSequenceOptions(
+			desc.SequenceOpts, n.n.Options, false /* setDefaults */, &params, desc.GetID(), desc.ParentID, existingType,
+		)
 		if err != nil {
 			return err
 		}
-
-		// If the sequence exceeded the old MinValue, it must be changed to start at the old MinValue.
-		if sequenceVal < oldMinValue {
-			err := params.p.txn.Put(params.ctx, seqValueKey, oldMinValue)
-			if err != nil {
-				return err
-			}
+		lastValidSequence = oldStart - opts.Increment
+	} else if (sequenceVal < oldMinValue && oldIncrement < 0) || (sequenceVal > oldMaxValue && oldIncrement > 0) {
+		// 2. The sequenceVal out of range result from increment
+		var oldBound int64
+		if sequenceVal < oldMinValue && oldIncrement < 0 {
+			// out of oldMinValue when decrease
+			oldBound = oldMinValue
+		} else if sequenceVal > oldMaxValue && oldIncrement > 0 {
+			// out of oldMaxValue when increase
+			oldBound = oldMaxValue
 		}
-	} else if opts.Increment > 0 && desc.SequenceOpts.MaxValue > oldMaxValue {
-		sequenceVal, err := getSequenceValue()
+		lastValidSequence, err = getLastSequenceValue(sequenceVal, oldIncrement, oldBound)
 		if err != nil {
 			return err
-		}
-
-		if sequenceVal > oldMaxValue {
-			err := params.p.txn.Put(params.ctx, seqValueKey, oldMaxValue)
-			if err != nil {
-				return err
-			}
 		}
 	}
+	if err := params.p.txn.Put(params.ctx, seqValueKey, lastValidSequence); err != nil {
+		return err
+	}
+	// When isAlterWithOutUse is true, allow (opts.Start - opts.Increment) exceed the bounds.
+	// The opts.Start must be in [newMinValue, newMaxValue]
+	if isAlterWithOutUse == false {
+		if sequenceVal > opts.MaxValue {
+			return pgerror.Newf(
+				pgcode.SequenceGeneratorLimitExceeded,
+				"MAXVALUE cannot be made to be less than the current value")
+		} else if sequenceVal < opts.MinValue {
+			return pgerror.Newf(
+				pgcode.SequenceGeneratorLimitExceeded,
+				"MINVALUE cannot be made to be exceed than the current value")
+		}
+	}
+	// Clear out the cache and update the last value.
+	params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.initSequenceCache()
+		m.RecordLatestSequenceVal(uint32(n.seqDesc.GetID()), sequenceVal)
+	})
 
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
