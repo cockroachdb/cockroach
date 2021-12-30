@@ -696,11 +696,13 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 			ResultsBufferSize: args.ConnResultsBufferSize,
 			IsSuperuser:       args.IsSuperuser,
-			CustomOptions:     make(map[string]string),
 		},
 	}
-	for k, v := range args.CustomOptionSessionDefaults {
-		sd.CustomOptions[k] = v
+	if len(args.CustomOptionSessionDefaults) > 0 {
+		sd.CustomOptions = make(map[string]string)
+		for k, v := range args.CustomOptionSessionDefaults {
+			sd.CustomOptions[k] = v
+		}
 	}
 	s.populateMinimalSessionData(sd)
 	return sd
