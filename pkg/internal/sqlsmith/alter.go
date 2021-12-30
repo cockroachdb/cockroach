@@ -462,8 +462,13 @@ func makeAlterDatabaseDropRegion(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterSurvivalGoal(s *Smither) (tree.Statement, bool) {
-	const numSurvivalGoals = 3
-	randInt := rand.Intn(numSurvivalGoals)
+	const numSurvivalGoals = 2
+	// Only {1, 2} are valid values for SurvivalGoal.
+	// 1. SurvivalGoalRegionFailure
+	// 2. SurvivalGoalZoneFailure
+	//
+	// 0. SurvivalGoalDefault is not valid as a value to alter to.
+	randInt := rand.Intn(numSurvivalGoals) + 1
 	survivalGoal := tree.SurvivalGoal(randInt)
 
 	ast := &tree.AlterDatabaseSurvivalGoal{
