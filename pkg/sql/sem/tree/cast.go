@@ -1731,10 +1731,10 @@ func ForEachCast(fn func(src, tgt oid.Oid)) {
 // ValidCast returns true if a valid cast exists from src to tgt in the given
 // context.
 func ValidCast(src, tgt *types.T, ctx CastContext) bool {
-	// If src and tgt are the same type, a cast is valid in any context.
-	if src.Oid() == tgt.Oid() {
-		return true
-	}
+	// // If src and tgt are the same type, a cast is valid in any context.
+	// if src.Oid() == tgt.Oid() {
+	// 	return true
+	// }
 
 	srcFamily := src.Family()
 	tgtFamily := tgt.Family()
@@ -1772,14 +1772,34 @@ func ValidCast(src, tgt *types.T, ctx CastContext) bool {
 	return false
 }
 
-var stringToEnumCounter = sqltelemetry.CastOpCounter(types.StringFamily.Name(), types.EnumFamily.Name())
-var bytesToEnumCounter = sqltelemetry.CastOpCounter(types.BytesFamily.Name(), types.EnumFamily.Name())
-var enumToStringCounter = sqltelemetry.CastOpCounter(types.EnumFamily.Name(), types.StringFamily.Name())
-var unknownToEnumCounter = sqltelemetry.CastOpCounter(types.UnknownFamily.Name(), types.EnumFamily.Name())
+// var stringToEnumCounter = sqltelemetry.CastOpCounter(types.StringFamily.Name(), types.EnumFamily.Name())
+// var bytesToEnumCounter = sqltelemetry.CastOpCounter(types.BytesFamily.Name(), types.EnumFamily.Name())
+
+// var enumToStringCounter = sqltelemetry.CastOpCounter(types.EnumFamily.Name(), types.StringFamily.Name())
+// var unknownToEnumCounter = sqltelemetry.CastOpCounter(types.UnknownFamily.Name(), types.EnumFamily.Name())
 
 // lookupCast returns a cast that describes the cast from src to tgt if it
 // exists. If it does not exist, ok=false is returned.
 func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) (cast, bool) {
+	// If src and tgt are the same type, a cast is valid in any context.
+	if src.Oid() == tgt.Oid() {
+		return cast{
+			maxContext: CastContextImplicit,
+			volatility: VolatilityImmutable,
+			// TODO: counter
+		}, true
+	}
+
+	// TODO:
+	// - First check castMap - those entries take precedence
+	// - Then:
+	//   - array type to string type => assignment, stable (remove entries above)
+	//   - string type to array type => explicit, stable (remove entries above)
+	//   - tuple type to string type => explicit, stable
+	//   - string type to tuple type => stable, assignment.
+	//   - figure out the counters
+	//
+
 	srcFamily := src.Family()
 	tgtFamily := tgt.Family()
 	srcFamily.Name()
@@ -1802,7 +1822,7 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 		return cast{
 			maxContext: CastContextExplicit,
 			volatility: VolatilityImmutable,
-			counter:    stringToEnumCounter,
+			// counter:    stringToEnumCounter,
 		}, true
 	}
 	if srcFamily == types.BytesFamily && tgtFamily == types.EnumFamily {
@@ -1813,7 +1833,7 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 		return cast{
 			maxContext: CastContextExplicit,
 			volatility: VolatilityImmutable,
-			counter:    bytesToEnumCounter,
+			// counter:    bytesToEnumCounter,
 		}, true
 	}
 	if srcFamily == types.EnumFamily && tgtFamily == types.StringFamily {
@@ -1822,18 +1842,18 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 		return cast{
 			maxContext: CastContextAssignment,
 			volatility: VolatilityImmutable,
-			counter:    enumToStringCounter,
+			// counter:    enumToStringCounter,
 		}, true
 	}
-	if srcFamily == types.UnknownFamily && tgtFamily == types.EnumFamily {
-		// Casts from unknown to enums are immutable and allowed in implicit
-		// contexts.
-		return cast{
-			maxContext: CastContextImplicit,
-			volatility: VolatilityImmutable,
-			counter:    unknownToEnumCounter,
-		}, true
-	}
+	// if srcFamily == types.UnknownFamily && tgtFamily == types.EnumFamily {
+	// 	// Casts from unknown to enums are immutable and allowed in implicit
+	// 	// contexts.
+	// 	return cast{
+	// 		maxContext: CastContextImplicit,
+	// 		volatility: VolatilityImmutable,
+	// 		counter:    unknownToEnumCounter,
+	// 	}, true
+	// }
 
 	if tgts, ok := castMap[src.Oid()]; ok {
 		if c, ok := tgts[tgt.Oid()]; ok {
