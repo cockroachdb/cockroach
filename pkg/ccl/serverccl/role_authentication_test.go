@@ -129,7 +129,7 @@ func TestVerifyPassword(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			exists, canLoginSQL, canLoginDBConsole, isSuperuser, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+			exists, canLoginSQL, canLoginDBConsole, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, &ie, username, "", /* databaseName */
 			)
 
@@ -153,33 +153,27 @@ func TestVerifyPassword(t *testing.T) {
 			if !exists || !canLoginDBConsole {
 				validDBConsole = false
 			}
-
-			hashedPassword, err := pwRetrieveFn(ctx)
-			if err != nil {
-				t.Errorf(
-					"credentials %s/%s failed with error %s, wanted no error",
-					tc.username,
-					tc.password,
-					err,
-				)
-			}
-
 			if exists && (canLoginSQL || canLoginDBConsole) {
-				pwCheck, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
+				var hashedPassword security.PasswordHash
+				expired, hashedPassword, err = pwRetrieveFn(ctx)
+				if err != nil {
+					t.Errorf(
+						"credentials %s/%s failed with error %s, wanted no error",
+						tc.username,
+						tc.password,
+						err,
+					)
+				}
+
+				pwCompare, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
 				if err != nil {
 					t.Error(err)
 					valid = false
 					validDBConsole = false
 				}
-				if !pwCheck {
+				if !pwCompare {
 					valid = false
 					validDBConsole = false
-				}
-			}
-
-			if validUntil != nil {
-				if validUntil.Time.Sub(timeutil.Now()) < 0 {
-					expired = true
 				}
 			}
 
