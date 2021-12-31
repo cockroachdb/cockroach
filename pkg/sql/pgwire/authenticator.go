@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Authenticator is a component of an AuthMethod that determines if the
@@ -31,7 +30,7 @@ type Authenticator = func(
 // and expiration time for a user logging in with password-based
 // authentication.
 type PasswordRetrievalFn = func(context.Context) (
+	expired bool,
 	pwHash security.PasswordHash,
-	pwExpiration *tree.DTimestamp,
 	_ error,
 )
