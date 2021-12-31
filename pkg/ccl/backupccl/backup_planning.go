@@ -1433,11 +1433,18 @@ func getBackupDetailAndManifest(
 
 	kmsEnv := &backupKMSEnv{settings: execCfg.Settings, conf: &execCfg.ExternalIODirConfig}
 
-	prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, user, makeCloudStorage, prevs,
-		*initialDetails.EncryptionOptions, kmsEnv)
+	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+
+	prevBackups, encryptionOptions, memSize, err := fetchPreviousBackups(ctx, &mem, user,
+		makeCloudStorage, prevs, *initialDetails.EncryptionOptions, kmsEnv)
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
+	defer func() {
+		mem.Shrink(ctx, memSize)
+	}()
+
 	if len(prevBackups) > 0 {
 		baseManifest := prevBackups[0]
 		if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
