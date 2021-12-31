@@ -31,9 +31,7 @@ import (
 // datum types (JSON, arrays, tuples).
 //
 // See also: docs/tech-notes/encoding.md, keyside.Encode().
-func Encode(
-	appendTo []byte, colID descpb.ColumnID, val tree.Datum, scratch []byte,
-) ([]byte, error) {
+func Encode(appendTo []byte, colID ColumnIDDiff, val tree.Datum, scratch []byte) ([]byte, error) {
 	if val == tree.DNull {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
 	}
@@ -99,4 +97,24 @@ func Encode(
 	default:
 		return nil, errors.Errorf("unable to encode table value: %T", t)
 	}
+}
+
+// ColumnIDDiff is the difference between two descpb.ColumnIDs. When multiple
+// columns are encoded in a single value, the difference relative to the
+// previous column ID is encoded for each column (to minimize space usage).
+type ColumnIDDiff uint32
+
+// NoColumnID is a sentinel used when we aren't encoding a specific column ID.
+// This is used when we use value encodings not to write KV Values but other
+// purposes, for example transferring a value over DistSQL (in the row engine).
+const NoColumnID = ColumnIDDiff(encoding.NoColumnID)
+
+// MakeColumnIDDiff creates the ColumnIDDiff for the difference between the
+// given columns in the same value. For the first column in the value,
+// `previous` should be zero / NoColumnID.
+func MakeColumnIDDiff(previous, current descpb.ColumnID) ColumnIDDiff {
+	if previous > current {
+		panic(errors.AssertionFailedf("cannot write column id %d after %d", current, previous))
+	}
+	return ColumnIDDiff(current - previous)
 }

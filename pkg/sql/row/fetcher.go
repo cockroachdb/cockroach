@@ -1298,7 +1298,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 			if lastColID > col.GetID() {
 				return errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
 			}
-			colIDDiff := col.GetID() - lastColID
+			colIDDiff := valueside.MakeColumnIDDiff(lastColID, col.GetID())
 			lastColID = col.GetID()
 
 			if result, err := valueside.Encode([]byte(nil), colIDDiff, rowVal.Datum,

@@ -12,7 +12,6 @@ package rowenc
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"unsafe"
 
@@ -1219,10 +1218,7 @@ func writeColumnValues(
 		if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
 			continue
 		}
-		if lastColID > col.id {
-			panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
-		}
-		colIDDiff := col.id - lastColID
+		colIDDiff := valueside.MakeColumnIDDiff(lastColID, col.id)
 		lastColID = col.id
 		var err error
 		value, err = valueside.Encode(value, colIDDiff, val, nil)

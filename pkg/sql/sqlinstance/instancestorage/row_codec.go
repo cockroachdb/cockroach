@@ -58,12 +58,12 @@ func (d *rowCodec) encodeRow(
 	addrDatum := tree.NewDString(addr)
 	var valueBuf []byte
 	valueBuf, err = valueside.Encode(
-		[]byte(nil), d.columns[1].GetID(), addrDatum, []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDiff(0, d.columns[1].GetID()), addrDatum, []byte(nil))
 	if err != nil {
 		return kv, err
 	}
 	sessionDatum := tree.NewDBytes(tree.DBytes(sessionID.UnsafeBytes()))
-	sessionColDiff := d.columns[2].GetID() - d.columns[1].GetID()
+	sessionColDiff := valueside.MakeColumnIDDiff(d.columns[1].GetID(), d.columns[2].GetID())
 	valueBuf, err = valueside.Encode(valueBuf, sessionColDiff, sessionDatum, []byte(nil))
 	if err != nil {
 		return kv, err

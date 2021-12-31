@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -135,7 +134,7 @@ func (dv *datumVec) Cap() int {
 func (dv *datumVec) MarshalAt(appendTo []byte, i int) ([]byte, error) {
 	dv.maybeSetDNull(i)
 	return valueside.Encode(
-		appendTo, descpb.NoColumnID, dv.data[i], dv.scratch,
+		appendTo, valueside.NoColumnID, dv.data[i], dv.scratch,
 	)
 }
 

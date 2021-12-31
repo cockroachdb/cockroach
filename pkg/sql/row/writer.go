@@ -187,7 +187,7 @@ func prepareInsertOrUpdateBatch(
 			if lastColID > col.GetID() {
 				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
 			}
-			colIDDiff := col.GetID() - lastColID
+			colIDDiff := valueside.MakeColumnIDDiff(lastColID, col.GetID())
 			lastColID = col.GetID()
 			var err error
 			rawValueBuf, err = valueside.Encode(rawValueBuf, colIDDiff, values[idx], nil)
