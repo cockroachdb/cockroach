@@ -213,7 +213,7 @@ func (s *Store) withReplicaForRequest(
 		return roachpb.NewError(err)
 	}
 	defer r.raftMu.Unlock()
-	r.setLastReplicaDescriptors(req)
+	r.setLastReplicaDescriptorsRaftMuLocked(req)
 	return f(ctx, r)
 }
 
