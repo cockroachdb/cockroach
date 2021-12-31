@@ -2,8 +2,6 @@ exec-ddl
 create table t (a int2, b int2, c int2 as (a + b) virtual)
 ----
 
-# TODO(mgartner): An assignment cast should be added so that the type of the
-# insert column for c is int2, not int.
 build format=show-types
 update t set a = (with cte as (select 1:::int8) select t.c from cte limit 1)
 ----
@@ -19,36 +17,41 @@ with &1 (cte)
       ├── fetch columns: a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int)
       ├── update-mapping:
       │    ├── a_new:16 => a:1
-      │    └── c_comp:17 => t.c:3
+      │    └── c_cast:18 => t.c:3
       └── project
-           ├── columns: c_comp:17(int) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
+           ├── columns: c_cast:18(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
            ├── project
-           │    ├── columns: a_new:16(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+           │    ├── columns: c_comp:17(int) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid) a_new:16(int2)
            │    ├── project
-           │    │    ├── columns: t.c:9(int2) a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
-           │    │    ├── scan t
-           │    │    │    ├── columns: a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
-           │    │    │    └── computed column expressions
-           │    │    │         └── t.c:9
-           │    │    │              └── a:7::INT8 + b:8::INT8 [type=int]
+           │    │    ├── columns: a_new:16(int2) a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+           │    │    ├── project
+           │    │    │    ├── columns: t.c:9(int2) a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+           │    │    │    ├── scan t
+           │    │    │    │    ├── columns: a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
+           │    │    │    │    └── computed column expressions
+           │    │    │    │         └── t.c:9
+           │    │    │    │              └── a:7::INT8 + b:8::INT8 [type=int]
+           │    │    │    └── projections
+           │    │    │         └── a:7::INT8 + b:8::INT8 [as=t.c:9, type=int]
            │    │    └── projections
-           │    │         └── a:7::INT8 + b:8::INT8 [as=t.c:9, type=int]
+           │    │         └── subquery [as=a_new:16, type=int2]
+           │    │              └── max1-row
+           │    │                   ├── columns: c:15(int2)
+           │    │                   └── limit
+           │    │                        ├── columns: c:15(int2)
+           │    │                        ├── project
+           │    │                        │    ├── columns: c:15(int2)
+           │    │                        │    ├── limit hint: 1.00
+           │    │                        │    ├── with-scan &1 (cte)
+           │    │                        │    │    ├── columns: int8:14(int!null)
+           │    │                        │    │    ├── mapping:
+           │    │                        │    │    │    └──  int8:13(int) => int8:14(int)
+           │    │                        │    │    └── limit hint: 1.00
+           │    │                        │    └── projections
+           │    │                        │         └── t.c:9 [as=c:15, type=int2]
+           │    │                        └── 1 [type=int]
            │    └── projections
-           │         └── subquery [as=a_new:16, type=int2]
-           │              └── max1-row
-           │                   ├── columns: c:15(int2)
-           │                   └── limit
-           │                        ├── columns: c:15(int2)
-           │                        ├── project
-           │                        │    ├── columns: c:15(int2)
-           │                        │    ├── limit hint: 1.00
-           │                        │    ├── with-scan &1 (cte)
-           │                        │    │    ├── columns: int8:14(int!null)
-           │                        │    │    ├── mapping:
-           │                        │    │    │    └──  int8:13(int) => int8:14(int)
-           │                        │    │    └── limit hint: 1.00
-           │                        │    └── projections
-           │                        │         └── t.c:9 [as=c:15, type=int2]
-           │                        └── 1 [type=int]
+           │         └── a_new:16::INT8 + b:8::INT8 [as=c_comp:17, type=int]
            └── projections
-                └── a_new:16::INT8 + b:8::INT8 [as=c_comp:17, type=int]
+                └── assignment-cast: INT2 [as=c_cast:18, type=int2]
+                     └── c_comp:17 [type=int]

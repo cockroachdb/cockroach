@@ -1402,30 +1402,7 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 // If there is no valid assignment cast from a column type in srcCols to its
 // corresponding target column type, then this function throws an error.
 func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
-	// If all source columns have types identical to their target column types,
-	// there are no assignment casts necessary. Do not create an empty
-	// projection.
-	castRequired := false
-	for ord, colID := range srcCols {
-		if colID == 0 {
-			// Column not mutated, so nothing to do.
-			continue
-		}
-		srcType := mb.md.ColumnMeta(colID).Type
-		targetType := mb.tab.Column(ord).DatumType()
-		if !srcType.Identical(targetType) {
-			castRequired = true
-			break
-		}
-	}
-	if !castRequired {
-		return
-	}
-
-	projectionScope := mb.outScope.replace()
-	projectionScope.cols = make([]scopeColumn, 0, len(mb.outScope.cols))
-	var uncastedCols opt.ColSet
-
+	var projectionScope *scope
 	for ord, colID := range srcCols {
 		if colID == 0 {
 			// Column not mutated, so nothing to do.
@@ -1439,7 +1416,6 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 		// An assignment cast is not necessary if the source and target types
 		// are identical.
 		if srcType.Identical(targetType) {
-			uncastedCols.Add(colID)
 			continue
 		}
 
@@ -1449,32 +1425,33 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 			panic(sqlerrors.NewInvalidAssignmentCastError(srcType, targetType, string(targetCol.ColName())))
 		}
 
-		// Create a new column which casts the input column to the correct
-		// type.
+		// Create the cast expression.
 		variable := mb.b.factory.ConstructVariable(colID)
 		cast := mb.b.factory.ConstructAssignmentCast(variable, targetType)
-		scopeCol := mb.b.synthesizeColumn(
-			projectionScope,
-			scopeColName(targetCol.ColName()).WithMetadataName(""),
-			targetType,
-			nil, /* expr */
-			cast,
-		)
+
+		// Lazily create the new scope.
+		if projectionScope == nil {
+			projectionScope = mb.outScope.replace()
+			projectionScope.appendColumnsFromScope(mb.outScope)
+		}
+
+		// Update the scope column to be casted.
+		//
+		// When building an UPDATE..FROM expression the projectionScope may have
+		// two columns with different names but the same ID. To get the correct
+		// column, we perform a lookup with the ID and the name. See #61520.
+		scopeCol := projectionScope.getColumnWithIDAndReferenceName(colID, targetCol.ColName())
+		scopeCol.name = scopeCol.name.WithMetadataName(fmt.Sprintf("%s_cast", targetCol.ColName()))
+		mb.b.populateSynthesizedColumn(scopeCol, cast)
 
 		// Replace old source column with the new one.
 		srcCols[ord] = scopeCol.id
 	}
 
-	// Add uncasted columns to the projection scope so that they become
-	// passthrough columns.
-	for i := range mb.outScope.cols {
-		if uncastedCols.Contains(mb.outScope.cols[i].id) {
-			projectionScope.appendColumn(&mb.outScope.cols[i])
-		}
+	if projectionScope != nil {
+		projectionScope.expr = mb.b.constructProject(mb.outScope.expr, projectionScope.cols)
+		mb.outScope = projectionScope
 	}
-
-	projectionScope.expr = mb.b.constructProject(mb.outScope.expr, projectionScope.cols)
-	mb.outScope = projectionScope
 }
 
 // partialIndexCount returns the number of public, write-only, and delete-only

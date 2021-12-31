@@ -458,7 +458,7 @@ func (cb *onDeleteSetBuilder) Build(
 				updateExprs[i].Expr = tree.DefaultVal{}
 			}
 		}
-		mb.addUpdateCols(updateExprs)
+		mb.addUpdateCols(updateExprs, false /* isUpsert */)
 
 		// TODO(radu): consider plumbing a flag to prevent building the FK check
 		// against the parent we are cascading from. Need to investigate in which
@@ -687,7 +687,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 				panic(errors.AssertionFailedf("unsupported action"))
 			}
 		}
-		mb.addUpdateCols(updateExprs)
+		mb.addUpdateCols(updateExprs, false /* isUpsert */)
 
 		mb.buildUpdate(nil /* returning */)
 		return mb.outScope.expr
@@ -777,10 +777,11 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	outColsNew := outCols[numFKCols:]
 	for i := 0; i < numFKCols; i++ {
 		c := childTable.Column(fk.OriginColumnOrdinal(childTable, i))
+		typ := md.ColumnMeta(oldValues[i]).Type
 		oldName := fmt.Sprintf("%s_old", c.ColName())
 		newName := fmt.Sprintf("%s_new", c.ColName())
-		outColsOld[i] = md.AddColumn(oldName, c.DatumType())
-		outColsNew[i] = md.AddColumn(newName, c.DatumType())
+		outColsOld[i] = md.AddColumn(oldName, typ)
+		outColsNew[i] = md.AddColumn(newName, typ)
 	}
 
 	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{

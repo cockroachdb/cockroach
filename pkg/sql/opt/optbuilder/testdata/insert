@@ -759,18 +759,18 @@ INSERT INTO xyz (x) VALUES (10)
 insert xyz
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column7:7 => x:1
+ │    ├── x_cast:7 => x:1
  │    ├── y_default:8 => y:2
  │    └── z_default:9 => z:3
  └── project
-      ├── columns: y_default:8 z_default:9 column7:7!null
+      ├── columns: y_default:8 z_default:9 x_cast:7!null
       ├── project
-      │    ├── columns: column7:7!null
+      │    ├── columns: x_cast:7!null
       │    ├── values
       │    │    ├── columns: column1:6!null
       │    │    └── (10,)
       │    └── projections
-      │         └── assignment-cast: STRING [as=column7:7]
+      │         └── assignment-cast: STRING [as=x_cast:7]
       │              └── column1:6
       └── projections
            ├── NULL::INT8 [as=y_default:8]
@@ -1190,44 +1190,44 @@ INSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95, NULL, 15])
 insert decimals
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column9:9 => a:1
- │    ├── column10:10 => b:2
- │    ├── column12:12 => c:3
- │    └── column14:14 => d:4
+ │    ├── a_cast:9 => a:1
+ │    ├── b_cast:10 => b:2
+ │    ├── c_cast:12 => c:3
+ │    └── d_cast:14 => d:4
  ├── check columns: check1:15 check2:16
  └── project
-      ├── columns: check1:15 check2:16 column9:9!null column10:10 column12:12!null column14:14!null
+      ├── columns: check1:15 check2:16 a_cast:9!null b_cast:10 c_cast:12!null d_cast:14!null
       ├── project
-      │    ├── columns: column14:14!null column9:9!null column10:10 column12:12!null
+      │    ├── columns: d_cast:14!null a_cast:9!null b_cast:10 c_cast:12!null
       │    ├── project
-      │    │    ├── columns: d_comp:13!null column9:9!null column10:10 column12:12!null
+      │    │    ├── columns: d_comp:13!null a_cast:9!null b_cast:10 c_cast:12!null
       │    │    ├── project
-      │    │    │    ├── columns: column12:12!null column9:9!null column10:10
+      │    │    │    ├── columns: c_cast:12!null a_cast:9!null b_cast:10
       │    │    │    ├── project
-      │    │    │    │    ├── columns: c_default:11!null column9:9!null column10:10
+      │    │    │    │    ├── columns: c_default:11!null a_cast:9!null b_cast:10
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column10:10
+      │    │    │    │    │    ├── columns: a_cast:9!null b_cast:10
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:7!null column2:8
       │    │    │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
       │    │    │    │    │    └── projections
-      │    │    │    │    │         ├── assignment-cast: DECIMAL(10) [as=column9:9]
+      │    │    │    │    │         ├── assignment-cast: DECIMAL(10) [as=a_cast:9]
       │    │    │    │    │         │    └── column1:7
-      │    │    │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=column10:10]
+      │    │    │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=b_cast:10]
       │    │    │    │    │              └── column2:8
       │    │    │    │    └── projections
       │    │    │    │         └── 1.23 [as=c_default:11]
       │    │    │    └── projections
-      │    │    │         └── assignment-cast: DECIMAL(10,1) [as=column12:12]
+      │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
       │    │    │              └── c_default:11
       │    │    └── projections
-      │    │         └── column9:9::DECIMAL + column12:12::DECIMAL [as=d_comp:13]
+      │    │         └── a_cast:9::DECIMAL + c_cast:12::DECIMAL [as=d_comp:13]
       │    └── projections
-      │         └── assignment-cast: DECIMAL(10,1) [as=column14:14]
+      │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
       │              └── d_comp:13
       └── projections
-           ├── round(column9:9) = column9:9 [as=check1:15]
-           └── column10:10[0] > 1 [as=check2:16]
+           ├── round(a_cast:9) = a_cast:9 [as=check1:15]
+           └── b_cast:10[0] > 1 [as=check2:16]
 
 assign-placeholders-build query-args=(1.1, (ARRAY[0.95, NULL, 15]))
 INSERT INTO decimals (a, b) VALUES ($1, $2)
@@ -1235,44 +1235,44 @@ INSERT INTO decimals (a, b) VALUES ($1, $2)
 insert decimals
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column9:9 => a:1
- │    ├── column10:10 => b:2
- │    ├── column12:12 => c:3
- │    └── column14:14 => d:4
+ │    ├── a_cast:9 => a:1
+ │    ├── b_cast:10 => b:2
+ │    ├── c_cast:12 => c:3
+ │    └── d_cast:14 => d:4
  ├── check columns: check1:15 check2:16
  └── project
-      ├── columns: check1:15 check2:16 column9:9!null column10:10!null column12:12!null column14:14!null
+      ├── columns: check1:15 check2:16 a_cast:9!null b_cast:10!null c_cast:12!null d_cast:14!null
       ├── project
-      │    ├── columns: column14:14!null column9:9!null column10:10!null column12:12!null
+      │    ├── columns: d_cast:14!null a_cast:9!null b_cast:10!null c_cast:12!null
       │    ├── project
-      │    │    ├── columns: d_comp:13!null column9:9!null column10:10!null column12:12!null
+      │    │    ├── columns: d_comp:13!null a_cast:9!null b_cast:10!null c_cast:12!null
       │    │    ├── project
-      │    │    │    ├── columns: column12:12!null column9:9!null column10:10!null
+      │    │    │    ├── columns: c_cast:12!null a_cast:9!null b_cast:10!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: c_default:11!null column9:9!null column10:10!null
+      │    │    │    │    ├── columns: c_default:11!null a_cast:9!null b_cast:10!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column10:10!null
+      │    │    │    │    │    ├── columns: a_cast:9!null b_cast:10!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null
       │    │    │    │    │    │    └── (1.1, ARRAY[0.95,NULL,15])
       │    │    │    │    │    └── projections
-      │    │    │    │    │         ├── assignment-cast: DECIMAL(10) [as=column9:9]
+      │    │    │    │    │         ├── assignment-cast: DECIMAL(10) [as=a_cast:9]
       │    │    │    │    │         │    └── column1:7
-      │    │    │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=column10:10]
+      │    │    │    │    │         └── assignment-cast: DECIMAL(5,1)[] [as=b_cast:10]
       │    │    │    │    │              └── column2:8
       │    │    │    │    └── projections
       │    │    │    │         └── 1.23 [as=c_default:11]
       │    │    │    └── projections
-      │    │    │         └── assignment-cast: DECIMAL(10,1) [as=column12:12]
+      │    │    │         └── assignment-cast: DECIMAL(10,1) [as=c_cast:12]
       │    │    │              └── c_default:11
       │    │    └── projections
-      │    │         └── column9:9::DECIMAL + column12:12::DECIMAL [as=d_comp:13]
+      │    │         └── a_cast:9::DECIMAL + c_cast:12::DECIMAL [as=d_comp:13]
       │    └── projections
-      │         └── assignment-cast: DECIMAL(10,1) [as=column14:14]
+      │         └── assignment-cast: DECIMAL(10,1) [as=d_cast:14]
       │              └── d_comp:13
       └── projections
-           ├── round(column9:9) = column9:9 [as=check1:15]
-           └── column10:10[0] > 1 [as=check2:16]
+           ├── round(a_cast:9) = a_cast:9 [as=check1:15]
+           └── b_cast:10[0] > 1 [as=check2:16]
 
 build
 INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2)
@@ -1280,24 +1280,24 @@ INSERT INTO assn_cast (c, qc, i, s) VALUES (' ', 'foo', '1', 2)
 insert assn_cast
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column12:12 => c:1
- │    ├── column13:13 => qc:2
+ │    ├── c_cast:12 => c:1
+ │    ├── qc_cast:13 => qc:2
  │    ├── column3:10 => i:3
- │    ├── column14:14 => s:4
+ │    ├── s_cast:14 => s:4
  │    └── rowid_default:15 => rowid:5
  └── project
-      ├── columns: rowid_default:15 column3:10!null column12:12!null column13:13!null column14:14!null
+      ├── columns: rowid_default:15 column3:10!null c_cast:12!null qc_cast:13!null s_cast:14!null
       ├── project
-      │    ├── columns: column12:12!null column13:13!null column14:14!null column3:10!null
+      │    ├── columns: c_cast:12!null qc_cast:13!null s_cast:14!null column3:10!null
       │    ├── values
       │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
       │    │    └── (' ', 'foo', 1, 2)
       │    └── projections
-      │         ├── assignment-cast: CHAR [as=column12:12]
+      │         ├── assignment-cast: CHAR [as=c_cast:12]
       │         │    └── column1:8
-      │         ├── assignment-cast: "char" [as=column13:13]
+      │         ├── assignment-cast: "char" [as=qc_cast:13]
       │         │    └── column2:9
-      │         └── assignment-cast: STRING [as=column14:14]
+      │         └── assignment-cast: STRING [as=s_cast:14]
       │              └── column4:11
       └── projections
            └── unique_rowid() [as=rowid_default:15]
@@ -1308,22 +1308,22 @@ INSERT INTO assn_cast (c, qc, i) VALUES ($1, $2, $3)
 insert assn_cast
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column11:11 => c:1
- │    ├── column12:12 => qc:2
+ │    ├── c_cast:11 => c:1
+ │    ├── qc_cast:12 => qc:2
  │    ├── column3:10 => i:3
  │    ├── s_default:13 => s:4
  │    └── rowid_default:14 => rowid:5
  └── project
-      ├── columns: s_default:13 rowid_default:14 column3:10!null column11:11!null column12:12!null
+      ├── columns: s_default:13 rowid_default:14 column3:10!null c_cast:11!null qc_cast:12!null
       ├── project
-      │    ├── columns: column11:11!null column12:12!null column3:10!null
+      │    ├── columns: c_cast:11!null qc_cast:12!null column3:10!null
       │    ├── values
       │    │    ├── columns: column1:8!null column2:9!null column3:10!null
       │    │    └── (' ', 'foo', 1)
       │    └── projections
-      │         ├── assignment-cast: CHAR [as=column11:11]
+      │         ├── assignment-cast: CHAR [as=c_cast:11]
       │         │    └── column1:8
-      │         └── assignment-cast: "char" [as=column12:12]
+      │         └── assignment-cast: "char" [as=qc_cast:12]
       │              └── column2:9
       └── projections
            ├── NULL::STRING [as=s_default:13]
@@ -1348,14 +1348,14 @@ insert assn_cast_default
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:10 => k:1
- │    ├── column17:17 => i2:2
- │    ├── column18:18 => c1:3
- │    ├── column19:19 => c2:4
- │    ├── column20:20 => d1:5
- │    ├── column21:21 => d2:6
+ │    ├── i2_cast:17 => i2:2
+ │    ├── c1_cast:18 => c1:3
+ │    ├── c2_cast:19 => c2:4
+ │    ├── d1_cast:20 => d1:5
+ │    ├── d2_cast:21 => d2:6
  │    └── s_default:16 => s:7
  └── project
-      ├── columns: column17:17!null column18:18!null column19:19!null column20:20!null column21:21!null column1:10!null s_default:16
+      ├── columns: i2_cast:17!null c1_cast:18!null c2_cast:19!null d1_cast:20!null d2_cast:21!null column1:10!null s_default:16
       ├── project
       │    ├── columns: i2_default:11!null c1_default:12!null c2_default:13!null d1_default:14!null d2_default:15!null s_default:16 column1:10!null
       │    ├── values
@@ -1369,15 +1369,15 @@ insert assn_cast_default
       │         ├── 4.56::DECIMAL(10,2) [as=d2_default:15]
       │         └── NULL::STRING [as=s_default:16]
       └── projections
-           ├── assignment-cast: INT2 [as=column17:17]
+           ├── assignment-cast: INT2 [as=i2_cast:17]
            │    └── i2_default:11
-           ├── assignment-cast: CHAR [as=column18:18]
+           ├── assignment-cast: CHAR [as=c1_cast:18]
            │    └── c1_default:12
-           ├── assignment-cast: CHAR [as=column19:19]
+           ├── assignment-cast: CHAR [as=c2_cast:19]
            │    └── c2_default:13
-           ├── assignment-cast: DECIMAL(10) [as=column20:20]
+           ├── assignment-cast: DECIMAL(10) [as=d1_cast:20]
            │    └── d1_default:14
-           └── assignment-cast: DECIMAL(10) [as=column21:21]
+           └── assignment-cast: DECIMAL(10) [as=d2_cast:21]
                 └── d2_default:15
 
 exec-ddl
@@ -1400,32 +1400,32 @@ insert assn_cast_comp
  ├── insert-mapping:
  │    ├── column1:10 => k:1
  │    ├── column2:11 => i:2
- │    ├── column17:17 => i_comp:3
+ │    ├── i_comp_cast:17 => i_comp:3
  │    ├── column3:12 => t:4
- │    ├── column18:18 => c_comp:5
- │    ├── column14:14 => d:6
- │    └── column19:19 => d_comp:7
+ │    ├── c_comp_cast:18 => c_comp:5
+ │    ├── d_cast:14 => d:6
+ │    └── d_comp_cast:19 => d_comp:7
  └── project
-      ├── columns: column17:17!null column18:18!null column19:19!null column1:10!null column2:11!null column3:12!null column14:14!null
+      ├── columns: i_comp_cast:17!null c_comp_cast:18!null d_comp_cast:19!null column1:10!null column2:11!null column3:12!null d_cast:14!null
       ├── project
-      │    ├── columns: i_comp_comp:15!null d_comp_comp:16!null column1:10!null column2:11!null column3:12!null column14:14!null
+      │    ├── columns: i_comp_comp:15!null d_comp_comp:16!null column1:10!null column2:11!null column3:12!null d_cast:14!null
       │    ├── project
-      │    │    ├── columns: column14:14!null column1:10!null column2:11!null column3:12!null
+      │    │    ├── columns: d_cast:14!null column1:10!null column2:11!null column3:12!null
       │    │    ├── values
       │    │    │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null
       │    │    │    └── (1, 2, 'foo', 1.56)
       │    │    └── projections
-      │    │         └── assignment-cast: DECIMAL(10) [as=column14:14]
+      │    │         └── assignment-cast: DECIMAL(10) [as=d_cast:14]
       │    │              └── column4:13
       │    └── projections
       │         ├── column2:11 + 10 [as=i_comp_comp:15]
-      │         └── column14:14::DECIMAL + 2.5 [as=d_comp_comp:16]
+      │         └── d_cast:14::DECIMAL + 2.5 [as=d_comp_comp:16]
       └── projections
-           ├── assignment-cast: INT2 [as=column17:17]
+           ├── assignment-cast: INT2 [as=i_comp_cast:17]
            │    └── i_comp_comp:15
-           ├── assignment-cast: CHAR [as=column18:18]
+           ├── assignment-cast: CHAR [as=c_comp_cast:18]
            │    └── column3:12
-           └── assignment-cast: DECIMAL(10) [as=column19:19]
+           └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
                 └── d_comp_comp:16
 
 # Regression test for #38293; the default values should be separate projections.

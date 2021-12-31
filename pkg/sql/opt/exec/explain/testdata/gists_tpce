@@ -349,7 +349,7 @@ explain(shape):
 │       │
 │       └── • lookup join (anti)
 │           │ table: status_type@status_type_pkey
-│           │ equality: (column62) = (st_id)
+│           │ equality: (th_st_id_cast) = (st_id)
 │           │ equality cols are key
 │           │
 │           └── • scan buffer
@@ -361,7 +361,7 @@ explain(shape):
         │
         └── • lookup join (anti)
             │ table: status_type@status_type_pkey
-            │ equality: (t_st_id_new) = (st_id)
+            │ equality: (t_st_id_cast) = (st_id)
             │ equality cols are key
             │
             └── • scan buffer
