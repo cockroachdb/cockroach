@@ -129,7 +129,7 @@ func TestVerifyPassword(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			exists, canLoginSQL, canLoginDBConsole, isSuperuser, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+			exists, canLoginSQL, canLoginDBConsole, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, &ie, username, "", /* databaseName */
 			)
 
@@ -145,37 +145,33 @@ func TestVerifyPassword(t *testing.T) {
 			valid := true
 			validDBConsole := true
 			expired := false
-
-			if !exists || !canLoginSQL {
-				valid = false
-			}
-
 			if !exists || !canLoginDBConsole {
 				validDBConsole = false
 			}
-
-			hashedPassword, err := pwRetrieveFn(ctx)
-			if err != nil {
-				t.Errorf(
-					"credentials %s/%s failed with error %s, wanted no error",
-					tc.username,
-					tc.password,
-					err,
-				)
+			if !exists || !canLoginSQL {
+				valid = false
 			}
+			if exists && (canLoginSQL || canLoginDBConsole) {
+				var hashedPassword security.PasswordHash
+				expired, hashedPassword, err = pwRetrieveFn(ctx)
+				if err != nil {
+					t.Errorf(
+						"credentials %s/%s failed with error %s, wanted no error",
+						tc.username,
+						tc.password,
+						err,
+					)
+				}
 
-			if valid {
-				valid, err = security.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
+				pwCompare, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
 				if err != nil {
 					t.Error(err)
 					valid = false
 					validDBConsole = false
 				}
-			}
-
-			if validUntil != nil {
-				if validUntil.Time.Sub(timeutil.Now()) < 0 {
-					expired = true
+				if !pwCompare {
+					valid = false
+					validDBConsole = false
 				}
 			}
 
@@ -193,7 +189,7 @@ func TestVerifyPassword(t *testing.T) {
 					"db console credentials %s/%s valid = %t, wanted %t",
 					tc.username,
 					tc.password,
-					valid,
+					validDBConsole,
 					tc.shouldAuthenticateDBConsole,
 				)
 			}
