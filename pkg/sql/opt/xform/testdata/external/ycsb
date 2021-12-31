@@ -93,7 +93,7 @@ INSERT INTO usertable VALUES (
 insert usertable
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column25:25 => ycsb_key:1
+ │    ├── ycsb_key_cast:25 => ycsb_key:1
  │    ├── column2:15 => field0:2
  │    ├── column3:16 => field1:3
  │    ├── column4:17 => field2:4
@@ -107,7 +107,7 @@ insert usertable
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column2:15!null column3:16!null column4:17!null column5:18!null column6:19!null column7:20!null column8:21!null column9:22!null column10:23!null column11:24!null column25:25!null
+      ├── columns: column2:15!null column3:16!null column4:17!null column5:18!null column6:19!null column7:20!null column8:21!null column9:22!null column10:23!null column11:24!null ycsb_key_cast:25!null
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(15-25)

@@ -84,7 +84,7 @@ CREATE TABLE child_multi (
   p INT DEFAULT 0,
   q INT DEFAULT 1,
   UNIQUE (c, q),
-  CONSTRAINT fk FOREIGN KEY (p, q) REFERENCES parent_multi(p, q) ON UPDATE SET DEFAULT 
+  CONSTRAINT fk FOREIGN KEY (p, q) REFERENCES parent_multi(p, q) ON UPDATE SET DEFAULT
 )
 ----
 
@@ -762,6 +762,86 @@ root
                                └── filters
                                     ├── c:57 = child_multi.c:59
                                     └── q:58 = child_multi.q:61
+
+# Test a cascade to a child that requires an assignment cast because the
+# referencing column's DEFAULT expression type is not identical to the
+# referencing column type.
+exec-ddl
+CREATE TABLE parent_assn_cast (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child_assn_cast (
+  c INT PRIMARY KEY,
+  p DECIMAL(10, 0) DEFAULT 1.45::DECIMAL(10, 2) REFERENCES parent_assn_cast(p) ON UPDATE SET DEFAULT
+)
+----
+
+build-cascades
+UPDATE parent_assn_cast SET p = 1 WHERE p > 1
+----
+root
+ ├── update parent_assn_cast
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── update-mapping:
+ │    │    └── p_new:7 => p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_assn_cast_p_fkey
+ │    └── project
+ │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── select
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── scan parent_assn_cast
+ │         │    │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── filters
+ │         │         └── p:4 > 1
+ │         └── projections
+ │              └── 1 [as=p_new:7]
+ └── cascade
+      └── update child_assn_cast
+           ├── columns: <none>
+           ├── fetch columns: c:12 child_assn_cast.p:13
+           ├── update-mapping:
+           │    └── p_cast:19 => child_assn_cast.p:9
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: p_cast:19!null c:12!null child_assn_cast.p:13!null p_old:16!null p_new:17!null
+           │    ├── project
+           │    │    ├── columns: p_new:18!null c:12!null child_assn_cast.p:13!null p_old:16!null p_new:17!null
+           │    │    ├── inner-join (cross)
+           │    │    │    ├── columns: c:12!null child_assn_cast.p:13!null p_old:16!null p_new:17!null
+           │    │    │    ├── scan child_assn_cast
+           │    │    │    │    └── columns: c:12!null child_assn_cast.p:13
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: p_old:16!null p_new:17!null
+           │    │    │    │    ├── with-scan &1
+           │    │    │    │    │    ├── columns: p_old:16!null p_new:17!null
+           │    │    │    │    │    └── mapping:
+           │    │    │    │    │         ├──  parent_assn_cast.p:4 => p_old:16
+           │    │    │    │    │         └──  p_new:7 => p_new:17
+           │    │    │    │    └── filters
+           │    │    │    │         └── p_old:16 IS DISTINCT FROM p_new:17
+           │    │    │    └── filters
+           │    │    │         └── child_assn_cast.p:13 = p_old:16
+           │    │    └── projections
+           │    │         └── 1.45::DECIMAL(10,2) [as=p_new:18]
+           │    └── projections
+           │         └── assignment-cast: DECIMAL(10) [as=p_cast:19]
+           │              └── p_new:18
+           └── f-k-checks
+                └── f-k-checks-item: child_assn_cast(p) -> parent_assn_cast(p)
+                     └── anti-join (cross)
+                          ├── columns: p:20!null
+                          ├── with-scan &2
+                          │    ├── columns: p:20!null
+                          │    └── mapping:
+                          │         └──  p_cast:19 => p:20
+                          ├── scan parent_assn_cast
+                          │    └── columns: parent_assn_cast.p:21!null
+                          └── filters
+                               └── p:20 = parent_assn_cast.p:21
 
 # Test a cascade to a child with a partial index.
 exec-ddl
