@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/colexecerror",
         "//pkg/sql/memsize",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",

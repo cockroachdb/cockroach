@@ -11,7 +11,7 @@
 package execinfra
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -21,7 +21,7 @@ import (
 // returns an error if the decoding is not valid, or if there are any remaining
 // bytes.
 func DecodeDatum(datumAlloc *tree.DatumAlloc, typ *types.T, data []byte) (tree.Datum, error) {
-	datum, rem, err := rowenc.DecodeTableValue(datumAlloc, typ, data)
+	datum, rem, err := valueside.Decode(datumAlloc, typ, data)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"error decoding %d bytes", errors.Safe(len(data)))

@@ -1,0 +1,209 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package valueside
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/errors"
+)
+
+// Decode decodes a value encoded by Encode.
+func Decode(
+	a *tree.DatumAlloc, valType *types.T, b []byte,
+) (_ tree.Datum, remaining []byte, _ error) {
+	_, dataOffset, _, typ, err := encoding.DecodeValueTag(b)
+	if err != nil {
+		return nil, b, err
+	}
+	// NULL is special because it is a valid value for any type.
+	if typ == encoding.Null {
+		return tree.DNull, b[dataOffset:], nil
+	}
+	// Bool is special because the value is stored in the value tag.
+	if valType.Family() != types.BoolFamily {
+		b = b[dataOffset:]
+	}
+	return DecodeUntaggedDatum(a, valType, b)
+}
+
+// DecodeUntaggedDatum is used to decode a Datum whose type is known,
+// and which doesn't have a value tag (either due to it having been
+// consumed already or not having one in the first place).
+//
+// This is used to decode datums encoded using value encoding.
+//
+// If t is types.Bool, the value tag must be present, as its value is encoded in
+// the tag directly.
+func DecodeUntaggedDatum(
+	a *tree.DatumAlloc, t *types.T, buf []byte,
+) (_ tree.Datum, remaining []byte, _ error) {
+	switch t.Family() {
+	case types.IntFamily:
+		b, i, err := encoding.DecodeUntaggedIntValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDInt(tree.DInt(i)), b, nil
+	case types.StringFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDString(tree.DString(data)), b, nil
+	case types.CollatedStringFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		d, err := a.NewDCollatedString(string(data), t.Locale())
+		return d, b, err
+	case types.BitFamily:
+		b, data, err := encoding.DecodeUntaggedBitArrayValue(buf)
+		return a.NewDBitArray(tree.DBitArray{BitArray: data}), b, err
+	case types.BoolFamily:
+		// A boolean's value is encoded in its tag directly, so we don't have an
+		// "Untagged" version of this function.
+		b, data, err := encoding.DecodeBoolValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return tree.MakeDBool(tree.DBool(data)), b, nil
+	case types.FloatFamily:
+		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDFloat(tree.DFloat(data)), b, nil
+	case types.DecimalFamily:
+		b, data, err := encoding.DecodeUntaggedDecimalValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDDecimal(tree.DDecimal{Decimal: data}), b, nil
+	case types.BytesFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDBytes(tree.DBytes(data)), b, nil
+	case types.DateFamily:
+		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(data))), b, nil
+	case types.Box2DFamily:
+		b, data, err := encoding.DecodeUntaggedBox2DValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDBox2D(tree.DBox2D{
+			CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: data},
+		}), b, nil
+	case types.GeographyFamily:
+		g := a.NewDGeographyEmpty()
+		so := g.Geography.SpatialObjectRef()
+		b, err := encoding.DecodeUntaggedGeoValue(buf, so)
+		a.DoneInitNewDGeo(so)
+		if err != nil {
+			return nil, b, err
+		}
+		return g, b, nil
+	case types.GeometryFamily:
+		g := a.NewDGeometryEmpty()
+		so := g.Geometry.SpatialObjectRef()
+		b, err := encoding.DecodeUntaggedGeoValue(buf, so)
+		a.DoneInitNewDGeo(so)
+		if err != nil {
+			return nil, b, err
+		}
+		return g, b, nil
+	case types.TimeFamily:
+		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTime(tree.DTime(data)), b, nil
+	case types.TimeTZFamily:
+		b, data, err := encoding.DecodeUntaggedTimeTZValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTimeTZ(tree.DTimeTZ{TimeTZ: data}), b, nil
+	case types.TimestampFamily:
+		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTimestamp(tree.DTimestamp{Time: data}), b, nil
+	case types.TimestampTZFamily:
+		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: data}), b, nil
+	case types.IntervalFamily:
+		b, data, err := encoding.DecodeUntaggedDurationValue(buf)
+		return a.NewDInterval(tree.DInterval{Duration: data}), b, err
+	case types.UuidFamily:
+		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
+		return a.NewDUuid(tree.DUuid{UUID: data}), b, err
+	case types.INetFamily:
+		b, data, err := encoding.DecodeUntaggedIPAddrValue(buf)
+		return a.NewDIPAddr(tree.DIPAddr{IPAddr: data}), b, err
+	case types.JsonFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		// We copy the byte buffer here, because the JSON decoding is lazy, and we
+		// do not want to hang on to the backing byte buffer, which might be an
+		// entire KV batch.
+		cpy := make([]byte, len(data))
+		copy(cpy, data)
+		j, err := json.FromEncoding(cpy)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDJSON(tree.DJSON{JSON: j}), b, nil
+	case types.OidFamily:
+		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
+	case types.ArrayFamily:
+		// Skip the encoded data length.
+		b, _, _, err := encoding.DecodeNonsortingUvarint(buf)
+		if err != nil {
+			return nil, nil, err
+		}
+		return decodeArray(a, t.ArrayContents(), b)
+	case types.TupleFamily:
+		return decodeTuple(a, t, buf)
+	case types.EnumFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		phys, log, err := tree.GetEnumComponentsFromPhysicalRep(t, data)
+		if err != nil {
+			return nil, nil, err
+		}
+		return a.NewDEnum(tree.DEnum{EnumTyp: t, PhysicalRep: phys, LogicalRep: log}), b, nil
+	case types.VoidFamily:
+		return a.NewDVoid(), buf, nil
+	default:
+		return nil, buf, errors.Errorf("couldn't decode type %s", t)
+	}
+}
