@@ -127,7 +127,7 @@ func TestVerifyPassword(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			exists, canLogin, isSuperuser, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+			exists, canLogin, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, &ie, username, "", /* databaseName */
 			)
 
@@ -142,32 +142,24 @@ func TestVerifyPassword(t *testing.T) {
 
 			valid := true
 			expired := false
-
 			if !exists || !canLogin {
 				valid = false
-			}
+			} else {
+				var hashedPassword security.PasswordHash
+				expired, hashedPassword, err = pwRetrieveFn(ctx)
+				if err != nil {
+					t.Errorf(
+						"credentials %s/%s failed with error %s, wanted no error",
+						tc.username,
+						tc.password,
+						err,
+					)
+				}
 
-			hashedPassword, err := pwRetrieveFn(ctx)
-			if err != nil {
-				t.Errorf(
-					"credentials %s/%s failed with error %s, wanted no error",
-					tc.username,
-					tc.password,
-					err,
-				)
-			}
-
-			if valid {
 				valid, err = security.CompareHashAndCleartextPassword(ctx, hashedPassword, tc.password)
 				if err != nil {
 					t.Error(err)
 					valid = false
-				}
-			}
-
-			if validUntil != nil {
-				if validUntil.Time.Sub(timeutil.Now()) < 0 {
-					expired = true
 				}
 			}
 
