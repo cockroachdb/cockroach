@@ -68,7 +68,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
-        "@com_github_xdg_scram//:scram",
+        "@com_github_xdg_go_scram//:scram",
     ],
 )
 

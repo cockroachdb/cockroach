@@ -13,6 +13,7 @@ package security
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -24,12 +25,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
-	"github.com/xdg/scram"
+	"github.com/xdg-go/scram"
+	"github.com/xdg-go/stringprep"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 // BcryptCost is the cost to use when hashing passwords. It is exposed for
@@ -214,12 +216,13 @@ func CompareHashAndCleartextPassword(
 		return false, nil
 
 	case bcryptHash:
-		sem := getBcryptSem(ctx)
+		sem := getExpensiveHashComputeSem(ctx)
 		alloc, err := sem.Acquire(ctx, 1)
 		if err != nil {
 			return false, err
 		}
 		defer alloc.Release()
+
 		err = bcrypt.CompareHashAndPassword([]byte(ph), appendEmptySha256(password))
 		if err != nil {
 			if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
@@ -230,16 +233,51 @@ func CompareHashAndCleartextPassword(
 		return true, nil
 
 	case *scramHash:
-		return false, unimplemented.NewWithIssue(42519, "cleartext comparison for SCRAM not supported yet")
+		sem := getExpensiveHashComputeSem(ctx)
+		alloc, err := sem.Acquire(ctx, 1)
+		if err != nil {
+			return false, err
+		}
+		defer alloc.Release()
+
+		// Server-side verification of a plaintext password
+		// against a pre-computed stored SCRAM server key.
+		//
+		// Code inspired from pg's scram_verify_plain_password(),
+		// src/backend/libpq/auth-scram.c.
+		//
+		prepared, err := stringprep.SASLprep.Prepare(password)
+		if err != nil {
+			// Special PostgreSQL case, quoth comment at the top of
+			// auth-scram.c:
+			//
+			// * - If the password isn't valid UTF-8, or contains characters prohibited
+			// *	 by the SASLprep profile, we skip the SASLprep pre-processing and use
+			// *	 the raw bytes in calculating the hash.
+			prepared = password
+		}
+
+		saltedPassword := pbkdf2.Key([]byte(prepared), []byte(ph.decoded.Salt), ph.decoded.Iters, sha256.Size, sha256.New)
+		// As per xdg-go/scram and pg's scram_ServerKey().
+		serverKey := computeHMAC(scram.SHA256, saltedPassword, []byte("Server Key"))
+		return bytes.Equal(serverKey, ph.decoded.ServerKey), nil
 
 	default:
 		return false, errors.AssertionFailedf("programming error: unsupported hash type %T", hashedPassword)
 	}
 }
 
+// computeHMAC is taken from xdg-go/scram; sadly it is not exported
+// from that package.
+func computeHMAC(hg scram.HashGeneratorFcn, key, data []byte) []byte {
+	mac := hmac.New(hg, key)
+	mac.Write(data)
+	return mac.Sum(nil)
+}
+
 // HashPassword takes a raw password and returns a bcrypt hashed password.
 func HashPassword(ctx context.Context, password string) ([]byte, error) {
-	sem := getBcryptSem(ctx)
+	sem := getExpensiveHashComputeSem(ctx)
 	alloc, err := sem.Acquire(ctx, 1)
 	if err != nil {
 		return nil, err
@@ -349,33 +387,34 @@ var MinPasswordLength = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// bcryptSemOnce wraps a semaphore that limits the number of concurrent calls
-// to the bcrypt hash functions. This is needed to avoid the risk of a
-// DoS attacks by malicious users or broken client apps that would
-// starve the server of CPU resources just by computing bcrypt hashes.
+// expensiveHashComputeSemOnce wraps a semaphore that limits the
+// number of concurrent calls to the bcrypt and sha256 hash
+// functions. This is needed to avoid the risk of a DoS attacks by
+// malicious users or broken client apps that would starve the server
+// of CPU resources just by computing bcrypt hashes.
 //
 // We use a sync.Once to delay the creation of the semaphore to the
 // first time the password functions are used. This gives a chance to
 // the server process to update GOMAXPROCS before we compute the
 // maximum amount of concurrency for the semaphore.
-var bcryptSemOnce struct {
+var expensiveHashComputeSemOnce struct {
 	sem  *quotapool.IntPool
 	once sync.Once
 }
 
-// envMaxBcryptConcurrency allows a user to override the semaphore
+// envMaxHashComputeConcurrency allows a user to override the semaphore
 // configuration using an environment variable.
 // If the env var is set to a value >= 1, that value is used.
 // Otherwise, a default is computed from the configure GOMAXPROCS.
-var envMaxBcryptConcurrency = envutil.EnvOrDefaultInt("COCKROACH_MAX_BCRYPT_CONCURRENCY", 0)
+var envMaxHashComputeConcurrency = envutil.EnvOrDefaultInt("COCKROACH_MAX_PW_HASH_COMPUTE_CONCURRENCY", 0)
 
-// getBcryptSem retrieves the bcrypt semaphore.
-func getBcryptSem(ctx context.Context) *quotapool.IntPool {
-	bcryptSemOnce.once.Do(func() {
+// getExpensiveHashComputeSem retrieves the bcrypt semaphore.
+func getExpensiveHashComputeSem(ctx context.Context) *quotapool.IntPool {
+	expensiveHashComputeSemOnce.once.Do(func() {
 		var n int
-		if envMaxBcryptConcurrency >= 1 {
+		if envMaxHashComputeConcurrency >= 1 {
 			// The operator knows better. Use what they tell us to use.
-			n = envMaxBcryptConcurrency
+			n = envMaxHashComputeConcurrency
 		} else {
 			// We divide by 8 so that the max CPU usage of bcrypt checks
 			// never exceeds ~10% of total CPU resources allocated to this
@@ -386,7 +425,7 @@ func getBcryptSem(ctx context.Context) *quotapool.IntPool {
 			n = 1
 		}
 		log.VInfof(ctx, 1, "configured maximum bcrypt concurrency: %d", n)
-		bcryptSemOnce.sem = quotapool.NewIntPool("bcrypt", uint64(n))
+		expensiveHashComputeSemOnce.sem = quotapool.NewIntPool("bcrypt", uint64(n))
 	})
-	return bcryptSemOnce.sem
+	return expensiveHashComputeSemOnce.sem
 }
