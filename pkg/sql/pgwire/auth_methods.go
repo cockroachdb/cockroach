@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/xdg-go/scram"
 )
@@ -123,7 +122,7 @@ func authPassword(
 		// Note: if this fails, we can't return the error right away,
 		// because we need to consume the client response first. This
 		// will be handled below.
-		hashedPassword, pwValidUntil, pwRetrievalErr := pwRetrieveFn(ctx)
+		expired, hashedPassword, pwRetrievalErr := pwRetrieveFn(ctx)
 
 		// Wait for the password response from the client.
 		pwdData, err := c.GetPwdData()
@@ -146,19 +145,23 @@ func authPassword(
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			return err
 		}
-		// Inform operators looking at logs if there's something amiss.
-		if hashedPassword.Method() == security.HashMissingPassword {
+
+		// Expiration check.
+		//
+		// NB: This check is advisory and could be omitted; the retrieval
+		// function ensures that the returned hashedPassword is
+		// security.MissingPasswordHash when the credentials have expired,
+		// so the credential check below would fail anyway.
+		if expired {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
+			// TODO(knz): Consider omitting the error return here, and let the
+			// code fallback, to hide the reason for the failure from the
+			// client.
+			return errors.New("password is expired")
+		} else if hashedPassword.Method() == security.HashMissingPassword {
 			c.LogAuthInfof(ctx, "user has no password defined")
 			// NB: the failure reason will be automatically handled by the fallback
 			// in auth.go (and report CREDENTIALS_INVALID).
-		}
-
-		// Expiration check.
-		if pwValidUntil != nil {
-			if pwValidUntil.Sub(timeutil.Now()) < 0 {
-				c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
-				return errors.New("password is expired")
-			}
 		}
 
 		// Now check the cleartext password against the retrieved credentials.
