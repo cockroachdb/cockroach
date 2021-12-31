@@ -634,7 +634,20 @@ the socket name programmatically. To use, for example:
 		EnvVar: "COCKROACH_INSECURE",
 		Description: `
 Connect to a cluster without using TLS nor authentication.
-This makes the client-server connection vulnerable to MITM attacks. Use with care.`,
+This makes the client-server connection vulnerable to MITM attacks. Use ith care.
+
+This setting implies --security-overrides=disable-tls,disable-rpc-authn and forces
+the SQL username to be 'root'.
+`,
+	}
+
+	ClientSecurityOverrides = FlagInfo{
+		Name: "security-overrides",
+		Description: `
+Disable some security protections:
+- disable-tls: disable use of TLS (MITM protection, confidentiality, non-repudiation)
+- disable-rpc-authn (MITM protection)
+`,
 	}
 
 	ServerInsecure = FlagInfo{

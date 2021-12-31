@@ -635,6 +635,7 @@ func init() {
 
 		// NB: Insecure is deprecated. See #53404.
 		boolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure)
+		varFlag(f, &baseCfg.SecurityOverrides, cliflags.ClientSecurityOverrides)
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
