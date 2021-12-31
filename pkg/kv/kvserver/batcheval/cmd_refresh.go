@@ -25,7 +25,7 @@ func init() {
 }
 
 // Refresh checks whether the key has any values written in the interval
-// [args.RefreshFrom, header.Timestamp].
+// (args.RefreshFrom, header.Timestamp].
 func Refresh(
 	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -62,7 +62,7 @@ func Refresh(
 	if err != nil {
 		return result.Result{}, err
 	} else if val != nil {
-		if ts := val.Timestamp; refreshFrom.LessEq(ts) {
+		if ts := val.Timestamp; refreshFrom.Less(ts) {
 			return result.Result{},
 				roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
 		}

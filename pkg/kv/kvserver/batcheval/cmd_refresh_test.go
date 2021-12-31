@@ -101,3 +101,62 @@ func TestRefreshError(t *testing.T) {
 		}
 	})
 }
+
+// TestRefreshTimestampBounds verifies that a Refresh treats its RefreshFrom
+// timestamp as exclusive and its txn.ReadTimestamp (i.e. its "RefreshTo"
+// timestamp) as inclusive.
+func TestRefreshTimestampBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	db := storage.NewDefaultInMemForTesting()
+	defer db.Close()
+
+	k := roachpb.Key("key")
+	v := roachpb.MakeValueFromString("val")
+	ts1 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	ts3 := hlc.Timestamp{WallTime: 3}
+
+	// Write to a key at time ts2.
+	require.NoError(t, storage.MVCCPut(ctx, db, nil, k, ts2, v, nil))
+
+	for _, tc := range []struct {
+		from, to hlc.Timestamp
+		expErr   bool
+	}{
+		// Sanity-check.
+		{ts1, ts3, true},
+		// RefreshTo is inclusive, so expect error on collision.
+		{ts1, ts2, true},
+		// RefreshTo is exclusive, so expect no error on collision.
+		{ts2, ts3, false},
+	} {
+		var resp roachpb.RefreshResponse
+		_, err := Refresh(ctx, db, CommandArgs{
+			Args: &roachpb.RefreshRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key: k,
+				},
+				RefreshFrom: tc.from,
+			},
+			Header: roachpb.Header{
+				Txn: &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						WriteTimestamp: tc.to,
+					},
+					ReadTimestamp: tc.to,
+				},
+				Timestamp: tc.to,
+			},
+		}, &resp)
+
+		if tc.expErr {
+			require.Error(t, err)
+			require.Regexp(t, "encountered recently written committed value", err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+}
