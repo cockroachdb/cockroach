@@ -55,11 +55,17 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 	// append. Code below can use origET to recreate the in-flight write set if
 	// any elements remain in it.
 	origET := et
-	et = origET.ShallowCopy().(*roachpb.EndTxnRequest)
+	etAlloc := new(struct {
+		et    roachpb.EndTxnRequest
+		union roachpb.RequestUnion_EndTxn
+	})
+	etAlloc.et = *origET // shallow copy
+	etAlloc.union.EndTxn = &etAlloc.et
+	et = &etAlloc.et
 	et.InFlightWrites = nil
 	et.LockSpans = et.LockSpans[:len(et.LockSpans):len(et.LockSpans)] // immutable
 	ba.Requests = append([]roachpb.RequestUnion(nil), ba.Requests...)
-	ba.Requests[len(ba.Requests)-1].MustSetInner(et)
+	ba.Requests[len(ba.Requests)-1].Value = &etAlloc.union
 
 	// Fast-path: If we know that this batch contains all of the transaction's
 	// in-flight writes, then we can avoid searching in the in-flight writes set
