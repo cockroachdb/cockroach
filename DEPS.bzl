@@ -6100,10 +6100,10 @@ def go_deps():
         name = "com_github_petermattis_goid",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/petermattis/goid",
-        sha256 = "5134a176e306f9b973ff670a33c7536b59bf4114d83fd94f74c736ff0cc10ef0",
-        strip_prefix = "github.com/petermattis/goid@v0.0.0-20180202154549-b0b1615b78e5",
+        sha256 = "9f536c5d39d6a3c851670ec585e1c876fe31f3402556d215ebbaffcecbacb30a",
+        strip_prefix = "github.com/petermattis/goid@v0.0.0-20211229010228-4d14c490ee36",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/petermattis/goid/com_github_petermattis_goid-v0.0.0-20180202154549-b0b1615b78e5.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/petermattis/goid/com_github_petermattis_goid-v0.0.0-20211229010228-4d14c490ee36.zip",
         ],
     )
     go_repository(
