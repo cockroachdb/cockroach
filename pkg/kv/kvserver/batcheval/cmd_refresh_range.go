@@ -25,7 +25,7 @@ func init() {
 }
 
 // RefreshRange checks whether the key range specified has any values written in
-// the interval [args.RefreshFrom, header.Timestamp].
+// the interval (args.RefreshFrom, header.Timestamp].
 func RefreshRange(
 	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -50,7 +50,7 @@ func RefreshRange(
 		return result.Result{}, errors.AssertionFailedf("empty RefreshFrom: %s", args)
 	}
 
-	// Iterate over values until we discover any value written at or after the
+	// Iterate over values until we discover any value written after the
 	// original timestamp, but before or at the current timestamp. Note that we
 	// iterate inconsistently, meaning that intents - including our own - are
 	// collected separately and the callback is only invoked on the latest
@@ -64,7 +64,7 @@ func RefreshRange(
 			Tombstones:   true,
 		},
 		func(kv roachpb.KeyValue) error {
-			if ts := kv.Value.Timestamp; refreshFrom.LessEq(ts) {
+			if ts := kv.Value.Timestamp; refreshFrom.Less(ts) {
 				return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, kv.Key, ts)
 			}
 			return nil
