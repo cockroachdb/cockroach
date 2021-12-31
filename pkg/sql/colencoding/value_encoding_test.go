@@ -39,7 +39,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 		typs[i] = ct
 		datums[i] = datum
 		var err error
-		buf, err = rowenc.EncodeTableValue(buf, descpb.ColumnID(encoding.NoColumnID), datum, scratch)
+		buf, err = rowenc.EncodeTableValue(buf, descpb.NoColumnID, datum, scratch)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -218,7 +217,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 		)
 		for i := range data {
 			d := randgen.RandDatum(rng, t, false /* nullOk */)
-			data[i], err = rowenc.EncodeTableValue(data[i], descpb.ColumnID(encoding.NoColumnID), d, scratch)
+			data[i], err = rowenc.EncodeTableValue(data[i], descpb.NoColumnID, d, scratch)
 			if err != nil {
 				panic(err)
 			}
