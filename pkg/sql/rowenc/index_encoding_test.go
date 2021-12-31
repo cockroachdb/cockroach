@@ -206,7 +206,7 @@ func TestIndexKey(t *testing.T) {
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
 		codec := keys.SystemSQLCodec
-		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
+		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 		primaryKey, _, err := EncodeIndexKey(tableDesc, tableDesc.GetPrimaryIndex(), colMap, testValues, primaryKeyPrefix)
 		if err != nil {
 			t.Fatal(err)
@@ -240,7 +240,7 @@ func TestIndexKey(t *testing.T) {
 				}
 			}
 
-			indexID, _, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
+			indexID, _, err := DecodeIndexKeyPrefix(codec, tableDesc.GetID(), entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -970,7 +970,7 @@ func TestDecodeTableValue(t *testing.T) {
 func ExtractIndexKey(
 	a *DatumAlloc, codec keys.SQLCodec, tableDesc catalog.TableDescriptor, entry kv.KeyValue,
 ) (roachpb.Key, error) {
-	indexID, key, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
+	indexID, key, err := DecodeIndexKeyPrefix(codec, tableDesc.GetID(), entry.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -1028,7 +1028,7 @@ func ExtractIndexKey(
 		columnID := index.GetKeySuffixColumnID(i)
 		colMap.Set(columnID, i+index.NumKeyColumns())
 	}
-	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
+	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 
 	decodedValues := make([]tree.Datum, len(values)+len(extraValues))
 	for i, value := range values {

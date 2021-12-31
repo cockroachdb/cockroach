@@ -2176,7 +2176,7 @@ func (desc *wrapper) PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span {
 
 // IndexSpan implements the TableDescriptor interface.
 func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roachpb.Span {
-	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, desc, indexID))
+	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), indexID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 

@@ -427,7 +427,7 @@ func makeRandomKey(
 	var colIDToRowIndex catalog.TableColMap
 	colIDToRowIndex.Set(index.GetKeyColumnID(0), 0)
 
-	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, index.GetID())
+	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.GetID())
 	k, _, err := rowenc.EncodeIndexKey(tableDesc, index, colIDToRowIndex, tree.Datums{keyDatum}, keyPrefix)
 	if err != nil {
 		panic(err)
