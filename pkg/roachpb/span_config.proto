@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "util/hlc/timestamp.proto";
 import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
 
@@ -85,6 +86,14 @@ message LeasePreference {
   repeated Constraint constraints = 1 [(gogoproto.nullable) = false];
 }
 
+// ProtectedTimestampRecord encapsulates information about a protected timestamp
+// record that applies to a span.
+message ProtectedTimestampRecord {
+  option (gogoproto.equal) = true;
+
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+}
+
 // SpanConfig holds the configuration that applies to a given keyspan. It
 // parallels the definition found in zonepb/zone.proto.
 message SpanConfig {
@@ -140,6 +149,14 @@ message SpanConfig {
   // preferred option to least. The first preference that an existing replica of
   // a range matches will take priority for the lease.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+
+  // ProtectedTimestampRecord encapsulates information about a protected timestamp
+  // record that applies to a span.
+  //
+  // More than one protected timestamp record can be covering the span. The
+  // earliest timestamp that is protected will hold up GC on the span.
+  repeated ProtectedTimestampRecord pts_records = 10 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "PTSRecords"];
 }
 
 // SpanConfigEntry ties a span to its corresponding config.
