@@ -29,7 +29,6 @@ go_library(
         "//pkg/util/contextutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/metric",
@@ -47,6 +46,7 @@ go_library(
         "@com_github_xdg_go_stringprep//:stringprep",
         "@org_golang_x_crypto//bcrypt",
         "@org_golang_x_crypto//ocsp",
+        "@org_golang_x_crypto//pbkdf2",
         "@org_golang_x_sync//errgroup",
     ],
 )
