@@ -1214,11 +1214,6 @@ func ForEachCast(fn func(src, tgt oid.Oid)) {
 // ValidCast returns true if a valid cast exists from src to tgt in the given
 // context.
 func ValidCast(src, tgt *types.T, ctx CastContext) bool {
-	// If src and tgt are the same type, a cast is valid in any context.
-	if src.Oid() == tgt.Oid() {
-		return true
-	}
-
 	srcFamily := src.Family()
 	tgtFamily := tgt.Family()
 
@@ -1337,6 +1332,17 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 			return c, true
 		}
 	}
+
+	// If src and tgt are the same type, the immutable cast is valid in any
+	// context. This logic is intentially after the lookup into castMap so that
+	// entries in castMap are preferred.
+	if src.Oid() == tgt.Oid() {
+		return cast{
+			maxContext: CastContextImplicit,
+			volatility: VolatilityImmutable,
+		}, true
+	}
+
 	return cast{}, false
 }
 
