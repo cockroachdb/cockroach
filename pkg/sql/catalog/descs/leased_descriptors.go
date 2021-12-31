@@ -98,12 +98,8 @@ func (ld *leasedDescriptors) getByName(
 		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
 	}
 
-	for _, d := range systemschema.UnleasableSystemDescriptors {
-		if parentID == d.GetParentID() &&
-			parentSchemaID == d.GetParentSchemaID() &&
-			name == d.GetName() {
-			return nil, true, nil
-		}
+	if systemschema.IsUnleasableSystemDescriptorByName(parentID, parentSchemaID, name) {
+		return nil, true, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
@@ -128,7 +124,7 @@ func (ld *leasedDescriptors) getByID(
 		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
 	}
 
-	if _, isUnleasable := systemschema.UnleasableSystemDescriptors[id]; isUnleasable {
+	if systemschema.IsUnleasableSystemDescriptorByID(id) {
 		return nil, true, nil
 	}
 
