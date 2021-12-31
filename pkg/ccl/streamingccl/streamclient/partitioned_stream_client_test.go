@@ -12,20 +12,37 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
+type subscriptionFeedSource struct {
+	sub Subscription
+}
+
+func (f *subscriptionFeedSource) Next() (streamingccl.Event, bool) {
+	return <-f.sub.Events(), true
+}
+
+func (f *subscriptionFeedSource) Close(ctx context.Context) {}
+
 func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	defer log.Scope(t).Close(t)
 	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -45,7 +62,13 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
-	client := &partitionedStreamClient{remote: &h.PGUrl}
+	client, err := makePartitionedStreamClient(&h.PGUrl)
+	defer client.Close()
+	require.NoError(t, err)
+	expectStreamState := func(streamID streaming.StreamID, status jobs.Status) {
+		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
+			[][]string{{string(status)}})
+	}
 
 	id, err := client.Create(ctx, h.Tenant.ID)
 	require.NoError(t, err)
@@ -58,28 +81,77 @@ INSERT INTO d.t2 VALUES (2);
 	require.Equal(t, 1, len(top))
 	// Plan for a non-existent stream
 	_, err = client.Plan(ctx, 999)
-	require.Errorf(t, err, "Replication stream %d not found", 999)
+	require.Error(t, err, "Replication stream %d not found", 999)
 
-	// TODO(casper): add tests for client.Subscribe()
-	h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", id),
-		[][]string{{"running"}})
+	expectStreamState(id, jobs.StatusRunning)
 	require.NoError(t, client.Heartbeat(ctx, id, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}))
 
 	// Pause the underlying producer job of the replication stream
 	h.SysDB.Exec(t, `PAUSE JOB $1`, id)
-	h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", id),
-		[][]string{{"paused"}})
-	require.Errorf(t, client.Heartbeat(ctx, id, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
-		"Replication stream %d is paused in the source cluster", id)
+	expectStreamState(id, jobs.StatusPaused)
+	require.Error(t, client.Heartbeat(ctx, id, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
+		"Replication stream %d is not running, status is STREAM_PAUSED", id)
 
 	// Cancel the underlying producer job of the replication stream
 	h.SysDB.Exec(t, `CANCEL JOB $1`, id)
-	h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", id),
-		[][]string{{"canceled"}})
-	require.Errorf(t, client.Heartbeat(ctx, id, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
-		"Replication stream %d is not active in the source cluster", id)
+	expectStreamState(id, jobs.StatusCanceled)
+	require.Error(t, client.Heartbeat(ctx, id, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
+		"Replication stream %d is not running, status is STREAM_INACTIVE", id)
 
 	// Non-existent stream is not active in the source cluster.
-	require.Errorf(t, client.Heartbeat(ctx, 999, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
-		"Replication stream %d not found", 999)
+	require.Error(t, client.Heartbeat(ctx, 999, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
+		"Replication stream %d is not running, status is STREAM_INACTIVE", 999)
+
+	// Testing client.Subscribe()
+	makePartitionSpec := func(tables ...string) *streampb.StreamPartitionSpec {
+		var spans []roachpb.Span
+		for _, table := range tables {
+			desc := catalogkv.TestingGetTableDescriptor(
+				h.SysServer.DB(), h.Tenant.Codec, "d", table)
+			spans = append(spans, desc.PrimaryIndexSpan(h.Tenant.Codec))
+		}
+
+		return &streampb.StreamPartitionSpec{
+			Spans:     spans,
+			Config: streampb.StreamPartitionSpec_ExecutionConfig{
+				MinCheckpointFrequency: 10 * time.Millisecond,
+			},
+		}
+	}
+
+	encodeSpec := func(tables ...string) []byte {
+		opaqueSpec, err := protoutil.Marshal(makePartitionSpec(tables...))
+		require.NoError(t, err)
+		return opaqueSpec
+	}
+
+	// Only subscribe to the changes to table t1.
+	sub, err := client.Subscribe(ctx, id, encodeSpec("t1"), hlc.Timestamp{})
+	require.NoError(t, err)
+
+	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
+	t1Descr := catalogkv.TestingGetTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+
+	ctxWithCancel, cancelFn := context.WithCancel(ctx)
+	cg := ctxgroup.WithContext(ctxWithCancel)
+	cg.GoCtx(sub.Receive)
+	cg.GoCtx(func(ctx context.Context) error {
+		// Observe the existing single row in t1.
+		expected := streamingtest.EncodeKV(t, h.Tenant.Codec, t1Descr, 42)
+		firstObserved := rf.ObserveKey(ctx, expected.Key)
+		require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
+		rf.ObserveResolved(ctx, firstObserved.Value.Timestamp)
+
+		// Updates the existing row.
+		h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
+		expected = streamingtest.EncodeKV(t, h.Tenant.Codec, t1Descr, 42, nil, "world")
+
+		// Observe its changes.
+		secondObserved := rf.ObserveKey(ctx, expected.Key)
+		require.Equal(t, expected.Value.RawBytes, secondObserved.Value.RawBytes)
+		require.True(t, firstObserved.Value.Timestamp.Less(secondObserved.Value.Timestamp))
+		cancelFn()
+		return nil
+	})
+	require.Error(t, cg.Wait(), "context canceled")
 }

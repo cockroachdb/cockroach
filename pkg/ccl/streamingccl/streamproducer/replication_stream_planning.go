@@ -212,9 +212,7 @@ func createReplicationStreamHook(
 }
 
 func getReplicationStreamSpec(
-	evalCtx *tree.EvalContext,
-	txn *kv.Txn,
-	streamID streaming.StreamID,
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active

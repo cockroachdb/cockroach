@@ -10,11 +10,10 @@ package streamclient
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -23,10 +22,6 @@ import (
 // sense to the source cluster (e.g. checkpoint records, or subscription token, etc)
 // is treated as an opaque object (e.g. []bytes) by this API.  This opacity is done
 // on purpose as it abstracts the operations on the source cluster behind this API.
-
-// StreamID identifies a stream across both its producer and consumer. It is
-// used when the consumer wishes to interact with the stream's producer.
-type StreamID uint64
 
 // CheckpointToken is emitted by a stream producer to encode information about
 // what that producer has emitted, including what spans or timestamps it might
@@ -42,52 +37,6 @@ type SubscriptionToken []byte
 // information to start a stream processor.
 type CheckpointToken []byte
 
-// StreamPausedError is returned when the replication stream is paused.
-type StreamPausedError struct {
-	streamID StreamID
-}
-
-// Error makes StreamPausedError an error.
-func (e *StreamPausedError) Error() string {
-	return fmt.Sprintf("Replication stream %d is paused in the source cluster", e.streamID)
-}
-
-// StreamInactiveError is returned when the replication stream is not active.
-type StreamInactiveError struct {
-	streamID StreamID
-}
-
-// Error makes StreamInactiveError an error.
-func (e *StreamInactiveError) Error() string {
-	return fmt.Sprintf("Replication stream %d is not active in the source cluster", e.streamID)
-}
-
-// StreamStatusUnknownError is returned when the replication stream is in unknown status.
-type StreamStatusUnknownError struct {
-	streamID StreamID
-}
-
-// Error makes StreamStatusUnknownError an error.
-func (e *StreamStatusUnknownError) Error() string {
-	return fmt.Sprintf("Replication stream %d is in unknown status in the source cluster", e.streamID)
-}
-
-// MakeReplicationStreamError converts unhealthy jobspb.StreamReplicationStatus to an error.
-func MakeReplicationStreamError(streamID StreamID, status jobspb.StreamReplicationStatus) error {
-	switch status.StreamStatus {
-	case jobspb.StreamReplicationStatus_STREAM_ACTIVE:
-		return nil
-	case jobspb.StreamReplicationStatus_STREAM_INACTIVE:
-		return &StreamInactiveError{streamID: streamID}
-	case jobspb.StreamReplicationStatus_STREAM_PAUSED:
-		return &StreamPausedError{streamID: streamID}
-	case jobspb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY:
-		return &StreamStatusUnknownError{streamID: streamID}
-	default:
-		return errors.Errorf("unknown replication stream status: %d", status.StreamStatus)
-	}
-}
-
 // Client provides a way for the stream ingestion job to consume a
 // specified stream.
 // TODO(57427): The stream client does not yet support the concept of
@@ -96,7 +45,7 @@ type Client interface {
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenantID roachpb.TenantID) (StreamID, error)
+	Create(ctx context.Context, tenantID roachpb.TenantID) (streaming.StreamID, error)
 
 	// Destroy informs the source of the stream that it may terminate production
 	// and release resources such as protected timestamps.
@@ -106,22 +55,25 @@ type Client interface {
 	// that source cluster protected timestamp _may_ be advanced up to the passed ts
 	// (which may be zero if no progress has been made e.g. during backfill).
 	// TODO(dt): ts -> checkpointToken.
-	Heartbeat(ctx context.Context, ID StreamID, consumed hlc.Timestamp) error
+	Heartbeat(ctx context.Context, streamID streaming.StreamID, consumed hlc.Timestamp) error
 
 	// Plan returns a Topology for this stream.
 	// TODO(dt): separate target argument from address argument.
-	Plan(ctx context.Context, ID StreamID) (Topology, error)
+	Plan(ctx context.Context, streamID streaming.StreamID) (Topology, error)
 
 	// Subscribe opens and returns a subscription for the specified partition from
 	// the specified remote address. This is used by each consumer processor to
 	// open its subscription to its partition of a larger stream.
-	// TODO(dt): ts -> checkpointToken, return -> Subscription.
+	// TODO(dt): ts -> checkpointToken.
 	Subscribe(
 		ctx context.Context,
-		stream StreamID,
+		streamID streaming.StreamID,
 		spec SubscriptionToken,
 		checkpoint hlc.Timestamp,
-	) (chan streamingccl.Event, chan error, error)
+	) (Subscription, error)
+
+	// Close releases all the resources used by this client.
+	Close() error
 }
 
 // Topology is a configuration of stream partitions. These are particular to a
@@ -136,6 +88,33 @@ type PartitionInfo struct {
 	SrcInstanceID int
 	SrcAddr       streamingccl.PartitionAddress
 	SrcLocality   roachpb.Locality
+}
+
+// Subscription represents subscription to a replication stream.
+type Subscription interface {
+
+	/*
+		Typical usage on the call site looks like:
+
+		ctxWithCancel, cancelFn := context.WithCancel(ctx)
+		g := ctxgroup.WithContext(ctxWithCancel)
+		sub := client.Subscribe()
+		g.GoCtx(sub.Receive)
+		g.GoCtx(processEventsAndErrors(sub.Events(), sub.Err()))
+		g.Wait()
+	*/
+
+	// Receive starts receiving subscription events. Terminates when context
+	// is cancelled. It will release all resources when the function returns.
+	Receive(ctx context.Context) error
+
+	// Events is a channel receiving streaming events.
+	// This channel is closed when no additional values will be sent to this channel.
+	Events() <-chan streamingccl.Event
+
+	// Err is set onces when Events channel closed -- must not be called before
+	// the channel closes.
+	Err() <-chan error
 }
 
 // NewStreamClient creates a new stream client based on the stream

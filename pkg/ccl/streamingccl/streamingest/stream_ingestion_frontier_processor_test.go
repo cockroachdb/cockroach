@@ -168,6 +168,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			sip.forceClientForTests = &mockStreamClient{
 				partitionEvents: tc.events,
 			}
+			defer sip.forceClientForTests.Close()
 
 			// Create a frontier processor.
 			var frontierSpec execinfrapb.StreamIngestionFrontierSpec

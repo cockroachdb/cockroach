@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -109,6 +110,9 @@ type streamIngestionProcessor struct {
 	// cutoverCh is used to convey that the ingestion job has been signaled to
 	// cutover.
 	cutoverCh chan struct{}
+
+	// cg is used to receive the subscription of events from the source cluster.
+	cg            ctxgroup.Group
 
 	// closePoller is used to shutdown the poller that checks the job for a
 	// cutover signal.
@@ -214,8 +218,9 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionIds))
 
 	// Initialize the event streams.
-	eventChs := make(map[string]chan streamingccl.Event)
-	errChs := make(map[string]chan error)
+	eventChs := make(map[string]<-chan streamingccl.Event)
+	errChs := make(map[string]<-chan error)
+	sip.cg = ctxgroup.WithContext(ctx)
 	for i := range sip.spec.PartitionIds {
 		id := sip.spec.PartitionIds[i]
 		spec := streamclient.SubscriptionToken(sip.spec.PartitionSpecs[i])
@@ -232,13 +237,14 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			}
 		}
 
-		eventCh, errCh, err := streamClient.Subscribe(ctx, streamclient.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
+		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
 			return
 		}
-		eventChs[id] = eventCh
-		errChs[id] = errCh
+		sip.cg.GoCtx(sub.Receive)
+		eventChs[id] = sub.Events()
+		errChs[id] = sub.Err()
 	}
 	sip.eventCh = sip.merge(ctx, eventChs, errChs)
 }
@@ -371,8 +377,8 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 // channel.
 func (sip *streamIngestionProcessor) merge(
 	ctx context.Context,
-	partitionStreams map[string]chan streamingccl.Event,
-	errorStreams map[string]chan error,
+	partitionStreams map[string]<-chan streamingccl.Event,
+	errorStreams map[string]<-chan error,
 ) chan partitionEvent {
 	merged := make(chan partitionEvent)
 

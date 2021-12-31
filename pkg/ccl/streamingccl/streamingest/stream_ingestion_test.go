@@ -88,6 +88,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	streamValidator := newStreamClientValidator()
 	registerValidator := registerValidatorWithClient(streamValidator)
 	client := streamclient.GetRandomStreamClientSingletonForTesting()
+	defer client.Close()
 	interceptEvents := []streamclient.InterceptFn{
 		completeJobAfterCheckpoints,
 		registerValidator,
