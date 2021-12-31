@@ -12,6 +12,8 @@ package valueside
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -206,4 +208,68 @@ func DecodeUntaggedDatum(
 	default:
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
 	}
+}
+
+// Decoder is a helper for decoding rows that contain multiple encoded values.
+//
+// This helper is intended for non-performance-critical uses (like processing
+// rangefeed KVs). The query execution engines have more specialized
+// implementations for performance reasons.
+type Decoder struct {
+	colIdxMap catalog.TableColMap
+	types     []*types.T
+}
+
+// MakeDecoder creates a Decoder for the given columns.
+//
+// Once created, the Decoder is immutable.
+func MakeDecoder(cols []catalog.Column) Decoder {
+	var d Decoder
+	d.types = make([]*types.T, len(cols))
+	for i, col := range cols {
+		d.colIdxMap.Set(col.GetID(), i)
+		d.types[i] = col.GetType()
+	}
+	return d
+}
+
+// Decode processes multiple encoded values. Values for the columns used to
+// create the decoder are populated in the corresponding positions in the Datums
+// slice.
+//
+// If a given column is not encoded, the datum will be DNull.
+//
+// Values for any other column IDs are ignored.
+//
+// Decode can be called concurrently on the same Decoder.
+func (d *Decoder) Decode(a *tree.DatumAlloc, bytes []byte) (tree.Datums, error) {
+	datums := make(tree.Datums, len(d.types))
+	for i := range datums {
+		datums[i] = tree.DNull
+	}
+
+	var lastColID descpb.ColumnID
+	for len(bytes) > 0 {
+		_, dataOffset, colIDDiff, typ, err := encoding.DecodeValueTag(bytes)
+		if err != nil {
+			return nil, err
+		}
+		colID := lastColID + descpb.ColumnID(colIDDiff)
+		lastColID = colID
+		idx, ok := d.colIdxMap.Get(colID)
+		if !ok {
+			// This column wasn't requested, so read its length and skip it.
+			l, err := encoding.PeekValueLengthWithOffsetsAndType(bytes, dataOffset, typ)
+			if err != nil {
+				return nil, err
+			}
+			bytes = bytes[l:]
+			continue
+		}
+		datums[idx], bytes, err = Decode(a, d.types[idx], bytes)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return datums, nil
 }

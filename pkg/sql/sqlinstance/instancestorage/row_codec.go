@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,19 +30,18 @@ import (
 
 // rowCodec encodes/decodes rows from the sql_instances table.
 type rowCodec struct {
-	codec     keys.SQLCodec
-	colIdxMap catalog.TableColMap
-	columns   []catalog.Column
+	codec   keys.SQLCodec
+	columns []catalog.Column
+	decoder valueside.Decoder
 }
 
 // MakeRowCodec makes a new rowCodec for the sql_instances table.
 func makeRowCodec(codec keys.SQLCodec) rowCodec {
+	columns := systemschema.SQLInstancesTable.PublicColumns()
 	return rowCodec{
-		codec: codec,
-		colIdxMap: row.ColIDtoRowIndexFromCols(
-			systemschema.SQLInstancesTable.PublicColumns(),
-		),
-		columns: systemschema.SQLInstancesTable.PublicColumns(),
+		codec:   codec,
+		columns: columns,
+		decoder: valueside.MakeDecoder(columns),
 	}
 }
 
@@ -86,11 +84,10 @@ func (d *rowCodec) decodeRow(
 	tombstone bool,
 	_ error,
 ) {
-	tbl := systemschema.SQLInstancesTable
 	var alloc tree.DatumAlloc
 	// First, decode the id field from the index key.
 	{
-		types := []*types.T{tbl.PublicColumns()[0].GetType()}
+		types := []*types.T{d.columns[0].GetType()}
 		row := make([]rowenc.EncDatum, 1)
 		_, _, _, err := rowenc.DecodeIndexKey(d.codec, types, row, nil, kv.Key)
 		if err != nil {
@@ -104,44 +101,25 @@ func (d *rowCodec) decodeRow(
 	if !kv.Value.IsPresent() {
 		return instanceID, "", "", hlc.Timestamp{}, true, nil
 	}
-	// The rest of the columns are stored as a family, packed with diff-encoded
-	// column IDs followed by their values.
-	{
-		bytes, err := kv.Value.GetTuple()
-		timestamp = kv.Value.Timestamp
-		if err != nil {
-			return instanceID, "", "", hlc.Timestamp{}, false, err
-		}
-		var colIDDiff uint32
-		var lastColID descpb.ColumnID
-		var res tree.Datum
-		for len(bytes) > 0 {
-			_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
-			if err != nil {
-				return instanceID, "", "", hlc.Timestamp{}, false, err
-			}
-			colID := lastColID + descpb.ColumnID(colIDDiff)
-			lastColID = colID
-			if idx, ok := d.colIdxMap.Get(colID); ok {
-				res, bytes, err = valueside.Decode(&alloc, tbl.PublicColumns()[idx].GetType(), bytes)
-				if err != nil {
-					return instanceID, "", "", hlc.Timestamp{}, false, err
-				}
-				switch colID {
-				case tbl.PublicColumns()[1].GetID(): // addr
-					if res != tree.DNull {
-						addr = string(tree.MustBeDString(res))
-					}
-				case tbl.PublicColumns()[2].GetID(): // sessionID
-					if res != tree.DNull {
-						sessionID = sqlliveness.SessionID(tree.MustBeDBytes(res))
-					}
-				default:
-					return instanceID, "", "", hlc.Timestamp{}, false, errors.Errorf("unknown column: %v", colID)
-				}
-			}
-		}
+	timestamp = kv.Value.Timestamp
+	// The rest of the columns are stored as a family.
+	bytes, err := kv.Value.GetTuple()
+	if err != nil {
+		return instanceID, "", "", hlc.Timestamp{}, false, err
 	}
+
+	datums, err := d.decoder.Decode(&alloc, bytes)
+	if err != nil {
+		return instanceID, "", "", hlc.Timestamp{}, false, err
+	}
+
+	if addrVal := datums[1]; addrVal != tree.DNull {
+		addr = string(tree.MustBeDString(addrVal))
+	}
+	if sessionIDVal := datums[2]; sessionIDVal != tree.DNull {
+		sessionID = sqlliveness.SessionID(tree.MustBeDBytes(sessionIDVal))
+	}
+
 	return instanceID, addr, sessionID, timestamp, false, nil
 }
 
