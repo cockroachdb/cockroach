@@ -855,9 +855,6 @@ type castInfo struct {
 	// casts are not allowed.
 	volatilityHint string
 
-	// Telemetry counter; set by init().
-	counter telemetry.Counter
-
 	// If set, the volatility of this cast is not cross-checked against postgres.
 	// Use this with caution.
 	ignoreVolatilityCheck bool
@@ -1201,9 +1198,6 @@ func init() {
 	styleCastsMap = make(map[castsMapKey]*castInfo)
 	for i := range validCasts {
 		c := &validCasts[i]
-
-		// Initialize counter.
-		c.counter = sqltelemetry.CastOpCounter(c.from.Name(), c.to.Name())
 
 		key := castsMapKey{from: c.from, to: c.to}
 		castsMap[key] = c
@@ -2516,4 +2510,47 @@ func PopulateDatumWithJSON(ctx *EvalContext, j json.JSON, desiredType *types.T) 
 		s = j.String()
 	}
 	return PerformCast(ctx, NewDString(s), desiredType)
+}
+
+// castCounterType represents a cast from one family to another.
+type castCounterType struct {
+	from, to types.Family
+}
+
+// castCounterMap is a map of cast counter types to their corresponding
+// telemetry counters.
+var castCounters map[castCounterType]telemetry.Counter
+
+// Initialize castCounters.
+func init() {
+	castCounters = make(map[castCounterType]telemetry.Counter)
+	for fromID := range types.Family_name {
+		for toID := range types.Family_name {
+			from := types.Family(fromID)
+			to := types.Family(toID)
+			var c telemetry.Counter
+			switch {
+			case from == types.ArrayFamily && to == types.ArrayFamily:
+				c = sqltelemetry.ArrayCastCounter
+			case from == types.TupleFamily && to == types.TupleFamily:
+				c = sqltelemetry.TupleCastCounter
+			case from == types.EnumFamily && to == types.EnumFamily:
+				c = sqltelemetry.EnumCastCounter
+			default:
+				c = sqltelemetry.CastOpCounter(from.Name(), to.Name())
+			}
+			castCounters[castCounterType{from, to}] = c
+		}
+	}
+}
+
+// GetCastCounter returns the telemetry counter for the cast from one family to
+// another family.
+func GetCastCounter(from, to types.Family) telemetry.Counter {
+	if c, ok := castCounters[castCounterType{from, to}]; ok {
+		return c
+	}
+	panic(errors.AssertionFailedf(
+		"no cast counter found for cast from %s to %s", from.Name(), to.Name(),
+	))
 }

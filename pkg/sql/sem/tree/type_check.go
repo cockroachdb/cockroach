@@ -447,7 +447,7 @@ func resolveCast(
 		if err != nil {
 			return err
 		}
-		telemetry.Inc(sqltelemetry.ArrayCastCounter)
+		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
 		return nil
 
 	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
@@ -456,7 +456,7 @@ func resolveCast(
 		if !castFrom.Equivalent(castTo) {
 			return invalidCastError(castFrom, castTo)
 		}
-		telemetry.Inc(sqltelemetry.EnumCastCounter)
+		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
 		return nil
 
 	case toFamily == types.TupleFamily && fromFamily == types.TupleFamily:
@@ -486,7 +486,7 @@ func resolveCast(
 				return err
 			}
 		}
-		telemetry.Inc(sqltelemetry.TupleCastCounter)
+		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
 		return nil
 
 	default:
@@ -503,7 +503,7 @@ func resolveCast(
 			}
 			return err
 		}
-		telemetry.Inc(cast.counter)
+		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
 		return nil
 	}
 }
