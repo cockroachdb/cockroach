@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -255,7 +254,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
-	exists, canLogin, _, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, canLogin, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -418,7 +417,7 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
-	exists, canLogin, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, canLogin, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -431,15 +430,13 @@ func (s *authenticationServer) verifyPassword(
 	if !exists || !canLogin {
 		return false, false, nil
 	}
-	hashedPassword, err := pwRetrieveFn(ctx)
+	expired, hashedPassword, err := pwRetrieveFn(ctx)
 	if err != nil {
 		return false, false, err
 	}
 
-	if validUntil != nil {
-		if validUntil.Time.Sub(timeutil.Now()) < 0 {
-			return false, true, nil
-		}
+	if expired {
+		return false, true, nil
 	}
 
 	ok, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, password)
