@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -64,7 +65,7 @@ func DecodeKeyValsToCols(
 				foundNull = foundNull || isNull
 			}
 			// Don't need the coldata - skip it.
-			key, err = rowenc.SkipTableKey(key)
+			key, err = keyside.Skip(key)
 		} else {
 			if unseen != nil {
 				unseen.Remove(vecIdx)
@@ -81,9 +82,9 @@ func DecodeKeyValsToCols(
 	return key, foundNull, scratch, nil
 }
 
-// decodeTableKeyToCol decodes a value encoded by EncodeTableKey, writing the
+// decodeTableKeyToCol decodes a value encoded by keyside.Encode, writing the
 // result to the rowIdx'th slot of the vecIdx'th vector in coldata.TypedVecs.
-// See the analog, rowenc.DecodeTableKey, in rowenc/column_type_encoding.go.
+// See the analog, keyside.Decode, in rowenc/column_type_encoding.go.
 // decodeTableKeyToCol also returns whether or not the decoded value was NULL.
 func decodeTableKeyToCol(
 	da *tree.DatumAlloc,
@@ -206,7 +207,7 @@ func decodeTableKeyToCol(
 		if dir == descpb.IndexDescriptor_DESC {
 			encDir = encoding.Descending
 		}
-		d, rkey, err = rowenc.DecodeTableKey(da, valType, key, encDir)
+		d, rkey, err = keyside.Decode(da, valType, key, encDir)
 		vecs.DatumCols[colIdx].Set(rowIdx, d)
 	}
 	return rkey, false, scratch, err

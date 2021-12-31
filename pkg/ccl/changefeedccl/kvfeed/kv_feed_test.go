@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -46,7 +46,7 @@ func TestKVFeed(t *testing.T) {
 
 	mkKey := func(tableID uint32, k string) roachpb.Key {
 		vDatum := tree.DString(k)
-		key, err := rowenc.EncodeTableKey(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
+		key, err := keyside.Encode(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
 		require.NoError(t, err)
 		return key
 	}

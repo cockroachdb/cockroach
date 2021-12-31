@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -35,7 +35,7 @@ import (
 func makeKV(t *testing.T, rnd *rand.Rand) roachpb.KeyValue {
 	const tableID = 42
 
-	key, err := rowenc.EncodeTableKey(
+	key, err := keyside.Encode(
 		keys.SystemSQLCodec.TablePrefix(tableID),
 		randgen.RandDatumSimple(rnd, types.String),
 		encoding.Ascending,
