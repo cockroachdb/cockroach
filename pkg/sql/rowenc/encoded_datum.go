@@ -53,13 +53,13 @@ type EncDatum struct {
 	Datum tree.Datum
 }
 
-func (ed *EncDatum) stringWithAlloc(typ *types.T, a *DatumAlloc) string {
+func (ed *EncDatum) stringWithAlloc(typ *types.T, a *tree.DatumAlloc) string {
 	if ed.Datum == nil {
 		if ed.encoded == nil {
 			return "<unset>"
 		}
 		if a == nil {
-			a = &DatumAlloc{}
+			a = &tree.DatumAlloc{}
 		}
 		err := ed.EnsureDecoded(typ, a)
 		if err != nil {
@@ -235,7 +235,7 @@ func (ed *EncDatum) IsNull() bool {
 }
 
 // EnsureDecoded ensures that the Datum field is set (decoding if it is not).
-func (ed *EncDatum) EnsureDecoded(typ *types.T, a *DatumAlloc) error {
+func (ed *EncDatum) EnsureDecoded(typ *types.T, a *tree.DatumAlloc) error {
 	if ed.Datum != nil {
 		return nil
 	}
@@ -279,7 +279,7 @@ func (ed *EncDatum) Encoding() (descpb.DatumEncoding, bool) {
 // Note: descpb.DatumEncoding_VALUE encodings are not unique because they can contain
 // a column ID so they should not be used to test for equality.
 func (ed *EncDatum) Encode(
-	typ *types.T, a *DatumAlloc, enc descpb.DatumEncoding, appendTo []byte,
+	typ *types.T, a *tree.DatumAlloc, enc descpb.DatumEncoding, appendTo []byte,
 ) ([]byte, error) {
 	if ed.encoded != nil && enc == ed.encoding {
 		// We already have an encoding that matches that we can use.
@@ -312,7 +312,7 @@ func (ed *EncDatum) Encode(
 // returned byte slice. Note that the context will only be used if acc is
 // non-nil.
 func (ed *EncDatum) Fingerprint(
-	ctx context.Context, typ *types.T, a *DatumAlloc, appendTo []byte, acc *mon.BoundAccount,
+	ctx context.Context, typ *types.T, a *tree.DatumAlloc, appendTo []byte, acc *mon.BoundAccount,
 ) ([]byte, error) {
 	// Note: we don't ed.EnsureDecoded on top of this method, because the default
 	// case uses ed.Encode, which has a fast path if the encoded bytes are already
@@ -350,7 +350,7 @@ func (ed *EncDatum) Fingerprint(
 //    0  if the receiver is equal to rhs,
 //    +1 if the receiver is greater than rhs.
 func (ed *EncDatum) Compare(
-	typ *types.T, a *DatumAlloc, evalCtx *tree.EvalContext, rhs *EncDatum,
+	typ *types.T, a *tree.DatumAlloc, evalCtx *tree.EvalContext, rhs *EncDatum,
 ) (int, error) {
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
@@ -418,7 +418,7 @@ func (ed *EncDatum) GetInt() (int64, error) {
 // EncDatumRow is a row of EncDatums.
 type EncDatumRow []EncDatum
 
-func (r EncDatumRow) stringToBuf(types []*types.T, a *DatumAlloc, b *bytes.Buffer) {
+func (r EncDatumRow) stringToBuf(types []*types.T, a *tree.DatumAlloc, b *bytes.Buffer) {
 	if len(types) != len(r) {
 		panic(errors.AssertionFailedf("mismatched types (%v) and row (%v)", types, r))
 	}
@@ -445,7 +445,7 @@ func (r EncDatumRow) Copy() EncDatumRow {
 
 func (r EncDatumRow) String(types []*types.T) string {
 	var b bytes.Buffer
-	r.stringToBuf(types, &DatumAlloc{}, &b)
+	r.stringToBuf(types, &tree.DatumAlloc{}, &b)
 	return b.String()
 }
 
@@ -464,7 +464,7 @@ func (r EncDatumRow) Size() uintptr {
 
 // EncDatumRowToDatums converts a given EncDatumRow to a Datums.
 func EncDatumRowToDatums(
-	types []*types.T, datums tree.Datums, row EncDatumRow, da *DatumAlloc,
+	types []*types.T, datums tree.Datums, row EncDatumRow, da *tree.DatumAlloc,
 ) error {
 	if len(types) != len(row) {
 		return errors.AssertionFailedf(
@@ -501,7 +501,7 @@ func EncDatumRowToDatums(
 // column).
 func (r EncDatumRow) Compare(
 	types []*types.T,
-	a *DatumAlloc,
+	a *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
 	evalCtx *tree.EvalContext,
 	rhs EncDatumRow,
@@ -527,7 +527,7 @@ func (r EncDatumRow) Compare(
 // CompareToDatums is a version of Compare which compares against decoded Datums.
 func (r EncDatumRow) CompareToDatums(
 	types []*types.T,
-	a *DatumAlloc,
+	a *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
 	evalCtx *tree.EvalContext,
 	rhs tree.Datums,
@@ -551,7 +551,7 @@ func (r EncDatumRow) CompareToDatums(
 type EncDatumRows []EncDatumRow
 
 func (r EncDatumRows) String(types []*types.T) string {
-	var a DatumAlloc
+	var a tree.DatumAlloc
 	var b bytes.Buffer
 	b.WriteString("[")
 	for i, r := range r {

@@ -4,7 +4,6 @@ go_library(
     name = "rowenc",
     srcs = [
         "column_type_encoding.go",
-        "datum_alloc.go",
         "encoded_datum.go",
         "index_encoding.go",
         "partition.go",

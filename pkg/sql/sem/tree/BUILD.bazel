@@ -41,6 +41,7 @@ go_library(
         "create.go",
         "data_placement.go",
         "datum.go",
+        "datum_alloc.go",
         "decimal.go",
         "delete.go",
         "discard.go",

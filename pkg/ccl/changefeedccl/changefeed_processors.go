@@ -884,7 +884,7 @@ type changeFrontier struct {
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeFrontierSpec
 	memAcc  mon.BoundAccount
-	a       rowenc.DatumAlloc
+	a       tree.DatumAlloc
 
 	// input returns rows from one or more changeAggregator processors
 	input execinfra.RowSource

@@ -307,7 +307,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
 		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
-		alloc := &rowenc.DatumAlloc{}
+		alloc := &tree.DatumAlloc{}
 
 		exporter, err := newParquetExporter(sp.spec, typs)
 		if err != nil {

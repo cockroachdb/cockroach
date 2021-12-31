@@ -78,7 +78,7 @@ type ColumnBackfiller struct {
 	evalCtx     *tree.EvalContext
 
 	fetcher row.Fetcher
-	alloc   rowenc.DatumAlloc
+	alloc   tree.DatumAlloc
 
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
@@ -450,7 +450,7 @@ type IndexBackfiller struct {
 
 	valNeededForCol util.FastIntSet
 
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
 	mon            *mon.BytesMonitor

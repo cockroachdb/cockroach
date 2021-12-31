@@ -191,7 +191,7 @@ func inputReader(
 	entries chan execinfrapb.RestoreSpanEntry,
 	metaCh chan *execinfrapb.ProducerMetadata,
 ) error {
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 
 	for {
 		// We read rows from the SplitAndScatter processor. We expect each row to

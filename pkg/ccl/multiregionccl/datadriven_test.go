@@ -707,7 +707,7 @@ func getRangeKeyForInput(
 	}
 
 	_, keyPrefix, err := rowenc.DecodePartitionTuple(
-		&rowenc.DatumAlloc{},
+		&tree.DatumAlloc{},
 		keys.SystemSQLCodec,
 		tableDesc,
 		primaryInd,

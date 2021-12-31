@@ -110,7 +110,7 @@ type joinReader struct {
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
 	// joinReader to wrap the fetcher with a stat collector when necessary.
 	fetcher            rowFetcher
-	alloc              rowenc.DatumAlloc
+	alloc              tree.DatumAlloc
 	rowAlloc           rowenc.EncDatumRowAlloc
 	shouldLimitBatches bool
 	readerType         joinReaderType

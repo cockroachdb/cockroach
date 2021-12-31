@@ -799,7 +799,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						if len(rows) != numNodes*numRows {
 							b.Errorf("got %d rows, expected %d", len(rows), numNodes*numRows)
 						}
-						var a rowenc.DatumAlloc
+						var a tree.DatumAlloc
 						for i := range rows {
 							if err := rows[i][0].EnsureDecoded(types.Int, &a); err != nil {
 								b.Fatal(err)
