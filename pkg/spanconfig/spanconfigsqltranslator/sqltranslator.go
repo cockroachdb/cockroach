@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -35,22 +36,27 @@ var _ spanconfig.SQLTranslator = &SQLTranslator{}
 
 // SQLTranslator is the concrete implementation of spanconfig.SQLTranslator.
 type SQLTranslator struct {
-	execCfg *sql.ExecutorConfig
-	codec   keys.SQLCodec
-	knobs   *spanconfig.TestingKnobs
+	execCfg       *sql.ExecutorConfig
+	codec         keys.SQLCodec
+	ptsSubscriber spanconfigprotectedts.ProtectedTimestampSubscriber
+	knobs         *spanconfig.TestingKnobs
 }
 
 // New constructs and returns a SQLTranslator.
 func New(
-	execCfg *sql.ExecutorConfig, codec keys.SQLCodec, knobs *spanconfig.TestingKnobs,
+	execCfg *sql.ExecutorConfig,
+	codec keys.SQLCodec,
+	ptsSubscriber spanconfigprotectedts.ProtectedTimestampSubscriber,
+	knobs *spanconfig.TestingKnobs,
 ) *SQLTranslator {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &SQLTranslator{
-		execCfg: execCfg,
-		codec:   codec,
-		knobs:   knobs,
+		ptsSubscriber: ptsSubscriber,
+		execCfg:       execCfg,
+		codec:         codec,
+		knobs:         knobs,
 	}
 }
 
@@ -227,6 +233,11 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	tableStartKey := s.codec.TablePrefix(uint32(desc.GetID()))
 	tableEndKey := tableStartKey.PrefixEnd()
 	tableSpanConfig := zone.AsSpanConfig()
+
+	// Check if there are any PTS records that must be written to tableSpanConfig.
+	records := s.ptsSubscriber.GetPTSRecordsForTableAsOf(desc.GetID(), desc.GetParentID(),
+		txn.CommitTimestamp())
+	tableSpanConfig.PTSRecords = records
 
 	entries := make([]roachpb.SpanConfigEntry, 0)
 	if desc.GetID() == keys.DescriptorTableID {

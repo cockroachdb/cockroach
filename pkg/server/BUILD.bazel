@@ -115,6 +115,7 @@ go_library(
         "//pkg/spanconfig/spanconfigkvaccessor",
         "//pkg/spanconfig/spanconfigkvsubscriber",
         "//pkg/spanconfig/spanconfigmanager",
+        "//pkg/spanconfig/spanconfigprotectedts",
         "//pkg/spanconfig/spanconfigreconciler",
         "//pkg/spanconfig/spanconfigsqltranslator",
         "//pkg/spanconfig/spanconfigsqlwatcher",

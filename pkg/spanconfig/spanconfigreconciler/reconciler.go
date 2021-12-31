@@ -15,8 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -303,6 +305,7 @@ func (f *fullReconciler) deleteExtraneousSpanConfigs(
 // incrementalReconciler is a single orchestrator for the incremental
 // reconciliation process.
 type incrementalReconciler struct {
+	ptsSubscriber       spanconfigprotectedts.ProtectedTimestampSubscriber
 	sqlTranslator       spanconfig.SQLTranslator
 	sqlWatcher          spanconfig.SQLWatcher
 	kvAccessor          spanconfig.KVAccessor
@@ -313,6 +316,19 @@ type incrementalReconciler struct {
 	knobs   *spanconfig.TestingKnobs
 }
 
+func (r *incrementalReconciler) onProtectedTimestampUpdate(
+	update spanconfigprotectedts.ProtectedTimestampUpdate,
+) {
+	switch update.Target.Union.(type) {
+	case *ptpb.Target_Cluster:
+		// Apply "special" cluster SpanConfig.
+	case *ptpb.Target_Tenants:
+		// Apply "special" tenant SpanConfig.
+	case *ptpb.Target_SchemaObjects:
+		// Translate all schema object IDs and apply the span configs.
+	}
+}
+
 // reconcile runs the incremental reconciliation process. It takes in:
 // - the timestamp to start the incremental process from (typically a timestamp
 //   we've already reconciled up until);
@@ -321,6 +337,7 @@ type incrementalReconciler struct {
 func (r *incrementalReconciler) reconcile(
 	ctx context.Context, startTS hlc.Timestamp, callback func(reconciledUpUntil hlc.Timestamp) error,
 ) error {
+	r.ptsSubscriber.Subscribe(r.onProtectedTimestampUpdate)
 	// Watch for incremental updates, applying KV as things change.
 	return r.sqlWatcher.WatchForSQLUpdates(ctx, startTS,
 		func(ctx context.Context, descriptorUpdates []spanconfig.DescriptorUpdate, checkpoint hlc.Timestamp) error {
