@@ -78,9 +78,8 @@ func GetUserSessionInitInfo(
 	exists bool,
 	canLogin bool,
 	isSuperuser bool,
-	validUntil *tree.DTimestamp,
 	defaultSettings []sessioninit.SettingsCacheEntry,
-	pwRetrieveFn func(ctx context.Context) (hashedPassword security.PasswordHash, err error),
+	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword security.PasswordHash, err error),
 	err error,
 ) {
 	// We may be operating with a timeout.
@@ -103,25 +102,32 @@ func GetUserSessionInitInfo(
 		// As explained above, for root we report that the user exists
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
-		rootFn := func(ctx context.Context) (security.PasswordHash, error) {
-			var ret security.PasswordHash
-			err := runFn(func(ctx context.Context) error {
+		rootFn := func(ctx context.Context) (expired bool, ret security.PasswordHash, err error) {
+			var validUntil *tree.DTimestamp
+			err = runFn(func(ctx context.Context) error {
 				authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, ie, username, databaseName)
 				if err != nil {
 					return err
 				}
+				validUntil = authInfo.ValidUntil
 				ret = authInfo.HashedPassword
 				return nil
 			})
+			if validUntil != nil {
+				if validUntil.Time.Sub(timeutil.Now()) < 0 {
+					expired = true
+					ret = nil
+				}
+			}
 			if ret == nil {
 				ret = security.MissingPasswordHash
 			}
-			return ret, err
+			return expired, ret, err
 		}
 
 		// Root user cannot have password expiry and must have login.
 		// It also never has default settings applied to it.
-		return true, true, true, nil, nil, rootFn, nil
+		return true, true, true, nil, rootFn, nil
 	}
 
 	var authInfo sessioninit.AuthInfo
@@ -166,14 +172,23 @@ func GetUserSessionInitInfo(
 	return authInfo.UserExists,
 		authInfo.CanLogin,
 		isSuperuser,
-		authInfo.ValidUntil,
 		settingsEntries,
-		func(ctx context.Context) (security.PasswordHash, error) {
-			ret := authInfo.HashedPassword
+		func(ctx context.Context) (expired bool, ret security.PasswordHash, err error) {
+			ret = authInfo.HashedPassword
+			if authInfo.ValidUntil != nil {
+				// NB: we compute the expiration as late as possible,
+				// to ensure that we determine the expiration relative
+				// to the time at which the client presents the password
+				// to the server (and not earlier).
+				if authInfo.ValidUntil.Time.Sub(timeutil.Now()) < 0 {
+					expired = true
+					ret = nil
+				}
+			}
 			if ret == nil {
 				ret = security.MissingPasswordHash
 			}
-			return ret, nil
+			return expired, ret, nil
 		},
 		err
 }
