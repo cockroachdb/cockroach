@@ -158,6 +158,72 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	}
 }
 
+func TestCastMapIncludesValidCasts(t *testing.T) {
+	// familyToType returns the first type found of the given family.
+	familyToTypes := func(f types.Family) []*types.T {
+		var typs []*types.T
+		for _, typ := range types.OidToType {
+			if f == typ.Family() {
+				typs = append(typs, typ)
+			}
+		}
+		return typs
+	}
+
+	// findCast returns the first cast found from a type in srcTypes to a type
+	// in tgtTypes.
+	findCast := func(srcTypes, tgtTypes []*types.T) (_ cast, ok bool) {
+		for _, src := range srcTypes {
+			for _, tgt := range tgtTypes {
+				cast, ok := lookupCast(
+					src,
+					tgt,
+					false, /* intervalStyleEnabled */
+					false, /* dateStyleEnabled */
+				)
+				if ok {
+					return cast, true
+				}
+			}
+		}
+		return cast{}, false
+	}
+
+	// Validate that there is at least one cast in castMap for each cast in
+	// validCasts.
+	for _, c := range validCasts {
+		srcTypes := familyToTypes(c.from)
+		if len(srcTypes) == 0 {
+			continue
+			// t.Errorf("could not find type for family %s", c.from.Name())
+			// continue
+		}
+
+		tgtTypes := familyToTypes(c.to)
+		if len(tgtTypes) == 0 {
+			continue
+			// t.Errorf("could not find type for family %s", c.to.Name())
+			// continue
+		}
+
+		cast, ok := findCast(srcTypes, tgtTypes)
+		if !ok {
+			t.Errorf(
+				"castMap should include at least one cast from family %s to family %s",
+				c.from.Name(), c.to.Name(),
+			)
+			continue
+		}
+		if cast.volatility != c.volatility {
+			t.Errorf(
+				"expected cast from family %s to %s to have volatility %s, found %s",
+				c.from.Name(), c.to.Name(),
+				c.volatility.String(), cast.volatility.String(),
+			)
+		}
+	}
+}
+
 // TestCastsFromUnknown verifies that there is a cast from Unknown defined for
 // all type families.
 func TestCastsFromUnknown(t *testing.T) {
