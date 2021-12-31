@@ -447,8 +447,9 @@ func assignSequenceOptions(
 	sequenceID descpb.ID,
 	sequenceParentID descpb.ID,
 	existingType *types.T,
-) error {
+) (hasStart bool, err error) {
 
+	hasStart = false
 	wasAscending := opts.Increment > 0
 
 	// Set the default integer type of a sequence.
@@ -465,7 +466,7 @@ func assignSequenceOptions(
 		}
 	}
 	if opts.Increment == 0 {
-		return pgerror.New(
+		return hasStart, pgerror.New(
 			pgcode.InvalidParameterValue, "INCREMENT must not be zero")
 	}
 	isAscending := opts.Increment > 0
@@ -487,7 +488,7 @@ func assignSequenceOptions(
 
 	lowerIntBound, upperIntBound, err := getSequenceIntegerBounds(integerType)
 	if err != nil {
-		return err
+		return hasStart, err
 	}
 
 	// Set default MINVALUE and MAXVALUE if AS option value for integer type is specified.
@@ -498,7 +499,7 @@ func assignSequenceOptions(
 		if !setDefaults && existingType != nil {
 			existingLowerIntBound, existingUpperIntBound, err := getSequenceIntegerBounds(existingType)
 			if err != nil {
-				return err
+				return hasStart, err
 			}
 			if (wasAscending && opts.MinValue == 1) || (!wasAscending && opts.MinValue == existingLowerIntBound) {
 				setMinValue = true
@@ -515,7 +516,7 @@ func assignSequenceOptions(
 			setMinValue,
 			setMaxValue,
 		); err != nil {
-			return err
+			return hasStart, err
 		}
 	}
 
@@ -525,13 +526,13 @@ func assignSequenceOptions(
 		// Error on duplicate options.
 		_, seenBefore := optionsSeen[option.Name]
 		if seenBefore {
-			return pgerror.New(pgcode.Syntax, "conflicting or redundant options")
+			return hasStart, pgerror.New(pgcode.Syntax, "conflicting or redundant options")
 		}
 		optionsSeen[option.Name] = true
 
 		switch option.Name {
 		case tree.SeqOptCycle:
-			return unimplemented.NewWithIssue(20961,
+			return hasStart, unimplemented.NewWithIssue(20961,
 				"CYCLE option is not supported")
 		case tree.SeqOptNoCycle:
 			// Do nothing; this is the default.
@@ -539,7 +540,7 @@ func assignSequenceOptions(
 			if v := *option.IntVal; v >= 1 {
 				opts.CacheSize = v
 			} else {
-				return pgerror.Newf(pgcode.InvalidParameterValue,
+				return hasStart, pgerror.Newf(pgcode.InvalidParameterValue,
 					"CACHE (%d) must be greater than zero", v)
 			}
 		case tree.SeqOptIncrement:
@@ -556,17 +557,18 @@ func assignSequenceOptions(
 			}
 		case tree.SeqOptStart:
 			opts.Start = *option.IntVal
+			hasStart = true
 		case tree.SeqOptVirtual:
 			opts.Virtual = true
 		case tree.SeqOptOwnedBy:
 			if params == nil {
-				return pgerror.Newf(pgcode.Internal,
+				return hasStart, pgerror.Newf(pgcode.Internal,
 					"Trying to add/remove Sequence Owner without access to context")
 			}
 			// The owner is being removed
 			if option.ColumnItemVal == nil {
 				if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
-					return err
+					return hasStart, err
 				}
 			} else {
 				// The owner is being added/modified
@@ -574,11 +576,11 @@ func assignSequenceOptions(
 					params.ctx, params.p, option.ColumnItemVal,
 				)
 				if err != nil {
-					return err
+					return hasStart, err
 				}
 				if tableDesc.ParentID != sequenceParentID &&
 					!allowCrossDatabaseSeqOwner.Get(&params.p.execCfg.Settings.SV) {
-					return errors.WithHintf(
+					return hasStart, errors.WithHintf(
 						pgerror.Newf(pgcode.FeatureNotSupported,
 							"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
 							allowCrossDatabaseSeqOwnerSetting),
@@ -590,11 +592,11 @@ func assignSequenceOptions(
 				if opts.SequenceOwner.OwnerTableID != tableDesc.ID ||
 					opts.SequenceOwner.OwnerColumnID != col.GetID() {
 					if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
-						return err
+						return hasStart, err
 					}
 					err := addSequenceOwner(params.ctx, params.p, option.ColumnItemVal, sequenceID, opts)
 					if err != nil {
-						return err
+						return hasStart, err
 					}
 				}
 			}
@@ -616,7 +618,7 @@ func assignSequenceOptions(
 	}
 
 	if opts.MinValue < lowerIntBound {
-		return pgerror.Newf(
+		return hasStart, pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"MINVALUE (%d) must be greater than (%d) for type %s",
 			opts.MinValue,
@@ -625,7 +627,7 @@ func assignSequenceOptions(
 		)
 	}
 	if opts.MaxValue < lowerIntBound {
-		return pgerror.Newf(
+		return hasStart, pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"MAXVALUE (%d) must be greater than (%d) for type %s",
 			opts.MaxValue,
@@ -634,7 +636,7 @@ func assignSequenceOptions(
 		)
 	}
 	if opts.MinValue > upperIntBound {
-		return pgerror.Newf(
+		return hasStart, pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"MINVALUE (%d) must be less than (%d) for type %s",
 			opts.MinValue,
@@ -643,7 +645,7 @@ func assignSequenceOptions(
 		)
 	}
 	if opts.MaxValue > upperIntBound {
-		return pgerror.Newf(
+		return hasStart, pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"MAXVALUE (%d) must be less than (%d) for type %s",
 			opts.MaxValue,
@@ -652,7 +654,7 @@ func assignSequenceOptions(
 		)
 	}
 	if opts.Start > opts.MaxValue {
-		return pgerror.Newf(
+		return hasStart, pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"START value (%d) cannot be greater than MAXVALUE (%d)",
 			opts.Start,
@@ -660,7 +662,7 @@ func assignSequenceOptions(
 		)
 	}
 	if opts.Start < opts.MinValue {
-		return pgerror.Newf(
+		return hasStart, pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"START value (%d) cannot be less than MINVALUE (%d)",
 			opts.Start,
@@ -668,7 +670,7 @@ func assignSequenceOptions(
 		)
 	}
 
-	return nil
+	return hasStart, nil
 }
 
 func removeSequenceOwnerIfExists(
