@@ -347,11 +347,11 @@ func makeThresholdBlocker(threshold int) thresholdBlocker {
 
 // getSpansFromManifest returns the spans that describe the data included in a
 // given backup.
-func getSpansFromManifest(t *testing.T, backupPath string) roachpb.Spans {
+func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) roachpb.Spans {
 	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupManifestName)
 	require.NoError(t, err)
 	var backupManifest BackupManifest
-	decompressedBytes, err := decompressData(backupManifestBytes)
+	decompressedBytes, err := decompressData(ctx, nil, backupManifestBytes)
 	require.NoError(t, err)
 	require.NoError(t, protoutil.Unmarshal(decompressedBytes, &backupManifest))
 	spans := make([]roachpb.Span, 0, len(backupManifest.Files))
