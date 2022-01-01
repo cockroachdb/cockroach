@@ -34,7 +34,7 @@ type DatumAlloc struct {
 	dstringAlloc      []tree.DString
 	dbytesAlloc       []tree.DBytes
 	dbitArrayAlloc    []tree.DBitArray
-	ddecimalAlloc     []tree.DDecimal
+	ddecimalAlloc     []tree.DDecimalAlloc
 	ddateAlloc        []tree.DDate
 	denumAlloc        []tree.DEnum
 	dbox2dAlloc       []tree.DBox2D
@@ -170,10 +170,10 @@ func (a *DatumAlloc) NewDDecimal(v tree.DDecimal) *tree.DDecimal {
 	}
 	buf := &a.ddecimalAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DDecimal, a.AllocSize)
+		*buf = make([]tree.DDecimalAlloc, a.AllocSize)
 	}
-	r := &(*buf)[0]
-	*r = v
+	r := (*buf)[0].Get()
+	r.Set(&v.Decimal)
 	*buf = (*buf)[1:]
 	return r
 }

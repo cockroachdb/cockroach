@@ -1554,7 +1554,7 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 		case bitarray.BitArray:
 			d = &tree.DBitArray{BitArray: t}
 		case *apd.Decimal:
-			dd := &tree.DDecimal{}
+			dd := tree.NewDDecimal()
 			dd.Set(t)
 			d = dd
 		case security.SQLUsername:

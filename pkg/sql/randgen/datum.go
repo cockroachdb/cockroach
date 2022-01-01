@@ -116,7 +116,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		}
 		return tree.NewDGeometry(geogen.RandomGeometry(rng, gm.SRID))
 	case types.DecimalFamily:
-		d := &tree.DDecimal{}
+		d := tree.NewDDecimal()
 		// int64(rng.Uint64()) to get negative numbers, too
 		d.Decimal.SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
 		return d

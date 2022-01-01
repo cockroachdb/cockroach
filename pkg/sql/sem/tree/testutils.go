@@ -49,7 +49,7 @@ func SampleDatum(t *types.T) Datum {
 		f := DFloat(123.456)
 		return &f
 	case types.DecimalFamily:
-		d := &DDecimal{}
+		d := NewDDecimal()
 		// int64(rng.Uint64()) to get negative numbers, too
 		d.Decimal.SetFinite(3, 6)
 		return d

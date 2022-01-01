@@ -2577,7 +2577,7 @@ func (a *intSumAggregate) Result() (tree.Datum, error) {
 	if !a.seenNonNull {
 		return tree.DNull, nil
 	}
-	dd := &tree.DDecimal{}
+	dd := tree.NewDDecimal()
 	if a.large {
 		dd.Set(&a.decSum)
 	} else {
@@ -2644,7 +2644,7 @@ func (a *decimalSumAggregate) Result() (tree.Datum, error) {
 	if !a.sawNonNull {
 		return tree.DNull, nil
 	}
-	dd := &tree.DDecimal{}
+	dd := tree.NewDDecimal()
 	dd.Set(&a.sum)
 	return dd, nil
 }
@@ -2947,7 +2947,7 @@ func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-	dd := &tree.DDecimal{}
+	dd := tree.NewDDecimal()
 	dd.Set(&a.sqrDiff)
 	// Remove trailing zeros. Depending on the order in which the input
 	// is processed, some number of trailing zeros could be added to the
@@ -3267,7 +3267,7 @@ func (a *decimalVarianceAggregate) Result() (tree.Datum, error) {
 	if _, err = tree.IntermediateCtx.Sub(a.agg.Tmp(), a.agg.Count(), decimalOne); err != nil {
 		return nil, err
 	}
-	dd := &tree.DDecimal{}
+	dd := tree.NewDDecimal()
 	if _, err = tree.DecimalCtx.Quo(&dd.Decimal, &sqrDiff.(*tree.DDecimal).Decimal, a.agg.Tmp()); err != nil {
 		return nil, err
 	}
@@ -3382,7 +3382,7 @@ func (a *decimalVarPopAggregate) Result() (tree.Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	dd := &tree.DDecimal{}
+	dd := tree.NewDDecimal()
 	if _, err = tree.DecimalCtx.Quo(&dd.Decimal, &sqrDiff.(*tree.DDecimal).Decimal, a.agg.Count()); err != nil {
 		return nil, err
 	}

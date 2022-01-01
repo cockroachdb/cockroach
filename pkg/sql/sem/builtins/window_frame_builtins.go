@@ -246,9 +246,9 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 		case *tree.DInt:
 			err = w.agg.Add(ctx, tree.NewDInt(-*v))
 		case *tree.DDecimal:
-			d := tree.DDecimal{}
+			d := tree.NewDDecimal()
 			d.Neg(&v.Decimal)
-			err = w.agg.Add(ctx, &d)
+			err = w.agg.Add(ctx, d)
 		case *tree.DFloat:
 			err = w.agg.Add(ctx, tree.NewDFloat(-*v))
 		case *tree.DInterval:
@@ -405,7 +405,7 @@ func (w *avgWindowFunc) Compute(
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &t.Decimal, count)
 		return &avg, err
 	case *tree.DInt:
-		dd := tree.DDecimal{}
+		dd := tree.NewDDecimal()
 		dd.SetInt64(int64(*t))
 		var avg tree.DDecimal
 		count := apd.New(int64(frameSize), 0)

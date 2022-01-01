@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -73,8 +72,9 @@ func makeDatumFromColOffset(
 			case types.IntFamily:
 				return alloc.NewDInt(tree.DInt(col.Int64()[rowIdx])), nil
 			case types.DecimalFamily:
-				d := *apd.New(col.Int64()[rowIdx], 0)
-				return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
+				d := alloc.NewDDecimal(tree.DDecimal{})
+				d.SetInt64(col.Int64()[rowIdx])
+				return d, nil
 			case types.DateFamily:
 				date, err := pgdate.MakeDateFromUnixEpoch(col.Int64()[rowIdx])
 				if err != nil {
@@ -93,11 +93,11 @@ func makeDatumFromColOffset(
 		case types.FloatFamily:
 			return alloc.NewDFloat(tree.DFloat(col.Float64()[rowIdx])), nil
 		case types.DecimalFamily:
-			var d apd.Decimal
+			d := alloc.NewDDecimal(tree.DDecimal{})
 			if _, err := d.SetFloat64(col.Float64()[rowIdx]); err != nil {
 				return nil, err
 			}
-			return alloc.NewDDecimal(tree.DDecimal{Decimal: d}), nil
+			return d, nil
 		}
 	case types.BytesFamily:
 		switch hint.Family() {

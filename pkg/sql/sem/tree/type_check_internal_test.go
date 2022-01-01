@@ -127,7 +127,7 @@ func dint(i tree.DInt) copyableExpr {
 }
 func ddecimal(f float64) copyableExpr {
 	return func() tree.Expr {
-		dd := &tree.DDecimal{}
+		dd := tree.NewDDecimal()
 		if _, err := dd.SetFloat64(f); err != nil {
 			panic(err)
 		}

@@ -53,7 +53,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			return tree.NewDFloat(tree.DFloat(math.Abs(x))), nil
 		}, "Calculates the absolute value of `val`.", tree.VolatilityImmutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			dd := &tree.DDecimal{}
+			dd := tree.NewDDecimal()
 			dd.Abs(x)
 			return dd, nil
 		}, "Calculates the absolute value of `val`.", tree.VolatilityImmutable),
@@ -197,7 +197,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			if y.Sign() == 0 {
 				return nil, tree.ErrDivByZero
 			}
-			dd := &tree.DDecimal{}
+			dd := tree.NewDDecimal()
 			_, err := tree.HighPrecisionCtx.QuoInteger(&dd.Decimal, x, y)
 			return dd, err
 		}, "Calculates the integer quotient of `x`/`y`.", tree.VolatilityImmutable),
@@ -222,7 +222,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			return tree.NewDFloat(tree.DFloat(math.Exp(x))), nil
 		}, "Calculates *e* ^ `val`.", tree.VolatilityImmutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			dd := &tree.DDecimal{}
+			dd := tree.NewDDecimal()
 			_, err := tree.DecimalCtx.Exp(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates *e* ^ `val`.", tree.VolatilityImmutable),
@@ -233,7 +233,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			return tree.NewDFloat(tree.DFloat(math.Floor(x))), nil
 		}, "Calculates the largest integer not greater than `val`.", tree.VolatilityImmutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			dd := &tree.DDecimal{}
+			dd := tree.NewDDecimal()
 			_, err := tree.ExactCtx.Floor(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates the largest integer not greater than `val`.", tree.VolatilityImmutable),
@@ -322,7 +322,7 @@ var mathBuiltins = map[string]builtinDefinition{
 				return nil, err
 			}
 
-			dd := &tree.DDecimal{}
+			dd := tree.NewDDecimal()
 			_, err := tree.DecimalCtx.Quo(&dd.Decimal, top, bot)
 			return dd, err
 		}, "Calculates the base `b` log of `val`.", tree.VolatilityImmutable),
@@ -336,7 +336,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			if y.Sign() == 0 {
 				return nil, tree.ErrDivByZero
 			}
-			dd := &tree.DDecimal{}
+			dd := tree.NewDDecimal()
 			_, err := tree.HighPrecisionCtx.Rem(&dd.Decimal, x, y)
 			return dd, err
 		}, "Calculates `x`%`y`.", tree.VolatilityImmutable),
@@ -462,7 +462,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative.", tree.VolatilityImmutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			d := &tree.DDecimal{}
+			d := tree.NewDDecimal()
 			d.Decimal.SetInt64(int64(x.Sign()))
 			return d, nil
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
@@ -518,7 +518,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			return tree.NewDFloat(tree.DFloat(math.Trunc(x))), nil
 		}, "Truncates the decimal values of `val`.", tree.VolatilityImmutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			dd := &tree.DDecimal{}
+			dd := tree.NewDDecimal()
 			x.Modf(&dd.Decimal, nil)
 			return dd, nil
 		}, "Truncates the decimal values of `val`.", tree.VolatilityImmutable),
@@ -593,7 +593,7 @@ var ceilImpl = makeBuiltin(defProps(),
 		return tree.NewDFloat(tree.DFloat(math.Ceil(x))), nil
 	}, "Calculates the smallest integer not smaller than `val`.", tree.VolatilityImmutable),
 	decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-		dd := &tree.DDecimal{}
+		dd := tree.NewDDecimal()
 		_, err := tree.ExactCtx.Ceil(&dd.Decimal, x)
 		if dd.IsZero() {
 			dd.Negative = false
@@ -616,7 +616,7 @@ var powImpls = makeBuiltin(defProps(),
 		return tree.NewDFloat(tree.DFloat(math.Pow(x, y))), nil
 	}, "Calculates `x`^`y`.", tree.VolatilityImmutable),
 	decimalOverload2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
-		dd := &tree.DDecimal{}
+		dd := tree.NewDDecimal()
 		_, err := tree.DecimalCtx.Pow(&dd.Decimal, x, y)
 		return dd, err
 	}, "Calculates `x`^`y`.", tree.VolatilityImmutable),
@@ -646,7 +646,7 @@ func decimalLogFn(
 		case 0:
 			return nil, errLogOfZero
 		}
-		dd := &tree.DDecimal{}
+		dd := tree.NewDDecimal()
 		_, err := logFn(&dd.Decimal, x)
 		return dd, err
 	}, info, tree.VolatilityImmutable)
@@ -730,7 +730,7 @@ func roundDDecimal(d *tree.DDecimal, scale int32) (tree.Datum, error) {
 }
 
 func roundDecimal(x *apd.Decimal, scale int32) (tree.Datum, error) {
-	dd := &tree.DDecimal{}
+	dd := tree.NewDDecimal()
 	_, err := tree.HighPrecisionCtx.Quantize(&dd.Decimal, x, -scale)
 	return dd, err
 }

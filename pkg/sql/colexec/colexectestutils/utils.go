@@ -1401,8 +1401,15 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
 			}
 			// Special case for decimals.
 			if d1, ok := actual[i].(apd.Decimal); ok {
-				if f2, ok := expected[i].(float64); ok {
-					d2, _, err := apd.NewFromString(fmt.Sprintf("%f", f2))
+				switch t := expected[i].(type) {
+				case apd.Decimal:
+					if d1.Cmp(&t) == 0 {
+						continue
+					} else {
+						return false
+					}
+				case float64:
+					d2, _, err := apd.NewFromString(fmt.Sprintf("%f", t))
 					if err == nil && d1.Cmp(d2) == 0 {
 						continue
 					} else {

@@ -499,7 +499,7 @@ func makeDecimalTestDatum(count int) []tree.Datum {
 
 	vals := make([]tree.Datum, count)
 	for i := range vals {
-		dd := &tree.DDecimal{}
+		dd := tree.NewDDecimal()
 		if _, err := dd.SetFloat64(rng.Float64()); err != nil {
 			panic(err)
 		}

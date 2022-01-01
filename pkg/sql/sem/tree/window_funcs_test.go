@@ -73,9 +73,9 @@ func testStartPreceding(
 		case types.FloatFamily:
 			typedOffset = NewDFloat(DFloat(offset))
 		case types.DecimalFamily:
-			decimal := apd.Decimal{}
+			decimal := NewDDecimal()
 			decimal.SetInt64(int64(offset))
-			typedOffset = &DDecimal{Decimal: decimal}
+			typedOffset = decimal
 		default:
 			t.Fatal("unsupported offset type")
 		}
@@ -123,9 +123,9 @@ func testStartFollowing(
 		case types.FloatFamily:
 			typedOffset = NewDFloat(DFloat(offset))
 		case types.DecimalFamily:
-			decimal := apd.Decimal{}
+			decimal := NewDDecimal()
 			decimal.SetInt64(int64(offset))
-			typedOffset = &DDecimal{Decimal: decimal}
+			typedOffset = decimal
 		default:
 			t.Fatal("unsupported offset type")
 		}
@@ -182,9 +182,9 @@ func testEndPreceding(
 		case types.FloatFamily:
 			typedOffset = NewDFloat(DFloat(offset))
 		case types.DecimalFamily:
-			decimal := apd.Decimal{}
+			decimal := NewDDecimal()
 			decimal.SetInt64(int64(offset))
-			typedOffset = &DDecimal{Decimal: decimal}
+			typedOffset = decimal
 		default:
 			t.Fatal("unsupported offset type")
 		}
@@ -232,9 +232,9 @@ func testEndFollowing(
 		case types.FloatFamily:
 			typedOffset = NewDFloat(DFloat(offset))
 		case types.DecimalFamily:
-			decimal := apd.Decimal{}
+			decimal := NewDDecimal()
 			decimal.SetInt64(int64(offset))
-			typedOffset = &DDecimal{Decimal: decimal}
+			typedOffset = decimal
 		default:
 			t.Fatal("unsupported offset type")
 		}
@@ -296,7 +296,7 @@ func makeFloatSortedPartition(count int) indexedRows {
 func makeDecimalSortedPartition(t *testing.T, count int) indexedRows {
 	partition := indexedRows{rows: make([]indexedRow, count)}
 	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	number := &DDecimal{}
+	number := NewDDecimal()
 	for idx := 0; idx < count; idx++ {
 		tmp := apd.Decimal{}
 		if r.Float64() < probabilityOfNewNumber {
@@ -309,7 +309,7 @@ func makeDecimalSortedPartition(t *testing.T, count int) indexedRows {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		}
-		value := &DDecimal{}
+		value := NewDDecimal()
 		_, err := tmp.SetFloat64(0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

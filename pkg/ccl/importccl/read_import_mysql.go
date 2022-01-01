@@ -264,7 +264,7 @@ func mysqlValueToDatum(
 				return tree.NewDFloat(-*i), nil
 			case *tree.DDecimal:
 				dec := &i.Decimal
-				dd := &tree.DDecimal{}
+				dd := tree.NewDDecimal()
 				dd.Decimal.Neg(dec)
 				return dd, nil
 			default:

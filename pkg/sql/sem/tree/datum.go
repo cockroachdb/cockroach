@@ -996,6 +996,35 @@ type DDecimal struct {
 	apd.Decimal
 }
 
+// DDecimalAlloc attempts to minimize heap allocations when using a DDecimal.
+// Each Decimal maintains (through an embedded big.Int) an internal reference
+// to a variable-length coefficient, which is represented by a []big.Word. To
+// minimize the number of individual heap allocations, we allocate a small
+// []big.Word alongside the DDecimal and wire the two up. big.Int will avoid
+// re-allocating unless its coefficient exceeds the initial capacity. We set
+// this capacity to accommodate any coefficient that would fit in a 64-bit
+// integer.
+type DDecimalAlloc struct {
+	d DDecimal
+	w [unsafe.Sizeof(uint64(0)) / unsafe.Sizeof(big.Word(0))]big.Word
+}
+
+// Get returns the allocated DDecimal.
+func (d *DDecimalAlloc) Get() *DDecimal {
+	if d.d.Coeff.Bits() == nil {
+		d.d.Coeff.SetBits(d.w[:])
+	}
+	return &d.d
+}
+
+// NewDDecimal is a helper routine to create a *DDecimal. The function attempts
+// to allocate the Decimal and its internal, variable-length references in a
+// single heap allocation.
+func NewDDecimal() *DDecimal {
+	a := new(DDecimalAlloc)
+	return a.Get()
+}
+
 // MustBeDDecimal attempts to retrieve a DDecimal from an Expr, panicking if the
 // assertion fails.
 func MustBeDDecimal(e Expr) DDecimal {
@@ -1009,7 +1038,7 @@ func MustBeDDecimal(e Expr) DDecimal {
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDDecimal(s string) (*DDecimal, error) {
-	dd := &DDecimal{}
+	dd := NewDDecimal()
 	err := dd.SetString(s)
 	return dd, err
 }

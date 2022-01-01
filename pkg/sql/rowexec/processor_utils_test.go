@@ -60,7 +60,7 @@ func toEncDatum(datumType *types.T, v interface{}) rowenc.EncDatum {
 		switch concreteType := v.(type) {
 		case int:
 			if datumType.Family() == types.DecimalFamily {
-				dd := &tree.DDecimal{}
+				dd := tree.NewDDecimal()
 				dd.SetInt64(int64(v.(int)))
 				return dd
 			}
