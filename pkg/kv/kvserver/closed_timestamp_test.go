@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -393,7 +393,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	}
 	// Split the table at key 2.
 	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err := rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
+	k, err := keyside.Encode(idxPrefix, tree.NewDInt(2), encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode key: %+v", err)
 	}
@@ -974,7 +974,7 @@ func getEncodedKeyForTable(
 		t.Fatalf("failed to lookup ids: %+v", err)
 	}
 	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err := rowenc.EncodeTableKey(idxPrefix, val, encoding.Ascending)
+	k, err := keyside.Encode(idxPrefix, val, encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode split key: %+v", err)
 	}

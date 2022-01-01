@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/physicalplan",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowinfra",
         "//pkg/sql/scrub",
         "//pkg/sql/sem/tree",

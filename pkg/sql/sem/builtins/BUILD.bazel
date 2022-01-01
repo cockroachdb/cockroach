@@ -59,6 +59,7 @@ go_library(
         "//pkg/sql/protoreflect",
         "//pkg/sql/roleoption",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",

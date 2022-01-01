@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -735,7 +736,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 		for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
 			var err error
 			// Slice off an extra encoded column from rf.keyRemainingBytes.
-			rf.keyRemainingBytes, err = rowenc.SkipTableKey(rf.keyRemainingBytes)
+			rf.keyRemainingBytes, err = keyside.Skip(rf.keyRemainingBytes)
 			if err != nil {
 				return false, err
 			}

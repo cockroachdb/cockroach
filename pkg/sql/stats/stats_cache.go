@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -583,7 +584,7 @@ func (sc *TableStatisticsCache) parseStats(
 		var a tree.DatumAlloc
 		for i := offset; i < len(res.Histogram); i++ {
 			bucket := &res.HistogramData.Buckets[i-offset]
-			datum, _, err := rowenc.DecodeTableKey(&a, res.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
+			datum, _, err := keyside.Decode(&a, res.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
 			if err != nil {
 				return nil, err
 			}

@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -24,7 +24,7 @@ import (
 // Workaround for bazel auto-generated code. goimports does not automatically
 // pick up the right packages when run within the bazel sandbox.
 var (
-	_ = rowenc.EncodeTableKey
+	_ = keyside.Encode
 	_ tree.Datum
 )
 
@@ -963,7 +963,7 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 					val := col.Get(i)
 
 					var err error
-					op.scratch, err = rowenc.EncodeTableKey(op.scratch, val.(tree.Datum), encoding.Ascending)
+					op.scratch, err = keyside.Encode(op.scratch, val.(tree.Datum), encoding.Ascending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -978,7 +978,7 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 					val := col.Get(i)
 
 					var err error
-					op.scratch, err = rowenc.EncodeTableKey(op.scratch, val.(tree.Datum), encoding.Ascending)
+					op.scratch, err = keyside.Encode(op.scratch, val.(tree.Datum), encoding.Ascending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -1001,7 +1001,7 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 					val := col.Get(i)
 
 					var err error
-					op.scratch, err = rowenc.EncodeTableKey(op.scratch, val.(tree.Datum), encoding.Ascending)
+					op.scratch, err = keyside.Encode(op.scratch, val.(tree.Datum), encoding.Ascending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -1016,7 +1016,7 @@ func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *
 					val := col.Get(i)
 
 					var err error
-					op.scratch, err = rowenc.EncodeTableKey(op.scratch, val.(tree.Datum), encoding.Ascending)
+					op.scratch, err = keyside.Encode(op.scratch, val.(tree.Datum), encoding.Ascending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -1815,7 +1815,7 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 					val := col.Get(i)
 
 					var err error
-					op.scratch, err = rowenc.EncodeTableKey(op.scratch, val.(tree.Datum), encoding.Descending)
+					op.scratch, err = keyside.Encode(op.scratch, val.(tree.Datum), encoding.Descending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -1830,7 +1830,7 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 					val := col.Get(i)
 
 					var err error
-					op.scratch, err = rowenc.EncodeTableKey(op.scratch, val.(tree.Datum), encoding.Descending)
+					op.scratch, err = keyside.Encode(op.scratch, val.(tree.Datum), encoding.Descending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -1853,7 +1853,7 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 					val := col.Get(i)
 
 					var err error
-					op.scratch, err = rowenc.EncodeTableKey(op.scratch, val.(tree.Datum), encoding.Descending)
+					op.scratch, err = keyside.Encode(op.scratch, val.(tree.Datum), encoding.Descending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -1868,7 +1868,7 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 					val := col.Get(i)
 
 					var err error
-					op.scratch, err = rowenc.EncodeTableKey(op.scratch, val.(tree.Datum), encoding.Descending)
+					op.scratch, err = keyside.Encode(op.scratch, val.(tree.Datum), encoding.Descending)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}

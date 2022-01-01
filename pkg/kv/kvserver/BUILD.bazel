@@ -356,7 +356,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",

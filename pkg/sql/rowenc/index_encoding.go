@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -711,7 +712,7 @@ func encodeArrayInvertedIndexTableKeys(
 		}
 		outKey := make([]byte, len(inKey))
 		copy(outKey, inKey)
-		newKey, err := EncodeTableKey(outKey, d, encoding.Ascending)
+		newKey, err := keyside.Encode(outKey, d, encoding.Ascending)
 		if err != nil {
 			return nil, err
 		}
@@ -1321,7 +1322,7 @@ func EncodeColumns(
 			return nil, colIDWithNullVal, err
 		}
 
-		if key, err = EncodeTableKey(key, val, dir); err != nil {
+		if key, err = keyside.Encode(key, val, dir); err != nil {
 			return nil, colIDWithNullVal, err
 		}
 	}
