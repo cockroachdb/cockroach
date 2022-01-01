@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -1762,7 +1761,7 @@ func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) 
 func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
 	var encoded, scratch []byte
 	encoded, err := valueside.Encode(
-		encoded, descpb.NoColumnID, offset, scratch)
+		encoded, valueside.NoColumnID, offset, scratch)
 	require.NoError(t, err)
 	return encoded
 }

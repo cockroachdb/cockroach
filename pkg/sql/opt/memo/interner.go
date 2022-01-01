@@ -18,7 +18,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -1213,7 +1212,7 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 		}
 	}
 
-	b, err = valueside.Encode(b, descpb.NoColumnID, val, nil /* scratch */)
+	b, err = valueside.Encode(b, valueside.NoColumnID, val, nil /* scratch */)
 	if err != nil {
 		panic(err)
 	}

@@ -34,7 +34,6 @@ go_test(
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",

@@ -13,7 +13,6 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/typeconv",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",

@@ -43,7 +43,6 @@ go_test(
         "//pkg/col/coldatatestutils",
         "//pkg/col/typeconv",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/memsize",

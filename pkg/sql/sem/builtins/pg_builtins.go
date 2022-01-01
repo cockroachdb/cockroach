@@ -2164,7 +2164,7 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				var totalSize int
 				for _, arg := range args {
-					encodeTableValue, err := valueside.Encode(nil, descpb.NoColumnID, arg, nil)
+					encodeTableValue, err := valueside.Encode(nil, valueside.NoColumnID, arg, nil)
 					if err != nil {
 						return tree.DNull, err
 					}

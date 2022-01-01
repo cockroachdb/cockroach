@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -107,8 +106,7 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 	} {
 		t.Run(d.String(), func(t *testing.T) {
 			var b []byte
-			colID := descpb.ColumnID(1)
-			encoded, err := valueside.Encode(b, colID, d, []byte{})
+			encoded, err := valueside.Encode(b, 1 /* colID */, d, []byte{})
 			require.NoError(t, err)
 			a := &tree.DatumAlloc{}
 			decoded, _, err := valueside.Decode(a, d.ResolvedType(), encoded)
@@ -123,7 +121,7 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 func TestDecodeTupleValueWithType(t *testing.T) {
 	tupleType := types.MakeLabeledTuple([]*types.T{types.Int, types.String}, []string{"a", "b"})
 	datum := tree.NewDTuple(tupleType, tree.NewDInt(tree.DInt(1)), tree.NewDString("foo"))
-	buf, err := valueside.Encode(nil, descpb.NoColumnID, datum, nil)
+	buf, err := valueside.Encode(nil, valueside.NoColumnID, datum, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
