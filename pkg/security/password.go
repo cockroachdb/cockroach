@@ -190,6 +190,16 @@ func (s *scramHash) Size() int {
 	return int(unsafe.Sizeof(*s)) + len(s.bytes) + len(s.decoded.Salt) + len(s.decoded.StoredKey) + len(s.decoded.ServerKey)
 }
 
+// GetSCRAMStoredCredentials retrieves the SCRAM credential parts.
+// The caller is responsible for ensuring the hash has method SCRAM-SHA-256.
+func GetSCRAMStoredCredentials(hash PasswordHash) (ok bool, creds scram.StoredCredentials) {
+	h, ok := hash.(*scramHash)
+	if ok {
+		return ok, h.decoded
+	}
+	return false, creds
+}
+
 // LoadPasswordHash decodes a password hash loaded as bytes from a credential store.
 func LoadPasswordHash(ctx context.Context, storedHash []byte) (res PasswordHash) {
 	res = invalidHash(storedHash)
