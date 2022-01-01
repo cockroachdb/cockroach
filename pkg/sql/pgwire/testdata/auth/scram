@@ -3,7 +3,8 @@ config secure
 
 sql
 CREATE USER foo WITH PASSWORD 'abc';
-CREATE USER abc WITH PASSWORD 'SCRAM-SHA-256$4096:pAlYy62NTdETKb291V/Wow==$OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=:r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ=';
+SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';
+CREATE USER abc WITH PASSWORD 'abc'
 ----
 ok
 
