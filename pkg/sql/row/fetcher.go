@@ -1298,17 +1298,17 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 			if lastColID > col.GetID() {
 				return errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
 			}
-			colIDDiff := col.GetID() - lastColID
+			colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
 			lastColID = col.GetID()
 
-			if result, err := valueside.Encode([]byte(nil), colIDDiff, rowVal.Datum,
+			if result, err := valueside.Encode([]byte(nil), colIDDelta, rowVal.Datum,
 				scratch); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
 					col.GetName(), rowVal.Datum)
 			} else if !rowVal.BytesEqual(result) {
 				return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
-					"value failed to round-trip encode. Column=%s colIDDiff=%d Key=%s expected %#v, got: %#v",
-					col.GetName(), colIDDiff, rf.kv.Key, rowVal.EncodedString(), result))
+					"value failed to round-trip encode. Column=%s colIDDelta=%d Key=%s expected %#v, got: %#v",
+					col.GetName(), colIDDelta, rf.kv.Key, rowVal.EncodedString(), result))
 			}
 		}
 		return nil

@@ -368,7 +368,7 @@ INSERT INTO t.test VALUES (10, 2);
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(0)}
 	// Encode the column value.
 	valueBuf, err := valueside.Encode(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -689,7 +689,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 
 	// Encode the second column value.
 	valueBuf, err := valueside.Encode(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -792,7 +792,7 @@ CREATE TABLE t.test (
 
 	// Encode the second column value.
 	valueBuf, err := valueside.Encode(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -810,7 +810,7 @@ CREATE TABLE t.test (
 
 	// Encode the second column value.
 	valueBuf, err = valueside.Encode(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -897,7 +897,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	// Encode the second column values. The second column is encoded with
 	// a garbage colIDDiff.
 	valueBuf, err := valueside.Encode(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

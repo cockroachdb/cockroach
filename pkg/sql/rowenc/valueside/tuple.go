@@ -11,7 +11,6 @@
 package valueside
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -31,7 +30,7 @@ func encodeUntaggedTuple(
 
 	var err error
 	for _, dd := range t.D {
-		appendTo, err = Encode(appendTo, descpb.NoColumnID, dd, scratch)
+		appendTo, err = Encode(appendTo, NoColumnID, dd, scratch)
 		if err != nil {
 			return nil, err
 		}

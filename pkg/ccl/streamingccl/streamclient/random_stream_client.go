@@ -440,7 +440,7 @@ func makeRandomKey(
 	// Create a value holding a random integer.
 	valueDatum := tree.NewDInt(tree.DInt(r.Intn(config.valueRange)))
 	valueBuf, err := valueside.Encode(
-		[]byte(nil), tableDesc.Columns[1].ID, valueDatum, []byte(nil))
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.Columns[1].ID), valueDatum, []byte(nil))
 	if err != nil {
 		panic(err)
 	}
