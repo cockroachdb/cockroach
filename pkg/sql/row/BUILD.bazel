@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/rowencpb:rowencpb_go_proto",
         "//pkg/sql/rowinfra",
         "//pkg/sql/scrub",

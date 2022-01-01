@@ -293,6 +293,7 @@ ALL_TESTS = [
     "//pkg/sql/randgen:randgen_test",
     "//pkg/sql/row:row_test",
     "//pkg/sql/rowcontainer:rowcontainer_test",
+    "//pkg/sql/rowenc/keyside:keyside_test",
     "//pkg/sql/rowenc:rowenc_test",
     "//pkg/sql/rowexec:rowexec_test",
     "//pkg/sql/rowflow:rowflow_test",

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -381,7 +382,7 @@ func (s *Builder) encodeConstraintKey(
 			}
 		}
 
-		key, err = rowenc.EncodeTableKey(key, val, dir)
+		key, err = keyside.Encode(key, val, dir)
 		if err != nil {
 			return nil, false, err
 		}

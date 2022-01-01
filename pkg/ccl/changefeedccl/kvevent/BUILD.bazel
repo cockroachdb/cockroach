@@ -43,7 +43,7 @@ go_test(
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql/randgen",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/types",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
