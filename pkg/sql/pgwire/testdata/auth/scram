@@ -2,8 +2,13 @@ config secure
 ----
 
 sql
-CREATE USER foo WITH PASSWORD 'abc';
+-- Explicit hash.
 CREATE USER abc WITH PASSWORD 'SCRAM-SHA-256$4096:pAlYy62NTdETKb291V/Wow==$OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=:r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ=';
+-- Automatic hashes.
+SET CLUSTER SETTING server.user_login.password_encryption = 'crdb-bcrypt';
+CREATE USER foo WITH PASSWORD 'abc';
+SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';
+CREATE USER abc2 WITH PASSWORD 'abc'
 ----
 ok
 
@@ -15,16 +20,19 @@ subtest conn_plaintext
 
 set_hba
 host all abc all password
+host all abc2 all password
 ----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all abc all password
+# host all abc2 all password
 #
 # Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
 host   all      root all     cert-password
 host   all      abc  all     password
+host   all      abc2 all     password
 
 # User abc has SCRAM credentials, but 'mistake' is not its password.
 # Expect authn error.
@@ -54,6 +62,18 @@ authlog 5
 13 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 14 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
+connect user=abc2 password=abc
+----
+ok defaultdb
+
+authlog 5
+.*client_connection_end
+----
+15 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+16 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc2 all password","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
+17 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
+18 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+19 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -62,18 +82,21 @@ subtest only_scram
 set_hba
 host all foo all scram-sha-256
 host all abc all scram-sha-256
+host all abc2 all scram-sha-256
 ----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all foo all scram-sha-256
 # host all abc all scram-sha-256
+# host all abc2 all scram-sha-256
 #
 # Interpreted configuration:
 # TYPE DATABASE USER ADDRESS METHOD        OPTIONS
 host   all      root all     cert-password
 host   all      foo  all     scram-sha-256
 host   all      abc  all     scram-sha-256
+host   all      abc2 all     scram-sha-256
 
 subtest only_scram/conn_scram
 
@@ -85,13 +108,13 @@ ERROR: password authentication failed for user foo (SQLSTATE 28000)
 authlog 7
 .*client_connection_end
 ----
-15 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
-16 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-17 {"EventType":"client_authentication_info","Info":"user password hash not in SCRAM format","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-18 {"EventType":"client_authentication_info","Info":"scram handshake error: user password hash not in SCRAM format","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-19 {"Detail":"password authentication failed for user foo","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-20 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
-21 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+20 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+21 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+22 {"EventType":"client_authentication_info","Info":"user password hash not in SCRAM format","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+23 {"EventType":"client_authentication_info","Info":"scram handshake error: user password hash not in SCRAM format","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+24 {"Detail":"password authentication failed for user foo","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+25 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+26 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 # User abc has SCRAM credentials, but 'mistake' is not its password.
 # Expect authn error.
@@ -102,12 +125,12 @@ ERROR: password authentication failed for user abc (SQLSTATE 28000)
 authlog 6
 .*client_connection_end
 ----
-22 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
-23 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-24 {"EventType":"client_authentication_info","Info":"scram handshake error: challenge proof invalid","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-25 {"Detail":"password authentication failed for user abc","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-26 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
-27 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+27 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+28 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+29 {"EventType":"client_authentication_info","Info":"scram handshake error: challenge proof invalid","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+30 {"Detail":"password authentication failed for user abc","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+31 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+32 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 
 connect user=abc password=abc
@@ -117,11 +140,24 @@ ok defaultdb
 authlog 5
 .*client_connection_end
 ----
-28 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
-29 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-30 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-31 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
-32 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+33 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+34 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+35 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+36 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+37 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+connect user=abc2 password=abc
+----
+ok defaultdb
+
+authlog 5
+.*client_connection_end
+----
+38 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+39 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc2 all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
+40 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
+41 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+42 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -161,6 +197,10 @@ ERROR: password authentication failed for user foo (SQLSTATE 28000)
 
 
 connect user=abc password=abc
+----
+ok defaultdb
+
+connect user=abc2 password=abc
 ----
 ok defaultdb
 
