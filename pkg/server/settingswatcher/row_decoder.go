@@ -14,22 +14,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
 // RowDecoder decodes rows from the settings table.
 type RowDecoder struct {
-	codec     keys.SQLCodec
-	alloc     tree.DatumAlloc
-	colIdxMap catalog.TableColMap
+	codec   keys.SQLCodec
+	alloc   tree.DatumAlloc
+	columns []catalog.Column
+	decoder valueside.Decoder
 }
 
 // RawValue contains a raw-value / value-type pair, corresponding to the value
@@ -41,11 +39,11 @@ type RawValue struct {
 
 // MakeRowDecoder makes a new RowDecoder for the settings table.
 func MakeRowDecoder(codec keys.SQLCodec) RowDecoder {
+	columns := systemschema.SettingsTable.PublicColumns()
 	return RowDecoder{
-		codec: codec,
-		colIdxMap: row.ColIDtoRowIndexFromCols(
-			systemschema.SettingsTable.PublicColumns(),
-		),
+		codec:   codec,
+		columns: columns,
+		decoder: valueside.MakeDecoder(columns),
 	}
 }
 
@@ -55,10 +53,9 @@ func MakeRowDecoder(codec keys.SQLCodec) RowDecoder {
 func (d *RowDecoder) DecodeRow(
 	kv roachpb.KeyValue,
 ) (setting string, val RawValue, tombstone bool, _ error) {
-	tbl := systemschema.SettingsTable
 	// First we need to decode the setting name field from the index key.
 	{
-		types := []*types.T{tbl.PublicColumns()[0].GetType()}
+		types := []*types.T{d.columns[0].GetType()}
 		nameRow := make([]rowenc.EncDatum, 1)
 		_, matches, _, err := rowenc.DecodeIndexKey(d.codec, types, nameRow, nil, kv.Key)
 		if err != nil {
@@ -76,43 +73,26 @@ func (d *RowDecoder) DecodeRow(
 		return setting, RawValue{}, true, nil
 	}
 
-	// The rest of the columns are stored as a family, packed with diff-encoded
-	// column IDs followed by their values.
-	{
-		// column valueType can be null (missing) so we default it to "s".
-		val.Type = "s"
-		bytes, err := kv.Value.GetTuple()
-		if err != nil {
-			return "", RawValue{}, false, err
-		}
-		var colIDDiff uint32
-		var lastColID descpb.ColumnID
-		var res tree.Datum
-		for len(bytes) > 0 {
-			_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
-			if err != nil {
-				return "", RawValue{}, false, err
-			}
-			colID := lastColID + descpb.ColumnID(colIDDiff)
-			lastColID = colID
-			if idx, ok := d.colIdxMap.Get(colID); ok {
-				res, bytes, err = valueside.Decode(&d.alloc, tbl.PublicColumns()[idx].GetType(), bytes)
-				if err != nil {
-					return "", RawValue{}, false, err
-				}
-				switch colID {
-				case tbl.PublicColumns()[1].GetID(): // value
-					val.Value = string(tree.MustBeDString(res))
-				case tbl.PublicColumns()[3].GetID(): // valueType
-					val.Type = string(tree.MustBeDString(res))
-				case tbl.PublicColumns()[2].GetID(): // lastUpdated
-					// TODO(dt): we could decode just the len and then seek `bytes` past
-					// it, without allocating/decoding the unused timestamp.
-				default:
-					return "", RawValue{}, false, errors.Errorf("unknown column: %v", colID)
-				}
-			}
-		}
+	// The rest of the columns are stored as a family.
+	bytes, err := kv.Value.GetTuple()
+	if err != nil {
+		return "", RawValue{}, false, err
 	}
+
+	datums, err := d.decoder.Decode(&d.alloc, bytes)
+	if err != nil {
+		return "", RawValue{}, false, err
+	}
+
+	if value := datums[1]; value != tree.DNull {
+		val.Value = string(tree.MustBeDString(value))
+	}
+	if typ := datums[3]; typ != tree.DNull {
+		val.Type = string(tree.MustBeDString(typ))
+	} else {
+		// Column valueType is missing; default it to "s".
+		val.Type = "s"
+	}
+
 	return setting, val, false, nil
 }
