@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"fmt"
 	"math"
 
@@ -196,37 +195,10 @@ func authScram(
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
-		// This scram auth credential was generated on pg with:
-		//      create user abc with password 'abc'
-		// const testPassword = "SCRAM-SHA-256$4096:pAlYy62NTdETKb291V/Wow==$OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=:r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ="
-		salt, err := base64.StdEncoding.DecodeString("pAlYy62NTdETKb291V/Wow==")
-		if err != nil {
-			panic(err)
-		}
-		storedKey, err := base64.StdEncoding.DecodeString("OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=")
-		if err != nil {
-			panic(err)
-		}
-		serverKey, err := base64.StdEncoding.DecodeString("r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ=")
-		if err != nil {
-			panic(err)
-		}
-		scramServer, _ := scram.SHA256.NewServer(func(user string) (scram.StoredCredentials, error) {
-			if user == "abc" {
-				return scram.StoredCredentials{
-					KeyFactors: scram.KeyFactors{
-						Salt:  string(salt),
-						Iters: 4096,
-					},
-					StoredKey: storedKey,
-					ServerKey: serverKey,
-				}, nil
-			}
-			return scram.StoredCredentials{}, errors.New("no scram cookie for you")
-		})
-
-		handshake := scramServer.NewConversation()
-
+		// First step: send a SCRAM authentication request to the client.
+		// We do this with an auth request with the request type SASL,
+		// and a payload containing the list of supported SCRAM methods.
+		//
 		// NB: SCRAM-SHA-256-PLUS is not supported, see
 		// https://github.com/cockroachdb/cockroach/issues/74300
 		// There is one nul byte to terminate the first string,
@@ -235,6 +207,44 @@ func authScram(
 		if err := c.SendAuthRequest(authReqSASL, []byte(supportedMethods)); err != nil {
 			return err
 		}
+
+		// While waiting for the client response, concurrently
+		// load the credentials from storage (or cache).
+		// Note: if this fails, we can't return the error right away,
+		// because we need to consume the client response first. This
+		// will be handled below.
+		expired, hashedPassword, pwRetrievalErr := pwRetrieveFn(ctx)
+
+		scramServer, _ := scram.SHA256.NewServer(func(user string) (creds scram.StoredCredentials, err error) {
+			// NB: the username passed in the SCRAM exchange (the user
+			// parameter in this callback) is ignored by PostgreSQL servers;
+			// see auth-scram.c, read_client_first_message().
+			//
+			// Therefore, we can't assume that SQL client drivers populate anything
+			// useful there. So we ignore it too.
+
+			// We still need to check whether the credentials loaded above
+			// are valid. We place this check in this callback because it
+			// only needs to happen after the SCRAM handshake actually needs
+			// to know the credentials.
+			if expired {
+				c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
+				// TODO(knz): Consider omitting the error return here, and let the
+				// code fallback, to hide the reason for the failure from the
+				// client.
+				return creds, errors.New("password is expired")
+			} else if hashedPassword.Method() != security.HashSCRAMSHA256 {
+				const credentialsNotSCRAM = "user password hash not in SCRAM format"
+				c.LogAuthInfof(ctx, credentialsNotSCRAM)
+				return creds, errors.New(credentialsNotSCRAM)
+			}
+
+			// The method check above ensures this cast is always valid.
+			scramCreds := hashedPassword.(*security.ScramHash)
+			return scramCreds.StoredCredentials(), nil
+		})
+
+		handshake := scramServer.NewConversation()
 
 		initial := true
 		for {
@@ -245,8 +255,18 @@ func authScram(
 			// Receive a response from the client.
 			resp, err := c.GetPwdData()
 			if err != nil {
+				c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+				if pwRetrievalErr != nil {
+					return errors.CombineErrors(err, pwRetrievalErr)
+				}
 				return err
 			}
+			// Now process the password retrieval error, if any.
+			if pwRetrievalErr != nil {
+				c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, pwRetrievalErr)
+				return pwRetrievalErr
+			}
+
 			var input []byte
 			if initial {
 				// Quoth postgres, backend/auth.go:
@@ -259,6 +279,7 @@ func authScram(
 				rb := pgwirebase.ReadBuffer{Msg: resp}
 				reqMethod, err := rb.GetString()
 				if err != nil {
+					c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 					return err
 				}
 				if reqMethod != "SCRAM-SHA-256" {
@@ -272,6 +293,7 @@ func authScram(
 				}
 				inputLen, err := rb.GetUint32()
 				if err != nil {
+					c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 					return err
 				}
 				// PostgreSQL ignores input from clients that pass -1 as length,
@@ -279,6 +301,7 @@ func authScram(
 				if inputLen < math.MaxUint32 {
 					input, err = rb.GetBytes(int(inputLen))
 					if err != nil {
+						c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 						return err
 					}
 				}
@@ -305,12 +328,11 @@ func authScram(
 			}
 		}
 
-		// Was the authentication for the right username?
-
 		// Did authentication succeed?
 		if !handshake.Valid() {
 			return security.NewErrPasswordUserAuthFailed(systemIdentity)
 		}
+
 		return nil // auth success!
 	})
 	return b, nil
