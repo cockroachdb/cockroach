@@ -12,6 +12,8 @@ package coldata
 
 import (
 	"fmt"
+	"math/big"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -184,7 +186,22 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 	case types.FloatFamily:
 		return make(Float64s, length)
 	case types.DecimalFamily:
-		return make(Decimals, length)
+		d := make(Decimals, length)
+		// Each Decimal maintains (through an embedded big.Int) an internal
+		// reference to a variable-length coefficient, which is represented by a
+		// []big.Word. Pre-allocate a single large []big.Word and distribute chunks
+		// to each Decimal. big.Int will avoid re-allocating unless it is provided
+		// with a coefficient that exceeds the initial capacity. We set this
+		// capacity to accommodate any coefficient that would fit in a 64-bit
+		// integer (i.e. up to 2^64).
+		const wordsPer = int(unsafe.Sizeof(uint64(0)) / unsafe.Sizeof(big.Word(0)))
+		w := make([]big.Word, wordsPer*length)
+		for i := range d {
+			low := wordsPer * i
+			high := wordsPer * (i + 1)
+			d[i].Coeff.SetBits(w[low:high:high])
+		}
+		return d
 	case types.TimestampTZFamily:
 		return make(Times, length)
 	case types.IntervalFamily:
