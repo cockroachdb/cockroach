@@ -27,7 +27,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/duration",
-        "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/json",
         "//pkg/util/log",

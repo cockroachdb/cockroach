@@ -1072,7 +1072,7 @@ func encodeUntaggedTuple(
 
 	var err error
 	for _, dd := range t.D {
-		appendTo, err = EncodeTableValue(appendTo, descpb.ColumnID(encoding.NoColumnID), dd, scratch)
+		appendTo, err = EncodeTableValue(appendTo, descpb.NoColumnID, dd, scratch)
 		if err != nil {
 			return nil, err
 		}
