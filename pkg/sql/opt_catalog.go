@@ -1255,7 +1255,7 @@ func (oi *optIndex) init(
 		}
 
 		// Get the partition values.
-		var a rowenc.DatumAlloc
+		var a tree.DatumAlloc
 		for _, valueEncBuf := range values {
 			t, _, err := rowenc.DecodePartitionTuple(
 				&a, oi.tab.codec, oi.tab.desc, oi.idx, oi.idx.GetPartitioning(),

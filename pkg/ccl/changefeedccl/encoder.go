@@ -102,7 +102,7 @@ type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
 
 	targets jobspb.ChangefeedTargets
-	alloc   rowenc.DatumAlloc
+	alloc   tree.DatumAlloc
 	buf     bytes.Buffer
 }
 

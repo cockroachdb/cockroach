@@ -244,7 +244,7 @@ func DecodeRowInfo(
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0,     /* lockTimeout */
 		false, /* isCheck */
-		&rowenc.DatumAlloc{},
+		&tree.DatumAlloc{},
 		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {

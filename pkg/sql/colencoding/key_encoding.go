@@ -43,7 +43,7 @@ import (
 // NULL, regardless of whether or not indexColIdx indicates that the column
 // should be decoded.
 func DecodeKeyValsToCols(
-	da *rowenc.DatumAlloc,
+	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	rowIdx int,
 	indexColIdx []int,
@@ -86,7 +86,7 @@ func DecodeKeyValsToCols(
 // See the analog, rowenc.DecodeTableKey, in rowenc/column_type_encoding.go.
 // decodeTableKeyToCol also returns whether or not the decoded value was NULL.
 func decodeTableKeyToCol(
-	da *rowenc.DatumAlloc,
+	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	vecIdx int,
 	rowIdx int,
@@ -219,7 +219,7 @@ func decodeTableKeyToCol(
 // See the analog, rowenc.UnmarshalColumnValue, in
 // rowenc/column_type_encoding.go.
 func UnmarshalColumnValueToCol(
-	da *rowenc.DatumAlloc,
+	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	vecIdx, rowIdx int,
 	typ *types.T,

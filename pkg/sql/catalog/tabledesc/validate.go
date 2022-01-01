@@ -1011,7 +1011,7 @@ func (desc *wrapper) ensureShardedIndexNotComputed(index *descpb.IndexDescriptor
 // stored sorted by upper bound. colOffset is non-zero for subpartitions and
 // indicates how many index columns to skip over.
 func (desc *wrapper) validatePartitioningDescriptor(
-	a *rowenc.DatumAlloc,
+	a *tree.DatumAlloc,
 	idx catalog.Index,
 	part catalog.Partitioning,
 	colOffset int,
@@ -1182,7 +1182,7 @@ func (ps partitionInterval) Range() interval.Range {
 func (desc *wrapper) validatePartitioning() error {
 	partitionNames := make(map[string]string)
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	return catalog.ForEachNonDropIndex(desc, func(idx catalog.Index) error {
 		return desc.validatePartitioningDescriptor(
 			a, idx, idx.GetPartitioning(), 0 /* colOffset */, partitionNames,

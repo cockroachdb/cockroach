@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -128,7 +129,7 @@ func GenerateValuesSpec(
 
 	spec.NumRows = uint64(len(rows))
 	if len(colTypes) != 0 {
-		var a rowenc.DatumAlloc
+		var a tree.DatumAlloc
 		for i := 0; i < len(rows); i++ {
 			var buf []byte
 			for j, info := range spec.Columns {

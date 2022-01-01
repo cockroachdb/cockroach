@@ -83,7 +83,7 @@ func MakeUpdater(
 	updateCols []catalog.Column,
 	requestedCols []catalog.Column,
 	updateType rowUpdaterType,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	sv *settings.Values,
 	internal bool,
 	metrics *Metrics,
