@@ -148,7 +148,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"operator_precedence_warning",
 	"parallel_setup_cost",
 	"parallel_tuple_cost",
-	"password_encryption",
+	// "password_encryption",
 	"quote_all_identifiers",
 	"random_page_cost",
 	"replacement_sort_tuples",
