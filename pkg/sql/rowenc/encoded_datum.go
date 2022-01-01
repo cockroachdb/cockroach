@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -246,9 +247,9 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *tree.DatumAlloc) error {
 	var rem []byte
 	switch ed.encoding {
 	case descpb.DatumEncoding_ASCENDING_KEY:
-		ed.Datum, rem, err = DecodeTableKey(a, typ, ed.encoded, encoding.Ascending)
+		ed.Datum, rem, err = keyside.Decode(a, typ, ed.encoded, encoding.Ascending)
 	case descpb.DatumEncoding_DESCENDING_KEY:
-		ed.Datum, rem, err = DecodeTableKey(a, typ, ed.encoded, encoding.Descending)
+		ed.Datum, rem, err = keyside.Decode(a, typ, ed.encoded, encoding.Descending)
 	case descpb.DatumEncoding_VALUE:
 		ed.Datum, rem, err = DecodeTableValue(a, typ, ed.encoded)
 	default:
@@ -290,9 +291,9 @@ func (ed *EncDatum) Encode(
 	}
 	switch enc {
 	case descpb.DatumEncoding_ASCENDING_KEY:
-		return EncodeTableKey(appendTo, ed.Datum, encoding.Ascending)
+		return keyside.Encode(appendTo, ed.Datum, encoding.Ascending)
 	case descpb.DatumEncoding_DESCENDING_KEY:
-		return EncodeTableKey(appendTo, ed.Datum, encoding.Descending)
+		return keyside.Encode(appendTo, ed.Datum, encoding.Descending)
 	case descpb.DatumEncoding_VALUE:
 		return EncodeTableValue(appendTo, descpb.NoColumnID, ed.Datum, nil /* scratch */)
 	default:

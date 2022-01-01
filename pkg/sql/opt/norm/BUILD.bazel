@@ -40,7 +40,7 @@ go_library(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",

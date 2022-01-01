@@ -161,6 +161,7 @@ go_test(
         "//pkg/sql/randgen",
         "//pkg/sql/rowcontainer",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
