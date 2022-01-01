@@ -178,7 +178,7 @@ func DecodeRowInfo(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc, key)
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc.GetID(), key)
 	if err != nil {
 		return nil, nil, nil, err
 	}

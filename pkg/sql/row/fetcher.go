@@ -356,7 +356,7 @@ func (rf *Fetcher) Init(
 	}
 
 	table.knownPrefixLength = len(
-		rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()),
+		rowenc.MakeIndexKeyPrefix(codec, table.desc.GetID(), table.index.GetID()),
 	)
 
 	var indexColumnIDs []descpb.ColumnID

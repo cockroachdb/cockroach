@@ -163,9 +163,8 @@ func DecodePartitionTuple(
 		colMap.Set(index.GetKeyColumnID(i), i)
 	}
 
-	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, index.GetID())
-	key, _, err := EncodePartialIndexKey(
-		tableDesc, index, len(allDatums), colMap, allDatums, indexKeyPrefix)
+	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
+	key, _, err := EncodePartialIndexKey(index, len(allDatums), colMap, allDatums, indexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
