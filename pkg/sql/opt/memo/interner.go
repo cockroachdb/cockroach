@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -1213,7 +1213,7 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 		}
 	}
 
-	b, err = rowenc.EncodeTableValue(b, descpb.NoColumnID, val, nil /* scratch */)
+	b, err = valueside.Encode(b, descpb.NoColumnID, val, nil /* scratch */)
 	if err != nil {
 		panic(err)
 	}

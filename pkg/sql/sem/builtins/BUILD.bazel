@@ -60,6 +60,7 @@ go_library(
         "//pkg/sql/roleoption",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",

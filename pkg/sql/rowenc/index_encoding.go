@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -907,7 +908,7 @@ func EncodePrimaryIndex(
 				if err != nil {
 					return err
 				}
-				value, err := MarshalColumnValue(col, datum)
+				value, err := valueside.MarshalLegacy(col.GetType(), datum)
 				if err != nil {
 					return err
 				}
@@ -1224,7 +1225,7 @@ func writeColumnValues(
 		colIDDiff := col.id - lastColID
 		lastColID = col.id
 		var err error
-		value, err = EncodeTableValue(value, colIDDiff, val, nil)
+		value, err = valueside.Encode(value, colIDDiff, val, nil)
 		if err != nil {
 			return nil, err
 		}

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -95,7 +96,7 @@ func (d *RowDecoder) DecodeRow(
 			colID := lastColID + descpb.ColumnID(colIDDiff)
 			lastColID = colID
 			if idx, ok := d.colIdxMap.Get(colID); ok {
-				res, bytes, err = rowenc.DecodeTableValue(&d.alloc, tbl.PublicColumns()[idx].GetType(), bytes)
+				res, bytes, err = valueside.Decode(&d.alloc, tbl.PublicColumns()[idx].GetType(), bytes)
 				if err != nil {
 					return "", RawValue{}, false, err
 				}
