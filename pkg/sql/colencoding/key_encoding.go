@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -282,7 +282,7 @@ func UnmarshalColumnValueToCol(
 	// Types backed by tree.Datums.
 	default:
 		var d tree.Datum
-		d, err = rowenc.UnmarshalColumnValue(da, typ, value)
+		d, err = valueside.UnmarshalLegacy(da, typ, value)
 		if err != nil {
 			return err
 		}

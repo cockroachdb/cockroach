@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -111,7 +111,7 @@ func DecodeTableValueToCol(
 	// Types backed by tree.Datums.
 	default:
 		var d tree.Datum
-		d, buf, err = rowenc.DecodeUntaggedDatum(da, valTyp, buf)
+		d, buf, err = valueside.DecodeUntaggedDatum(da, valTyp, buf)
 		if err != nil {
 			return buf, err
 		}

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -142,7 +143,7 @@ func DecodePartitionTuple(
 			t.SpecialCount++
 		} else {
 			var datum tree.Datum
-			datum, valueEncBuf, err = DecodeTableValue(a, col.GetType(), valueEncBuf)
+			datum, valueEncBuf, err = valueside.Decode(a, col.GetType(), valueEncBuf)
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "decoding")
 			}

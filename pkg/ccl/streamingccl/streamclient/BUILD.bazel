@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
         "//pkg/util/hlc",
         "//pkg/util/log",

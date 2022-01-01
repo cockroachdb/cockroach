@@ -25,7 +25,7 @@ import (
 // or collated strings have composite encoding where part of their value lies in
 // the value part of the key/value pair.
 //
-// See also: docs/tech-notes/encoding.md, EncodeTableValue().
+// See also: docs/tech-notes/encoding.md, valueside.Encode().
 func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, errors.Errorf("invalid direction: %d", dir)
