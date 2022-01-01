@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/valueside",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",

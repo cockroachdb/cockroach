@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -87,7 +88,7 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (entry roachpb.SpanConf
 			colID := lastColID + descpb.ColumnID(colIDDiff)
 			lastColID = colID
 			if idx, ok := sd.colIdxMap.Get(colID); ok {
-				res, bytes, err = rowenc.DecodeTableValue(&sd.alloc, tbl.PublicColumns()[idx].GetType(), bytes)
+				res, bytes, err = valueside.Decode(&sd.alloc, tbl.PublicColumns()[idx].GetType(), bytes)
 				if err != nil {
 					return roachpb.SpanConfigEntry{}, err
 				}

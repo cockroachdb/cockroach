@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -56,14 +57,14 @@ func (d *rowCodec) encodeRow(
 ) (kv kv.KeyValue, err error) {
 	addrDatum := tree.NewDString(addr)
 	var valueBuf []byte
-	valueBuf, err = rowenc.EncodeTableValue(
+	valueBuf, err = valueside.Encode(
 		[]byte(nil), d.columns[1].GetID(), addrDatum, []byte(nil))
 	if err != nil {
 		return kv, err
 	}
 	sessionDatum := tree.NewDBytes(tree.DBytes(sessionID.UnsafeBytes()))
 	sessionColDiff := d.columns[2].GetID() - d.columns[1].GetID()
-	valueBuf, err = rowenc.EncodeTableValue(valueBuf, sessionColDiff, sessionDatum, []byte(nil))
+	valueBuf, err = valueside.Encode(valueBuf, sessionColDiff, sessionDatum, []byte(nil))
 	if err != nil {
 		return kv, err
 	}
@@ -122,7 +123,7 @@ func (d *rowCodec) decodeRow(
 			colID := lastColID + descpb.ColumnID(colIDDiff)
 			lastColID = colID
 			if idx, ok := d.colIdxMap.Get(colID); ok {
-				res, bytes, err = rowenc.DecodeTableValue(&alloc, tbl.PublicColumns()[idx].GetType(), bytes)
+				res, bytes, err = valueside.Decode(&alloc, tbl.PublicColumns()[idx].GetType(), bytes)
 				if err != nil {
 					return instanceID, "", "", hlc.Timestamp{}, false, err
 				}

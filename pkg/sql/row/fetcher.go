@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1023,7 +1024,7 @@ func (rf *Fetcher) processValueSingle(
 			// although that would require changing UnmarshalColumnValue to operate
 			// on bytes, and for Encode/DecodeTableValue to operate on marshaled
 			// single values.
-			value, err := rowenc.UnmarshalColumnValue(rf.alloc, typ, kv.Value)
+			value, err := valueside.UnmarshalLegacy(rf.alloc, typ, kv.Value)
 			if err != nil {
 				return "", "", err
 			}
@@ -1300,7 +1301,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 			colIDDiff := col.GetID() - lastColID
 			lastColID = col.GetID()
 
-			if result, err := rowenc.EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
+			if result, err := valueside.Encode([]byte(nil), colIDDiff, rowVal.Datum,
 				scratch); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
 					col.GetName(), rowVal.Datum)

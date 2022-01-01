@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -438,7 +439,7 @@ func makeRandomKey(
 
 	// Create a value holding a random integer.
 	valueDatum := tree.NewDInt(tree.DInt(r.Intn(config.valueRange)))
-	valueBuf, err := rowenc.EncodeTableValue(
+	valueBuf, err := valueside.Encode(
 		[]byte(nil), tableDesc.Columns[1].ID, valueDatum, []byte(nil))
 	if err != nil {
 		panic(err)

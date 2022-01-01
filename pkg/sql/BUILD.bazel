@@ -610,6 +610,7 @@ go_test(
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/rowencpb",
+        "//pkg/sql/rowenc/valueside",
         "//pkg/sql/rowexec",
         "//pkg/sql/rowinfra",
         "//pkg/sql/scrub",

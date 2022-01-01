@@ -44,6 +44,7 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/rowencpb",
+        "//pkg/sql/rowenc/valueside",
         "//pkg/sql/rowinfra",
         "//pkg/sql/scrub",
         "//pkg/sql/sem/builtins",
