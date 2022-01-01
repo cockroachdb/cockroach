@@ -106,7 +106,7 @@ type PasswordHash interface {
 var _ PasswordHash = emptyPassword{}
 var _ PasswordHash = invalidHash(nil)
 var _ PasswordHash = bcryptHash(nil)
-var _ PasswordHash = (*scramHash)(nil)
+var _ PasswordHash = (*ScramHash)(nil)
 
 // emptyPassword represents a virtual hash when there was no password
 // to start with.
@@ -153,21 +153,26 @@ func (b bcryptHash) Method() HashMethod { return HashBCrypt }
 // Size is part of the PasswordHash interface.
 func (b bcryptHash) Size() int { return len(b) }
 
-// scramHash represents a SCRAM-SHA-256 password hash.
-type scramHash struct {
+// ScramHash represents a SCRAM-SHA-256 password hash.
+type ScramHash struct {
 	bytes   []byte
 	decoded scram.StoredCredentials
 }
 
 // String implements fmt.Stringer.
-func (s *scramHash) String() string { return string(s.bytes) }
+func (s *ScramHash) String() string { return string(s.bytes) }
 
 // Method is part of the PasswordHash interface.
-func (s *scramHash) Method() HashMethod { return HashSCRAMSHA256 }
+func (s *ScramHash) Method() HashMethod { return HashSCRAMSHA256 }
 
 // Size is part of the PasswordHash interface.
-func (s *scramHash) Size() int {
+func (s *ScramHash) Size() int {
 	return int(unsafe.Sizeof(*s)) + len(s.bytes) + len(s.decoded.Salt) + len(s.decoded.StoredKey) + len(s.decoded.ServerKey)
+}
+
+// StoredCredentials retrieves the SCRAM credential parts.
+func (s *ScramHash) StoredCredentials() scram.StoredCredentials {
+	return s.decoded
 }
 
 // LoadPasswordHash decodes a password hash loaded as bytes from a credential store.
@@ -196,7 +201,7 @@ func LoadPasswordHash(ctx context.Context, storedHash []byte) (res PasswordHash)
 		if err != nil {
 			return res //nolint:returnerrcheck
 		}
-		return &scramHash{
+		return &ScramHash{
 			bytes: storedHash,
 			decoded: scram.StoredCredentials{
 				KeyFactors: scram.KeyFactors{
@@ -258,7 +263,7 @@ func CompareHashAndCleartextPassword(
 		}
 		return true, nil
 
-	case *scramHash:
+	case *ScramHash:
 		sem := getExpensiveHashComputeSem(ctx)
 		alloc, err := sem.Acquire(ctx, 1)
 		if err != nil {
