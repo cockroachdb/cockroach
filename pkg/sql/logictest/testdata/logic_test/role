@@ -1415,6 +1415,9 @@ subtest pw_hashes
 
 user root
 
+statement ok
+SET CLUSTER SETTING server.user_login.password_encryption = 'crdb-bcrypt'
+
 let $bcrypt_pw
 SELECT 'CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq'
 
@@ -1463,7 +1466,7 @@ RESET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enable
 subtest bcrypt_cost
 
 statement ok
-SET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt = 20
+SET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt = 8
 
 statement ok
 CREATE USER hash7 WITH PASSWORD 'hello'
@@ -1472,7 +1475,46 @@ CREATE USER hash7 WITH PASSWORD 'hello'
 query TT
 SELECT username, substr("hashedPassword", 1, 7) FROM system.users WHERE username = 'hash7'
 ----
-hash7  $2a$20$
+hash7  $2a$08$
 
 statement ok
 RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt;
+
+subtest scram_gen_hash
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256'
+
+statement ok
+CREATE USER hash8 WITH PASSWORD 'hello world'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$130000
+
+statement ok
+ALTER USER hash8 WITH PASSWORD 'hello universe'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$130000
+
+subtest scram_cost
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256 = 200000
+
+statement ok
+ALTER USER hash8 WITH PASSWORD 'hai'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 20) FROM system.users WHERE username = 'hash8'
+----
+hash8  SCRAM-SHA-256$200000
+
+# Reset cluster setting after test completion.
+statement ok
+RESET CLUSTER SETTING server.user_login.password_encryption;
+RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256
