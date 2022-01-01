@@ -1217,6 +1217,15 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html#GUC-PASSWORD-ENCRYPTION
+	// We only support reading this setting in clients: it is not desirable to let clients choose
+	// their own password hash algorithm.
+	`password_encryption`: {
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return security.PasswordHashMethod.String(&evalCtx.Settings.SV), nil
+		},
+	},
+
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
 	// If this gets properly implemented, we will need to re-evaluate how escape_string_warning is implemented

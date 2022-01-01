@@ -1459,3 +1459,28 @@ hash6  $2a$10$  false
 # Reset cluster setting after test completion.
 statement ok
 SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = true
+
+subtest pw_encryption
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256'
+
+statement ok
+CREATE USER hash7 WITH PASSWORD 'hello world'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 18) FROM system.users WHERE username = 'hash7'
+----
+hash7  SCRAM-SHA-256$4096
+
+statement ok
+ALTER USER hash7 WITH PASSWORD 'hello universe'
+
+query TT
+SELECT username, substr("hashedPassword", 1, 18) FROM system.users WHERE username = 'hash7'
+----
+hash7  SCRAM-SHA-256$4096
+
+# Reset cluster setting after test completion.
+statement ok
+SET CLUSTER SETTING server.user_login.password_encryption = 'crdb-bcrypt'

@@ -14,9 +14,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -42,6 +44,13 @@ import (
 // For now, we use the library's default cost.
 var BcryptCost = bcrypt.DefaultCost
 
+// SCRAMCost is the cost to use in SCRAM exchanges.
+// The value of 4096 is the minimum value recommended by RFC 5802.
+// It should be increased along with computation power.
+//
+// TODO(knz): Do we want to make this configurable via a cluster setting?
+var SCRAMCost = 4096
+
 // ErrEmptyPassword indicates that an empty password was attempted to be set.
 var ErrEmptyPassword = errors.New("empty passwords are not permitted")
 
@@ -59,17 +68,21 @@ type HashMethod int8
 const (
 	// HashInvalidMethod represents invalid hashes.
 	// This always fails authentication.
-	HashInvalidMethod HashMethod = iota
+	HashInvalidMethod HashMethod = 0
 	// HashMissingPassword represents a virtual hash when there was
 	// no password.  This too always fails authentication.
 	// We need a different method here than HashInvalidMethod because
 	// the authentication code distinguishes the two cases when reporting
 	// why authentication fails in audit logs.
-	HashMissingPassword
+	HashMissingPassword HashMethod = 1
 	// HashBCrypt indicates CockroachDB's bespoke bcrypt-based method.
-	HashBCrypt
+	// NB: Do not renumber this constant; it is used as value
+	// in cluster setting enums.
+	HashBCrypt HashMethod = 2
 	// HashSCRAMSHA256 indicates SCRAM-SHA-256.
-	HashSCRAMSHA256
+	// NB: Do not renumber this constant; it is used as value
+	// in cluster setting enums.
+	HashSCRAMSHA256 HashMethod = 3
 )
 
 // PasswordHash represents the type of a password hash loaded from a credential store.
@@ -280,15 +293,101 @@ func computeHMAC(hg scram.HashGeneratorFcn, key, data []byte) []byte {
 	return mac.Sum(nil)
 }
 
+// PasswordHashMethod is the cluster setting that configures which
+// hash method to use when clients request to store a cleartext password.
+var PasswordHashMethod = settings.RegisterEnumSetting(
+	settings.TenantWritable,
+	"server.user_login.password_encryption",
+	"which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD",
+	"crdb-bcrypt",
+	map[int64]string{
+		int64(HashBCrypt):      "crdb-bcrypt",
+		int64(HashSCRAMSHA256): "scram-sha-256",
+	},
+).WithPublic()
+
 // HashPassword takes a raw password and returns a bcrypt hashed password.
-func HashPassword(ctx context.Context, password string) ([]byte, error) {
-	sem := getExpensiveHashComputeSem(ctx)
-	alloc, err := sem.Acquire(ctx, 1)
-	if err != nil {
-		return nil, err
+func HashPassword(ctx context.Context, password string, method HashMethod) ([]byte, error) {
+	switch method {
+	case HashBCrypt:
+		sem := getExpensiveHashComputeSem(ctx)
+		alloc, err := sem.Acquire(ctx, 1)
+		if err != nil {
+			return nil, err
+		}
+		defer alloc.Release()
+		return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
+
+	case HashSCRAMSHA256:
+		prepared, err := stringprep.SASLprep.Prepare(password)
+		if err != nil {
+			// Special PostgreSQL case, quoth comment at the top of
+			// auth-scram.c:
+			//
+			// * - If the password isn't valid UTF-8, or contains characters prohibited
+			// *	 by the SASLprep profile, we skip the SASLprep pre-processing and use
+			// *	 the raw bytes in calculating the hash.
+			prepared = password
+		}
+
+		// The computation of ServerKey and StoredKey is conveniently provided
+		// to us by xdg/scram in the Client method GetStoredCredentials().
+		// To use it, we need a client.
+		client, err := scram.SHA256.NewClientUnprepped("" /* username: unused */, prepared, "" /* authzID: unused */)
+		if err != nil {
+			return nil, errors.AssertionFailedf("programming error: client construction should never fail")
+		}
+
+		// We also need to generate a random salt ourselves.
+		const scramSaltSize = 16 // postgres: SCRAM_DEFAULT_SALT_LEN.
+		salt := make([]byte, scramSaltSize)
+		if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+			return nil, errors.Wrap(err, "generating random salt")
+		}
+
+		// The computation of the SCRAM hash is expensive. Use the shared
+		// semaphore for it. We reuse the same pattern as the bcrypt case above.
+		sem := getExpensiveHashComputeSem(ctx)
+		alloc, err := sem.Acquire(ctx, 1)
+		if err != nil {
+			return nil, err
+		}
+		defer alloc.Release()
+		// Compute the credentials.
+		creds := client.GetStoredCredentials(scram.KeyFactors{Iters: SCRAMCost, Salt: string(salt)})
+		// Encode them in our standard hash format.
+		return encodeScramHash(salt, creds), nil
+
+	default:
+		return nil, errors.Newf("unsupported hash method: %v", method)
 	}
-	defer alloc.Release()
-	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
+}
+
+// encodeScramHash encodes the provided SCRAM credentials using the
+// standard PostgreSQL / RFC5802 representation.
+func encodeScramHash(saltBytes []byte, sc scram.StoredCredentials) []byte {
+	b64enc := base64.StdEncoding
+	saltLen := b64enc.EncodedLen(len(saltBytes))
+	storedKeyLen := b64enc.EncodedLen(len(sc.StoredKey))
+	serverKeyLen := b64enc.EncodedLen(len(sc.ServerKey))
+	// The representation is:
+	//    SCRAM-SHA-256$<iters>:<salt>$<stored key>:<server key>
+	// We use a capacity-based slice extension instead of a size-based fill
+	// so as to automatically support iteration counts with more than 4 digits.
+	res := make([]byte, 0, len(scramPrefix)+1+4 /*iters*/ +1+saltLen+1+storedKeyLen+1+serverKeyLen)
+	res = append(res, scramPrefix...)
+	res = append(res, '$')
+	res = strconv.AppendInt(res, int64(sc.Iters), 10)
+	res = append(res, ':')
+	res = append(res, make([]byte, saltLen)...)
+	b64enc.Encode(res[len(res)-saltLen:], saltBytes)
+	res = append(res, '$')
+	res = append(res, make([]byte, storedKeyLen)...)
+	b64enc.Encode(res[len(res)-storedKeyLen:], sc.StoredKey)
+	res = append(res, ':')
+	res = append(res, make([]byte, serverKeyLen)...)
+	b64enc.Encode(res[len(res)-serverKeyLen:], sc.ServerKey)
+	return res
 }
 
 // AutoDetectPasswordHashes is the cluster setting that configures whether
@@ -320,6 +419,8 @@ func isBcryptHash(hashedPassword []byte, strict bool) bool {
 	return false
 }
 
+const scramPrefix = "SCRAM-SHA-256"
+
 // scramHashRe matches the lexical structure of PostgreSQL's
 // pre-computed SCRAM hashes.
 //
@@ -328,7 +429,7 @@ func isBcryptHash(hashedPassword []byte, strict bool) bool {
 // "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 // The salt must have size >0; the server key pair is two times 32 bytes,
 // which always encode to 44 base64 characters.
-var scramHashRe = regexp.MustCompile(`^SCRAM-SHA-256\$(\d+):([A-Za-z0-9+/]+=*)\$([A-Za-z0-9+/]{43}=):([A-Za-z0-9+/]{43}=)$`)
+var scramHashRe = regexp.MustCompile(`^` + scramPrefix + `\$(\d+):([A-Za-z0-9+/]+=*)\$([A-Za-z0-9+/]{43}=):([A-Za-z0-9+/]{43}=)$`)
 
 func isSCRAMHash(hashedPassword []byte) bool {
 	return scramHashRe.Match(hashedPassword)
