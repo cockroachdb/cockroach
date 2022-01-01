@@ -140,9 +140,6 @@ type ColumnID tree.ColumnID
 // SafeValue implements the redact.SafeValue interface.
 func (ColumnID) SafeValue() {}
 
-// NoColumnID is a sentinel representing an invalid column ID.
-const NoColumnID = ColumnID(encoding.NoColumnID)
-
 // ColumnIDs is a slice of ColumnDescriptor IDs.
 type ColumnIDs []ColumnID
 

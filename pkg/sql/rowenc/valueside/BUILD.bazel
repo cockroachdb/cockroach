@@ -39,7 +39,6 @@ go_test(
     deps = [
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
