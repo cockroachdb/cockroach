@@ -271,7 +271,12 @@ func DecodeUntaggedDatum(a *tree.DatumAlloc, t *types.T, buf []byte) (tree.Datum
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
 	case types.ArrayFamily:
-		return decodeArray(a, t.ArrayContents(), buf)
+		// Skip the encoded data length.
+		b, _, _, err := encoding.DecodeNonsortingUvarint(buf)
+		if err != nil {
+			return nil, nil, err
+		}
+		return decodeArray(a, t.ArrayContents(), b)
 	case types.TupleFamily:
 		return decodeTuple(a, t, buf)
 	case types.EnumFamily:
@@ -609,7 +614,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		datum, _, err := decodeArrayNoMarshalColumnValue(a, typ.ArrayContents(), v)
+		datum, _, err := decodeArray(a, typ.ArrayContents(), v)
 		// TODO(yuzefovich): do we want to create a new object via tree.DatumAlloc?
 		return datum, err
 	case types.JsonFamily:
@@ -726,18 +731,6 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 
 // decodeArray decodes the value encoding for an array.
 func decodeArray(a *tree.DatumAlloc, elementType *types.T, b []byte) (tree.Datum, []byte, error) {
-	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
-	if err != nil {
-		return nil, b, err
-	}
-	return decodeArrayNoMarshalColumnValue(a, elementType, b)
-}
-
-// decodeArrayNoMarshalColumnValue skips the step where the MarshalColumnValue
-// is stripped from the bytes. This is required for single-column family arrays.
-func decodeArrayNoMarshalColumnValue(
-	a *tree.DatumAlloc, elementType *types.T, b []byte,
-) (tree.Datum, []byte, error) {
 	header, b, err := decodeArrayHeader(b)
 	if err != nil {
 		return nil, b, err

@@ -754,20 +754,17 @@ func TestArrayEncoding(t *testing.T) {
 		})
 
 		t.Run("decode "+test.name, func(t *testing.T) {
-			enc := make([]byte, 0)
-			enc = append(enc, byte(len(test.encoding)))
-			enc = append(enc, test.encoding...)
-			d, _, err := DecodeArray(&tree.DatumAlloc{}, test.datum.ParamTyp, enc)
+			d, _, err := DecodeArray(&tree.DatumAlloc{}, test.datum.ParamTyp, test.encoding)
 			hasNulls := d.(*tree.DArray).HasNulls
 			if test.datum.HasNulls != hasNulls {
-				t.Fatalf("expected %v to have HasNulls=%t, got %t", enc, test.datum.HasNulls, hasNulls)
+				t.Fatalf("expected %v to have HasNulls=%t, got %t", test.encoding, test.datum.HasNulls, hasNulls)
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
 			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			if d.Compare(evalContext, &test.datum) != 0 {
-				t.Fatalf("expected %v to decode to %s, got %s", enc, test.datum.String(), d.String())
+				t.Fatalf("expected %v to decode to %s, got %s", test.encoding, test.datum.String(), d.String())
 			}
 		})
 	}
