@@ -418,13 +418,13 @@ export default function Debug() {
         <DebugTableRow title="Hot Ranges">
           <DebugTableLink
             name="All Nodes"
-            url="_status/hotranges"
-            note="_status/hotranges"
+            url="_status/v2/hotranges"
+            note="_status/v2/hotranges"
           />
           <DebugTableLink
             name="Single node's ranges"
-            url="_status/hotranges?node_id=local"
-            note="_status/hotranges?node_id=[node_id]"
+            url="_status/v2/hotranges?node_id=local"
+            note="_status/v2/hotranges?node_id=[node_id]"
           />
         </DebugTableRow>
         <DebugTableRow title="Single Node Specific">
