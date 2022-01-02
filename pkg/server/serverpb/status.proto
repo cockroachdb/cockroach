@@ -1116,6 +1116,31 @@ message HotRangesResponse {
   ];
 }
 
+message HotRangesResponseV2 {
+  message HotRange {
+    int32 range_id = 1 [
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+      (gogoproto.customname) = "RangeID"
+    ];
+    int32 node_id = 2 [
+      (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+    double qps = 3 [
+      (gogoproto.customname) = "QPS"
+    ];
+    string table_name = 4;
+    string database_name = 5;
+    string index_name = 6;
+    repeated int32 replica_node_ids = 7 [
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+  }
+  repeated HotRange ranges = 1;
+}
+
 message RangeRequest {
   int64 range_id = 1;
 }
@@ -1692,6 +1717,13 @@ service Status {
       get : "/_status/hotranges"
     };
   }
+
+  rpc HotRanges2(HotRangesRequest) returns (HotRangesResponseV2) {
+    option (google.api.http) = {
+      get : "/_status/v2/hotranges"
+    };
+  }
+
   rpc Range(RangeRequest) returns (RangeResponse) {
     option (google.api.http) = {
       get : "/_status/range/{range_id}"

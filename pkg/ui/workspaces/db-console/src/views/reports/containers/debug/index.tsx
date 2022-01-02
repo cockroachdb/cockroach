@@ -417,8 +417,8 @@ export default function Debug() {
         <DebugTableRow title="Hot Ranges">
           <DebugTableLink
             name="All Nodes"
-            url="_status/hotranges"
-            note="_status/hotranges"
+            url="_status/v2/hotranges"
+            note="_status/v2/hotranges"
           />
           <DebugTableLink
             name="Single node's ranges"
