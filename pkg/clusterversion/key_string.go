@@ -10,26 +10,27 @@ func _() {
 	var x [1]struct{}
 	_ = x[V21_2-0]
 	_ = x[Start22_1-1]
-	_ = x[AvoidDrainingNames-2]
-	_ = x[DrainingNamesMigration-3]
-	_ = x[TraceIDDoesntImplyStructuredRecording-4]
-	_ = x[AlterSystemTableStatisticsAddAvgSizeCol-5]
-	_ = x[AlterSystemStmtDiagReqs-6]
-	_ = x[MVCCAddSSTable-7]
-	_ = x[InsertPublicSchemaNamespaceEntryOnRestore-8]
-	_ = x[UnsplitRangesInAsyncGCJobs-9]
-	_ = x[ValidateGrantOption-10]
-	_ = x[PebbleFormatBlockPropertyCollector-11]
-	_ = x[ProbeRequest-12]
-	_ = x[SelectRPCsTakeTracingInfoInband-13]
-	_ = x[PreSeedTenantSpanConfigs-14]
-	_ = x[SeedTenantSpanConfigs-15]
-	_ = x[PublicSchemasWithDescriptors-16]
+	_ = x[TargetBytesAvoidExcess-2]
+	_ = x[AvoidDrainingNames-3]
+	_ = x[DrainingNamesMigration-4]
+	_ = x[TraceIDDoesntImplyStructuredRecording-5]
+	_ = x[AlterSystemTableStatisticsAddAvgSizeCol-6]
+	_ = x[AlterSystemStmtDiagReqs-7]
+	_ = x[MVCCAddSSTable-8]
+	_ = x[InsertPublicSchemaNamespaceEntryOnRestore-9]
+	_ = x[UnsplitRangesInAsyncGCJobs-10]
+	_ = x[ValidateGrantOption-11]
+	_ = x[PebbleFormatBlockPropertyCollector-12]
+	_ = x[ProbeRequest-13]
+	_ = x[SelectRPCsTakeTracingInfoInband-14]
+	_ = x[PreSeedTenantSpanConfigs-15]
+	_ = x[SeedTenantSpanConfigs-16]
+	_ = x[PublicSchemasWithDescriptors-17]
 }
 
-const _Key_name = "V21_2Start22_1AvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptors"
+const _Key_name = "V21_2Start22_1TargetBytesAvoidExcessAvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptors"
 
-var _Key_index = [...]uint16{0, 5, 14, 32, 54, 91, 130, 153, 167, 208, 234, 253, 287, 299, 330, 354, 375, 403}
+var _Key_index = [...]uint16{0, 5, 14, 36, 54, 76, 113, 152, 175, 189, 230, 256, 275, 309, 321, 352, 376, 397, 425}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
