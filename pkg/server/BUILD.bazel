@@ -120,6 +120,7 @@ go_library(
         "//pkg/spanconfig/spanconfigkvaccessor",
         "//pkg/spanconfig/spanconfigmanager",
         "//pkg/sql",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catconstants",
