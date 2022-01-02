@@ -52,6 +52,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -2033,6 +2035,90 @@ func (s *statusServer) HotRanges(
 	return response, nil
 }
 
+func (s *statusServer) HotRangesV2(
+	ctx context.Context, req *serverpb.HotRangesRequest,
+) (*serverpb.HotRangesResponseV2, error) {
+	resp, err := s.HotRanges(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	dbNames := make(map[uint32]string)
+	tableNames := make(map[uint32]string)
+	indexNames := make(map[uint32]map[uint32]string)
+	parents := make(map[uint32]uint32)
+
+	var descrs []catalog.Descriptor
+	if err = s.sqlServer.distSQLServer.CollectionFactory.Txn(
+		ctx, s.sqlServer.internalExecutor, s.db,
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			if descrs, err = descriptors.GetAllDescriptors(ctx, txn); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	for _, desc := range descrs {
+		id := uint32(desc.GetID())
+		switch desc := desc.(type) {
+		case catalog.TableDescriptor:
+			parents[id] = uint32(desc.GetParentID())
+			tableNames[id] = desc.GetName()
+			indexNames[id] = make(map[uint32]string)
+			for _, idx := range desc.AllIndexes() {
+				indexNames[id][uint32(idx.GetID())] = idx.GetName()
+			}
+		case catalog.DatabaseDescriptor:
+			dbNames[id] = desc.GetName()
+		}
+	}
+
+	var ranges []*serverpb.HotRangesResponseV2_HotRange
+	// TODO (koorosh): how to flatten triple nested loop?
+	for nodeID, hr := range resp.HotRangesByNodeID {
+		for _, store := range hr.Stores {
+			for _, r := range store.HotRanges {
+				var (
+					dbName, tableName, indexName string
+					replicaNodeIDs               []roachpb.NodeID
+				)
+				_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
+				if err != nil {
+					continue
+				}
+				parent := parents[tableID]
+				if parent != 0 {
+					tableName = tableNames[tableID]
+					dbName = dbNames[parent]
+				} else {
+					dbName = dbNames[tableID]
+				}
+				_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
+				if err == nil {
+					indexName = indexNames[tableID][idxID]
+				}
+				for _, repl := range r.Desc.Replicas().Descriptors() {
+					replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
+				}
+				ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
+					RangeID:           r.Desc.RangeID,
+					NodeID:            nodeID,
+					QPS:               r.QueriesPerSecond,
+					TableName:         tableName,
+					DatabaseName:      dbName,
+					IndexName:         indexName,
+					ReplicaNodeIds:    replicaNodeIDs,
+					LeaseholderNodeID: r.LeaseholderNodeID,
+				})
+			}
+		}
+	}
+
+	return &serverpb.HotRangesResponseV2{Ranges: ranges}, nil
+}
+
 func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
 	var resp serverpb.HotRangesResponse_NodeResponse
 	err := s.stores.VisitStores(func(store *kvserver.Store) error {
@@ -2042,6 +2128,10 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 			HotRanges: make([]serverpb.HotRangesResponse_HotRange, len(ranges)),
 		}
 		for i, r := range ranges {
+			replica, err := store.GetReplica(r.Desc.GetRangeID())
+			if err == nil {
+				storeResp.HotRanges[i].LeaseholderNodeID = replica.State(ctx).Lease.Replica.NodeID
+			}
 			storeResp.HotRanges[i].Desc = *r.Desc
 			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
 		}
