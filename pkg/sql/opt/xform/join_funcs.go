@@ -1618,15 +1618,15 @@ func (c *CustomFuncs) SplitDisjunctionForJoin(
 	origLeftScan *memo.ScanExpr,
 	origRightScan *memo.ScanExpr,
 ) (
-	left opt.ScalarExpr,
-	right opt.ScalarExpr,
+	leftPreds opt.ScalarExpr,
+	rightPreds opt.ScalarExpr,
 	itemToReplace *memo.FiltersItem,
 	swapDuplicateScanPrivateOrder bool,
 	ok bool,
 ) {
 	for i := range filters {
 		if filters[i].Condition.Op() == opt.OrOp {
-			if left, right, ok = c.findInterestingDisjunctionPairForJoin(joinRel, &filters[i]); ok {
+			if leftPreds, rightPreds, ok = c.findInterestingDisjunctionPairForJoin(joinRel, &filters[i]); ok {
 				itemToReplace = &filters[i]
 				// The scan with lower column ids is expected on the left. If this is
 				// not the case, set swapDuplicateScanPrivateOrder to indicate to the
@@ -1647,6 +1647,28 @@ func (c *CustomFuncs) SplitDisjunctionForJoin(
 		}
 	}
 	return nil, nil, nil, false, false
+}
+
+// makeFilteredSelectForJoin takes a scanPrivate and filters and constructs a
+// new SelectExpr from a ScanExpr with filter columns mapped from origCols to
+// the column IDs in the new scan.
+func (c *CustomFuncs) makeFilteredSelectForJoin(
+	filters memo.FiltersExpr,
+	scanPrivate *memo.ScanPrivate,
+	origCols opt.ColSet,
+) (
+	newScan memo.RelExpr,
+	newSelect memo.RelExpr,
+	newCols opt.ColSet,
+) {
+	newScan = c.e.f.ConstructScan(scanPrivate)
+	newSelect =
+		c.e.f.ConstructSelect(
+			newScan,
+			c.e.funcs.MapFilterCols(filters, origCols, c.e.funcs.OutputCols(newScan)),
+		)
+	newCols = c.e.funcs.OutputCols(newScan)
+	return
 }
 
 // SplitJoinWithEquijoinDisjuncts checks a join relation for a disjunction of
@@ -1685,21 +1707,18 @@ func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
 	var leftInput memo.RelExpr
 	var rightInput memo.RelExpr
 
-	switch joinRel.(type) {
+	switch join := joinRel.(type) {
 	case *memo.InnerJoinExpr:
-		join := joinRel.(*memo.InnerJoinExpr)
 		joinPrivate = &join.JoinPrivate
 		leftInput = join.Left
 		rightInput = join.Right
 		joinType = descpb.JoinType_INNER
 	case *memo.SemiJoinExpr:
-		join := joinRel.(*memo.SemiJoinExpr)
 		joinPrivate = &join.JoinPrivate
 		leftInput = join.Left
 		rightInput = join.Right
 		joinType = descpb.JoinType_LEFT_SEMI
 	case *memo.AntiJoinExpr:
-		join := joinRel.(*memo.AntiJoinExpr)
 		joinPrivate = &join.JoinPrivate
 		leftInput = join.Left
 		rightInput = join.Right
@@ -1739,6 +1758,7 @@ func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
 		c.e.funcs.duplicateScanPrivatesForJoin(leftSP, rightSP, swapDuplicateScanPrivateOrder)
 	newLeftScanPrivate2, newRightScanPrivate2 :=
 		c.e.funcs.duplicateScanPrivatesForJoin(leftSP, rightSP, swapDuplicateScanPrivateOrder)
+
 	amendedLeftOrigCols := c.e.funcs.ScanPrivateCols(leftSP)
 	amendedRightOrigCols := c.e.funcs.ScanPrivateCols(rightSP)
 	amendedOrigCols := c.e.funcs.UnionCols(amendedLeftOrigCols, amendedRightOrigCols)
@@ -1752,18 +1772,10 @@ func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
 	}
 
 	// Build the new Selects for the first new join, with mapped filter columns.
-	newLeftScan := c.e.f.ConstructScan(newLeftScanPrivate)
-	newLeftSelect :=
-		c.e.f.ConstructSelect(
-			newLeftScan,
-			c.e.funcs.MapFilterCols(leftFilters, amendedLeftOrigCols, c.e.funcs.OutputCols(newLeftScan)),
-		)
-	newRightScan := c.e.f.ConstructScan(newRightScanPrivate)
-	newRightSelect :=
-		c.e.f.ConstructSelect(
-			newRightScan,
-			c.e.funcs.MapFilterCols(rightFilters, amendedRightOrigCols, c.e.funcs.OutputCols(newRightScan)),
-		)
+	newLeftScan, newLeftSelect, newLeftCols :=
+		c.makeFilteredSelectForJoin(leftFilters, newLeftScanPrivate, amendedLeftOrigCols)
+	newRightScan, newRightSelect, newRightCols :=
+		c.makeFilteredSelectForJoin(rightFilters, newRightScanPrivate, amendedRightOrigCols)
 
 	// Assign the firstOnClause, which was built from splitting the disjunction,
 	// to the first new join.
@@ -1771,7 +1783,7 @@ func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
 		c.e.funcs.MapFilterCols(
 			c.e.funcs.ReplaceFiltersItem(joinFilters, itemToReplace, firstOnClause),
 			amendedOrigCols,
-			c.e.funcs.UnionCols(c.e.funcs.OutputCols(newLeftScan), c.e.funcs.OutputCols(newRightScan)),
+			c.e.funcs.UnionCols(newLeftCols, newRightCols),
 		)
 	newJoinPrivate := c.e.funcs.DuplicateJoinPrivate(joinPrivate)
 
@@ -1788,18 +1800,10 @@ func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
 	}
 
 	// Build the new Selects for the second new join, with mapped filter columns.
-	newLeftScan2 := c.e.f.ConstructScan(newLeftScanPrivate2)
-	newLeftSelect2 :=
-		c.e.f.ConstructSelect(
-			newLeftScan2,
-			c.e.funcs.MapFilterCols(leftFilters, amendedLeftOrigCols, c.e.funcs.OutputCols(newLeftScan2)),
-		)
-	newRightScan2 := c.e.f.ConstructScan(newRightScanPrivate2)
-	newRightSelect2 :=
-		c.e.f.ConstructSelect(
-			newRightScan2,
-			c.e.funcs.MapFilterCols(rightFilters, amendedRightOrigCols, c.e.funcs.OutputCols(newRightScan2)),
-		)
+	_, newLeftSelect2, newLeftCols2 :=
+		c.makeFilteredSelectForJoin(leftFilters, newLeftScanPrivate2, amendedLeftOrigCols)
+	_, newRightSelect2, newRightCols2 :=
+		c.makeFilteredSelectForJoin(rightFilters, newRightScanPrivate2, amendedRightOrigCols)
 
 	// Assign the secondOnClause, which was built from splitting the disjunction,
 	// to the second new join.
@@ -1807,7 +1811,7 @@ func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
 		c.e.funcs.MapFilterCols(
 			c.e.funcs.ReplaceFiltersItem(joinFilters, itemToReplace, secondOnClause),
 			amendedOrigCols,
-			c.e.funcs.UnionCols(c.e.funcs.OutputCols(newLeftScan2), c.e.funcs.OutputCols(newRightScan2)),
+			c.e.funcs.UnionCols(newLeftCols2, newRightCols2),
 		)
 	newJoinPrivate2 := c.e.funcs.DuplicateJoinPrivate(joinPrivate)
 
@@ -1855,17 +1859,24 @@ func (c *CustomFuncs) SplitJoinWithEquijoinDisjuncts(
 	return
 }
 
+// isJoinPred tests if a predicate is a join predicate which references columns
+// from both leftRelColSet and rightRelColSet, as indicated in the predicate's
+// referenced columns, predCols.
+func isJoinPred(predCols opt.ColSet, leftRelColSet opt.ColSet, rightRelColSet opt.ColSet) (bool) {
+	return leftRelColSet.Intersects(predCols) && rightRelColSet.Intersects(predCols)
+}
+
 // findInterestingDisjunctionPairForJoin groups disjunction subexpressions into
 // an "interesting" pair of join predicates.
 //
-// An "interesting" pair of predicates is one where each predicate is an
+// An "interesting" pair of predicates is one where one predicate is an
 // equality predicate which could enable more performant joins than cross join,
-// such as hash join or lookup join. All predicates in the disjunction must be
-// equality join terms referencing both input relations. When there are more
-// than two predicates, the deepest leaf node in the left depth OrExpr tree
-// is returned as "left" and the remaining predicates are built into a brand new
-// OrExpr chain and returned as "right". The inputs to joinRel are expected to
-// be ScanExprs or SelectExprs with a ScanExpr as input.
+// such as hash join or lookup join. At least one predicate in the disjunction
+// must be an equality join term referencing both input relations. When there
+// are more than two predicates, the deepest leaf node in the left depth OrExpr
+// tree is returned as "left" and the remaining predicates are built into a
+// brand new OrExpr chain and returned as "right". The inputs to joinRel are
+// expected to be ScanExprs or SelectExprs with a ScanExpr as input.
 //
 // findInterestingDisjunctionPairForJoin returns an ok=false if at least one of
 // the ORed predicates is not an equality join term referencing both input
@@ -1902,44 +1913,54 @@ func (c *CustomFuncs) findInterestingDisjunctionPairForJoin(
 	var rightExprs memo.ScalarListExpr
 	leftColSet := c.OutputCols(leftScan)
 	rightColSet := c.OutputCols(rightScan)
+	leftHasNoJoinPreds := true
+
+	// An ANDed expression is interesting if it has at least one equality join
+	// predicate.
+	var isInterestingConjunction func(opt.ScalarExpr) bool
+	isInterestingConjunction = func(expr opt.ScalarExpr) bool {
+		interesting = false
+		switch t := expr.(type) {
+		case *memo.AndExpr:
+			if isInterestingConjunction(t.Left) {
+				return true
+			}
+			return isInterestingConjunction(t.Right)
+		case *memo.EqExpr:
+			cols := c.OuterCols(expr)
+			return isJoinPred(cols, leftColSet, rightColSet)
+		default:
+			return false
+		}
+	}
 
 	// Traverse all adjacent OrExpr.
 	var collect func(opt.ScalarExpr)
 	collect = func(expr opt.ScalarExpr) {
+		interesting = false
 		switch t := expr.(type) {
 		case *memo.OrExpr:
 			collect(t.Left)
-			if !interesting {
-				return
-			}
 			collect(t.Right)
 			return
-		case *memo.EqExpr:
-			// Do nothing
+		case *memo.EqExpr, *memo.AndExpr:
+			interesting = isInterestingConjunction(expr)
 			break
 		default:
-			interesting = false
-			return
-		}
-		cols := c.OuterCols(expr)
-
-		// The join predicate must reference columns from both the
-		// left and right relations.
-		if !leftColSet.Intersects(cols) || !rightColSet.Intersects(cols) {
-			interesting = false
-			return
+			// Do nothing
 		}
 
-		if len(leftExprs) == 0 {
+		if interesting && leftHasNoJoinPreds {
 			leftExprs = append(leftExprs, expr)
+			leftHasNoJoinPreds = false
 		} else {
 			rightExprs = append(rightExprs, expr)
 		}
 	}
+
 	collect(filter.Condition)
 	// Return an empty pair if either of the expression lists is empty.
-	if !interesting ||
-		len(leftExprs) == 0 ||
+	if len(leftExprs) == 0 ||
 		len(rightExprs) == 0 {
 		return nil, nil, false
 	}

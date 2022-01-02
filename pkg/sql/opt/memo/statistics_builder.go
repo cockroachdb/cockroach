@@ -3933,25 +3933,39 @@ _FilterLoop:
 		}
 		var filter FiltersItem
 		var filters FiltersExpr = nil
+		var filtersFDs []props.FuncDepSet = nil
+		var ok bool
+
 		for i := 0; i < len(disjuncts); i++ {
-			// Only handle equality expressions for now.
-			if _, ok := disjuncts[i].(*EqExpr); !ok {
+			var andFilters FiltersExpr = nil
+			filtersFD := props.FuncDepSet{}
+
+			// Only handle ANDed equality expressions for which ConstructFiltersItem
+			// is able to build column equivalencies.
+			switch disjuncts[i].(type) {
+			case *EqExpr, *AndExpr:
+			 if andFilters, ok = addEqExprConjuncts(disjuncts[i], andFilters, e.Memo()); !ok {
+			     numUnappliedConjuncts++
+			     continue _FilterLoop
+			 }
+			 e.Memo().logPropsBuilder.addFiltersToFuncDep(andFilters, &filtersFD)
+			default:
 				numUnappliedConjuncts++
 				continue _FilterLoop
 			}
-			filter = ConstructFiltersItem(disjuncts[i], e.Memo())
 			// If no column equivalencies are found, we know nothing about this term,
 			// so should skip selectivity estimation on the entire conjunct.
-			if filter.ScalarProps().FuncDeps.Empty() {
+			if filtersFD.Empty() {
 				numUnappliedConjuncts++
 				continue _FilterLoop
 			}
 			filters = append(filters, filter)
+			filtersFDs = append(filtersFDs, filtersFD)
 		}
 		var singleSelectivity props.Selectivity
 		var selectivities []props.Selectivity = nil
 		for i := 0; i < len(filters); i++ {
-			FD := &filters[i].ScalarProps().FuncDeps
+			FD := &filtersFDs[i]
 			equivReps := FD.EquivReps()
 			if semiJoin {
 				singleSelectivity = sb.selectivityFromEquivalenciesSemiJoin(
@@ -4020,6 +4034,32 @@ func ConstructFiltersItem(condition opt.ScalarExpr, m *Memo) FiltersItem {
 	item := FiltersItem{Condition: condition}
 	item.PopulateProps(m)
 	return item
+}
+
+// addEqExprConjuncts recursively walks a scalar expression as long as it
+// continues to find nested And operators. It adds any equality expression
+// conjuncts to the given FiltersExpr and returns true.
+// This function is inspired by norm.CustomFuncs.addEqExprConjuncts, but serves
+// a different purpose.
+// The whole purpose of this new function is to enable the building of
+// functional dependencies based on equality predicates for selectivity
+// estimation purposes, so it is not important to traverse OrExpr expression
+// subtrees or make filters for any other expression type.
+func addEqExprConjuncts(
+	scalar opt.ScalarExpr, filters FiltersExpr, m *Memo,
+) (_ FiltersExpr, ok bool) {
+	switch t := scalar.(type) {
+	case *AndExpr:
+		var ok1, ok2 bool
+		filters, ok1 = addEqExprConjuncts(t.Left, filters, m)
+		filters, ok2 = addEqExprConjuncts(t.Right, filters, m)
+		return filters, ok1 || ok2
+	case *EqExpr:
+		filters = append(filters, ConstructFiltersItem(t, m))
+	default:
+		return nil, false
+	}
+	return filters, true
 }
 
 func (sb *statisticsBuilder) selectivityFromEquivalency(
