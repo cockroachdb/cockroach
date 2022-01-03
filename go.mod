@@ -108,7 +108,7 @@ require (
 	github.com/lib/pq v1.10.2
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
 	github.com/linkedin/goavro/v2 v2.10.0
-	github.com/lufia/iostat v1.0.0
+	github.com/lufia/iostat v1.2.1
 	github.com/maruel/panicparse/v2 v2.2.0
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
 	github.com/mattn/go-isatty v0.0.14

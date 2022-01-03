@@ -4850,10 +4850,10 @@ def go_deps():
         name = "com_github_lufia_iostat",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lufia/iostat",
-        sha256 = "84d50ec22f751a4750b17ae3a58edcf80f15eeba948b0611c84e5cd968764c8f",
-        strip_prefix = "github.com/lufia/iostat@v1.0.0",
+        sha256 = "964e9c5528a9de240d77d17df387bae1d59ddedd25734542ae8d70a27c59199e",
+        strip_prefix = "github.com/lufia/iostat@v1.2.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lufia/iostat/com_github_lufia_iostat-v1.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lufia/iostat/com_github_lufia_iostat-v1.2.1.zip",
         ],
     )
     go_repository(
