@@ -53,7 +53,7 @@ go_test(
         "proxy_handler_test.go",
         "server_test.go",
     ],
-    data = [":testdata"],
+    data = glob(["testdata/**"]),
     embed = [":sqlproxyccl"],
     deps = [
         "//pkg/base",
