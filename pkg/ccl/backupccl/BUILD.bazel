@@ -23,6 +23,7 @@ go_library(
         "restore_planning.go",
         "restore_processor_planning.go",
         "restore_schema_change_creation.go",
+        "restore_span_covering.go",
         "schedule_exec.go",
         "schedule_pts_chaining.go",
         "show.go",
