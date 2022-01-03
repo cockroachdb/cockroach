@@ -257,9 +257,21 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 					return
 				}
 
-				probeCtx, sp := tracing.EnsureChildSpan(ctx, p.tracer, opName+" - probe")
-				probe(probeCtx, p.db, pl)
-				sp.Finish()
+				func() {
+					// KVPROBER_TRACES is for traces of probes sent to the KV layer by
+					// kvprober. Note that lower fidelity logging goes to the HEALTH
+					// channel instead of the KVPROBER_TRACES channel. Eventually, CC
+					// will integrate with proper tracing infra (like Google Cloud Trace).
+					// At that point, we will send these traces there. For now tho, we
+					// simply log out traces.
+					probeCtx, collectAndFinish := tracing.ContextWithRecordingSpan(
+						ctx, p.tracer, opName)
+					defer collectAndFinish()
+					probe(probeCtx, p.db, pl)
+					if logTraces.Get(&p.settings.SV) {
+						log.KvproberTraces.Infof(ctx, "%s", collectAndFinish().String())
+					}
+				}()
 			}
 		})
 	}
@@ -307,7 +319,6 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTx
 		// We read a "range-local" key dedicated to probing. See pkg/keys for more.
 		// There is no data at the key, but that is okay. Even tho there is no data
 		// at the key, the prober still executes a read operation on the range.
-		// TODO(josh): Trace the probes.
 		f := ops.Read(step.Key)
 		if bypassAdmissionControl.Get(&p.settings.SV) {
 			return txns.Txn(ctx, f)

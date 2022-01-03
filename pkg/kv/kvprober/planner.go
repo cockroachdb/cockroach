@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -150,6 +151,8 @@ func newMeta2Planner(
 //   we pay a smaller CPU cost more often.
 func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 	if len(p.plan) == 0 {
+		log.Eventf(ctx, "scanning meta2 to generate a plan")
+
 		// Protect CRDB from planning executing too often, due to either issues
 		// with CRDB (meta2 unavailability) or bugs in kvprober.
 		timeSinceLastPlan := p.now().Sub(p.lastPlanTime) // Since(p.lastPlanTime)

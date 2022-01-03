@@ -455,4 +455,5 @@ sinks:
     channels: TELEMETRY
     max-file-size: 102400
     max-group-size: 1048576
+  kvprober-traces: { channels: KVPROBER_TRACES }
 `
