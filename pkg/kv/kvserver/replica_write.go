@@ -213,10 +213,6 @@ func (r *Replica) executeWriteBatch(
 		}
 	}()
 
-	brSig := r.breaker.Signal()
-	if isCircuitBreakerProbe(ctx) {
-		brSig = neverTripSignaller{}
-	}
 	for {
 		select {
 		case <-brSig.C():

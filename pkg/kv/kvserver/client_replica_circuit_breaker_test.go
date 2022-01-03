@@ -56,7 +56,7 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 	runCircuitBreakerTest(t, "leaseholder-tripped", func(t *testing.T, ctx context.Context, tc *circuitBreakerTest) {
 		// Get lease on n1.
 		require.NoError(t, tc.Write(n1))
-		// Disable the probe so that when the breaker trips, it stays that tripped.
+		// Disable the probe so that when the breaker trips, it stays tripped.
 		tc.SetProbeEnabled(n1, false)
 		tc.Report(n1, errors.New("boom"))
 
@@ -207,7 +207,9 @@ func (cbt *circuitBreakerTest) Report(idx int, err error) {
 }
 
 func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) error, idx int) {
+	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
+		t.Helper()
 		err := method(idx)
 		// All errors coming out should be annotated as coming from
 		// the circuit breaker.
@@ -248,12 +250,13 @@ func (*circuitBreakerTest) sendBatchRequest(repl *kvserver.Replica, req roachpb.
 	defer cancel()
 	_, pErr := repl.Send(ctx, ba)
 	if err := ctx.Err(); err != nil {
-		return errors.Wrap(err, "timed out waiting for batch response")
+		return errors.Wrap(pErr.GoError(), "timed out waiting for batch response")
 	}
 	return pErr.GoError()
 }
 
 func (*circuitBreakerTest) RequireIsBreakerOpen(t *testing.T, err error) {
+	t.Helper()
 	require.True(t, errors.Is(err, circuit.ErrBreakerOpen), "%+v", err)
 }
 
