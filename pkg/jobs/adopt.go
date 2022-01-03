@@ -421,7 +421,9 @@ const pauseAndCancelUpdate = `
 						 WHEN status = '` + string(StatusPauseRequested) + `' THEN '` + string(StatusPaused) + `'
 						 WHEN status = '` + string(StatusCancelRequested) + `' THEN '` + string(StatusReverting) + `'
 						 ELSE status
-          END
+          END,
+					num_runs = 0,
+					last_run = NULL
     WHERE (status IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `'))
       AND ((claim_session_id = $1) AND (claim_instance_id = $2))
 RETURNING id, status

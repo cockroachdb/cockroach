@@ -417,9 +417,6 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		).Scan(&lastRun)
 		return jobID, lastRun
 	}
-	validateResumeCounts := func(t *testing.T, expected, found int64) {
-		require.Equal(t, expected, found, "unexpected number of jobs resumed")
-	}
 	waitUntilCount := func(t *testing.T, counter *metric.Counter, count int64) {
 		testutils.SucceedsSoon(t, func() error {
 			cnt := counter.Count()
@@ -473,6 +470,9 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		adopted                  *metric.Counter
 		resumed                  *metric.Counter
 		afterJobStateMachineKnob func()
+		// expectImmediateRetry is true if the test should expect immediate
+		// resumption on retry, such as after pausing and resuming job.
+		expectImmediateRetry bool
 	}
 	testInfraSetUp := func(ctx context.Context, bti *BackoffTestInfra) func() {
 		// We use a manual clock to control and evaluate job execution times.
@@ -579,8 +579,13 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			// adopt-loops do not resume jobs without correctly following the job
 			// schedules.
 			waitUntilCount(t, bti.adopted, bti.adopted.Count()+2)
-			// Validate that the job is not resumed yet.
-			validateResumeCounts(t, expectedResumed, bti.resumed.Count())
+			if bti.expectImmediateRetry && i > 0 {
+				// Validate that the job did not wait to resume on retry.
+				require.Equal(t, expectedResumed+1, bti.resumed.Count(), "unexpected number of jobs resumed in retry %d", i)
+			} else {
+				// Validate that the job is not resumed yet.
+				require.Equal(t, expectedResumed, bti.resumed.Count(), "unexpected number of jobs resumed in retry %d", i)
+			}
 			// Advance the clock by delta from the expected time of next retry.
 			bti.clock.Advance(unitTime)
 			// Wait until the resumer completes its execution.
@@ -588,7 +593,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			expectedResumed++
 			retryCnt++
 			// Validate that the job is resumed only once.
-			validateResumeCounts(t, expectedResumed, bti.resumed.Count())
+			require.Equal(t, expectedResumed, bti.resumed.Count(), "unexpected number of jobs resumed in retry %d", i)
 			lastRun = bti.clock.Now()
 		}
 		bti.done.Store(true)
@@ -631,7 +636,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 
 	t.Run("pause running", func(t *testing.T) {
 		ctx := context.Background()
-		bti := BackoffTestInfra{}
+		bti := BackoffTestInfra{expectImmediateRetry: true}
 		bti.afterJobStateMachineKnob = func() {
 			if bti.done.Load().(bool) {
 				return
@@ -706,7 +711,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 
 	t.Run("pause reverting", func(t *testing.T) {
 		ctx := context.Background()
-		bti := BackoffTestInfra{}
+		bti := BackoffTestInfra{expectImmediateRetry: true}
 		bti.afterJobStateMachineKnob = func() {
 			if bti.done.Load().(bool) {
 				return
