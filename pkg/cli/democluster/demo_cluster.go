@@ -634,7 +634,7 @@ func (c *transientCluster) waitForRPCAddrReadinessOrError(
 	rpcAddrReadyChs []chan struct{},
 	timeoutCh <-chan time.Time,
 ) error {
-	if idx > len(rpcAddrReadyChs) || idx > len(c.servers) {
+	if idx >= len(rpcAddrReadyChs) || idx >= len(c.servers) {
 		return errors.AssertionFailedf("programming error: server %d not created yet", idx)
 	}
 
