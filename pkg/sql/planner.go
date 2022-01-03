@@ -101,8 +101,6 @@ type extendedEvalContext struct {
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
-
-	SchemaChangeInternalExecutor *InternalExecutor
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
