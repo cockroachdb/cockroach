@@ -118,6 +118,8 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 	if err != nil {
 		return err
 	}
-	d.jobRegistry.NotifyToAdoptJobs(ctx)
+	// TODO(ajwerner): Rework the job registry dependency to capture the set of
+	// jobs which were created to more efficiently notify and wait for jobs here.
+	d.jobRegistry.NotifyToAdoptJobs()
 	return nil
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -921,4 +923,74 @@ func TestJitterCalculation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRunWithoutLoop tests that Run calls will trigger the execution of a
+// job even when the adoption loop is set to infinitely slow and that the
+// observation of the completion of the job using the notification channel
+// for local jobs works.
+func TestRunWithoutLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer ResetConstructors()
+	var shouldFailCounter int64
+	var ran, failure int64
+	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+		var successDone, failureDone int64
+		shouldFail := atomic.AddInt64(&shouldFailCounter, 1)%2 == 0
+		maybeIncrementCounter := func(check, counter *int64) {
+			if atomic.CompareAndSwapInt64(check, 0, 1) {
+				atomic.AddInt64(counter, 1)
+			}
+		}
+		return FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				maybeIncrementCounter(&successDone, &ran)
+				if shouldFail {
+					return errors.New("boom")
+				}
+				return nil
+			},
+			FailOrCancel: func(ctx context.Context) error {
+				maybeIncrementCounter(&failureDone, &failure)
+				return nil
+			},
+		}
+	})
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	intervalBaseSetting.Override(ctx, &settings.SV, 1e6)
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+	})
+
+	defer s.Stopper().Stop(ctx)
+	r := s.JobRegistry().(*Registry)
+	var records []*Record
+	const N = 10
+	for i := 0; i < N; i++ {
+		records = append(records, &Record{
+			JobID:       r.MakeJobID(),
+			Description: "testing",
+			Username:    security.RootUserName(),
+			Details:     jobspb.ImportDetails{},
+			Progress:    jobspb.ImportProgress{},
+		})
+	}
+	var jobIDs []jobspb.JobID
+	require.NoError(t, kvDB.Txn(ctx, func(
+		ctx context.Context, txn *kv.Txn,
+	) (err error) {
+		jobIDs, err = r.CreateJobsWithTxn(ctx, txn, records)
+		return err
+	}))
+	require.EqualError(t, r.Run(
+		ctx, s.InternalExecutor().(sqlutil.InternalExecutor), jobIDs,
+	), "boom")
+	// No adoption loops should have been run.
+	require.Equal(t, int64(0), r.metrics.AdoptIterations.Count())
+	require.Equal(t, int64(N), atomic.LoadInt64(&ran))
+	require.Equal(t, int64(N/2), atomic.LoadInt64(&failure))
 }

@@ -11,9 +11,7 @@
 package jobs
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -37,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -140,7 +137,18 @@ type Registry struct {
 		// jobs scheduled inside a transaction, they will show in this map but will
 		// only be run when the transaction commits.
 		adoptedJobs map[jobspb.JobID]*adoptedJob
+
+		// waiting is a set of jobs for which we're waiting to complete. In general,
+		// we expect these jobs to have been started with a claim by this instance.
+		// That may not have lasted to completion. Separately a goroutine will be
+		// passively polling for these jobs to complete. If they complete locally,
+		// the waitingSet will be updated appropriately.
+		waiting jobWaitingSets
 	}
+
+	// withSessionEvery ensures that logging when failing to get a live session
+	// is not too loud.
+	withSessionEvery log.EveryN
 
 	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
 }
@@ -198,7 +206,8 @@ func MakeRegistry(
 		// Use a non-zero buffer to allow queueing of notifications.
 		// The writing method will use a default case to avoid blocking
 		// if a notification is already queued.
-		adoptionCh: make(chan adoptionNotice, 1),
+		adoptionCh:       make(chan adoptionNotice, 1),
+		withSessionEvery: log.Every(time.Second),
 	}
 	if knobs != nil {
 		r.knobs = *knobs
@@ -207,6 +216,7 @@ func MakeRegistry(
 		}
 	}
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
+	r.mu.waiting = make(map[jobspb.JobID]map[*waitingSet]struct{})
 	r.metrics.init(histogramWindowInterval)
 	return r
 }
@@ -261,111 +271,6 @@ func (r *Registry) makeCtx() (context.Context, func()) {
 // MakeJobID generates a new job ID.
 func (r *Registry) MakeJobID() jobspb.JobID {
 	return jobspb.JobID(builtins.GenerateUniqueInt(r.nodeID.SQLInstanceID()))
-}
-
-// NotifyToAdoptJobs notifies the job adoption loop to start claimed jobs.
-func (r *Registry) NotifyToAdoptJobs(context.Context) {
-	select {
-	case r.adoptionCh <- resumeClaimedJobs:
-	default:
-	}
-}
-
-// WaitForJobs waits for a given list of jobs to reach some sort
-// of terminal state.
-func (r *Registry) WaitForJobs(
-	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
-) error {
-	if len(jobs) == 0 {
-		return nil
-	}
-	buf := bytes.Buffer{}
-	for i, id := range jobs {
-		if i > 0 {
-			buf.WriteString(",")
-		}
-		buf.WriteString(fmt.Sprintf(" %d", id))
-	}
-	// Manually retry instead of using SHOW JOBS WHEN COMPLETE so we have greater
-	// control over retries. Also, avoiding SHOW JOBS prevents us from having to
-	// populate the crdb_internal.jobs vtable.
-	query := fmt.Sprintf(
-		`SELECT count(*) FROM system.jobs WHERE id IN (%s)
-       AND (status != $1 AND status != $2 AND status != $3 AND status != $4 AND status != $5)`,
-		buf.String())
-	for r := retry.StartWithCtx(ctx, retry.Options{
-		InitialBackoff: 5 * time.Millisecond,
-		MaxBackoff:     1 * time.Second,
-		Multiplier:     1.5,
-	}); r.Next(); {
-		// We poll the number of queued jobs that aren't finished. As with SHOW JOBS
-		// WHEN COMPLETE, if one of the jobs is missing from the jobs table for
-		// whatever reason, we'll fail later when we try to load the job.
-		row, err := ex.QueryRowEx(
-			ctx,
-			"poll-show-jobs",
-			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			query,
-			StatusSucceeded,
-			StatusFailed,
-			StatusCanceled,
-			StatusRevertFailed,
-			StatusPaused,
-		)
-		if err != nil {
-			return errors.Wrap(err, "polling for queued jobs to complete")
-		}
-		if row == nil {
-			return errors.New("polling for queued jobs failed")
-		}
-		count := int64(tree.MustBeDInt(row[0]))
-		if log.V(3) {
-			log.Infof(ctx, "waiting for %d queued jobs to complete", count)
-		}
-		if count == 0 {
-			break
-		}
-	}
-	for i, id := range jobs {
-		j, err := r.LoadJob(ctx, id)
-		if err != nil {
-			return errors.WithHint(
-				errors.Wrapf(err, "job %d could not be loaded", jobs[i]),
-				"The job may not have succeeded.")
-		}
-		if j.Payload().FinalResumeError != nil {
-			decodedErr := errors.DecodeError(ctx, *j.Payload().FinalResumeError)
-			return decodedErr
-		}
-		if j.Payload().Error != "" {
-			return errors.Newf("job %d failed with error: %s", jobs[i], j.Payload().Error)
-		}
-		if j.Status() == StatusPaused {
-			if reason := j.Payload().PauseReason; reason != "" {
-				return errors.Newf("job %d was paused before it completed with reason: %s", jobs[i], reason)
-			}
-			return errors.Newf("job %d was paused before it completed", jobs[i])
-		}
-	}
-	return nil
-}
-
-// Run starts previously unstarted jobs from a list of scheduled
-// jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
-func (r *Registry) Run(
-	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
-) error {
-	if len(jobs) == 0 {
-		return nil
-	}
-	log.Infof(ctx, "scheduled jobs %+v", jobs)
-	r.NotifyToAdoptJobs(ctx)
-	err := r.WaitForJobs(ctx, ex, jobs)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // newJob creates a new Job.
@@ -764,26 +669,28 @@ SELECT claim_session_id
  FETCH FIRST $2 ROWS ONLY)
 `
 
+type withSessionFunc func(ctx context.Context, s sqlliveness.Session)
+
+func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
+	s, err := r.sqlInstance.Session(ctx)
+	if err != nil {
+		if log.ExpensiveLogEnabled(ctx, 2) ||
+			(ctx.Err() == nil && r.withSessionEvery.ShouldLog()) {
+			log.Errorf(ctx, "error getting live session: %s", err)
+		}
+		return
+	}
+
+	log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
+	f(ctx, s)
+}
+
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
-	every := log.Every(time.Second)
-	withSession := func(
-		f func(ctx context.Context, s sqlliveness.Session),
-	) func(ctx context.Context) {
-		return func(ctx context.Context) {
-			s, err := r.sqlInstance.Session(ctx)
-			if err != nil {
-				if log.ExpensiveLogEnabled(ctx, 2) || (ctx.Err() == nil && every.ShouldLog()) {
-					log.Errorf(ctx, "error getting live session: %s", err)
-				}
-				return
-			}
-
-			log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
-			f(ctx, s)
-		}
+	wrapWithSession := func(f withSessionFunc) func(ctx context.Context) {
+		return func(ctx context.Context) { r.withSession(ctx, f) }
 	}
 
 	// removeClaimsFromDeadSessions queries the jobs table for non-terminal
@@ -816,14 +723,14 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			log.Errorf(ctx, "failed to serve pause and cancel requests: %v", err)
 		}
 	}
-	cancelLoopTask := withSession(func(ctx context.Context, s sqlliveness.Session) {
+	cancelLoopTask := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		removeClaimsFromDeadSessions(ctx, s)
 		r.maybeCancelJobs(ctx, s)
 		servePauseAndCancelRequests(ctx, s)
 	})
 	// claimJobs iterates the set of jobs which are not currently claimed and
 	// claims jobs up to maxAdoptionsPerLoop.
-	claimJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
+	claimJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		r.metrics.AdoptIterations.Inc(1)
 		if err := r.claimJobs(ctx, s); err != nil {
 			log.Errorf(ctx, "error claiming jobs: %s", err)
@@ -832,7 +739,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// processClaimedJobs iterates the jobs claimed by the current node that
 	// are in the running or reverting state, and then it starts those jobs if
 	// they are not already running.
-	processClaimedJobs := withSession(func(ctx context.Context, s sqlliveness.Session) {
+	processClaimedJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		if r.adoptionDisabled(ctx) {
 			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
 			r.cancelAllAdoptedJobs()
@@ -1269,6 +1176,7 @@ func (r *Registry) stepThroughStateMachine(
 			)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Canceled)
+		r.removeFromWaitingSets(job.ID())
 		return errors.WithSecondaryError(errors.Errorf("job %s", status), jobErr)
 	case StatusSucceeded:
 		if jobErr != nil {
@@ -1279,6 +1187,7 @@ func (r *Registry) stepThroughStateMachine(
 		switch {
 		case err == nil:
 			telemetry.Inc(TelemetryMetrics[jobType].Successful)
+			r.removeFromWaitingSets(job.ID())
 		default:
 			// If we can't transactionally mark the job as succeeded then it will be
 			// restarted during the next adopt loop and it will be retried.
@@ -1331,6 +1240,7 @@ func (r *Registry) stepThroughStateMachine(
 			)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
+		r.removeFromWaitingSets(job.ID())
 		return jobErr
 	case StatusRevertFailed:
 		// TODO(sajjad): Remove StatusRevertFailed and related code in other places in v22.1.

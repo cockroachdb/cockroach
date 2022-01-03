@@ -21,6 +21,7 @@ go_library(
         "update.go",
         "utils.go",
         "validate.go",
+        "wait.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs",
     visibility = ["//visibility:public"],
