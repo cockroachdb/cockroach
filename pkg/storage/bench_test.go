@@ -23,6 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -565,9 +569,10 @@ const overhead = 48 // Per key/value overhead (empirically determined)
 type engineMaker func(testing.TB, string) Engine
 
 type benchDataOptions struct {
-	numVersions int
-	numKeys     int
-	valueBytes  int
+	numVersions       int
+	numKeys           int
+	valueBytes        int
+	numColumnFamilies int
 
 	// In transactional mode, data is written by writing and later resolving
 	// intents. In non-transactional mode, data is written directly, without
@@ -678,14 +683,15 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 // skip more historical versions; later timestamps mean scans which
 // skip fewer.
 //
-// The creation of the database is time consuming, especially for larger
-// numbers of versions. The database is persisted between runs and stored in
-// the current directory as "mvcc_scan_<versions>_<keys>_<valueBytes>" (which
-// is also returned).
+// The creation of the database is time consuming, especially for larger numbers
+// of versions. The database is persisted between runs and stored in the current
+// directory as "mvcc_scan_<versions>_<keys>_<columnFamilies>_<valueBytes>"
+// (which is also returned).
 func setupMVCCData(
 	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions,
 ) (Engine, string) {
-	loc := fmt.Sprintf("mvcc_data_%d_%d_%d", opts.numVersions, opts.numKeys, opts.valueBytes)
+	loc := fmt.Sprintf("mvcc_data_%d_%d_%d_%d",
+		opts.numVersions, opts.numKeys, opts.numColumnFamilies, opts.valueBytes)
 	if opts.transactional {
 		loc += "_txn"
 	}
@@ -693,8 +699,8 @@ func setupMVCCData(
 	exists := true
 	if _, err := os.Stat(loc); oserror.IsNotExist(err) {
 		exists = false
-	} else if err != nil {
-		b.Fatal(err)
+	} else {
+		require.NoError(b, err)
 	}
 
 	eng := emk(b, loc)
@@ -709,10 +715,16 @@ func setupMVCCData(
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
 
-	keys := make([]roachpb.Key, opts.numKeys)
+	keySlice := make([]roachpb.Key, opts.numKeys)
 	var order []int
+	var cf uint32
 	for i := 0; i < opts.numKeys; i++ {
-		keys[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
+		if opts.numColumnFamilies > 0 {
+			keySlice[i] = makeBenchRowKey(b, nil, i/opts.numColumnFamilies, cf)
+			cf = (cf + 1) % uint32(opts.numColumnFamilies)
+		} else {
+			keySlice[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
+		}
 		keyVersions := rng.Intn(opts.numVersions) + 1
 		for j := 0; j < keyVersions; j++ {
 			order = append(order, i)
@@ -734,7 +746,7 @@ func setupMVCCData(
 	}
 
 	writeKey := func(batch Batch, idx int) {
-		key := keys[idx]
+		key := keySlice[idx]
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
 		value.InitChecksum(key)
 		counts[idx]++
@@ -749,7 +761,7 @@ func setupMVCCData(
 	}
 
 	resolveLastIntent := func(batch Batch, idx int) {
-		key := keys[idx]
+		key := keySlice[idx]
 		txnMeta := txn.TxnMeta
 		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
 		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
@@ -795,7 +807,7 @@ func setupMVCCData(
 	if opts.transactional {
 		// If we were writing transactionally, we need to do one last round of
 		// intent resolution. Just stuff it all into the last batch.
-		for idx := range keys {
+		for idx := range keySlice {
 			resolveLastIntent(batch, idx)
 		}
 	}
@@ -842,17 +854,25 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		iter.Close()
 	}
 
+	var startKey, endKey roachpb.Key
+	startKeyBuf := append(make([]byte, 0, 1024), []byte("key-")...)
+	endKeyBuf := append(make([]byte, 0, 1024), []byte("key-")...)
+
 	b.SetBytes(int64(opts.numRows * opts.valueBytes))
 	b.ResetTimer()
 
-	startKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-	endKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 	for i := 0; i < b.N; i++ {
 		// Choose a random key to start scan.
-		keyIdx := rand.Int31n(int32(opts.numKeys - opts.numRows))
-		startKey := roachpb.Key(encoding.EncodeUvarintAscending(startKeyBuf[:4], uint64(keyIdx)))
-		endKey := roachpb.Key(encoding.EncodeUvarintAscending(endKeyBuf[:4], uint64(keyIdx+int32(opts.numRows)-1)))
-		endKey = endKey.Next()
+		if opts.numColumnFamilies == 0 {
+			keyIdx := rand.Int31n(int32(opts.numKeys - opts.numRows))
+			startKey = roachpb.Key(encoding.EncodeUvarintAscending(startKeyBuf[:4], uint64(keyIdx)))
+			endKey = roachpb.Key(encoding.EncodeUvarintAscending(endKeyBuf[:4], uint64(keyIdx+int32(opts.numRows)-1))).Next()
+		} else {
+			startID := rand.Int63n(int64((opts.numKeys - opts.numRows) / opts.numColumnFamilies))
+			endID := startID + int64(opts.numRows/opts.numColumnFamilies) + 1
+			startKey = makeBenchRowKey(b, startKeyBuf[:0], int(startID), 0)
+			endKey = makeBenchRowKey(b, endKeyBuf[:0], int(endID), 0)
+		}
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
 		res, err := MVCCScan(ctx, eng, startKey, endKey, ts, MVCCScanOptions{
@@ -1575,4 +1595,27 @@ func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys i
 		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, false, hlc.Timestamp{}, math.MaxInt64)
 		require.NoError(b, err)
 	}
+}
+
+var benchRowColMap catalog.TableColMap
+var benchRowPrefix roachpb.Key
+
+func init() {
+	benchRowColMap.Set(0, 0)
+	benchRowPrefix = keys.SystemSQLCodec.IndexPrefix(1, 1)
+}
+
+// makeBenchRowKey makes a key for a SQL row for use in benchmarks,
+// using the system tenant with table 1 index 1, and a single column.
+func makeBenchRowKey(b *testing.B, buf []byte, id int, columnFamily uint32) roachpb.Key {
+	var err error
+	buf = append(buf, benchRowPrefix...)
+	buf, _, err = rowenc.EncodeColumns(
+		[]descpb.ColumnID{0}, nil /* directions */, benchRowColMap,
+		[]tree.Datum{tree.NewDInt(tree.DInt(id))}, buf)
+	if err != nil {
+		// conditionally check this, for performance
+		require.NoError(b, err)
+	}
+	return keys.MakeFamilyKey(buf, columnFamily)
 }
