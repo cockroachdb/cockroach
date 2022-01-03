@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -109,7 +110,7 @@ func (r *Replica) Send(
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
 func (r *Replica) sendWithRangeID(
 	ctx context.Context, _forStacks roachpb.RangeID, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+) (_ *roachpb.BatchResponse, rErr *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
@@ -117,6 +118,34 @@ func (r *Replica) sendWithRangeID(
 
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
+	parCtx := ctx
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer func() {
+		// HACK (or rather crude version of final thing):
+		// TODO(tbg): be careful about AmbiguousResultError here. If something already got proposed,
+		// need to propagate an ambiguous result, not any kind of cancellation error. Or maybe we don't,
+		// as long as the code on the other side (DistSender) isn't going to make any assumptions about
+		// what did or did not happen yet. Somewhat relatedly, it would be nice to know that a txn did
+		// not commit when a breaker error comes back.
+		if parCtx.Err() == nil && ctx.Err() != nil && errors.Is(rErr.GoError(), context.Canceled) {
+			if brErr := r.breaker.Signal().Err(); brErr != nil {
+				rErr = roachpb.NewError(brErr)
+			}
+		}
+	}()
+	r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {
+		// HACK: without this, if a request got stuck and is abandoned, it will
+		// still hold its latches and so subsequent requests will time out on
+		// SequenceReq if we don't do this.
+		select {
+		case <-ctx.Done():
+			return
+		case <-r.breaker.Signal().C():
+			time.Sleep(time.Second) // Hack on hack to avoid context.Canceled when reqs reach the breaker
+			cancel()
+		}
+	})
 
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)

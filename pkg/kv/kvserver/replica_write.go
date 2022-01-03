@@ -100,6 +100,25 @@ func withCircuitBreakerProbeMarker(ctx context.Context) context.Context {
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
+	// The circuit breaker is checked very early to successfully fail-fast the
+	// majority of requests even if there's a truly bad problem like a deadlock.
+	//
+	// TODO(tbg): consider doing this in `(*Replica).Send` already.
+	// TODO(tbg): DistSender needs to understand the circuit breaker errors.
+	// Otherwise, if its caching info is stale, it might persistently contact
+	// unavailable replicas despite there possibly existing a healthy alternative.
+	brSig := r.breaker.Signal()
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
+	if false {
+		// NB: aggressive check disabled since they should "never" be necessary
+		// in testing.
+		if err := brSig.Err(); err != nil {
+			return nil, g, roachpb.NewError(err)
+		}
+	}
+
 	startTime := timeutil.Now()
 
 	// Even though we're not a read-only operation by definition, we have to
