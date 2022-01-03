@@ -93,7 +93,7 @@ func standardOptions(i int) *pebble.Options {
   max_concurrent_compactions=2
 `,
 	}
-	if i < 0 || i > len(stdOpts) {
+	if i < 0 || i >= len(stdOpts) {
 		panic("invalid index for standard option")
 	}
 	opts := storage.DefaultPebbleOptions()
