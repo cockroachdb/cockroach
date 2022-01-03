@@ -195,7 +195,9 @@ func (r *Replica) executeWriteBatch(
 	startPropTime := timeutil.Now()
 	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
-	slowTimer.Reset(r.store.cfg.SlowReplicationThreshold)
+
+	slowThreshold := r.slowReplicationThreshold(ba)
+	slowTimer.Reset(slowThreshold)
 	// NOTE: this defer was moved from a case in the select statement to here
 	// because escape analysis does a better job avoiding allocations to the
 	// heap when defers are unconditional. When this was in the slowTimer select
@@ -381,6 +383,16 @@ func (r *Replica) executeWriteBatch(
 			return nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
 		}
 	}
+}
+
+func (r *Replica) slowReplicationThreshold(ba *roachpb.BatchRequest) time.Duration {
+	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SlowReplicationThresholdOverride != nil {
+		if dur := knobs.SlowReplicationThresholdOverride(ba); dur > 0 {
+			return dur
+		}
+		// Fall through.
+	}
+	return r.store.cfg.SlowReplicationThreshold
 }
 
 func rangeUnavailableMessage(
