@@ -1169,19 +1169,19 @@ func (tc *TxnCoordSender) Active() bool {
 // GetLeafTxnInputState is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnInputState(
 	ctx context.Context, opt kv.TxnStatusOpt,
-) (roachpb.LeafTxnInputState, error) {
+) (*roachpb.LeafTxnInputState, error) {
+	tis := new(roachpb.LeafTxnInputState)
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
 	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
-		return roachpb.LeafTxnInputState{}, err
+		return nil, err
 	}
 
 	// Copy mutable state so access is safe for the caller.
-	var tis roachpb.LeafTxnInputState
 	tis.Txn = tc.mu.txn
 	for _, reqInt := range tc.interceptorStack {
-		reqInt.populateLeafInputState(&tis)
+		reqInt.populateLeafInputState(tis)
 	}
 
 	// Also mark the TxnCoordSender as "active".  This prevents changing
@@ -1196,15 +1196,14 @@ func (tc *TxnCoordSender) GetLeafTxnInputState(
 // GetLeafTxnFinalState is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnFinalState(
 	ctx context.Context, opt kv.TxnStatusOpt,
-) (roachpb.LeafTxnFinalState, error) {
+) (*roachpb.LeafTxnFinalState, error) {
+	tfs := new(roachpb.LeafTxnFinalState)
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
 	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
-		return roachpb.LeafTxnFinalState{}, err
+		return nil, err
 	}
-
-	var tfs roachpb.LeafTxnFinalState
 
 	// For compatibility with pre-20.1 nodes: populate the command
 	// count.
@@ -1217,7 +1216,7 @@ func (tc *TxnCoordSender) GetLeafTxnFinalState(
 	// Copy mutable state so access is safe for the caller.
 	tfs.Txn = tc.mu.txn
 	for _, reqInt := range tc.interceptorStack {
-		reqInt.populateLeafFinalState(&tfs)
+		reqInt.populateLeafFinalState(tfs)
 	}
 
 	return tfs, nil

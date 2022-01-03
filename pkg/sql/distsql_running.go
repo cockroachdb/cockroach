@@ -456,7 +456,7 @@ func (dsp *DistSQLPlanner) Run(
 			recv.SetError(err)
 			return func() {}
 		}
-		leafInputState = &tis
+		leafInputState = tis
 	}
 
 	if logPlanDiagram {

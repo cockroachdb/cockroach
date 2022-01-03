@@ -685,8 +685,8 @@ func (txn *Txn) commit(ctx context.Context) error {
 	// to reduce contention by releasing locks. In multi-tenant settings, it
 	// will be subject to admission control, and the zero CreateTime will give
 	// it preference within the tenant.
-	var ba roachpb.BatchRequest
-	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
+	et := endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger)
+	ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 	_, pErr := txn.Send(ctx, ba)
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
@@ -741,7 +741,9 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	if txn != b.txn {
 		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.appendReqs(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
+	et := endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger)
+	b.growReqs(1)
+	b.reqs[len(b.reqs)-1].Value = &et.union
 	b.initResult(1 /* calls */, 0, b.raw, nil)
 	return txn.Run(ctx, b)
 }
@@ -859,8 +861,8 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+		et := endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */)
+		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
 			return nil
@@ -885,8 +887,8 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+		et := endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */)
+		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
 			func(ctx context.Context) error {
 				if _, pErr := txn.Send(ctx, ba); pErr != nil {
@@ -920,19 +922,27 @@ func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
-func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Request {
-	req := &roachpb.EndTxnRequest{
-		Commit:   commit,
-		Deadline: deadline,
-	}
+// endTxnReqAlloc is used to batch the heap allocations of an EndTxn request.
+type endTxnReqAlloc struct {
+	req      roachpb.EndTxnRequest
+	union    roachpb.RequestUnion_EndTxn
+	unionArr [1]roachpb.RequestUnion
+}
+
+func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) *endTxnReqAlloc {
+	alloc := new(endTxnReqAlloc)
+	alloc.req.Commit = commit
+	alloc.req.Deadline = deadline
 	if hasTrigger {
-		req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
+		alloc.req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
 				SystemConfigSpan: true,
 			},
 		}
 	}
-	return req
+	alloc.union.EndTxn = &alloc.req
+	alloc.unionArr[0].Value = &alloc.union
+	return alloc
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
@@ -978,23 +988,24 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		}
 
 		var retryable bool
-		if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
-			if txn.typ == RootTxn {
-				// We sent transactional requests, so the TxnCoordSender was supposed to
-				// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
-				// applies only in the case where this is the root transaction.
-				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
+		if err != nil {
+			if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
+				if txn.typ == RootTxn {
+					// We sent transactional requests, so the TxnCoordSender was supposed to
+					// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
+					// applies only in the case where this is the root transaction.
+					log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
+				}
+			} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
+				if !txn.IsRetryableErrMeantForTxn(*t) {
+					// Make sure the txn record that err carries is for this txn.
+					// If it's not, we terminate the "retryable" character of the error. We
+					// might get a TransactionRetryWithProtoRefreshError if the closure ran another
+					// transaction internally and let the error propagate upwards.
+					return errors.Wrapf(err, "retryable error from another txn")
+				}
+				retryable = true
 			}
-
-		} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
-			if !txn.IsRetryableErrMeantForTxn(*t) {
-				// Make sure the txn record that err carries is for this txn.
-				// If it's not, we terminate the "retryable" character of the error. We
-				// might get a TransactionRetryWithProtoRefreshError if the closure ran another
-				// transaction internally and let the error propagate upwards.
-				return errors.Wrapf(err, "retryable error from another txn")
-			}
-			retryable = true
 		}
 
 		if !retryable {
@@ -1268,7 +1279,7 @@ func (txn *Txn) applyDeadlineToBoundedStaleness(
 // transaction for use with InitializeLeafTxn(), when distributing
 // the state of the current transaction to multiple distributed
 // transaction coordinators.
-func (txn *Txn) GetLeafTxnInputState(ctx context.Context) roachpb.LeafTxnInputState {
+func (txn *Txn) GetLeafTxnInputState(ctx context.Context) *roachpb.LeafTxnInputState {
 	if txn.typ != RootTxn {
 		panic(errors.WithContextTags(errors.AssertionFailedf("GetLeafTxnInputState() called on leaf txn"), ctx))
 	}
@@ -1290,10 +1301,10 @@ func (txn *Txn) GetLeafTxnInputState(ctx context.Context) roachpb.LeafTxnInputSt
 // retryable errors, it acts like Send()).
 func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	ctx context.Context,
-) (roachpb.LeafTxnInputState, error) {
+) (*roachpb.LeafTxnInputState, error) {
 	if txn.typ != RootTxn {
-		return roachpb.LeafTxnInputState{},
-			errors.WithContextTags(errors.AssertionFailedf("GetLeafTxnInputStateOrRejectClient() called on leaf txn"), ctx)
+		return nil, errors.WithContextTags(
+			errors.AssertionFailedf("GetLeafTxnInputStateOrRejectClient() called on leaf txn"), ctx)
 	}
 
 	txn.mu.Lock()
@@ -1301,7 +1312,7 @@ func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	tfs, err := txn.mu.sender.GetLeafTxnInputState(ctx, OnlyPending)
 	if err != nil {
 		txn.handleErrIfRetryableLocked(ctx, err)
-		return roachpb.LeafTxnInputState{}, err
+		return nil, err
 	}
 	return tfs, nil
 }
@@ -1310,21 +1321,19 @@ func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 // transaction for use with UpdateRootWithLeafFinalState(), when combining the
 // impact of multiple distributed transaction coordinators that are
 // all operating on the same transaction.
-func (txn *Txn) GetLeafTxnFinalState(ctx context.Context) (roachpb.LeafTxnFinalState, error) {
+func (txn *Txn) GetLeafTxnFinalState(ctx context.Context) (*roachpb.LeafTxnFinalState, error) {
 	if txn.typ != LeafTxn {
-		return roachpb.LeafTxnFinalState{},
-			errors.WithContextTags(
-				errors.AssertionFailedf("GetLeafTxnFinalState() called on root txn"), ctx)
+		return nil, errors.WithContextTags(
+			errors.AssertionFailedf("GetLeafTxnFinalState() called on root txn"), ctx)
 	}
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	tfs, err := txn.mu.sender.GetLeafTxnFinalState(ctx, AnyTxnStatus)
 	if err != nil {
-		return roachpb.LeafTxnFinalState{},
-			errors.WithContextTags(
-				errors.NewAssertionErrorWithWrappedErrf(err,
-					"unexpected error from GetLeafTxnFinalState(AnyTxnStatus)"), ctx)
+		return nil, errors.WithContextTags(
+			errors.NewAssertionErrorWithWrappedErrf(err,
+				"unexpected error from GetLeafTxnFinalState(AnyTxnStatus)"), ctx)
 	}
 	return tfs, nil
 }
