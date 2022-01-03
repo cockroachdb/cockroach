@@ -5561,3 +5561,293 @@ func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
 func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.TELEMETRY, format, args...)
 }
+
+// loggerKvproberTraces is the logger type for the KVPROBER_TRACES channel.
+type loggerKvproberTraces struct{}
+
+// KvproberTraces is a logger that logs to the KVPROBER_TRACES channel.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+var KvproberTraces loggerKvproberTraces
+
+// KvproberTraces and loggerKvproberTraces implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = KvproberTraces
+
+// Infof logs to the KVPROBER_TRACES channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvproberTraces) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.KVPROBER_TRACES, format, args...)
+}
+
+// VInfof logs to the KVPROBER_TRACES channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvproberTraces) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.KVPROBER_TRACES, format, args...)
+	}
+}
+
+// Info logs to the KVPROBER_TRACES channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvproberTraces) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.KVPROBER_TRACES, msg)
+}
+
+// InfofDepth logs to the KVPROBER_TRACES channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerKvproberTraces) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.KVPROBER_TRACES, format, args...)
+}
+
+// Warningf logs to the KVPROBER_TRACES channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvproberTraces) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.KVPROBER_TRACES, format, args...)
+}
+
+// VWarningf logs to the KVPROBER_TRACES channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvproberTraces) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.KVPROBER_TRACES, format, args...)
+	}
+}
+
+// Warning logs to the KVPROBER_TRACES channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvproberTraces) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.KVPROBER_TRACES, msg)
+}
+
+// WarningfDepth logs to the KVPROBER_TRACES channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerKvproberTraces) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.KVPROBER_TRACES, format, args...)
+}
+
+// Errorf logs to the KVPROBER_TRACES channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvproberTraces) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.KVPROBER_TRACES, format, args...)
+}
+
+// VErrorf logs to the KVPROBER_TRACES channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvproberTraces) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.KVPROBER_TRACES, format, args...)
+	}
+}
+
+// Error logs to the KVPROBER_TRACES channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvproberTraces) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.KVPROBER_TRACES, msg)
+}
+
+// ErrorfDepth logs to the KVPROBER_TRACES channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerKvproberTraces) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.KVPROBER_TRACES, format, args...)
+}
+
+// Fatalf logs to the KVPROBER_TRACES channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvproberTraces) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.KVPROBER_TRACES, format, args...)
+}
+
+// VFatalf logs to the KVPROBER_TRACES channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvproberTraces) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.KVPROBER_TRACES, format, args...)
+	}
+}
+
+// Fatal logs to the KVPROBER_TRACES channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvproberTraces) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.KVPROBER_TRACES, msg)
+}
+
+// FatalfDepth logs to the KVPROBER_TRACES channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerKvproberTraces) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.KVPROBER_TRACES, format, args...)
+}
+
+// Shout logs to channel KVPROBER_TRACES, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+func (loggerKvproberTraces) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.KVPROBER_TRACES, msg)
+}
+
+// Shoutf logs to channel KVPROBER_TRACES, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+func (loggerKvproberTraces) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.KVPROBER_TRACES, format, args...)
+}

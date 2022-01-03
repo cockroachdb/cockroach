@@ -443,6 +443,7 @@ sinks:
       INFO: [DEV, OPS]
       WARNING: all except [DEV, OPS]
   health:                 { channels: HEALTH  }
+  kvprober-traces:        { channels: KVPROBER_TRACES }
   pebble:                 { channels: STORAGE }
   security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true  }
   sql-auth:               { channels: SESSIONS, auditable: true }

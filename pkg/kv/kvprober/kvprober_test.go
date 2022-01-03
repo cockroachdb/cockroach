@@ -31,7 +31,7 @@ func TestReadProbe(t *testing.T) {
 			noPlan: true,
 		}
 		p := initTestProber(ctx, m)
-		p.readProbeImpl(ctx, m, m, m)
+		require.False(t, p.readProbeImpl(ctx, m, m, m))
 
 		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
@@ -42,7 +42,7 @@ func TestReadProbe(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		m := &mock{t: t, read: true}
 		p := initTestProber(ctx, m)
-		p.readProbeImpl(ctx, m, m, m)
+		require.True(t, p.readProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
@@ -53,7 +53,7 @@ func TestReadProbe(t *testing.T) {
 	t.Run("happy path with bypass cluster setting overridden", func(t *testing.T) {
 		m := &mock{t: t, bypass: true, read: true}
 		p := initTestProber(ctx, m)
-		p.readProbeImpl(ctx, m, m, m)
+		require.True(t, p.readProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
@@ -68,7 +68,7 @@ func TestReadProbe(t *testing.T) {
 			planErr: fmt.Errorf("inject plan failure"),
 		}
 		p := initTestProber(ctx, m)
-		p.readProbeImpl(ctx, m, m, m)
+		require.True(t, p.readProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
@@ -83,7 +83,7 @@ func TestReadProbe(t *testing.T) {
 			txnErr: fmt.Errorf("inject txn failure"),
 		}
 		p := initTestProber(ctx, m)
-		p.readProbeImpl(ctx, m, m, m)
+		require.True(t, p.readProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
@@ -98,7 +98,7 @@ func TestReadProbe(t *testing.T) {
 			readErr: fmt.Errorf("inject read failure"),
 		}
 		p := initTestProber(ctx, m)
-		p.readProbeImpl(ctx, m, m, m)
+		require.True(t, p.readProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
@@ -116,7 +116,7 @@ func TestWriteProbe(t *testing.T) {
 			noPlan: true,
 		}
 		p := initTestProber(ctx, m)
-		p.writeProbeImpl(ctx, m, m, m)
+		require.False(t, p.writeProbeImpl(ctx, m, m, m))
 
 		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().WriteProbeAttempts.Count())
@@ -127,7 +127,7 @@ func TestWriteProbe(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		m := &mock{t: t, write: true}
 		p := initTestProber(ctx, m)
-		p.writeProbeImpl(ctx, m, m, m)
+		require.True(t, p.writeProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
@@ -138,7 +138,7 @@ func TestWriteProbe(t *testing.T) {
 	t.Run("happy path with bypass cluster setting overridden", func(t *testing.T) {
 		m := &mock{t: t, bypass: true, write: true}
 		p := initTestProber(ctx, m)
-		p.writeProbeImpl(ctx, m, m, m)
+		require.True(t, p.writeProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
@@ -153,7 +153,7 @@ func TestWriteProbe(t *testing.T) {
 			planErr: fmt.Errorf("inject plan failure"),
 		}
 		p := initTestProber(ctx, m)
-		p.writeProbeImpl(ctx, m, m, m)
+		require.True(t, p.writeProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().WriteProbeAttempts.Count())
@@ -168,7 +168,7 @@ func TestWriteProbe(t *testing.T) {
 			txnErr: fmt.Errorf("inject txn failure"),
 		}
 		p := initTestProber(ctx, m)
-		p.writeProbeImpl(ctx, m, m, m)
+		require.True(t, p.writeProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
@@ -183,7 +183,7 @@ func TestWriteProbe(t *testing.T) {
 			writeErr: fmt.Errorf("inject write failure"),
 		}
 		p := initTestProber(ctx, m)
-		p.writeProbeImpl(ctx, m, m, m)
+		require.True(t, p.writeProbeImpl(ctx, m, m, m))
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())

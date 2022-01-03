@@ -17,19 +17,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// kv.prober.bypass_admission_control controls whether kvprober's requests
-// should bypass kv layer's admission control. Setting this value to true
-// ensures that kvprober will not be significantly affected if the cluster is
-// overloaded.
-var bypassAdmissionControl = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"kv.prober.bypass_admission_control.enabled",
-	"set to bypass admission control queue for kvprober requests; "+
-		"note that dedicated clusters should have this set as users own capacity planning "+
-		"but serverless clusters should not have this set as SREs own capacity planning",
-	true,
-)
-
 var readEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.prober.read.enabled",
@@ -126,3 +113,16 @@ var numStepsToPlanAtOnce = settings.RegisterIntSetting(
 		}
 		return nil
 	})
+
+// kv.prober.bypass_admission_control controls whether kvprober's requests
+// should bypass kv layer's admission control. Setting this value to true
+// ensures that kvprober will not be significantly affected if the cluster is
+// overloaded.
+var bypassAdmissionControl = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"kv.prober.bypass_admission_control.enabled",
+	"set to bypass admission control queue for kvprober requests; "+
+		"note that dedicated clusters should have this set as users own capacity planning "+
+		"but serverless clusters should not have this set as SREs own capacity planning",
+	true,
+)

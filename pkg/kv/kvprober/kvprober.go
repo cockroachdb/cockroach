@@ -232,7 +232,7 @@ func (p *Prober) Metrics() Metrics {
 // returns an error only if stopper.RunAsyncTask returns an error.
 func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = logtags.AddTag(ctx, "kvprober", nil /* value */)
-	startLoop := func(ctx context.Context, opName string, probe func(context.Context, *kv.DB, planner), pl planner, interval *settings.DurationSetting) error {
+	startLoop := func(ctx context.Context, opName string, probe func(context.Context, *kv.DB, planner) bool, pl planner, interval *settings.DurationSetting) error {
 		return stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: opName, SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 			defer logcrash.RecoverAndReportNonfatalPanic(ctx, &p.settings.SV)
 
@@ -257,9 +257,19 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 					return
 				}
 
-				probeCtx, sp := tracing.EnsureChildSpan(ctx, p.tracer, opName+" - probe")
-				probe(probeCtx, p.db, pl)
-				sp.Finish()
+				func() {
+					// KVPROBER_TRACES is for traces of probes sent to the KV layer by
+					// kvprober. Note that lower fidelity logging goes to the HEALTH
+					// channel instead of the KVPROBER_TRACES channel. It is better
+					// to store traces using proper logging infra, but such infra
+					// is not always available, hence this stopgap.
+					probeCtx, collectAndFinish := tracing.ContextWithRecordingSpan(
+						ctx, p.tracer, opName)
+					defer collectAndFinish()
+					if probe(probeCtx, p.db, pl) {
+						log.KvproberTraces.Infof(ctx, "%s", collectAndFinish())
+					}
+				}()
 			}
 		})
 	}
@@ -270,14 +280,19 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	return startLoop(ctx, "write probe loop", p.writeProbe, p.writePlanner, writeInterval)
 }
 
+// Returns true if a probe was actually attempted. Returns false if no probe
+// was attempted, since the probe type was disabled.
+//
 // Doesn't return an error. Instead increments error type specific metrics.
-func (p *Prober) readProbe(ctx context.Context, db *kv.DB, pl planner) {
-	p.readProbeImpl(ctx, &proberOpsImpl{}, &proberTxnImpl{db: p.db}, pl)
+func (p *Prober) readProbe(ctx context.Context, db *kv.DB, pl planner) bool {
+	return p.readProbeImpl(ctx, &proberOpsImpl{}, &proberTxnImpl{db: p.db}, pl)
 }
 
-func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTxn, pl planner) {
+func (p *Prober) readProbeImpl(
+	ctx context.Context, ops proberOps, txns proberTxn, pl planner,
+) bool {
 	if !readEnabled.Get(&p.settings.SV) {
-		return
+		return false
 	}
 
 	p.metrics.ProbePlanAttempts.Inc(1)
@@ -286,7 +301,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTx
 	if err != nil {
 		log.Health.Errorf(ctx, "can't make a plan: %v", err)
 		p.metrics.ProbePlanFailures.Inc(1)
-		return
+		return true
 	}
 
 	// If errors above the KV scan, then this counter won't be incremented.
@@ -307,7 +322,6 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTx
 		// We read a "range-local" key dedicated to probing. See pkg/keys for more.
 		// There is no data at the key, but that is okay. Even tho there is no data
 		// at the key, the prober still executes a read operation on the range.
-		// TODO(josh): Trace the probes.
 		f := ops.Read(step.Key)
 		if bypassAdmissionControl.Get(&p.settings.SV) {
 			return txns.Txn(ctx, f)
@@ -318,7 +332,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTx
 		// TODO(josh): Write structured events with log.Structured.
 		log.Health.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.Key, step.RangeID, err)
 		p.metrics.ReadProbeFailures.Inc(1)
-		return
+		return true
 	}
 
 	d := timeutil.Since(start)
@@ -326,16 +340,22 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOps, txns proberTx
 
 	// Latency of failures is not recorded. They are counted as failures tho.
 	p.metrics.ReadProbeLatency.RecordValue(d.Nanoseconds())
+	return true
 }
 
+// Returns true if a probe was actually attempted. Returns false if no probe
+// was attempted, since the probe type was disabled.
+//
 // Doesn't return an error. Instead increments error type specific metrics.
-func (p *Prober) writeProbe(ctx context.Context, db *kv.DB, pl planner) {
-	p.writeProbeImpl(ctx, &proberOpsImpl{}, &proberTxnImpl{db: p.db}, pl)
+func (p *Prober) writeProbe(ctx context.Context, db *kv.DB, pl planner) bool {
+	return p.writeProbeImpl(ctx, &proberOpsImpl{}, &proberTxnImpl{db: p.db}, pl)
 }
 
-func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOps, txns proberTxn, pl planner) {
+func (p *Prober) writeProbeImpl(
+	ctx context.Context, ops proberOps, txns proberTxn, pl planner,
+) bool {
 	if !writeEnabled.Get(&p.settings.SV) {
-		return
+		return false
 	}
 
 	p.metrics.ProbePlanAttempts.Inc(1)
@@ -344,7 +364,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOps, txns proberT
 	if err != nil {
 		log.Health.Errorf(ctx, "can't make a plan: %v", err)
 		p.metrics.ProbePlanFailures.Inc(1)
-		return
+		return true
 	}
 
 	p.metrics.WriteProbeAttempts.Inc(1)
@@ -364,7 +384,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOps, txns proberT
 	if err != nil {
 		log.Health.Errorf(ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v", step.Key, step.RangeID, err)
 		p.metrics.WriteProbeFailures.Inc(1)
-		return
+		return true
 	}
 
 	d := timeutil.Since(start)
@@ -372,6 +392,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOps, txns proberT
 
 	// Latency of failures is not recorded. They are counted as failures tho.
 	p.metrics.WriteProbeLatency.RecordValue(d.Nanoseconds())
+	return true
 }
 
 // Returns a random duration pulled from the uniform distribution given below:

@@ -134,3 +134,8 @@ const SQL_INTERNAL_PERF = logpb.Channel_SQL_INTERNAL_PERF
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 const TELEMETRY = logpb.Channel_TELEMETRY
+
+// KVPROBER_TRACES is for traces of probes sent to the KV layer by
+// kvprober. Note that lower fidelity logging goes to the HEALTH
+// channel instead of the KVPROBER_TRACES channel.
+const KVPROBER_TRACES = logpb.Channel_KVPROBER_TRACES

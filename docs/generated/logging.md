@@ -169,3 +169,9 @@ The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 feature usage within CockroachDB and anonymizes any application-
 specific data.
 
+### `KVPROBER_TRACES`
+
+The `KVPROBER_TRACES` channel is for traces of probes sent to the KV layer by
+kvprober. Note that lower fidelity logging goes to the HEALTH
+channel instead of the KVPROBER_TRACES channel.
+
