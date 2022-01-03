@@ -658,7 +658,9 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		} else {
 			// We've dropped a non-physical table, no need for a GC job, let's delete
 			// its descriptor and zone config immediately.
-			if err := DeleteTableDescAndZoneConfig(ctx, sc.db, sc.execCfg.Codec, tableDesc); err != nil {
+			if err := DeleteTableDescAndZoneConfig(
+				ctx, sc.db, sc.settings, sc.execCfg.Codec, tableDesc,
+			); err != nil {
 				return err
 			}
 		}
@@ -1936,24 +1938,18 @@ func (sc *SchemaChanger) txn(
 // used in the surrounding SQL session, so session tracing is unable
 // to capture schema change activity.
 func createSchemaChangeEvalCtx(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	ts hlc.Timestamp,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
-	descriptors *descs.Collection,
+	ctx context.Context, execCfg *ExecutorConfig, ts hlc.Timestamp, descriptors *descs.Collection,
 ) extendedEvalContext {
 
 	sd := NewFakeSessionData(execCfg.SV())
-	ie := ieFactory(ctx, sd)
 
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the
 		// other fields are used.
-		Tracing:                      &SessionTracing{},
-		ExecCfg:                      execCfg,
-		Descs:                        descriptors,
-		SchemaChangeInternalExecutor: ie.(*InternalExecutor),
+		Tracing: &SessionTracing{},
+		ExecCfg: execCfg,
+		Descs:   descriptors,
 		EvalContext: tree.EvalContext{
 			SessionDataStack: sessiondata.NewStack(sd),
 			// TODO(andrei): This is wrong (just like on the main code path on
@@ -2457,12 +2453,18 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 
 // DeleteTableDescAndZoneConfig removes a table's descriptor and zone config from the KV database.
 func DeleteTableDescAndZoneConfig(
-	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc catalog.TableDescriptor,
+	ctx context.Context,
+	db *kv.DB,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
 ) error {
 	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.GetID())
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
-			return err
+		if !descs.UnsafeSkipSystemConfigTrigger.Get(&settings.SV) {
+			if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
+				return err
+			}
 		}
 		b := &kv.Batch{}
 

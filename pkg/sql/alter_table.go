@@ -800,7 +800,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateCheckInTxn(
-					params.ctx, &params.p.semaCtx, params.ExecCfg().InternalExecutor, params.SessionData(), n.tableDesc, params.EvalContext().Txn, ck.Expr,
+					params.ctx, &params.p.semaCtx, params.ExecCfg().InternalExecutorFactory,
+					params.SessionData(), n.tableDesc, params.EvalContext().Txn, ck.Expr,
 				); err != nil {
 					return err
 				}
@@ -822,8 +823,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateFkInTxn(
-					params.ctx, params.p.LeaseMgr(), params.ExecCfg().InternalExecutor,
-					n.tableDesc, params.EvalContext().Txn, name, params.EvalContext().Codec,
+					params.ctx, params.p.LeaseMgr(),
+					params.ExecCfg().InternalExecutorFactory,
+					params.p.SessionData(),
+					n.tableDesc,
+					params.EvalContext().Txn,
+					name, params.EvalContext().Codec,
 				); err != nil {
 					return err
 				}
@@ -846,7 +851,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"constraint %q in the middle of being added, try again later", t.Constraint)
 					}
 					if err := validateUniqueWithoutIndexConstraintInTxn(
-						params.ctx, params.ExecCfg().InternalExecutor, n.tableDesc, params.EvalContext().Txn, name,
+						params.ctx, params.ExecCfg().InternalExecutorFactory(
+							params.ctx, params.SessionData(),
+						), n.tableDesc, params.EvalContext().Txn, name,
 					); err != nil {
 						return err
 					}
