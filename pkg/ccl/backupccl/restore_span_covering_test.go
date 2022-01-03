@@ -11,11 +11,16 @@ package backupccl
 import (
 	"fmt"
 	"math/rand"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 // MockBackupChain returns a chain of mock backup manifests that have spans and
@@ -59,4 +64,62 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []BackupManifes
 		backups[i].Dir = roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{}}
 	}
 	return backups
+}
+
+func checkRestoreCovering(
+	backups []BackupManifest, spans roachpb.Spans, cov []execinfrapb.RestoreSpanEntry,
+) error {
+	var expectedPartitions int
+	required := make(map[string]*roachpb.SpanGroup)
+	for _, s := range spans {
+		var last roachpb.Key
+		for _, b := range backups {
+			for _, f := range b.Files {
+				if sp := s.Intersect(f.Span); sp.Valid() {
+					if required[f.Path] == nil {
+						required[f.Path] = &roachpb.SpanGroup{}
+					}
+					required[f.Path].Add(sp)
+					if sp.EndKey.Compare(last) > 0 {
+						last = sp.EndKey
+						expectedPartitions++
+					}
+				}
+			}
+		}
+	}
+	for _, c := range cov {
+		for _, f := range c.Files {
+			required[f.Path].Sub(c.Span)
+		}
+	}
+	for name, uncovered := range required {
+		for _, missing := range uncovered.Slice() {
+			return errors.Errorf("file %s is was supposed to cover span %s", name, missing)
+		}
+	}
+	if got := len(cov); got != expectedPartitions {
+		return errors.Errorf("expected at least %d partitions, got %d", expectedPartitions, got)
+	}
+	return nil
+}
+
+func TestRestoreEntryCover(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	r, _ := randutil.NewTestRand()
+	for _, numBackups := range []int{1, 2, 3, 5, 9, 10, 11, 12} {
+		for _, spans := range []int{1, 2, 3, 5, 9, 11, 12} {
+			for _, files := range []int{0, 1, 2, 3, 4, 10, 12, 50} {
+				backups := MockBackupChain(numBackups, spans, files, r)
+
+				t.Run(fmt.Sprintf("numBackups=%d, numSpans=%d, numFiles=%d", numBackups, spans, files), func(t *testing.T) {
+					cover := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil)
+					if err := checkRestoreCovering(backups, backups[numBackups-1].Spans, cover); err != nil {
+						t.Fatal(err)
+					}
+				})
+			}
+		}
+	}
 }

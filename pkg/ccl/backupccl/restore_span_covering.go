@@ -9,6 +9,8 @@
 package backupccl
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -246,4 +248,76 @@ rangeLoop:
 		}
 	}
 	return requestEntries, maxEndTime, nil
+}
+
+// makeSimpleImportSpans partitions the spans of requiredSpans into a covering
+// of RestoreSpanEntry's which each have all overlapping files from the passed
+// backups assigned to them. The spans of requiredSpans are trimmed/removed
+// based on the lowWaterMark.
+func makeSimpleImportSpans(
+	requiredSpans roachpb.Spans,
+	backups []BackupManifest,
+	backupLocalityMap map[int]storeByLocalityKV,
+	lowWaterMark roachpb.Key,
+) []execinfrapb.RestoreSpanEntry {
+	if len(backups) < 1 {
+		return nil
+	}
+
+	for i := range backups {
+		sort.Sort(BackupFileDescriptors(backups[i].Files))
+	}
+
+	var cover []execinfrapb.RestoreSpanEntry
+	for _, span := range requiredSpans {
+		if span.EndKey.Compare(lowWaterMark) < 0 {
+			continue
+		} else if span.Key.Compare(lowWaterMark) < 0 {
+			span.Key = lowWaterMark
+		}
+
+		spanCoverStart := len(cover)
+
+		for layer := range backups {
+			covPos := spanCoverStart
+			// TODO(dt): binary search to the first file in required span?
+			for _, f := range backups[layer].Files {
+				if sp := span.Intersect(f.Span); sp.Valid() {
+					fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir}
+					if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
+						fileSpec = execinfrapb.RestoreFileSpec{Path: f.Path, Dir: dir}
+					}
+					if len(cover) == spanCoverStart {
+						cover = append(cover, makeEntry(span.Key, sp.EndKey, fileSpec))
+					} else {
+						// Add each file to every matching partition in the cover.
+						for i := covPos; i < len(cover) && cover[i].Span.Key.Compare(sp.EndKey) < 0; i++ {
+							if cover[i].Span.Overlaps(sp) {
+								cover[i].Files = append(cover[i].Files, fileSpec)
+							}
+							// Later files start later, so this cover ends before this file,
+							// it ends before them too and they can start searching after it.
+							if cover[i].Span.EndKey.Compare(sp.Key) <= 0 {
+								covPos = i + 1
+							}
+						}
+						if covEnd := cover[len(cover)-1].Span.EndKey; sp.EndKey.Compare(covEnd) > 0 {
+							cover = append(cover, makeEntry(covEnd, sp.EndKey, fileSpec))
+						}
+					}
+				} else if span.EndKey.Compare(f.Span.Key) <= 0 {
+					// This file is already after the end, so rest are too.
+					break
+				}
+			}
+		}
+	}
+
+	return cover
+}
+
+func makeEntry(start, end roachpb.Key, f execinfrapb.RestoreFileSpec) execinfrapb.RestoreSpanEntry {
+	return execinfrapb.RestoreSpanEntry{
+		Span: roachpb.Span{Key: start, EndKey: end}, Files: []execinfrapb.RestoreFileSpec{f},
+	}
 }
