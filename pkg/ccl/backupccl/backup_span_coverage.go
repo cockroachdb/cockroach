@@ -1,0 +1,98 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package backupccl
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/errors"
+)
+
+// checkCoverage verifies that spans are covered by a given chain of backups.
+func checkCoverage(
+	ctx context.Context,
+	spans []roachpb.Span,
+	backups []BackupManifest,
+) error {
+	if len(spans) == 0 {
+		return nil
+	}
+
+	frontier, err := span.MakeFrontier(spans...)
+	if err != nil {
+		return err
+	}
+
+	// The main loop below requires the entire frontier be caught up to the start
+	// time of each steap it proceeds, however a span introduced in a later backup
+	// would hold back the whole frontier at 0 until it is reached, so run through
+	// all layers first to unconditionally advance the introduced spans.
+	for i := range backups {
+		for _, sp := range backups[i].IntroducedSpans {
+			if _, err := frontier.Forward(sp, backups[i].StartTime); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Walk through the chain of backups in order advancing the spans each covers
+	// and verify that the entire required span frontier is covered as expected.
+	for i := range backups {
+		// This backup advances its covered spans _from its start time_ to its end
+		// time, so before actually advance those spans in the frontier to that end
+		// time, assert that it is starting at the start time, i.e. that this
+		// backup does indeed pick up where the prior backup left off.
+		if start, required := frontier.Frontier(), backups[i].StartTime; start.Less(required) {
+			s := frontier.PeekFrontierSpan()
+			return errors.Errorf(
+				"no backup covers time [%s,%s) for range [%s,%s) (or backups listed out of order)",
+				start, required, s.Key, s.EndKey,
+			)
+		}
+
+		// Advance every span the backup covers to its end time.
+		for _, s := range backups[i].Spans {
+			if _, err := frontier.Forward(s, backups[i].EndTime); err != nil {
+				return err
+			}
+		}
+
+		// Check that the backup actually covered all the required spans.
+		if end, required := frontier.Frontier(), backups[i].EndTime; end.Less(required) {
+			return errors.Errorf("expected previous backups to cover until time %v, got %v (e.g. span %v)",
+				required, end, frontier.PeekFrontierSpan())
+		}
+	}
+
+	return nil
+}
+
+// uncoveredSpans retuns the subet of `spans` that is not covered by `covered`.
+// This is similar to roachpb.SubtractSpans, but does not mutate `required``.
+func uncoveredSpans(spans roachpb.Spans, covered roachpb.Spans) roachpb.Spans {
+	cov := interval.NewRangeList()
+
+	for _, s := range spans {
+		cov.Add(interval.Range{Start: interval.Comparable(s.Key), End: interval.Comparable(s.EndKey)})
+	}
+
+	for _, s := range covered {
+		cov.Sub(interval.Range{Start: interval.Comparable(s.Key), End: interval.Comparable(s.EndKey)})
+	}
+
+	res := make(roachpb.Spans, 0, cov.Len())
+	i := cov.Iterator()
+	for s, ok := i.Next(); ok; s, ok = i.Next() {
+		res = append(res, roachpb.Span{Key: roachpb.Key(s.Start), EndKey: roachpb.Key(s.End)})
+	}
+	return res
+}
