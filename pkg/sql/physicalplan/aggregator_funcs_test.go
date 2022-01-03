@@ -68,7 +68,7 @@ func runTestFlow(
 	leafInputState := txn.GetLeafTxnInputState(context.Background())
 	req := execinfrapb.SetupFlowRequest{
 		Version:           execinfra.Version,
-		LeafTxnInputState: &leafInputState,
+		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID:     execinfrapb.FlowID{UUID: uuid.FastMakeV4()},
 			Processors: procs,

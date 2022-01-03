@@ -112,12 +112,12 @@ type TxnSender interface {
 	//
 	// If AnyTxnStatus is passed, then this function never returns
 	// errors.
-	GetLeafTxnInputState(context.Context, TxnStatusOpt) (roachpb.LeafTxnInputState, error)
+	GetLeafTxnInputState(context.Context, TxnStatusOpt) (*roachpb.LeafTxnInputState, error)
 
 	// GetLeafTxnFinalState retrieves the final state of a LeafTxn
 	// necessary and sufficient to update a RootTxn with progress made
 	// on its behalf by the LeafTxn.
-	GetLeafTxnFinalState(context.Context, TxnStatusOpt) (roachpb.LeafTxnFinalState, error)
+	GetLeafTxnFinalState(context.Context, TxnStatusOpt) (*roachpb.LeafTxnFinalState, error)
 
 	// UpdateRootWithLeafFinalState updates a RootTxn using the final
 	// state of a LeafTxn.

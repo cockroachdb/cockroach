@@ -753,7 +753,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	defer diskMonitor.Stop(ctx)
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{

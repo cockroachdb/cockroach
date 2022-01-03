@@ -128,7 +128,7 @@ func TestClusterFlow(t *testing.T) {
 
 		req1 := &execinfrapb.SetupFlowRequest{
 			Version:           execinfra.Version,
-			LeafTxnInputState: &leafInputState,
+			LeafTxnInputState: leafInputState,
 			Flow: execinfrapb.FlowSpec{
 				FlowID: fid,
 				Processors: []execinfrapb.ProcessorSpec{{
@@ -151,7 +151,7 @@ func TestClusterFlow(t *testing.T) {
 
 		req2 := &execinfrapb.SetupFlowRequest{
 			Version:           execinfra.Version,
-			LeafTxnInputState: &leafInputState,
+			LeafTxnInputState: leafInputState,
 			Flow: execinfrapb.FlowSpec{
 				FlowID: fid,
 				Processors: []execinfrapb.ProcessorSpec{{
@@ -174,7 +174,7 @@ func TestClusterFlow(t *testing.T) {
 
 		req3 := &execinfrapb.SetupFlowRequest{
 			Version:           execinfra.Version,
-			LeafTxnInputState: &leafInputState,
+			LeafTxnInputState: leafInputState,
 			Flow: execinfrapb.FlowSpec{
 				FlowID: fid,
 				Processors: []execinfrapb.ProcessorSpec{
@@ -428,7 +428,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 
 	req := execinfrapb.SetupFlowRequest{
 		Version:           execinfra.Version,
-		LeafTxnInputState: &leafInputState,
+		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: execinfrapb.FlowID{UUID: uuid.MakeV4()},
 			// The left-hand Values processor in the diagram above.
@@ -720,7 +720,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{
 							Version:           execinfra.Version,
-							LeafTxnInputState: &leafInputState,
+							LeafTxnInputState: leafInputState,
 							Flow: execinfrapb.FlowSpec{
 								Processors: []execinfrapb.ProcessorSpec{{
 									Core: execinfrapb.ProcessorCoreUnion{Values: &valSpecs[i]},

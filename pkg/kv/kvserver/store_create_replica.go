@@ -81,18 +81,18 @@ func (s *Store) tryGetOrCreateReplica(
 	// The common case: look up an existing (initialized) replica.
 	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
 		repl.raftMu.Lock() // not unlocked on success
-		repl.mu.Lock()
+		repl.mu.RLock()
 
 		// The current replica is removed, go back around.
 		if repl.mu.destroyStatus.Removed() {
-			repl.mu.Unlock()
+			repl.mu.RUnlock()
 			repl.raftMu.Unlock()
 			return nil, false, errRetry
 		}
 
 		// Drop messages from replicas we know to be too old.
-		if fromReplicaIsTooOld(repl, creatingReplica) {
-			repl.mu.Unlock()
+		if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
+			repl.mu.RUnlock()
 			repl.raftMu.Unlock()
 			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 		}
@@ -104,7 +104,7 @@ func (s *Store) tryGetOrCreateReplica(
 					replicaID, repl)
 			}
 
-			repl.mu.Unlock()
+			repl.mu.RUnlock()
 			if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
 				DestroyData: true,
 			}); err != nil {
@@ -113,7 +113,7 @@ func (s *Store) tryGetOrCreateReplica(
 			repl.raftMu.Unlock()
 			return nil, false, errRetry
 		}
-		defer repl.mu.Unlock()
+		defer repl.mu.RUnlock()
 
 		if repl.mu.replicaID > replicaID {
 			// The sender is behind and is sending to an old replica.
@@ -238,11 +238,11 @@ func (s *Store) tryGetOrCreateReplica(
 	return repl, true, nil
 }
 
-// isFromReplicaTooOld returns an true if the creatingReplica is deemed to be
-// a member of the range which has been removed.
-// Assumes toReplica.mu is held.
-func fromReplicaIsTooOld(toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor) bool {
-	toReplica.mu.AssertHeld()
+// fromReplicaIsTooOldRLocked returns true if the creatingReplica is deemed to
+// be a member of the range which has been removed.
+// Assumes toReplica.mu is locked for (at least) reading.
+func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor) bool {
+	toReplica.mu.AssertRHeld()
 	if fromReplica == nil {
 		return false
 	}
