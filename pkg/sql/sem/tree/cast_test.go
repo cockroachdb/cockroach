@@ -131,6 +131,31 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 			t.Logf("cast %s::%s has no corresponding pg cast", c.from.Name(), c.to.Name())
 		}
 	}
+
+	for src := range castMap {
+		for tgt, c := range castMap[src] {
+			if c.volatility == volatilityTODO {
+				continue
+			}
+
+			// Find the corresponding pg cast.
+			found := false
+			for _, pgCast := range pgCasts {
+				if src == pgCast.from && tgt == pgCast.to {
+					found = true
+					if c.volatility != pgCast.volatility {
+						t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
+							oidStr(src), oidStr(tgt), c.volatility, pgCast.volatility,
+						)
+
+					}
+				}
+			}
+			if !found && testing.Verbose() {
+				t.Logf("cast %s::%s has no corresponding pg cast", oidStr(src), oidStr(tgt))
+			}
+		}
+	}
 }
 
 // TestCastsFromUnknown verifies that there is a cast from Unknown defined for
