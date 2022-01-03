@@ -660,6 +660,7 @@ func (a internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
+	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/RangeFeed")
 	rfAdapter := rangeFeedClientAdapter{
 		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
 	}
@@ -668,6 +669,7 @@ func (a internalClientAdapter) RangeFeed(
 	args.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
 	go func() {
 		defer cancel()
+		defer sp.Finish()
 		err := a.server.RangeFeed(args, rfAdapter)
 		if err == nil {
 			err = io.EOF
@@ -704,12 +706,14 @@ func (a internalClientAdapter) GossipSubscription(
 	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_GossipSubscriptionClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
+	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/GossipSubscription")
 	gsAdapter := gossipSubscriptionClientAdapter{
 		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
 	}
 
 	go func() {
 		defer cancel()
+		defer sp.Finish()
 		err := a.server.GossipSubscription(args, gsAdapter)
 		if err == nil {
 			err = io.EOF
