@@ -462,14 +462,14 @@ func makeAlterDatabaseDropRegion(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterSurvivalGoal(s *Smither) (tree.Statement, bool) {
-	const numSurvivalGoals = 2
-	// Only {1, 2} are valid values for SurvivalGoal.
-	// 1. SurvivalGoalRegionFailure
-	// 2. SurvivalGoalZoneFailure
-	//
-	// 0. SurvivalGoalDefault is not valid as a value to alter to.
-	randInt := rand.Intn(numSurvivalGoals) + 1
-	survivalGoal := tree.SurvivalGoal(randInt)
+	// Only SurvivalGoalRegionFailure and SurvivalGoalZoneFailure are valid
+	// values for SurvivalGoal. SurvivalGoalDefault is not valid in an
+	// AlterDatabaseSurvivalGoal AST node.
+	survivalGoals := [...]tree.SurvivalGoal{
+		tree.SurvivalGoalRegionFailure,
+		tree.SurvivalGoalZoneFailure,
+	}
+	survivalGoal := survivalGoals[rand.Intn(len(survivalGoals))]
 
 	ast := &tree.AlterDatabaseSurvivalGoal{
 		Name:         tree.Name("defaultdb"),
@@ -479,13 +479,18 @@ func makeAlterSurvivalGoal(s *Smither) (tree.Statement, bool) {
 }
 
 func makeAlterDatabasePlacement(s *Smither) (tree.Statement, bool) {
-	const DataPlacementTypes = 3
-	randInt := rand.Intn(DataPlacementTypes)
-	dataPlacementType := tree.DataPlacement(randInt)
+	// Only DataPlacementDefault and DataPlacementRestricted are valid values
+	// for Placement. DataPlacementUnspecified is not valid in an
+	// AlterDatabasePlacement AST node.
+	dataPlacements := [...]tree.DataPlacement{
+		tree.DataPlacementDefault,
+		tree.DataPlacementRestricted,
+	}
+	dataPlacement := dataPlacements[rand.Intn(len(dataPlacements))]
 
 	ast := &tree.AlterDatabasePlacement{
 		Name:      tree.Name("defaultdb"),
-		Placement: dataPlacementType,
+		Placement: dataPlacement,
 	}
 
 	return ast, true
