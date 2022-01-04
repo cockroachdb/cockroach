@@ -9,12 +9,15 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 ops
 DROP VIEW defaultdb.v1
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveTableComment
+      DescriptorID: 55
 PreCommitPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
@@ -132,24 +135,39 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 5 MutationType ops
+StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 56}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 57}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 58}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 61}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 61}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveTableComment
+      DescriptorID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 56
+    *scop.RemoveTableComment
+      DescriptorID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
+    *scop.RemoveTableComment
+      DescriptorID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
+    *scop.RemoveTableComment
+      DescriptorID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 61
+    *scop.RemoveTableComment
+      DescriptorID: 61
 PreCommitPhase stage 1 of 1 with 25 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
