@@ -6,7 +6,7 @@ exports_files([
 ])
 
 load("@bazel_gazelle//:def.bzl", "gazelle")
-load("@io_bazel_rules_go//go:def.bzl", "nogo")
+load("@io_bazel_rules_go//go:def.bzl", "go_path", "nogo")
 load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
 
 # The following directives inform gazelle how to auto-generate BUILD.bazel
@@ -256,4 +256,14 @@ nogo(
             "//pkg/testutils/lint/passes/unconvert",
         ] + STATICCHECK_CHECKS,
     }),
+)
+
+go_path(
+    name = "go_path",
+    mode = "link",
+    deps = [
+        "//pkg/cmd/cockroach-short",
+        "//pkg/cmd/roachprod",
+        "//pkg/cmd/roachtest",
+    ],
 )
