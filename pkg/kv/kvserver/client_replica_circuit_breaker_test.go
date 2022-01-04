@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -119,6 +120,15 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 		tc.RequireIsNotLeaseholderError(t, tc.Read(n2))
 		tc.RequireIsNotLeaseholderError(t, tc.Write(n2))
 	})
+
+	runCircuitBreakerTest(t, "leaseholder-unavailable", func(t *testing.T, ctx context.Context, tc *circuitBreakerTest) {
+		// Get lease on n1.
+		require.NoError(t, tc.Write(n1))
+		tc.SetSlowThreshold(time.Second)
+		tc.StopServer(n2) // lose quorum
+		tc.RequireIsBreakerOpen(t, tc.Write(n1))
+		tc.RequireIsBreakerOpen(t, tc.Read(n1)) // not true
+	})
 }
 
 // Test infrastructure below.
@@ -151,6 +161,7 @@ type replWithKnob struct {
 
 type circuitBreakerTest struct {
 	*testcluster.TestCluster
+	slowThresh  *atomic.Value // time.Duration
 	ManualClock *hlc.HybridManualClock
 	repls       []replWithKnob // 0 -> repl on Servers[0], etc
 }
@@ -169,6 +180,17 @@ func runCircuitBreakerTest(
 
 func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	manualClock := hlc.NewHybridManualClock()
+	var rangeID int64 // atomic
+	slowThresh := &atomic.Value{}
+	slowThresh.Store(time.Duration(0))
+	storeKnobs := &kvserver.StoreTestingKnobs{
+		SlowReplicationThresholdOverride: func(ba *roachpb.BatchRequest) time.Duration {
+			if rid := roachpb.RangeID(atomic.LoadInt64(&rangeID)); rid == 0 || ba.RangeID != rid {
+				return 0
+			}
+			return slowThresh.Load().(time.Duration)
+		},
+	}
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
@@ -176,12 +198,14 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 				Server: &server.TestingKnobs{
 					ClockSource: manualClock.UnixNano,
 				},
+				Store: storeKnobs,
 			},
 		},
 	}
 	tc := testcluster.StartTestCluster(t, 2, args)
 
 	k := tc.ScratchRange(t)
+	atomic.StoreInt64(&rangeID, int64(tc.LookupRangeOrFatal(t, k).RangeID))
 
 	tc.AddVotersOrFatal(t, k, tc.Target(1))
 
@@ -195,6 +219,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 		TestCluster: tc,
 		ManualClock: manualClock,
 		repls:       repls,
+		slowThresh:  slowThresh,
 	}
 }
 
@@ -267,6 +292,13 @@ func (*circuitBreakerTest) RequireIsNotLeaseholderError(t *testing.T, err error)
 
 func (cbt *circuitBreakerTest) Write(idx int) error {
 	return cbt.writeViaRepl(cbt.repls[idx].Replica)
+}
+
+// SetSlowThreshold sets the SlowReplicationThreshold for requests sent through the
+// test harness (i.e. via Write) to the provided duration. The zero value restores
+// the default.
+func (cbt *circuitBreakerTest) SetSlowThreshold(dur time.Duration) {
+	cbt.slowThresh.Store(dur)
 }
 
 func (cbt *circuitBreakerTest) Read(idx int) error {
