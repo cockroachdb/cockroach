@@ -16,7 +16,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
-        "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
+        "//pkg/util/tracing/tracingservicepb",
     ],
 )
 

@@ -91,31 +91,55 @@ func authPassword(
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
+		// First step: send a cleartext authentication request to the client.
 		if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
 			return err
 		}
+
+		// While waiting for the client response, concurrently
+		// load the credentials from storage (or cache).
+		// Note: if this fails, we can't return the error right away,
+		// because we need to consume the client response first. This
+		// will be handled below.
+		hashedPassword, pwValidUntil, pwRetrievalErr := pwRetrieveFn(ctx)
+
+		// Wait for the password response from the client.
 		pwdData, err := c.GetPwdData()
 		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			if pwRetrievalErr != nil {
+				return errors.CombineErrors(err, pwRetrievalErr)
+			}
 			return err
 		}
-		password, err := passwordString(pwdData)
-		if err != nil {
-			return err
-		}
-		hashedPassword, pwValidUntil, err := pwRetrieveFn(ctx)
-		if err != nil {
-			return err
-		}
-		if len(hashedPassword) == 0 {
-			c.LogAuthInfof(ctx, "user has no password defined")
+		// Now process the password retrieval error, if any.
+		if pwRetrievalErr != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, pwRetrievalErr)
+			return pwRetrievalErr
 		}
 
+		// Extract the password response from the client.
+		password, err := passwordString(pwdData)
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+		// Inform operators looking at logs if there's something amiss.
+		if len(hashedPassword) == 0 {
+			c.LogAuthInfof(ctx, "user has no password defined")
+			// NB: the failure reason will be automatically handled by the fallback
+			// in auth.go (and report CREDENTIALS_INVALID).
+		}
+
+		// Expiration check.
 		if pwValidUntil != nil {
 			if pwValidUntil.Sub(timeutil.Now()) < 0 {
 				c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
 				return errors.New("password is expired")
 			}
 		}
+
+		// Now check the cleartext password against the retrieved credentials.
 		return security.UserAuthPasswordHook(
 			false /*insecure*/, password, hashedPassword,
 		)(ctx, systemIdentity, clientConnection)

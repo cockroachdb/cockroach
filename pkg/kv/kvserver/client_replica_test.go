@@ -3373,9 +3373,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 		tableSpan     = roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 		mkRecord      = func() ptpb.Record {
 			return ptpb.Record{
-				ID:        uuid.MakeV4().GetBytes(),
-				Timestamp: tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
-				Spans:     []roachpb.Span{tableSpan},
+				ID:              uuid.MakeV4().GetBytes(),
+				Timestamp:       tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
+				DeprecatedSpans: []roachpb.Span{tableSpan},
 			}
 		}
 		mkStaleTxn = func() *kv.Txn {

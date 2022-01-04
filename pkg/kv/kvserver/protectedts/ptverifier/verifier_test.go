@@ -78,10 +78,10 @@ func TestVerifier(t *testing.T) {
 			spans[i] = makeTableSpan(tid)
 		}
 		r := ptpb.Record{
-			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: s.Clock().Now(),
-			Mode:      ptpb.PROTECT_AFTER,
-			Spans:     spans,
+			ID:              uuid.MakeV4().GetBytes(),
+			Timestamp:       s.Clock().Now(),
+			Mode:            ptpb.PROTECT_AFTER,
+			DeprecatedSpans: spans,
 		}
 		require.Nil(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return pts.Protect(ctx, txn, &r)
@@ -138,8 +138,8 @@ func TestVerifier(t *testing.T) {
 						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
 							VerificationFailedRanges: []roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{{
 								RangeID:  42,
-								StartKey: roachpb.RKey(r.Spans[0].Key),
-								EndKey:   roachpb.RKey(r.Spans[0].EndKey),
+								StartKey: roachpb.RKey(r.DeprecatedSpans[0].Key),
+								EndKey:   roachpb.RKey(r.DeprecatedSpans[0].EndKey),
 							}},
 						})
 						return &resp, nil
@@ -166,16 +166,16 @@ func TestVerifier(t *testing.T) {
 						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
 							VerificationFailedRanges: []roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{{
 								RangeID:  42,
-								StartKey: roachpb.RKey(r.Spans[0].Key),
-								EndKey:   roachpb.RKey(r.Spans[0].EndKey),
+								StartKey: roachpb.RKey(r.DeprecatedSpans[0].Key),
+								EndKey:   roachpb.RKey(r.DeprecatedSpans[0].EndKey),
 								Reason:   "foo",
 							}},
 						})
 						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
 							VerificationFailedRanges: []roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{{
 								RangeID:  12,
-								StartKey: roachpb.RKey(r.Spans[1].Key),
-								EndKey:   roachpb.RKey(r.Spans[1].EndKey),
+								StartKey: roachpb.RKey(r.DeprecatedSpans[1].Key),
+								EndKey:   roachpb.RKey(r.DeprecatedSpans[1].EndKey),
 								Reason:   "bar",
 							}},
 						})
@@ -206,8 +206,8 @@ func TestVerifier(t *testing.T) {
 						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
 							DeprecatedFailedRanges: []roachpb.RangeDescriptor{{
 								RangeID:  42,
-								StartKey: roachpb.RKey(r.Spans[0].Key),
-								EndKey:   roachpb.RKey(r.Spans[0].EndKey),
+								StartKey: roachpb.RKey(r.DeprecatedSpans[0].Key),
+								EndKey:   roachpb.RKey(r.DeprecatedSpans[0].EndKey),
 							}},
 						})
 						return &resp, nil

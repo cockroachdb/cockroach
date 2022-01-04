@@ -60,8 +60,8 @@ go_proto_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb:with-mocks",
-        "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_go_proto",
-        "//pkg/server/status/statuspb:statuspb_go_proto",
+        "//pkg/server/diagnostics/diagnosticspb",
+        "//pkg/server/status/statuspb",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",

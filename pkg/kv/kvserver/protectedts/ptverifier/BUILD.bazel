@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
@@ -30,7 +30,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",

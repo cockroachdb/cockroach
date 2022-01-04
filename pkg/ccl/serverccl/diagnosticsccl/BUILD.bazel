@@ -17,7 +17,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/diagnostics",
-        "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_go_proto",
+        "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/sql",

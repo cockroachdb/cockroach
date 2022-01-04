@@ -226,7 +226,7 @@ func getSpansProtectedByBackup(
 		return nil, err
 	}
 
-	return ptsRecord.Spans, nil
+	return ptsRecord.DeprecatedSpans, nil
 }
 
 func protectTimestampRecordForSchedule(
