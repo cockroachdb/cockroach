@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -4368,4 +4369,61 @@ func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
 	return h.getOid()
+}
+
+//OidFromConstraint generates an OID given constraint information.
+func OidFromConstraint(
+	desc catalog.TableDescriptor,
+	schemaName string,
+	constraintName string,
+	constraintType scpb.ConstraintType,
+) *tree.DOid {
+	oidMaker := makeOidHasher()
+	switch constraintType {
+	case scpb.ConstraintType_FK:
+		for _, fk := range desc.AllActiveAndInactiveForeignKeys() {
+			if fk.Name == constraintName {
+				return oidMaker.ForeignKeyConstraintOid(
+					desc.GetParentID(),
+					schemaName,
+					desc.GetID(),
+					fk,
+				)
+			}
+		}
+	case scpb.ConstraintType_PrimaryKey:
+		for _, idx := range desc.AllIndexes() {
+			if idx.GetName() == constraintName {
+				oidMaker.UniqueConstraintOid(
+					desc.GetParentID(),
+					schemaName,
+					desc.GetID(),
+					idx.GetID(),
+				)
+			}
+		}
+	case scpb.ConstraintType_UniqueWithoutIndex:
+		for _, unique := range desc.GetUniqueWithoutIndexConstraints() {
+			if unique.GetName() == constraintName {
+				return oidMaker.UniqueWithoutIndexConstraintOid(
+					desc.GetParentID(),
+					schemaName,
+					desc.GetID(),
+					&unique,
+				)
+			}
+		}
+	case scpb.ConstraintType_Check:
+		for _, check := range desc.GetChecks() {
+			if check.Name == constraintName {
+				return oidMaker.CheckConstraintOid(
+					desc.GetParentID(),
+					schemaName,
+					desc.GetID(),
+					check,
+				)
+			}
+		}
+	}
+	return nil
 }
