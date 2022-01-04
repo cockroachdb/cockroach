@@ -78,7 +78,7 @@ rm go/src/github.com/cockroachdb/cockroach/cockroach-short
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
 ----
 
-bazel build //pkg/cmd/cockroach-short:cockroach-short
+bazel build //pkg/cmd/cockroach-short:cockroach-short //:go_path
 ----
 
 bazel info workspace --color=no
@@ -112,16 +112,13 @@ git status --ignored --short go/src/github.com/cockroachdb/cockroach/pkg
 rm pkg/file_to_delete.go
 ----
 
-find /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg -name *.go
+find /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach -name *.go
 ----
 ----
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/_bazel/bin/pkg/cmd/dev/dev_test_/testmain.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/kv/kvclient/rangefeed/mock_rangefeed_gomock_gopath/src/google.golang.org/grpc/preloader.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/kv/kvclient/rangefeed/mock_rangefeed_gomock_gopath/src/github.com/cockroachdb/cockroach/pkg/util/uuid/uuid_wrapper.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/kv/kvserver/kvserver_go_proto_/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/roachpb/batch_generated-gen.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/sql/opt/optgen/lang/expr-gen.og.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/sql/opt/optgen/lang/operator-gen.og.go
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated-gen.go
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/expr-gen.og.go
+/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/operator-gen.og.go
 ----
 ----
 
@@ -135,16 +132,16 @@ cat go/src/github.com/cockroachdb/cockroach/build/bazelutil/checked_in_genfiles.
 ----
 ----
 
-cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/kv/kvserver/kvserver_go_proto_/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go go/src/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go go/src/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go
 ----
 
-cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/roachpb/batch_generated-gen.go go/src/github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated.go
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated-gen.go go/src/github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated.go
 ----
 
-cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/sql/opt/optgen/lang/expr-gen.og.go go/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/expr.og.go
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/expr-gen.og.go go/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/expr.og.go
 ----
 
-cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/sql/opt/optgen/lang/operator-gen.og.go go/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/operator.og.go
+cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/operator-gen.og.go go/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/operator.og.go
 ----
 
 bazel build //pkg/cmd/cockroach-short:cockroach-short -s

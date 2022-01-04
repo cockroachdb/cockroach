@@ -11,7 +11,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,12 +50,9 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
-		"bazel":   d.generateBazel,
-		"docs":    d.generateDocs,
-		"execgen": d.generateUnimplemented,
-		"go":      d.generateGo,
-		"optgen":  d.generateUnimplemented,
-		"proto":   d.generateUnimplemented,
+		"bazel": d.generateBazel,
+		"docs":  d.generateDocs,
+		"go":    d.generateGo,
 	}
 
 	if len(targets) == 0 {
@@ -73,10 +69,10 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		if !ok {
 			return fmt.Errorf("unrecognized target: %s", target)
 		}
-
 		if err := generator(cmd); err != nil {
 			return err
 		}
+
 	}
 
 	return nil
@@ -158,59 +154,25 @@ func (d *dev) generateDocs(cmd *cobra.Command) error {
 }
 
 func (d *dev) generateGo(cmd *cobra.Command) error {
+	// Build :go_path, then hoist generated code.
 	ctx := cmd.Context()
-	workspace, err := d.getWorkspace(ctx)
-	if err != nil {
-		return err
-	}
-	// List targets we need to build.
-	contents, err := d.os.ReadFile(filepath.Join(workspace, "build/bazelutil/checked_in_genfiles.txt"))
-	if err != nil {
-		return err
-	}
-	var lines []string
-	for _, line := range strings.Split(contents, "\n") {
-		line = strings.TrimSpace(line)
-		if len(line) == 0 || strings.HasPrefix(line, "#") {
-			continue
-		}
-		lines = append(lines, line)
-	}
-	var targets []string
-	for _, line := range lines {
-		targets = append(targets, strings.Split(line, "|")[0])
-	}
 	// Build targets.
 	var args []string
 	args = append(args, "build")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
-	args = append(args, targets...)
-	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	args = append(args, "//:go_path")
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
 		return err
 	}
-	// Copy from bazel-bin to workspace.
+	// Hoist.
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
 	bazelBin, err := d.getBazelBin(ctx)
 	if err != nil {
 		return err
 	}
-	for _, line := range lines {
-		components := strings.Split(line, "|")
-		target := components[0]
-		dir := strings.Split(strings.TrimPrefix(target, "//"), ":")[0]
-		oldBasename := components[1]
-		newBasename := components[2]
-		err = d.os.CopyFile(filepath.Join(bazelBin, dir, oldBasename),
-			filepath.Join(workspace, dir, newBasename))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (*dev) generateUnimplemented(*cobra.Command) error {
-	return errors.New("to hoist all generated code into the workspace, run " +
-		"`dev build` with the flag `--hoist-generated-code`; to build the generated Go " +
-		"code needed to pass CI, run `dev generate go`")
+	return d.hoistGeneratedCode(ctx, workspace, bazelBin)
 }
