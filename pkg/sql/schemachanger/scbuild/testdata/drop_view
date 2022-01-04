@@ -26,6 +26,9 @@ DROP VIEW defaultdb.v1
   details:
     dependedOn: 55
     tableId: 54
+- [[TableComment:{DescID: 55}, ABSENT], PUBLIC]
+  details:
+    tableId: 55
 - [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
@@ -161,6 +164,21 @@ DROP VIEW defaultdb.v1 CASCADE
     columnID: 1
     dependedOn: 61
     tableId: 58
+- [[TableComment:{DescID: 55}, ABSENT], PUBLIC]
+  details:
+    tableId: 55
+- [[TableComment:{DescID: 56}, ABSENT], PUBLIC]
+  details:
+    tableId: 56
+- [[TableComment:{DescID: 57}, ABSENT], PUBLIC]
+  details:
+    tableId: 57
+- [[TableComment:{DescID: 58}, ABSENT], PUBLIC]
+  details:
+    tableId: 58
+- [[TableComment:{DescID: 61}, ABSENT], PUBLIC]
+  details:
+    tableId: 61
 - [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 55
