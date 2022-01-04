@@ -479,9 +479,12 @@ func (s *Store) canAcceptSnapshotLocked(
 		return nil, errors.Errorf("canAcceptSnapshotLocked requires a replica present")
 	}
 	// The raftMu is held which allows us to use the existing replica as a
-	// placeholder when we decide that the snapshot can be applied. As long
-	// as the caller releases the raftMu only after feeding the snapshot
-	// into the replica, this is safe.
+	// placeholder when we decide that the snapshot can be applied. As long as the
+	// caller releases the raftMu only after feeding the snapshot into the
+	// replica, this is safe. This is true even when the snapshot spans a merge,
+	// because we will be guaranteed to have the subsumed (initialized) Replicas
+	// in place as well. This is because they are present when the merge first
+	// commits, and cannot have been replicaGC'ed yet (see replicaGCQueue.process).
 	existingRepl.raftMu.AssertHeld()
 
 	existingRepl.mu.RLock()
