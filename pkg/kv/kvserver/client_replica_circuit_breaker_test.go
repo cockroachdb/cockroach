@@ -126,7 +126,12 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 		require.NoError(t, tc.Write(n1))
 		tc.SetSlowThreshold(time.Second)
 		tc.StopServer(n2) // lose quorum
-		tc.RequireIsBreakerOpen(t, tc.Write(n1))
+		{
+			err := tc.Write(n1)
+			var ae *roachpb.AmbiguousResultError
+			require.True(t, errors.As(err, &ae), "%+v", err)
+			t.Log(err)
+		}
 		tc.RequireIsBreakerOpen(t, tc.Read(n1)) // not true
 	})
 }

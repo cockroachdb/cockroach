@@ -109,7 +109,7 @@ func (r *Replica) Send(
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
 func (r *Replica) sendWithRangeID(
 	ctx context.Context, _forStacks roachpb.RangeID, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+) (_ *roachpb.BatchResponse, rErr *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
@@ -400,6 +400,11 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
 			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
+		}
+		// Also exit loop if breaker is open. Not failing fast here will lead to requests
+		// stuck acquiring latches.
+		if err := r.breaker.Signal().Err(); err != nil {
+			return nil, roachpb.NewError(err)
 		}
 
 		// Acquire latches to prevent overlapping requests from executing until
