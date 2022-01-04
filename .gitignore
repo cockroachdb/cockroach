@@ -9,6 +9,10 @@
 #
 # https://github.com/github/gitignore/tree/master/Global
 
+# Celia-specific -- DO NOT CHECK IN!! :)
+.idea/*
+c-deps/*
+
 artifacts
 /bin
 /bin.*
