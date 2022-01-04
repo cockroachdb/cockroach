@@ -171,6 +171,10 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
 		scdeps.NewPartitioner(execCfg.Settings, evalContext),
+		execCfg.CommentUpdaterFactory.NewCommentUpdater(
+			evalContext.Context,
+			txn,
+			evalContext.SessionData()),
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		schemaChangerJobID,
 		stmts,

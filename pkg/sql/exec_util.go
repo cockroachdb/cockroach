@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/commenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -1183,6 +1184,9 @@ type ExecutorConfig struct {
 
 	// IndexValidator is used to validate indexes.
 	IndexValidator scexec.IndexValidator
+
+	// CommentUpdaterFactory is used to issue queries for updating comments.
+	CommentUpdaterFactory commenter.CommentUpdaterFactory
 
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.

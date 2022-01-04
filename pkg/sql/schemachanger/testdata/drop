@@ -12,7 +12,8 @@ DROP SCHEMA db.sc;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+delete comment for descriptor #56 of type SchemaCommentType
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 5 MutationType ops
@@ -62,7 +63,12 @@ DROP TABLE db.sc.t;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
+delete comment for descriptor #58 of type TableCommentType
+delete comment for descriptor #58 of type ColumnCommentType
+delete comment for descriptor #58 of type ColumnCommentType
+delete comment for descriptor #58 of type IndexCommentType
+delete comment for constraint on #58, ordinal: 1, type: PrimaryKey
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 4 MutationType ops
@@ -113,7 +119,8 @@ DROP SCHEMA db.sc CASCADE;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 3 MutationType ops
+## StatementPhase stage 1 of 1 with 4 MutationType ops
+delete comment for descriptor #57 of type SchemaCommentType
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 11 MutationType ops
@@ -170,7 +177,9 @@ DROP DATABASE db CASCADE;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 4 MutationType ops
+delete comment for descriptor #55 of type SchemaCommentType
+delete comment for descriptor #54 of type DatabaseCommentType
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 6 MutationType ops
@@ -251,7 +260,29 @@ DROP DATABASE db1 CASCADE
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 14 MutationType ops
+## StatementPhase stage 1 of 1 with 36 MutationType ops
+delete comment for descriptor #64 of type TableCommentType
+delete comment for descriptor #67 of type TableCommentType
+delete comment for descriptor #67 of type ColumnCommentType
+delete comment for descriptor #67 of type ColumnCommentType
+delete comment for descriptor #67 of type ColumnCommentType
+delete comment for descriptor #67 of type IndexCommentType
+delete comment for descriptor #62 of type SchemaCommentType
+delete comment for descriptor #65 of type TableCommentType
+delete comment for descriptor #66 of type TableCommentType
+delete comment for descriptor #66 of type ColumnCommentType
+delete comment for descriptor #66 of type ColumnCommentType
+delete comment for descriptor #66 of type ColumnCommentType
+delete comment for descriptor #66 of type IndexCommentType
+delete comment for descriptor #68 of type TableCommentType
+delete comment for descriptor #69 of type TableCommentType
+delete comment for descriptor #70 of type TableCommentType
+delete comment for descriptor #71 of type TableCommentType
+delete comment for descriptor #74 of type TableCommentType
+delete comment for descriptor #63 of type SchemaCommentType
+delete comment for descriptor #61 of type DatabaseCommentType
+delete comment for constraint on #67, ordinal: 1, type: PrimaryKey
+delete comment for constraint on #66, ordinal: 1, type: PrimaryKey
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 56 MutationType ops

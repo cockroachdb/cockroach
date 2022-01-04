@@ -62,6 +62,8 @@ type MutationVisitor interface {
 	AddJobReference(context.Context, AddJobReference) error
 	CreateDeclarativeSchemaChangerJob(context.Context, CreateDeclarativeSchemaChangerJob) error
 	UpdateSchemaChangerJob(context.Context, UpdateSchemaChangerJob) error
+	RemoveComment(context.Context, RemoveComment) error
+	RemoveConstraintComment(context.Context, RemoveConstraintComment) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -262,4 +264,14 @@ func (op CreateDeclarativeSchemaChangerJob) Visit(ctx context.Context, v Mutatio
 // Visit is part of the MutationOp interface.
 func (op UpdateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.UpdateSchemaChangerJob(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveConstraintComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveConstraintComment(ctx, op)
 }

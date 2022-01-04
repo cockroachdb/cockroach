@@ -137,7 +137,32 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 		}
 	}
-
+	for _, comment := range mvs.commentsToUpdate {
+		if len(comment.comment) > 0 {
+			if err := deps.CommentUpdater().UpsertDescriptorComment(
+				comment.id, comment.subID, comment.commentType, comment.comment); err != nil {
+				return err
+			}
+		} else {
+			if err := deps.CommentUpdater().DeleteDescriptorComment(
+				comment.id, comment.subID, comment.commentType); err != nil {
+				return err
+			}
+		}
+	}
+	for _, comment := range mvs.constraintCommentsToUpdate {
+		if len(comment.comment) > 0 {
+			if err := deps.CommentUpdater().UpsertConstraintComment(
+				comment.tbl, comment.schemaName, comment.constraintOrdinal, comment.constraintType, comment.comment); err != nil {
+				return err
+			}
+		} else {
+			if err := deps.CommentUpdater().DeleteConstraintComment(
+				comment.tbl, comment.schemaName, comment.constraintOrdinal, comment.constraintType); err != nil {
+				return err
+			}
+		}
+	}
 	for _, id := range mvs.descriptorsToDelete.Ordered() {
 		if err := b.DeleteDescriptor(ctx, id); err != nil {
 			return err
@@ -237,16 +262,33 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 }
 
 type mutationVisitorState struct {
-	c                       Catalog
-	checkedOutDescriptors   nstree.Map
-	drainedNames            map[descpb.ID][]descpb.NameInfo
-	descriptorsToDelete     catalog.DescriptorIDSet
-	dbGCJobs                catalog.DescriptorIDSet
-	descriptorGCJobs        map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
-	indexGCJobs             map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
-	schemaChangerJob        *jobs.Record
-	schemaChangerJobUpdates map[jobspb.JobID]schemaChangerJobUpdate
-	eventsByStatement       map[uint32][]eventPayload
+	c                          Catalog
+	checkedOutDescriptors      nstree.Map
+	drainedNames               map[descpb.ID][]descpb.NameInfo
+	descriptorsToDelete        catalog.DescriptorIDSet
+	commentsToUpdate           []commentToUpdate
+	constraintCommentsToUpdate []constraintCommentToUpdate
+	dbGCJobs                   catalog.DescriptorIDSet
+	descriptorGCJobs           map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
+	indexGCJobs                map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
+	schemaChangerJob           *jobs.Record
+	schemaChangerJobUpdates    map[jobspb.JobID]schemaChangerJobUpdate
+	eventsByStatement          map[uint32][]eventPayload
+}
+
+type constraintCommentToUpdate struct {
+	tbl               catalog.TableDescriptor
+	schemaName        string
+	constraintOrdinal int
+	constraintType    scpb.ConstraintType
+	comment           string
+}
+
+type commentToUpdate struct {
+	id          int64
+	subID       int64
+	commentType scpb.CommentType
+	comment     string
 }
 
 type eventPayload struct {
@@ -305,6 +347,37 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 
 func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {
 	mvs.descriptorsToDelete.Add(id)
+}
+
+func (mvs *mutationVisitorState) DeleteComment(
+	id descpb.ID, subID int, commentType scpb.CommentType,
+) {
+	mvs.commentsToUpdate = append(mvs.commentsToUpdate,
+		commentToUpdate{
+			id:          int64(id),
+			subID:       int64(subID),
+			commentType: commentType,
+		})
+}
+
+func (mvs *mutationVisitorState) DeleteConstraintComment(
+	ctx context.Context,
+	tbl catalog.TableDescriptor,
+	constraintOrdinal int,
+	constraintType scpb.ConstraintType,
+) error {
+	schema, err := mvs.c.MustReadImmutableDescriptor(ctx, tbl.GetParentSchemaID())
+	if err != nil {
+		return err
+	}
+	mvs.constraintCommentsToUpdate = append(mvs.constraintCommentsToUpdate,
+		constraintCommentToUpdate{
+			tbl:               tbl,
+			schemaName:        schema.GetName(),
+			constraintOrdinal: constraintOrdinal,
+			constraintType:    constraintType,
+		})
+	return nil
 }
 
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {

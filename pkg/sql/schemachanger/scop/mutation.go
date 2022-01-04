@@ -362,3 +362,20 @@ type UpdateSchemaChangerJob struct {
 	Statuses        []scpb.Status
 	IsNonCancelable bool
 }
+
+// RemoveComment is used to delete a comment associated with a descriptor.
+type RemoveComment struct {
+	mutationOp
+	DescriptorID descpb.ID
+	SubID        int
+	CommentType  scpb.CommentType
+}
+
+// RemoveConstraintComment is used to delete a comment associated with a
+// constraint.
+type RemoveConstraintComment struct {
+	mutationOp
+	TableID           descpb.ID
+	ConstraintType    scpb.ConstraintType
+	ConstraintOrdinal uint32
+}
