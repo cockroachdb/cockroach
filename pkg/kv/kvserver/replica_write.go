@@ -100,6 +100,59 @@ func withCircuitBreakerProbeMarker(ctx context.Context) context.Context {
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
+	// The circuit breaker is checked very early to successfully fail-fast the
+	// majority of requests even if there's a truly bad problem like a deadlock.
+	//
+	// TODO(tbg): do this in executeBatchWithConcurrencyRetries, but only for read-write path.
+	// There, wrap a context in a cancellation and stash it on the replica. teach the breaker
+	// to cancel everyone in that map. When "our" context is cancelled but parent is not,
+	// we know the breaker did it and can emit an error accordingly. Need to be careful: must not replace an AmbiguousResultError.
+	// Need to check if the error derives from context.Canceled.
+	// Also, should avoid getting to the propose stage in the first place when breaker is open.
+	// TODO(tbg): kvnemesis?
+	// TODO(tbg): DistSender needs to understand the circuit breaker errors.
+	// Otherwise, if its caching info is stale, it might persistently contact
+	// unavailable replicas despite there possibly existing a healthy alternative.
+	// Basically they should be treated like a NotLeaseholderError but the replica
+	// shouldn't be retried... this is probably too hard for now, better to make it
+	// a hard error but to ensure it evicts the leaseholder cache.
+	brSig := r.breaker.Signal()
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
+
+	if err := brSig.Err(); err != nil {
+		return nil, g, roachpb.NewError(err)
+	}
+
+	parCtx := ctx
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer func() {
+		// HACK (or rather crude version of final thing):
+		// TODO(tbg): be careful about AmbiguousResultError here. If something already got proposed,
+		// need to propagate an ambiguous result, not any kind of cancellation error. Or maybe we don't,
+		// as long as the code on the other side (DistSender) isn't going to make any assumptions about
+		// what did or did not happen yet. Somewhat relatedly, it would be nice to know that a txn did
+		// not commit when a breaker error comes back.
+		if parCtx.Err() == nil && ctx.Err() != nil && errors.Is(pErr.GoError(), context.Canceled) {
+			if brErr := r.breaker.Signal().Err(); brErr != nil {
+				pErr = roachpb.NewError(brErr)
+			}
+		}
+	}()
+	r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {
+		// HACK: without this, if a request got stuck and is abandoned, it will
+		// still hold its latches and so subsequent requests will time out on
+		// SequenceReq if we don't do this.
+		select {
+		case <-ctx.Done():
+			return
+		case <-r.breaker.Signal().C():
+			cancel()
+		}
+	})
+
 	startTime := timeutil.Now()
 
 	// Even though we're not a read-only operation by definition, we have to
@@ -219,7 +272,12 @@ func (r *Replica) executeWriteBatch(
 		select {
 		case <-brSig.C():
 			abandon()
-			return nil, nil, roachpb.NewError(brSig.Err()) // TODO(tbg): return a structured error
+			// The breaker is open. We can't return a better error here unless that
+			// error is handled exactly as an ambiguous result. We also don't want
+			// to mark this error as originating from a breaker as this makes bugs
+			// more likely.
+			err := roachpb.NewAmbiguousResultErrorf("%v", brSig.Err())
+			return nil, nil, roachpb.NewError(err)
 		case propResult := <-ch:
 			// Semi-synchronously process any intents that need resolving here in
 			// order to apply back pressure on the client which generated them. The
