@@ -45,9 +45,14 @@ import (
 func registerFollowerReads(r registry.Registry) {
 	register := func(survival survivalGoal, locality localitySetting, rc readConsistency) {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("follower-reads/survival=%s/locality=%s/reads=%s", survival, locality, rc),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(6, spec.CPU(2), spec.Geo(), spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b")),
+			Name:  fmt.Sprintf("follower-reads/survival=%s/locality=%s/reads=%s", survival, locality, rc),
+			Owner: registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(
+				6, /* nodeCount */
+				spec.CPU(4),
+				spec.Geo(),
+				spec.Zones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+			),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Wipe(ctx)
@@ -224,10 +229,16 @@ func runFollowerReadsTest(
 
 	// Enable the slow query log so we have a shot at identifying why follower
 	// reads are not being served after the fact when this test fails. Use a
-	// latency threshold of 50ms, which should be well below the latency of a
+	// latency threshold of 25ms, which should be well below the latency of a
 	// cross-region hop to read from the leaseholder but well above the latency
 	// of a follower read.
-	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '50ms'")
+	const maxLatencyThreshold = 25 * time.Millisecond
+	_, err := db.ExecContext(
+		ctx, fmt.Sprintf(
+			"SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '%s'",
+			maxLatencyThreshold,
+		),
+	)
 	if err != nil {
 		// 20.2 doesn't have this setting.
 		if !strings.Contains(err.Error(), "unknown cluster setting") {
@@ -324,7 +335,7 @@ func runFollowerReadsTest(
 		//
 		// We don't do this for singleRegion since, in a single region, there's no
 		// low latency and high-latency regimes.
-		verifySQLLatency(ctx, c, t, c.Node(1), start, end, 20*time.Millisecond)
+		verifySQLLatency(ctx, c, t, c.Node(1), start, end, maxLatencyThreshold)
 	}
 }
 
