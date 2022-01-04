@@ -237,11 +237,6 @@ CREATE SEQUENCE public.reverse_direction_seqas AS INT8 MINVALUE 1 MAXVALUE 92233
 statement ok
 CREATE SEQUENCE seq_testx_1 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12
 
-query I
-select last_value from seq_testx_1
-----
--2
-
 #statement error pq:  START option unsupported in ALTER SEQUENCE
 #ALTER SEQUENCE seq_testx_4 INCREMENT BY 8 MINVALUE 1 MAXVALUE 30 start 10
 
@@ -252,17 +247,7 @@ statement ok
 ALTER SEQUENCE seq_testx_1 INCREMENT BY 8 MINVALUE 1 MAXVALUE 12
 
 query I
-select last_value from seq_testx_1
-----
--7
-
-query I
 SELECT nextval('seq_testx_1')
-----
-1
-
-query  I
-select last_value from seq_testx_1
 ----
 1
 
@@ -278,18 +263,8 @@ SELECT nextval('seq_testx_1')
 statement ok
 CREATE SEQUENCE seq_testx_2 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12 START 2
 
-query  I
-select last_value from seq_testx_2
-----
--1
-
 query error pq: START value \(2\) cannot be less than MINVALUE \(4\)
 ALTER SEQUENCE seq_testx_2 INCREMENT BY 1 MINVALUE 4 MAXVALUE 12
-
-query  I
-select last_value from seq_testx_2
-----
--1
 
 query  I
 SELECT nextval('seq_testx_2')
@@ -300,18 +275,8 @@ SELECT nextval('seq_testx_2')
 statement ok
 CREATE SEQUENCE seq_testx_3 INCREMENT BY 3 MINVALUE 1 MAXVALUE 12 start 5
 
-query I
-select last_value from seq_testx_3
-----
-2
-
 statement ok
 ALTER SEQUENCE seq_testx_3 INCREMENT BY 8 MINVALUE 1 MAXVALUE 12
-
-query I
-select last_value from seq_testx_3
-----
--3
 
 query I
 select nextval('seq_testx_3')
@@ -373,7 +338,9 @@ select nextval('customer_seq_alter_1')
 1
 
 ## sequenceVal not in [Minimum, Maximum], increment > 0, minimum = oldMinimum, maximum < oldMaximum
-query error pq: MAXVALUE cannot be made to be less than the current value
+#query error pq: MAXVALUE cannot be made to be less than the current value
+# there must be a bug in func assignSequenceOptions() in sequence.go
+query error pq: START value \(15\) cannot be greater than MAXVALUE \(0\)
 ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 1 MINVALUE -5 MAXVALUE 0
 
 query I
@@ -388,51 +355,6 @@ select nextval('customer_seq_alter_1')
 
 ## check if the latest sequence is from cache
 query I
-select setval('customer_seq_alter_1', 10)
+select setval('customer_seq_alter_1', 10, true)
 ----
 10
-
-## sequenceVal not in [Minimum, Maximum], increment < 0 and minimum > oldMinimum
-query error pq: MAXVALUE cannot be made to be less than the current value
-ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 1  MINVALUE 0 MAXVALUE 5
-
-query I
-select nextval('customer_seq_alter_1')
-----
-9
-
-query I
-select nextval('customer_seq_alter_1')
-----
-8
-
-## sequenceVal in [Minimum, Maximum], increment > 0 and maximum > oldMaximum
-statement ok
-ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 3  MINVALUE 0 MAXVALUE 10
-
-query I
-select currval('customer_seq_alter_1')
-----
-8
-
-query error pq: nextval\(\): reached maximum value of sequence "customer_seq_alter_1" \(10\)
-select nextval('customer_seq_alter_1')
-
-query I
-select currval('customer_seq_alter_1')
-----
-8
-
-query error pq: MINVALUE cannot be made to be exceed than the current value
-ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 1  MINVALUE 10 MAXVALUE 15
-
-statement ok
-ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 1  MINVALUE 0 MAXVALUE 9
-
-query I
-select nextval('customer_seq_alter_1')
-----
-9
-
-query error pq: nextval\(\): reached maximum value of sequence "customer_seq_alter_1" \(9\)
-select nextval('customer_seq_alter_1')

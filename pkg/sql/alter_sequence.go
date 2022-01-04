@@ -71,8 +71,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	oldMaxValue := desc.SequenceOpts.MaxValue
 	oldIncrement := desc.SequenceOpts.Increment
 	oldStart := desc.SequenceOpts.Start
-	// isAlterAfterInit : true incidate alter_sequence_stmt after create_sequence_stmt without use
-	// isAlterWithOutUse := false
+	isCalled := false
 
 	existingType := types.Int
 	if desc.GetSequenceOpts().AsIntegerType != "" {
@@ -110,24 +109,6 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		return kv.ValueInt(), nil
 	}
 
-	// getLastSequenceValue get the last valid sequence value when unavailable values are caused by increment
-	getLastSequenceValue := func(lastVal int64, oldIncrement int64, oldBound int64) (int64, error) {
-		if (lastVal > oldBound && oldIncrement > 0) || (lastVal < oldBound && oldIncrement < 0) {
-			lastValidVal := lastVal
-			figureBeyond := (lastVal - oldBound) % oldIncrement
-			// oldBound is the last valid sequence value
-			if figureBeyond == 0 {
-				lastValidVal = oldBound
-			} else {
-				lastValidVal = oldBound - (oldIncrement - figureBeyond)
-			}
-			return lastValidVal, nil
-		}
-		return 0, pgerror.Newf(
-			pgcode.SequenceGeneratorLimitExceeded,
-			"select currval or nextval please, it's abnormal")
-	}
-
 	// Due to the semantics of sequence caching (see sql.planner.incrementSequenceUsingCache()),
 	// it is possible for a sequence to have a value that exceeds its MinValue or MaxValue. Users
 	// do no see values extending the sequence's bounds, and instead see "bounds exceeded" errors.
@@ -143,58 +124,46 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	}
 
 	// If the sequenceVal exceeded the old MinValue or MaxValue, we must set sequenceVal to the last valid one.
-	// 1. Values is just init, when the sequence is altered before it has ever been used
-	// In this case, last valid sequenceVal is oldStart or newStart
 	// Set the initial value to the newStartValue if there is a start param in alter_sequence_stmt.
-	if sequenceVal == oldStart-oldIncrement {
-		if hasNewStart {
-			sequenceVal = opts.Start - opts.Increment
-		} else {
+	if hasNewStart {
+		isCalled = true
+		sequenceVal = opts.Start - opts.Increment
+	} else {
+		// 1. Values is just init, when the sequence is altered before it has ever been used
+		if sequenceVal == oldStart-oldIncrement {
+			isCalled = true
 			sequenceVal = oldStart - opts.Increment
-		}
-
-		if err := params.p.txn.Put(params.ctx, seqValueKey, sequenceVal); err != nil {
-			return err
-		}
-	} else if (sequenceVal < oldMinValue && oldIncrement < 0) || (sequenceVal > oldMaxValue && oldIncrement > 0) {
-		// 2. The sequenceVal out of range result from increment
-		if hasNewStart {
-			sequenceVal = opts.Start - opts.Increment
 		} else {
-			var oldBound int64
-			if sequenceVal < oldMinValue && oldIncrement < 0 {
-				// out of oldMinValue when decrease
-				oldBound = oldMinValue
-			} else if sequenceVal > oldMaxValue && oldIncrement > 0 {
-				// out of oldMaxValue when increase
-				oldBound = oldMaxValue
-			}
-			sequenceVal, err = getLastSequenceValue(sequenceVal, oldIncrement, oldBound)
+			// 2. The sequence is altered after it has ever been used
+			isCalled = true
+			sequenceVal, err = params.p.SessionData().SequenceState.GetLastValue()
 			if err != nil {
 				return err
 			}
-
-			if sequenceVal > opts.MaxValue {
-				return pgerror.Newf(
-					pgcode.SequenceGeneratorLimitExceeded,
-					"MAXVALUE cannot be made to be less than the current value")
-			} else if sequenceVal < opts.MinValue {
-				return pgerror.Newf(
-					pgcode.SequenceGeneratorLimitExceeded,
-					"MINVALUE cannot be made to be exceed than the current value")
+			// The sequenceVal out of range result from increment
+			if (sequenceVal < oldMinValue && oldIncrement < 0) || (sequenceVal > oldMaxValue && oldIncrement > 0) {
+				if sequenceVal > opts.MaxValue {
+					return pgerror.Newf(
+						pgcode.SequenceGeneratorLimitExceeded,
+						"MAXVALUE cannot be made to be less than the current value")
+				} else if sequenceVal < opts.MinValue {
+					return pgerror.Newf(
+						pgcode.SequenceGeneratorLimitExceeded,
+						"MINVALUE cannot be made to be exceed than the current value")
+				}
 			}
-
 		}
+	}
 
-		if err := params.p.txn.Put(params.ctx, seqValueKey, sequenceVal); err != nil {
-			return err
-		}
+	if err := params.p.txn.Put(params.ctx, seqValueKey, sequenceVal); err != nil {
+		return err
 	}
 	// Clear out the cache and update the last value.
 	params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
 		m.initSequenceCache()
-		// I don't know if if is needed
-		m.RecordLatestSequenceVal(uint32(n.seqDesc.GetID()), sequenceVal)
+		if isCalled {
+			m.RecordLatestSequenceVal(uint32(n.seqDesc.GetID()), sequenceVal)
+		}
 	})
 
 	if err := params.p.writeSchemaChange(
