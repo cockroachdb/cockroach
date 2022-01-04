@@ -393,43 +393,88 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 10 MutationType ops
+StatementPhase stage 1 of 1 with 23 MutationType ops
   transitions:
     [[Sequence:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 56}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 56, ColumnID: 1}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[ColumnComment:{DescID: 56, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 56, ColumnID: 2}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[ColumnComment:{DescID: 56, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 56, ColumnID: 3}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[ColumnComment:{DescID: 56, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 56, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
+    [[ConstraintComment:{DescID: 56, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexComment:{DescID: 56, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 57}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 58}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 59}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 59}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 60}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 60}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 63}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 63}, ABSENT], PUBLIC] -> ABSENT
     [[Type:{DescID: 61}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Type:{DescID: 62}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Schema:{DescID: 54}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[SchemaComment:{DescID: 54}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveTableComment
+      DescriptorID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 56
+    *scop.RemoveTableComment
+      DescriptorID: 56
+    *scop.RemoveColumnComment
+      ColumnID: 1
+      TableID: 56
+    *scop.RemoveColumnComment
+      ColumnID: 2
+      TableID: 56
+    *scop.RemoveColumnComment
+      ColumnID: 3
+      TableID: 56
+    *scop.RemoveConstraintComment
+      ConstraintName: t1_pkey
+      ConstraintType: 4
+      TableID: 56
+    *scop.RemoveIndexComment
+      IndexID: 1
+      TableID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
+    *scop.RemoveTableComment
+      DescriptorID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
+    *scop.RemoveTableComment
+      DescriptorID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
+    *scop.RemoveTableComment
+      DescriptorID: 59
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 60
+    *scop.RemoveTableComment
+      DescriptorID: 60
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 63
+    *scop.RemoveTableComment
+      DescriptorID: 63
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 61
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 62
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
+    *scop.RemoveSchemaComment
+      DescriptorID: 54
 PreCommitPhase stage 1 of 1 with 43 MutationType ops
   transitions:
     [[Sequence:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
