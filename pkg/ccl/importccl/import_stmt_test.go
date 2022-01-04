@@ -5611,6 +5611,36 @@ func TestImportPgDump(t *testing.T) {
 		sqlDB.Exec(t, "IMPORT PGDUMP ($1)", srv.URL)
 		sqlDB.CheckQueryResults(t, `SELECT * from t`, [][]string{{"2", "42", "1"}, {"4", "42", "3"}})
 	})
+
+	t.Run("more-target-cols-than-data", func(t *testing.T) {
+		data := `
+COPY public.t (id, link, lang, feed, date) FROM stdin;
+4964055	http://foo	france	http://bar	2021-03-16 05:46:23.239227
+\.
+
+INSERT INTO public.t (id, link, lang, feed, date) VALUES (4964056, 'http://foo', 'france', 'http://bar', '2021-03-16 05:46:23.239227');
+			`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		defer sqlDB.Exec(t, "DROP TABLE t")
+		sqlDB.Exec(t, `
+IMPORT TABLE t (
+id INT8 NOT NULL PRIMARY KEY DEFAULT unique_rowid(),
+feed STRING,
+link STRING,
+lang STRING,
+country STRING,
+date TIMESTAMP
+) PGDUMP DATA ($1) WITH ignore_unsupported_statements`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * from t`,
+			[][]string{{"4964055", "http://bar", "http://foo", "france", "NULL", "2021-03-16 05:46:23.239227 +0000 +0000"},
+				{"4964056", "http://bar", "http://foo", "france", "NULL", "2021-03-16 05:46:23.239227 +0000 +0000"}})
+	})
+
 	t.Run("import-into-not-supported", func(t *testing.T) {
 		data := `INSERT INTO t VALUES (1, 2), (3, 4)`
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
