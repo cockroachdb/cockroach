@@ -1184,6 +1184,9 @@ type ExecutorConfig struct {
 	// IndexValidator is used to validate indexes.
 	IndexValidator scexec.IndexValidator
 
+	// CommentUpdaterFactory is used to issue queries for updating comments.
+	CommentUpdaterFactory scexec.CommentUpdaterFactory
+
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.
 	ContentionRegistry *contention.Registry

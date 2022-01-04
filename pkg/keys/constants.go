@@ -407,14 +407,27 @@ const (
 	TenantUsageTableID                  = 45
 	SQLInstancesTableID                 = 46
 	SpanConfigurationsTableID           = 47
+)
 
-	// CommentType is type for system.comments
-	DatabaseCommentType   = 0
-	TableCommentType      = 1
-	ColumnCommentType     = 2
-	IndexCommentType      = 3
-	SchemaCommentType     = 4
-	ConstraintCommentType = 5
+// CommentType the type of the schema object on which a comment has been
+// applied.
+type CommentType int
+
+//go:generate stringer --type CommentType --output=comment_type_string.go
+
+const (
+	// DatabaseCommentType comment on a database.
+	DatabaseCommentType CommentType = 0
+	// TableCommentType comment on a table/view/sequence.
+	TableCommentType CommentType = 1
+	// ColumnCommentType comment on a column.
+	ColumnCommentType CommentType = 2
+	// IndexCommentType comment on an index.
+	IndexCommentType CommentType = 3
+	// SchemaCommentType comment on a schema.
+	SchemaCommentType CommentType = 4
+	// ConstraintCommentType comment on a constraint.
+	ConstraintCommentType CommentType = 5
 )
 
 const (
