@@ -8,7 +8,7 @@ go_library(
         "postgres.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-metadata-tables/rdbms",
-    visibility = ["//visibility:private"],
+    visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql",
         "//pkg/sql/types",

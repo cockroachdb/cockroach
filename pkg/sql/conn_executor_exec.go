@@ -700,7 +700,12 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
-	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+
+	// We need to turn off autocommit behavior here so that the "insert fast path"
+	// does not get triggered. The postgres docs say that commands in the extended
+	// protocol are all treated as an implicit transaction that does not get
+	// committed until a Sync message is received.
+	p.autoCommit = os.ImplicitTxn.Get() && !isExtendedProtocol && !ex.server.cfg.TestingKnobs.DisableAutoCommit
 
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()

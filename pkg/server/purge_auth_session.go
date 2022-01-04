@@ -120,7 +120,7 @@ RETURNING 1
 		autoLogoutTime = currTime.Add(autoLogoutTimeout * time.Duration(-1))
 	)
 
-	if _, err := internalExecutor.QueryRowEx(
+	if _, err := internalExecutor.ExecEx(
 		ctx,
 		"delete-old-expired-sessions",
 		nil, /* txn */
@@ -132,7 +132,7 @@ RETURNING 1
 		log.Errorf(ctx, "error while deleting old expired web sessions: %+v", err)
 	}
 
-	if _, err := internalExecutor.QueryRowEx(
+	if _, err := internalExecutor.ExecEx(
 		ctx,
 		"delete-old-revoked-sessions",
 		nil, /* txn */
@@ -144,7 +144,7 @@ RETURNING 1
 		log.Errorf(ctx, "error while deleting old revoked web sessions: %+v", err)
 	}
 
-	if _, err := internalExecutor.QueryRowEx(
+	if _, err := internalExecutor.ExecEx(
 		ctx,
 		"delete-sessions-timeout",
 		nil, /* txn */

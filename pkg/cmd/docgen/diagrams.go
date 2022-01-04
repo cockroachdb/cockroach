@@ -1498,9 +1498,6 @@ func getAllStmtSpecs(sqlGrammarFile string, bnfAPITimeout time.Duration) ([]stmt
 	stmtRegex := regexp.MustCompile(`%type\s*<tree.Statement>\s*(.*)$`)
 
 	scanner := bufio.NewScanner(file)
-	if err != nil {
-		return nil, err
-	}
 	for scanner.Scan() {
 		text := scanner.Text()
 		if matches := stmtRegex.FindAllStringSubmatch(text, -1); len(matches) > 0 {

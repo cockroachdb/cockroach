@@ -1,21 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "indexusagestats",
-    srcs = [
-        "cluster_settings.go",
-        "index_usage_stats.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/indexusagestats",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/roachpb",
-        "//pkg/settings",
-        "//pkg/util/stop",
-    ],
-)
-
-go_library(
     name = "idxusage",
     srcs = [
         "cluster_settings.go",
