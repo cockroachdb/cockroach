@@ -37,6 +37,7 @@ type Dependencies interface {
 	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
 	EventLogger() EventLogger
+	CommentUpdater() CommentUpdater
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -234,4 +235,20 @@ type BackfillProgressFlusher interface {
 
 	// FlushFractionCompleted writes out the fraction completed.
 	FlushFractionCompleted(ctx context.Context) error
+}
+
+// CommentUpdater is used to update comments associated with schema objects.
+type CommentUpdater interface {
+	// UpsertDescriptorComment updates a comment associated with an associated
+	// schema object.
+	UpsertDescriptorComment(id descpb.ID, subID int, commentType int, comment string) error
+
+	// DeleteDescriptorComment deletes a comment for a given descriptor.
+	DeleteDescriptorComment(id descpb.ID, subID int, commentType int) error
+
+	//UpsertConstraintComment upserts a comment associated with a constraint.
+	UpsertConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintOrdinal int, constraintType scpb.ConstraintType, comment string) error
+
+	//DeleteConstraintComment deletes a comment associated with a constraint.
+	DeleteConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintOrdinal int, constraintType scpb.ConstraintType) error
 }

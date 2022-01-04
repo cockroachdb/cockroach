@@ -54,6 +54,7 @@ func NewExecutorDependencies(
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
 	partitioner scmutationexec.Partitioner,
+	commentUpdater scexec.CommentUpdater,
 	eventLogger scexec.EventLogger,
 	schemaChangerJobID jobspb.JobID,
 	statements []string,
@@ -70,6 +71,7 @@ func NewExecutorDependencies(
 		},
 		backfiller:              backfiller,
 		backfillTracker:         backfillTracker,
+		commentUpdater:          commentUpdater,
 		periodicProgressFlusher: backfillFlusher,
 		statements:              statements,
 		partitioner:             partitioner,
@@ -304,6 +306,7 @@ func (d *txnDeps) SetResumeSpans(
 type execDeps struct {
 	txnDeps
 	partitioner             scmutationexec.Partitioner
+	commentUpdater          scexec.CommentUpdater
 	backfiller              scexec.Backfiller
 	backfillTracker         scexec.BackfillTracker
 	periodicProgressFlusher scexec.PeriodicProgressFlusher
@@ -360,6 +363,11 @@ func (d *execDeps) Statements() []string {
 // User implements the scexec.Dependencies interface.
 func (d *execDeps) User() security.SQLUsername {
 	return d.user
+}
+
+// CommentUpdater implements the scexec.Dependencies interface.
+func (d *execDeps) CommentUpdater() scexec.CommentUpdater {
+	return d.commentUpdater
 }
 
 // EventLoggerFactory constructs a new event logger with a txn.

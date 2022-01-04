@@ -77,6 +77,17 @@ type MutationVisitorStateUpdater interface {
 	// DeleteDescriptor adds a descriptor for deletion.
 	DeleteDescriptor(id descpb.ID)
 
+	// DeleteComment removes comments for a descriptor
+	DeleteComment(id descpb.ID, subID int, commentType int)
+
+	// DeleteConstraintComment removes comments for a descriptor
+	DeleteConstraintComment(
+		ctx context.Context,
+		tbl catalog.TableDescriptor,
+		constraintOrdinal int,
+		constraintType scpb.ConstraintType,
+	) error
+
 	// AddNewGCJobForTable enqueues a GC job for the given table.
 	AddNewGCJobForTable(descriptor catalog.TableDescriptor)
 
@@ -1014,6 +1025,21 @@ func (m *visitor) DeleteDatabaseSchemaEntry(
 	}
 	delete(db.Schemas, sc.GetName())
 	return nil
+}
+
+func (m *visitor) RemoveComment(_ context.Context, op scop.RemoveComment) error {
+	m.s.DeleteComment(op.DescriptorID, op.SubID, op.CommentType)
+	return nil
+}
+
+func (m *visitor) RemoveConstraintComment(
+	ctx context.Context, op scop.RemoveConstraintComment,
+) error {
+	tbl, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	return m.s.DeleteConstraintComment(ctx, tbl.(catalog.TableDescriptor), int(op.ConstraintOrdinal), op.ConstraintType)
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)

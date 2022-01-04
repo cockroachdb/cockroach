@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -4368,4 +4369,46 @@ func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
 	return h.getOid()
+}
+
+//OidFromConstraint generates an OID given constraint information.
+func OidFromConstraint(
+	desc catalog.TableDescriptor,
+	schemaName string,
+	constraintOrdinal int,
+	constraintType scpb.ConstraintType,
+) descpb.ID {
+	oidMaker := makeOidHasher()
+	var oid *tree.DInt
+	switch constraintType {
+	case scpb.ConstraintType_FK:
+		oid = &oidMaker.ForeignKeyConstraintOid(
+			desc.GetParentID(),
+			schemaName,
+			desc.GetID(),
+			desc.AllActiveAndInactiveForeignKeys()[constraintOrdinal],
+		).DInt
+	case scpb.ConstraintType_PrimaryKey:
+		oid = &oidMaker.UniqueConstraintOid(
+			desc.GetParentID(),
+			schemaName,
+			desc.GetID(),
+			descpb.IndexID(constraintOrdinal),
+		).DInt
+	case scpb.ConstraintType_UniqueWithoutIndex:
+		oid = &oidMaker.UniqueWithoutIndexConstraintOid(
+			desc.GetParentID(),
+			schemaName,
+			desc.GetID(),
+			&desc.GetUniqueWithoutIndexConstraints()[constraintOrdinal],
+		).DInt
+	case scpb.ConstraintType_Check:
+		oid = &oidMaker.CheckConstraintOid(
+			desc.GetParentID(),
+			schemaName,
+			desc.GetID(),
+			desc.GetChecks()[constraintOrdinal],
+		).DInt
+	}
+	return descpb.ID(*oid)
 }

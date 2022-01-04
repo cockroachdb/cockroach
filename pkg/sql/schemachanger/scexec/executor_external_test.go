@@ -70,6 +70,7 @@ func (ti testInfra) newExecDeps(
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		noopIndexValidator{}, /* indexValidator */
 		noopPartitioner{},    /* partitioner */
+		noopCommentUpdater{}, /* commentUpdater*/
 		noopEventLogger{},    /* eventLogger */
 		1,                    /* schemaChangerJobID */
 		nil,                  /* statements */
@@ -547,7 +548,43 @@ func (noopEventLogger) LogEvent(
 	return nil
 }
 
+type noopCommentUpdater struct {
+}
+
+func (noopCommentUpdater) UpsertDescriptorComment(
+	descID descpb.ID, subID int, commentType int, comment string,
+) error {
+	return nil
+}
+
+// DeleteDescriptorComment deletes a comment for a given descriptor.
+func (noopCommentUpdater) DeleteDescriptorComment(id descpb.ID, subID int, commentType int) error {
+	return nil
+}
+
+//UpsertConstraintComment upsersts a comment associated with a constraint.
+func (noopCommentUpdater) UpsertConstraintComment(
+	desc catalog.TableDescriptor,
+	schemaName string,
+	constraintOrdinal int,
+	constraintType scpb.ConstraintType,
+	comment string,
+) error {
+	return nil
+}
+
+//DeleteConstraintComment deletes a comment associated with a constraint.
+func (noopCommentUpdater) DeleteConstraintComment(
+	desc catalog.TableDescriptor,
+	schemaName string,
+	constraintOrdinal int,
+	constraintType scpb.ConstraintType,
+) error {
+	return nil
+}
+
 var _ scexec.Backfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
 var _ scmutationexec.Partitioner = noopPartitioner{}
 var _ scexec.EventLogger = noopEventLogger{}
+var _ scexec.CommentUpdater = noopCommentUpdater{}

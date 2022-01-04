@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/commenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -171,6 +172,12 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
 		scdeps.NewPartitioner(execCfg.Settings, evalContext),
+		commenter.NewCommentUpdater(evalContext.Context,
+			execCfg.InternalExecutorFactory,
+			evalContext.SessionData(),
+			txn,
+			OidFromConstraint,
+		),
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		schemaChangerJobID,
 		stmts,

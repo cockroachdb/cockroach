@@ -816,7 +816,7 @@ func (s *TestState) IndexValidator() scexec.IndexValidator {
 	return s
 }
 
-// LogEvent implements scexec.EventLogger
+// LogEvent implements scexec.EventLogger.
 func (s *TestState) LogEvent(
 	_ context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
 ) error {
@@ -825,7 +825,54 @@ func (s *TestState) LogEvent(
 	return nil
 }
 
-// EventLogger implements scexec.Dependencies
+// EventLogger implements scexec.Dependencies.
 func (s *TestState) EventLogger() scexec.EventLogger {
+	return s
+}
+
+// UpsertDescriptorComment updates a comment associated with an associated
+// schema object.
+func (s *TestState) UpsertDescriptorComment(
+	id descpb.ID, subID int, commentType int, comment string,
+) error {
+	s.LogSideEffectf("upsert %s comment for descriptor #%d of type %d",
+		comment, id, commentType)
+	return nil
+}
+
+// DeleteDescriptorComment deletes a comment for a given descriptor.
+func (s *TestState) DeleteDescriptorComment(id descpb.ID, subID int, commentType int) error {
+	s.LogSideEffectf("delete comment for descriptor #%d of type %d",
+		id, commentType)
+	return nil
+}
+
+//UpdateConstraintComment updates  a comment associated with a constraint.
+func (s *TestState) UpsertConstraintComment(
+	desc catalog.TableDescriptor,
+	_ string,
+	constraintOrdinal int,
+	constraintType scpb.ConstraintType,
+	comment string,
+) error {
+	s.LogSideEffectf("upsert comment %s for constraint on #%d, ordinal: %d, type: %d"+
+		comment, desc.GetID(), constraintOrdinal, constraintType)
+	return nil
+}
+
+//DeleteConstraintComment deletes a comment associated with a constraint.
+func (s *TestState) DeleteConstraintComment(
+	desc catalog.TableDescriptor,
+	schemaName string,
+	constraintOrdinal int,
+	constraintType scpb.ConstraintType,
+) error {
+	s.LogSideEffectf("delete commentfor constraint on #%d, ordinal: %d, type: %d",
+		desc.GetID(), constraintOrdinal, constraintType)
+	return nil
+}
+
+// CommentUpdater implement scexec.Dependencies.
+func (s *TestState) CommentUpdater() scexec.CommentUpdater {
 	return s
 }

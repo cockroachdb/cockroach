@@ -232,6 +232,15 @@ func decomposeDescToElements(b BuildCtx, tbl catalog.Descriptor, targetStatus sc
 			Privileges:   user.Privileges,
 		})
 	}
+
+	// When dropping always generate an element for any descriptor related
+	// comments.
+	if targetStatus == scpb.Status_ABSENT {
+		comment := scpb.TableComment{
+			TableID: tbl.GetID(),
+		}
+		enqueue(b, targetStatus, &comment)
+	}
 }
 
 func decomposeColumnIntoElements(
@@ -299,6 +308,13 @@ func decomposeColumnIntoElements(
 				ColumnID:     column.GetID(),
 			})
 		}
+	}
+	if targetStatus == scpb.Status_ABSENT {
+		comment := scpb.ColumnComment{
+			TableID:  tbl.GetID(),
+			ColumnID: column.GetID(),
+		}
+		enqueue(b, targetStatus, &comment)
 	}
 }
 
@@ -385,11 +401,34 @@ func decomposeTableDescToElements(
 				primaryIndex, indexName := primaryIndexElemFromDescriptor(index.IndexDesc(), tbl)
 				enqueue(b, targetStatus, primaryIndex)
 				enqueue(b, targetStatus, indexName)
+				if targetStatus == scpb.Status_ABSENT {
+					comment := scpb.ConstraintComment{
+						ConstraintType:    scpb.ConstraintType_PrimaryKey,
+						ConstraintOrdinal: uint32(index.GetID()),
+						TableID:           tbl.GetID(),
+					}
+					enqueue(b, targetStatus, &comment)
+				}
 
 			} else {
 				secondaryIndex, indexName := secondaryIndexElemFromDescriptor(index.IndexDesc(), tbl)
 				enqueue(b, targetStatus, secondaryIndex)
 				enqueue(b, targetStatus, indexName)
+				if targetStatus == scpb.Status_ABSENT && secondaryIndex.Unique {
+					comment := scpb.ConstraintComment{
+						ConstraintType:    scpb.ConstraintType_PrimaryKey,
+						ConstraintOrdinal: uint32(index.GetID()),
+						TableID:           tbl.GetID(),
+					}
+					enqueue(b, targetStatus, &comment)
+				}
+			}
+			if targetStatus == scpb.Status_ABSENT {
+				comment := scpb.IndexComment{
+					TableID: tbl.GetID(),
+					IndexID: index.GetID(),
+				}
+				enqueue(b, targetStatus, &comment)
 			}
 		}
 	case tbl.IsSequence():
@@ -444,6 +483,14 @@ func decomposeTableDescToElements(
 			IndexID:           0, // Invalid ID
 			ColumnIDs:         constraint.ColumnIDs,
 		})
+		if targetStatus == scpb.Status_ABSENT {
+			comment := scpb.ConstraintComment{
+				ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
+				ConstraintOrdinal: uint32(idx),
+				TableID:           tbl.GetID(),
+			}
+			enqueue(b, targetStatus, &comment)
+		}
 	}
 	// Add any check constraints next.
 	for idx, constraint := range tbl.AllActiveAndInactiveChecks() {
@@ -470,7 +517,27 @@ func decomposeTableDescToElements(
 			ColumnIDs:         constraint.ColumnIDs,
 			Expr:              constraint.Expr,
 		})
+		if targetStatus == scpb.Status_ABSENT {
+			comment := scpb.ConstraintComment{
+				ConstraintType:    scpb.ConstraintType_Check,
+				ConstraintOrdinal: uint32(idx),
+				TableID:           tbl.GetID(),
+			}
+			enqueue(b, targetStatus, &comment)
+		}
 	}
+	// Clean up comments foreign key constraints.
+	for idx := range tbl.AllActiveAndInactiveForeignKeys() {
+		if targetStatus == scpb.Status_ABSENT {
+			comment := scpb.ConstraintComment{
+				ConstraintType:    scpb.ConstraintType_FK,
+				ConstraintOrdinal: uint32(idx),
+				TableID:           tbl.GetID(),
+			}
+			enqueue(b, targetStatus, &comment)
+		}
+	}
+
 	// Add locality information.
 	enqueue(b, targetStatus, &scpb.Locality{
 		DescriptorID: tbl.GetID(),
