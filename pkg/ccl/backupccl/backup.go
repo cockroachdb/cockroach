@@ -8,7 +8,10 @@
 
 package backupccl
 
-import descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+import (
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+)
 
 // GetTenants retrieves the tenant information from the manifest. It should be
 // used instead of Tenants to support older versions of the manifest which used
@@ -30,4 +33,8 @@ func (m *BackupManifest) GetTenants() []descpb.TenantInfoWithUsage {
 // HasTenants returns true if the manifest contains (non-system) tenant data.
 func (m *BackupManifest) HasTenants() bool {
 	return len(m.Tenants) > 0 || len(m.TenantsDeprecated) > 0
+}
+
+func init() {
+	protoreflect.RegisterShorthands((*BackupManifest)(nil), "backup", "backup_manifest")
 }

@@ -302,11 +302,14 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			v2.String())
 		// Ensure that the tenant still works.
 		initialTenantRunner.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
+		// Use to wait for tenant crash leading to a clean up.
+		waitForTenantClose := make(chan struct{})
 		// Cause the upgrade to crash on v1.
 		go func() {
 			<-tenantStopperChannel
 			tenant.Close()
 			tenantInfo.v2onMigrationStopper.Stop(ctx)
+			waitForTenantClose <- struct{}{}
 		}()
 		// Upgrade the tenant cluster, but the upgrade
 		// will fail on v1.
@@ -314,6 +317,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			".*(database is closed|failed to connect|closed network connection)+",
 			"SET CLUSTER SETTING version = $1",
 			clusterversion.TestingBinaryVersion.String())
+		<-waitForTenantClose
 		cleanup()
 		tenantInfo = mkTenant(t, initialTenantID, true /*existing*/)
 		tenant, cleanup = startAndConnectToTenant(t, tenantInfo)
