@@ -1779,4 +1779,6 @@ service Status {
       get: "/_status/databases/{database}/tables/{table}/indexstats"
     };
   }
+
+  rpc StreamStatementStats(StatementsRequest) returns (stream StatementsResponse.CollectedStatementStatistics) {}
 }

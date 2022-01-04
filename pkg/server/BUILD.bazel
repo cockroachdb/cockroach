@@ -44,6 +44,7 @@ go_library(
         "statements.go",
         "status.go",
         "sticky_engine.go",
+        "stream_stmt_stats.go",
         "tenant.go",
         "tenant_status.go",
         "testing_knobs.go",

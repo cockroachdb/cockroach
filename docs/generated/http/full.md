@@ -4121,6 +4121,76 @@ Response object returned by TableIndexStatsResponse.
 
 
 
+## StreamStatementStats
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+StatementsRequest is used by both tenant and node-level
+implementations to serve fan-out requests across multiple nodes or
+instances. When implemented on a node, the `node_id` field refers to
+the cluster nodes by their nodeID. When implemented on a tenant, the
+`node_id` field refers to the instanceIDs that identify individual
+tenant pods.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.StatementsRequest-string) |  |  | [reserved](#support-status) |
+| combined | [bool](#cockroach.server.serverpb.StatementsRequest-bool) |  | If this field is set we will use the combined statements API instead. | [reserved](#support-status) |
+| start | [int64](#cockroach.server.serverpb.StatementsRequest-int64) |  | These fields are used for the combined statements API. | [reserved](#support-status) |
+| end | [int64](#cockroach.server.serverpb.StatementsRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [StatementsResponse.ExtendedStatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey) |  |  | [reserved](#support-status) |
+| id | [uint64](#cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics-uint64) |  |  | [reserved](#support-status) |
+| stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics-cockroach.server.serverpb.StatementsResponse.ExtendedStatementStatisticsKey"></a>
+#### StatementsResponse.ExtendedStatementStatisticsKey
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key_data | [cockroach.sql.StatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics-cockroach.sql.StatementStatisticsKey) |  |  | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics-int32) |  |  | [reserved](#support-status) |
+| aggregated_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| aggregation_interval | [google.protobuf.Duration](#cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics-google.protobuf.Duration) |  | The aggregation duration. | [reserved](#support-status) |
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

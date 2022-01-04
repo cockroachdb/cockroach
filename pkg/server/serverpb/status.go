@@ -34,6 +34,7 @@ type SQLStatusServer interface {
 	IndexUsageStatistics(context.Context, *IndexUsageStatisticsRequest) (*IndexUsageStatisticsResponse, error)
 	ResetIndexUsageStats(context.Context, *ResetIndexUsageStatsRequest) (*ResetIndexUsageStatsResponse, error)
 	TableIndexStats(context.Context, *TableIndexStatsRequest) (*TableIndexStatsResponse, error)
+	StreamStatementStats(*StatementsRequest, Status_StreamStatementStatsServer) error
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
