@@ -816,7 +816,7 @@ func (s *TestState) IndexValidator() scexec.IndexValidator {
 	return s
 }
 
-// LogEvent implements scexec.EventLogger
+// LogEvent implements scexec.EventLogger.
 func (s *TestState) LogEvent(
 	_ context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
 ) error {
@@ -825,7 +825,24 @@ func (s *TestState) LogEvent(
 	return nil
 }
 
-// EventLogger implements scexec.Dependencies
+// EventLogger implements scexec.Dependencies.
 func (s *TestState) EventLogger() scexec.EventLogger {
+	return s
+}
+
+// UpdateComment implement scexec.CommentUpdater.
+func (s *TestState) UpdateComment(id descpb.ID, comment string) error {
+	if len(comment) > 0 {
+		s.LogSideEffectf("upsert %s comment for descriptor #%d",
+			comment, id)
+	} else {
+		s.LogSideEffectf("delete comment for descriptor #%d",
+			id)
+	}
+	return nil
+}
+
+// CommentUpdater implement scexec.Dependencies.
+func (s *TestState) CommentUpdater() scexec.CommentUpdater {
 	return s
 }

@@ -393,43 +393,73 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 10 MutationType ops
+StatementPhase stage 1 of 1 with 20 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 56, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 56, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 56, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 63}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 63}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 61}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 62}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 62}, PUBLIC, DROP] -> ABSENT
     [Schema:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveComment
+      DescriptorID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 56
+    *scop.RemoveComment
+      DescriptorID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
+    *scop.RemoveComment
+      DescriptorID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
+    *scop.RemoveComment
+      DescriptorID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
+    *scop.RemoveComment
+      DescriptorID: 59
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 60
+    *scop.RemoveComment
+      DescriptorID: 60
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 63
+    *scop.RemoveComment
+      DescriptorID: 63
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 61
+    *scop.RemoveComment
+      DescriptorID: 61
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 62
+    *scop.RemoveComment
+      DescriptorID: 62
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
+    *scop.RemoveComment
+      DescriptorID: 54
 PreCommitPhase stage 1 of 1 with 43 MutationType ops
   transitions:
     [Sequence:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED

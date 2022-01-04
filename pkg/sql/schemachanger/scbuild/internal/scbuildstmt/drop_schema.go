@@ -98,6 +98,10 @@ func dropSchema(
 			DatabaseID: sc.GetParentID(),
 			SchemaID:   sc.GetID(),
 		})
+		b.EnqueueDrop(&scpb.Comment{
+			DescriptorID: sc.GetID(),
+			Comment:      "",
+		})
 		return true, dropIDs
 	}
 	panic(errors.AssertionFailedf("unexpected sc kind %q for sc %q (%d)",

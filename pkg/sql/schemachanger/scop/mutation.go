@@ -362,3 +362,9 @@ type UpdateSchemaChangerJob struct {
 	Statuses        []scpb.Status
 	IsNonCancelable bool
 }
+
+// RemoveComment is used to delete a comment associated with a descriptor.
+type RemoveComment struct {
+	mutationOp
+	DescriptorID descpb.ID
+}

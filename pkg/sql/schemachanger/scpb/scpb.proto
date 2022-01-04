@@ -51,6 +51,7 @@ message ElementProto {
   ColumnTypeReference columnTypeReference = 30 [(gogoproto.moretags) = "parent:\"Column, Type\""];
   DatabaseSchemaEntry schemaEntry = 31 [(gogoproto.moretags) = "parent:\"Database, Schema\""];
   CheckConstraintTypeReference checkConstraintTypeReference = 32  [(gogoproto.moretags) = "parent:\"Table, Type\""];
+  Comment comment = 33 [(gogoproto.moretags) = "parent:\"Table, Type\""];
 }
 
 message Target {
@@ -413,4 +414,10 @@ message DefaultPrivilege {
 message DatabaseSchemaEntry {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   uint32 schema_id = 2 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+}
+
+message Comment {
+  option (gogoproto.equal) = true;
+  uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  string comment = 2;
 }

@@ -37,6 +37,7 @@ type Dependencies interface {
 	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
 	EventLogger() EventLogger
+	CommentUpdater() CommentUpdater
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -234,4 +235,12 @@ type BackfillProgressFlusher interface {
 
 	// FlushFractionCompleted writes out the fraction completed.
 	FlushFractionCompleted(ctx context.Context) error
+}
+
+// CommentUpdater is used to update comments associated with schema objects.
+type CommentUpdater interface {
+	// UpdateComment updates a comment associated with an associated schema
+	// object. If the comment string is empty, the comment entry can be
+	// eliminated by the implementation.
+	UpdateComment(id descpb.ID, comment string) error
 }

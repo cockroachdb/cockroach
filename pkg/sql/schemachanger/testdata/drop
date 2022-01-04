@@ -12,7 +12,8 @@ DROP SCHEMA db.sc;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+delete comment for descriptor #56
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 5 MutationType ops
@@ -62,7 +63,8 @@ DROP TABLE db.sc.t;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+delete comment for descriptor #58
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 4 MutationType ops
@@ -113,7 +115,10 @@ DROP SCHEMA db.sc CASCADE;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 3 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
+delete comment for descriptor #57
+delete comment for descriptor #59
+delete comment for descriptor #60
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 11 MutationType ops
@@ -170,7 +175,9 @@ DROP DATABASE db CASCADE;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 4 MutationType ops
+delete comment for descriptor #54
+delete comment for descriptor #55
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 6 MutationType ops
@@ -251,7 +258,21 @@ DROP DATABASE db1 CASCADE
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 14 MutationType ops
+## StatementPhase stage 1 of 1 with 28 MutationType ops
+delete comment for descriptor #61
+delete comment for descriptor #62
+delete comment for descriptor #63
+delete comment for descriptor #64
+delete comment for descriptor #65
+delete comment for descriptor #66
+delete comment for descriptor #67
+delete comment for descriptor #68
+delete comment for descriptor #69
+delete comment for descriptor #70
+delete comment for descriptor #71
+delete comment for descriptor #72
+delete comment for descriptor #73
+delete comment for descriptor #74
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 56 MutationType ops

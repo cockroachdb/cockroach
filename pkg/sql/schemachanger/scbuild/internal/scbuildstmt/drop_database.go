@@ -76,4 +76,8 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 		DatabaseID:       db.GetID(),
 		DependentObjects: dropIDs.Ordered(),
 	})
+	b.EnqueueDrop(&scpb.Comment{
+		DescriptorID: db.GetID(),
+		Comment:      "",
+	})
 }

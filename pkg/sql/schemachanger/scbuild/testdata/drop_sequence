@@ -5,6 +5,10 @@ CREATE SEQUENCE defaultdb.SQ1
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
+- DROP Comment:{DescID: 54}
+  state: PUBLIC
+  details:
+    descriptorId: 54
 - DROP Locality:{DescID: 54}
   state: PUBLIC
   details:
@@ -62,6 +66,10 @@ CREATE TABLE defaultdb.blog_posts3 (id INT PRIMARY KEY, val typ DEFAULT CAST(chr
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
+- DROP Comment:{DescID: 54}
+  state: PUBLIC
+  details:
+    descriptorId: 54
 - DROP DefaultExprTypeReference:{DescID: 59, ColumnID: 2, ReferencedDescID: 57}
   state: PUBLIC
   details:

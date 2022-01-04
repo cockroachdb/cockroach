@@ -228,6 +228,15 @@ func decomposeDescToElements(b BuildCtx, tbl catalog.Descriptor, dir scpb.Target
 		}
 		addOrDropForDir(b, dir, &userElem)
 	}
+
+	// When dropping always generate an element for any descriptor related
+	// comments.
+	if dir == scpb.Target_DROP {
+		comment := scpb.Comment{
+			DescriptorID: tbl.GetID(),
+		}
+		addOrDropForDir(b, dir, &comment)
+	}
 }
 
 func decomposeColumnIntoElements(

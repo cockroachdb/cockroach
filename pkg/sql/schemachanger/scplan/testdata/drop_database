@@ -49,59 +49,101 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 ops
 DROP DATABASE db1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 14 MutationType ops
+StatementPhase stage 1 of 1 with 28 MutationType ops
   transitions:
     [Sequence:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 60}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 60}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 60, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 60, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 60, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 60, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [Schema:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [Sequence:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [Table:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 59, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 59, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 59, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 59, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 61}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 62}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 62}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 63}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 63}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 64}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 64}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 67}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 67}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 65}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 65}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 66}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 66}, PUBLIC, DROP] -> ABSENT
     [Schema:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [Database:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 54}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
+    *scop.RemoveComment
+      DescriptorID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 60
+    *scop.RemoveComment
+      DescriptorID: 60
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveComment
+      DescriptorID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
+    *scop.RemoveComment
+      DescriptorID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
+    *scop.RemoveComment
+      DescriptorID: 59
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 61
+    *scop.RemoveComment
+      DescriptorID: 61
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 62
+    *scop.RemoveComment
+      DescriptorID: 62
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 63
+    *scop.RemoveComment
+      DescriptorID: 63
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 64
+    *scop.RemoveComment
+      DescriptorID: 64
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 67
+    *scop.RemoveComment
+      DescriptorID: 67
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 65
+    *scop.RemoveComment
+      DescriptorID: 65
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 66
+    *scop.RemoveComment
+      DescriptorID: 66
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 56
+    *scop.RemoveComment
+      DescriptorID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
+    *scop.RemoveComment
+      DescriptorID: 54
 PreCommitPhase stage 1 of 1 with 56 MutationType ops
   transitions:
     [Sequence:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED

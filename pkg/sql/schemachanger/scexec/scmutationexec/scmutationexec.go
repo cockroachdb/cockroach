@@ -77,6 +77,9 @@ type MutationVisitorStateUpdater interface {
 	// DeleteDescriptor adds a descriptor for deletion.
 	DeleteDescriptor(id descpb.ID)
 
+	// DeleteComment removes comments for a descriptor
+	DeleteComment(id descpb.ID)
+
 	// AddNewGCJobForTable enqueues a GC job for the given table.
 	AddNewGCJobForTable(descriptor catalog.TableDescriptor)
 
@@ -1013,6 +1016,11 @@ func (m *visitor) DeleteDatabaseSchemaEntry(
 		return err
 	}
 	delete(db.Schemas, sc.GetName())
+	return nil
+}
+
+func (m *visitor) RemoveComment(_ context.Context, op scop.RemoveComment) error {
+	m.s.DeleteComment(op.DescriptorID)
 	return nil
 }
 

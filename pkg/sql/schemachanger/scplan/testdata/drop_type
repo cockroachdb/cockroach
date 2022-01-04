@@ -5,15 +5,21 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 ops
 DROP TYPE defaultdb.typ
 ----
-StatementPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [Type:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 54}, PUBLIC, DROP] -> ABSENT
     [Type:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 55}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
+    *scop.RemoveComment
+      DescriptorID: 54
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveComment
+      DescriptorID: 55
 PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [Type:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED

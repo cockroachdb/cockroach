@@ -9,6 +9,10 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
+- DROP Comment:{DescID: 55}
+  state: PUBLIC
+  details:
+    descriptorId: 55
 - DROP Locality:{DescID: 55}
   state: PUBLIC
   details:
@@ -75,6 +79,26 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
+- DROP Comment:{DescID: 55}
+  state: PUBLIC
+  details:
+    descriptorId: 55
+- DROP Comment:{DescID: 56}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+- DROP Comment:{DescID: 57}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+- DROP Comment:{DescID: 58}
+  state: PUBLIC
+  details:
+    descriptorId: 58
+- DROP Comment:{DescID: 61}
+  state: PUBLIC
+  details:
+    descriptorId: 61
 - DROP Locality:{DescID: 55}
   state: PUBLIC
   details:

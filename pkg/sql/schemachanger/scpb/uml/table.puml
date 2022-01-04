@@ -228,6 +228,11 @@ CheckConstraintTypeReference :  TableID
 CheckConstraintTypeReference :  ConstraintOrdinal
 CheckConstraintTypeReference :  TypeID
 
+object Comment
+
+Comment :  DescriptorID
+Comment :  Comment
+
 Table <|-- Column
 Table <|-- PrimaryIndex
 Table <|-- SecondaryIndex
@@ -281,4 +286,6 @@ Database <|-- DatabaseSchemaEntry
 Schema <|-- DatabaseSchemaEntry
 Table <|-- CheckConstraintTypeReference
 Type <|-- CheckConstraintTypeReference
+Table <|-- Comment
+Type <|-- Comment
 @enduml

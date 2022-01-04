@@ -5,6 +5,14 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 build
 DROP TYPE defaultdb.typ
 ----
+- DROP Comment:{DescID: 54}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+- DROP Comment:{DescID: 55}
+  state: PUBLIC
+  details:
+    descriptorId: 55
 - DROP Namespace:{DescID: 54, Name: typ}
   state: PUBLIC
   details:

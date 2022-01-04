@@ -38,9 +38,10 @@ CREATE VIEW v1 AS (SELECT customer_id, carrier FROM defaultdb.shipments)
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 3 MutationType ops
+StatementPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [Table:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [Column:{DescID: 57, ColumnID: 1}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 57, ColumnID: 2}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [Column:{DescID: 57, ColumnID: 3}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
@@ -48,14 +49,22 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
     [Column:{DescID: 57, ColumnID: 5}, PUBLIC, DROP] -> DELETE_AND_WRITE_ONLY
     [PrimaryIndex:{DescID: 57, IndexID: 1}, PUBLIC, DROP] -> VALIDATED
     [View:{DescID: 59}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 59}, PUBLIC, DROP] -> ABSENT
     [Sequence:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 58}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
+    *scop.RemoveComment
+      DescriptorID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
+    *scop.RemoveComment
+      DescriptorID: 59
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
+    *scop.RemoveComment
+      DescriptorID: 58
 PreCommitPhase stage 1 of 1 with 22 MutationType ops
   transitions:
     [Table:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED

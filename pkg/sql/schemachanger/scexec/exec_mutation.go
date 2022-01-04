@@ -137,7 +137,11 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 		}
 	}
-
+	for _, id := range mvs.commentsToDelete.Ordered() {
+		if err := deps.CommentUpdater().UpdateComment(id, ""); err != nil {
+			return err
+		}
+	}
 	for _, id := range mvs.descriptorsToDelete.Ordered() {
 		if err := b.DeleteDescriptor(ctx, id); err != nil {
 			return err
@@ -241,6 +245,7 @@ type mutationVisitorState struct {
 	checkedOutDescriptors   nstree.Map
 	drainedNames            map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete     catalog.DescriptorIDSet
+	commentsToDelete        catalog.DescriptorIDSet
 	dbGCJobs                catalog.DescriptorIDSet
 	descriptorGCJobs        map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
 	indexGCJobs             map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
@@ -305,6 +310,10 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 
 func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {
 	mvs.descriptorsToDelete.Add(id)
+}
+
+func (mvs *mutationVisitorState) DeleteComment(id descpb.ID) {
+	mvs.commentsToDelete.Add(id)
 }
 
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {

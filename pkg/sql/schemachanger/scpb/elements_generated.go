@@ -433,3 +433,16 @@ func ForEachCheckConstraintTypeReference (b NodeIterator, elementFunc func(statu
 	}
   })
 }
+func (e Comment) element() {}
+
+// ForEachComment iterates over nodes of type Comment.
+func ForEachComment (b NodeIterator, elementFunc func(status Status,
+	dir Target_Direction,  
+	element *Comment) ) {
+	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
+		e, ok := elem.(*Comment)
+		if ok {
+		elementFunc(status, dir, e)
+	}
+  })
+}

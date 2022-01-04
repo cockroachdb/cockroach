@@ -165,6 +165,18 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 6
     tableId: 59
     typeId: 58
+- DROP Comment:{DescID: 59}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+- DROP Comment:{DescID: 60}
+  state: PUBLIC
+  details:
+    descriptorId: 60
+- DROP Comment:{DescID: 61}
+  state: PUBLIC
+  details:
+    descriptorId: 61
 - DROP ComputedExprTypeReference:{DescID: 59, ColumnID: 6, ReferencedDescID: 57}
   state: PUBLIC
   details:

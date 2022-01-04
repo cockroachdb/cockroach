@@ -83,6 +83,10 @@ func dropType(b BuildCtx, typ catalog.TypeDescriptor, behavior tree.DropBehavior
 	canDrop(arrayType)
 	// Create drop elements for both.
 	b.EnqueueDrop(&scpb.Type{TypeID: typ.GetID()})
+	b.EnqueueDrop(&scpb.Comment{
+		DescriptorID: typ.GetID(),
+		Comment:      "",
+	})
 	b.EnqueueDrop(&scpb.Namespace{
 		DatabaseID:   typ.GetParentID(),
 		SchemaID:     typ.GetParentSchemaID(),
@@ -90,6 +94,10 @@ func dropType(b BuildCtx, typ catalog.TypeDescriptor, behavior tree.DropBehavior
 		Name:         typ.GetName(),
 	})
 	b.EnqueueDrop(&scpb.Type{TypeID: arrayType.GetID()})
+	b.EnqueueDrop(&scpb.Comment{
+		DescriptorID: arrayType.GetID(),
+		Comment:      "",
+	})
 	b.EnqueueDrop(&scpb.Namespace{
 		DatabaseID:   arrayType.GetParentID(),
 		SchemaID:     arrayType.GetParentSchemaID(),

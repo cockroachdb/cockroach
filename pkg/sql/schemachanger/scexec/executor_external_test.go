@@ -70,6 +70,7 @@ func (ti testInfra) newExecDeps(
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		noopIndexValidator{}, /* indexValidator */
 		noopPartitioner{},    /* partitioner */
+		noopCommentUpdater{}, /* commentUpdater*/
 		noopEventLogger{},    /* eventLogger */
 		1,                    /* schemaChangerJobID */
 		nil,                  /* statements */
@@ -535,7 +536,15 @@ func (noopEventLogger) LogEvent(
 	return nil
 }
 
+type noopCommentUpdater struct {
+}
+
+func (noopCommentUpdater) UpdateComment(descID descpb.ID, comment string) error {
+	return nil
+}
+
 var _ scexec.Backfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
 var _ scmutationexec.Partitioner = noopPartitioner{}
 var _ scexec.EventLogger = noopEventLogger{}
+var _ scexec.CommentUpdater = noopCommentUpdater{}

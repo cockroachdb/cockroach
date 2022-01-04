@@ -9,12 +9,15 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 ops
 DROP VIEW defaultdb.v1
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 55}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveComment
+      DescriptorID: 55
 PreCommitPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
@@ -133,24 +136,39 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 5 MutationType ops
+StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 55}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 56}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 57}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 58}, PUBLIC, DROP] -> ABSENT
     [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
+    [Comment:{DescID: 61}, PUBLIC, DROP] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveComment
+      DescriptorID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 56
+    *scop.RemoveComment
+      DescriptorID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
+    *scop.RemoveComment
+      DescriptorID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
+    *scop.RemoveComment
+      DescriptorID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 61
+    *scop.RemoveComment
+      DescriptorID: 61
 PreCommitPhase stage 1 of 1 with 25 MutationType ops
   transitions:
     [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED

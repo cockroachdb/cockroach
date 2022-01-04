@@ -102,6 +102,50 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     columnId: 3
     name: val
     tableId: 57
+- DROP Comment:{DescID: 54}
+  state: PUBLIC
+  details:
+    descriptorId: 54
+- DROP Comment:{DescID: 56}
+  state: PUBLIC
+  details:
+    descriptorId: 56
+- DROP Comment:{DescID: 57}
+  state: PUBLIC
+  details:
+    descriptorId: 57
+- DROP Comment:{DescID: 58}
+  state: PUBLIC
+  details:
+    descriptorId: 58
+- DROP Comment:{DescID: 59}
+  state: PUBLIC
+  details:
+    descriptorId: 59
+- DROP Comment:{DescID: 60}
+  state: PUBLIC
+  details:
+    descriptorId: 60
+- DROP Comment:{DescID: 61}
+  state: PUBLIC
+  details:
+    descriptorId: 61
+- DROP Comment:{DescID: 62}
+  state: PUBLIC
+  details:
+    descriptorId: 62
+- DROP Comment:{DescID: 63}
+  state: PUBLIC
+  details:
+    descriptorId: 63
+- DROP Comment:{DescID: 64}
+  state: PUBLIC
+  details:
+    descriptorId: 64
+- DROP Comment:{DescID: 65}
+  state: PUBLIC
+  details:
+    descriptorId: 65
 - DROP DatabaseSchemaEntry:{DescID: 50, ReferencedDescID: 54}
   state: PUBLIC
   details:
