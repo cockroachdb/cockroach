@@ -135,6 +135,7 @@ go_test(
         "backup_destination_test.go",
         "backup_intents_test.go",
         "backup_test.go",
+        "bench_covering_test.go",
         "bench_test.go",
         "create_scheduled_backup_test.go",
         "full_cluster_backup_restore_test.go",
