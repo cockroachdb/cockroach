@@ -1287,8 +1287,9 @@ func (desc *Mutable) RenameColumnDescriptor(column catalog.Column, newColName st
 func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column, error) {
 	currentMutationID := desc.ClusterVersion.NextMutationID
 	for _, col := range desc.DeletableColumns() {
-		if (col.Public() && col.ColName() == name) ||
-			(col.Adding() && col.MutationID() == currentMutationID) {
+		if col.ColName() == name &&
+			((col.Public()) ||
+				(col.Adding() && col.MutationID() == currentMutationID)) {
 			return col, nil
 		}
 	}
