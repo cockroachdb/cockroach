@@ -94,13 +94,13 @@ func dropViewDependents(b BuildCtx, view catalog.TableDescriptor, behavior tree.
 			if dependentDesc.GetParentID() != view.GetParentID() {
 				panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
 					name.Object(), depViewName.FQString()),
-						"you can drop %s instead.", depViewName.Object()))
+					"you can drop %s instead.", depViewName.Object()))
 			} else {
 				panic(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
-						name.Object(), depViewName.Object()))
-				}
+					name.Object(), depViewName.Object()))
 			}
-			// Decompose and recursively attempt to drop.
-			dropView(b, dependentDesc, behavior)
-		})
+		}
+		// Decompose and recursively attempt to drop.
+		dropView(b, dependentDesc, behavior)
+	})
 }
