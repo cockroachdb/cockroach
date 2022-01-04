@@ -228,6 +228,39 @@ CheckConstraintTypeReference :  TableID
 CheckConstraintTypeReference :  ConstraintOrdinal
 CheckConstraintTypeReference :  TypeID
 
+object TableComment
+
+TableComment :  TableID
+TableComment :  Comment
+
+object DatabaseComment
+
+DatabaseComment :  DatabaseID
+DatabaseComment :  Comment
+
+object SchemaComment
+
+SchemaComment :  SchemaID
+SchemaComment :  Comment
+
+object IndexComment
+
+IndexComment :  TableID
+IndexComment :  IndexID
+IndexComment :  Comment
+
+object ColumnComment
+
+ColumnComment :  TableID
+ColumnComment :  ColumnID
+ColumnComment :  Comment
+
+object ConstraintComment
+
+ConstraintComment :  TableID
+ConstraintComment :  ConstraintType
+ConstraintComment :  ConstraintOrdinal
+
 Table <|-- Column
 Table <|-- PrimaryIndex
 Table <|-- SecondaryIndex
@@ -281,4 +314,11 @@ Database <|-- DatabaseSchemaEntry
 Schema <|-- DatabaseSchemaEntry
 Table <|-- CheckConstraintTypeReference
 Type <|-- CheckConstraintTypeReference
+Table <|-- TableComment
+View <|-- TableComment
+Sequence <|-- TableComment
+Database <|-- DatabaseComment
+Schema <|-- SchemaComment
+Index <|-- IndexComment
+Column <|-- ColumnComment
 @enduml

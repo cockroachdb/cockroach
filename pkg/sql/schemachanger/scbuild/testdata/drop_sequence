@@ -21,6 +21,9 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - [[Sequence:{DescID: 54}, ABSENT], PUBLIC]
   details:
     sequenceId: 54
+- [[TableComment:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    tableId: 54
 - [[UserPrivileges:{DescID: 54, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 54
@@ -117,6 +120,9 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - [[Sequence:{DescID: 54}, ABSENT], PUBLIC]
   details:
     sequenceId: 54
+- [[TableComment:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    tableId: 54
 - [[UserPrivileges:{DescID: 54, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 54

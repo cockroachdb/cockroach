@@ -39,37 +39,40 @@ func NewJobRunDependencies(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
+	commentUpdaterFactory scexec.CommentUpdaterFactory,
 	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
-		collectionFactory:  collectionFactory,
-		db:                 db,
-		internalExecutor:   internalExecutor,
-		backfiller:         backfiller,
-		rangeCounter:       rangeCounter,
-		eventLoggerFactory: eventLoggerFactory,
-		partitioner:        partitioner,
-		jobRegistry:        jobRegistry,
-		job:                job,
-		codec:              codec,
-		settings:           settings,
-		testingKnobs:       testingKnobs,
-		statements:         statements,
-		indexValidator:     indexValidator,
+		collectionFactory:     collectionFactory,
+		db:                    db,
+		internalExecutor:      internalExecutor,
+		backfiller:            backfiller,
+		rangeCounter:          rangeCounter,
+		eventLoggerFactory:    eventLoggerFactory,
+		partitioner:           partitioner,
+		jobRegistry:           jobRegistry,
+		job:                   job,
+		codec:                 codec,
+		settings:              settings,
+		testingKnobs:          testingKnobs,
+		statements:            statements,
+		indexValidator:        indexValidator,
+		commentUpdaterFactory: commentUpdaterFactory,
 	}
 }
 
 type jobExecutionDeps struct {
-	collectionFactory  *descs.CollectionFactory
-	db                 *kv.DB
-	internalExecutor   sqlutil.InternalExecutor
-	eventLoggerFactory func(txn *kv.Txn) scexec.EventLogger
-	partitioner        scmutationexec.Partitioner
-	backfiller         scexec.Backfiller
-	rangeCounter       RangeCounter
-	jobRegistry        *jobs.Registry
-	job                *jobs.Job
+	collectionFactory     *descs.CollectionFactory
+	db                    *kv.DB
+	internalExecutor      sqlutil.InternalExecutor
+	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
+	partitioner           scmutationexec.Partitioner
+	backfiller            scexec.Backfiller
+	commentUpdaterFactory scexec.CommentUpdaterFactory
+	rangeCounter          RangeCounter
+	jobRegistry           *jobs.Registry
+	job                   *jobs.Job
 
 	indexValidator scexec.IndexValidator
 
@@ -113,6 +116,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			statements:              d.statements,
 			partitioner:             d.partitioner,
 			user:                    d.job.Payload().UsernameProto.Decode(),
+			commentUpdaterFactory:   d.commentUpdaterFactory,
 		})
 	})
 	if err != nil {
