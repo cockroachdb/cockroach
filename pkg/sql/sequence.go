@@ -133,9 +133,9 @@ func incrementSequenceHelper(
 func (p *planner) incrementSequenceUsingCache(
 	ctx context.Context, descriptor catalog.TableDescriptor,
 ) (int64, error) {
-	seqOpts := descriptor.GetSequenceOpts()
+	opts := descriptor.GetSequenceOpts()
 
-	cacheSize := seqOpts.EffectiveCacheSize()
+	cacheSize := opts.EffectiveCacheSize()
 
 	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
 		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
@@ -143,8 +143,8 @@ func (p *planner) incrementSequenceUsingCache(
 		// We *do not* use the planner txn here, since nextval does not respect
 		// transaction boundaries. This matches the specification at
 		// https://www.postgresql.org/docs/14/functions-sequence.html
-		endValue, err := kv.IncrementValRetryable(
-			ctx, p.ExecCfg().DB, seqValueKey, seqOpts.Increment*cacheSize)
+		postIncrement, err := kv.IncrementValRetryable(
+			ctx, p.ExecCfg().DB, seqValueKey, opts.Increment*cacheSize)
 
 		if err != nil {
 			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
@@ -152,21 +152,19 @@ func (p *planner) incrementSequenceUsingCache(
 			}
 			return 0, 0, 0, err
 		}
-
-		incrementAmount = seqOpts.Increment
-		lastEndValue := endValue - incrementAmount*cacheSize
-		beginValue := endValue - incrementAmount*(cacheSize-1)
+		preIncrement := postIncrement - opts.Increment*cacheSize
+		nextVal := postIncrement - opts.Increment*(cacheSize-1)
 		// This sequence has exceeded its bounds after performing this increment.
-		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
+		if postIncrement > opts.MaxValue || postIncrement < opts.MinValue {
 			// If the first sequence value in this cache exceeded its bounds, then return an error.
-			if (seqOpts.Increment > 0 && beginValue > seqOpts.MaxValue) ||
-				(seqOpts.Increment < 0 && beginValue < seqOpts.MinValue) {
+			if (opts.Increment > 0 && nextVal > opts.MaxValue) ||
+				(opts.Increment < 0 && nextVal < opts.MinValue) {
 				return 0, 0, 0, boundsExceededError(descriptor)
 			}
 			// Otherwise, values between the limit and the value prior to incrementing can be cached.
-			limit := seqOpts.MaxValue
-			if seqOpts.Increment < 0 {
-				limit = seqOpts.MinValue
+			limit := opts.MaxValue
+			if opts.Increment < 0 {
+				limit = opts.MinValue
 			}
 			abs := func(i int64) int64 {
 				if i < 0 {
@@ -174,12 +172,12 @@ func (p *planner) incrementSequenceUsingCache(
 				}
 				return i
 			}
-			sizeOfCache = abs(limit-lastEndValue) / abs(seqOpts.Increment)
+			sizeOfCache = abs(limit-preIncrement) / abs(opts.Increment)
 		} else {
 			sizeOfCache = cacheSize
 		}
 
-		return beginValue, incrementAmount, sizeOfCache, nil
+		return nextVal, opts.Increment, sizeOfCache, nil
 	}
 
 	var val int64

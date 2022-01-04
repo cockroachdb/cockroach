@@ -193,7 +193,8 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	// Clear out the cache and update the last value.
 	params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
 		m.initSequenceCache()
-		//	m.RecordLatestSequenceVal(uint32(n.seqDesc.GetID()), sequenceVal)
+		// I don't know if if is needed
+		m.RecordLatestSequenceVal(uint32(n.seqDesc.GetID()), sequenceVal)
 	})
 
 	if err := params.p.writeSchemaChange(
