@@ -155,11 +155,11 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 	schedule = getSQLStatsCompactionSchedule(t, helper)
 	require.Equal(t, string(jobs.StatusSucceeded), schedule.ScheduleStatus())
 
-	stmtStatsCnt, txnStatsCnt = getPersistedStatsEntry(t, helper.sqlDB)
-	require.Equal(t, 1 /* expected */, stmtStatsCnt,
-		"expecting exactly 1 persisted stmt fingerprints, but found: %d", stmtStatsCnt)
-	require.Equal(t, 1 /* expected */, txnStatsCnt,
-		"expecting exactly 1 persisted txn fingerprints, but found: %d", txnStatsCnt)
+	stmtStatsCntPostCompact, txnStatsCntPostCompact := getPersistedStatsEntry(t, helper.sqlDB)
+	require.Less(t, stmtStatsCntPostCompact, stmtStatsCnt,
+		"expecting persisted stmt fingerprints count to be less than %d, but found: %d", stmtStatsCnt, stmtStatsCntPostCompact)
+	require.Less(t, txnStatsCntPostCompact, txnStatsCnt,
+		"expecting persisted txn fingerprints count to be less than %d, but found: %d", txnStatsCnt, txnStatsCntPostCompact)
 }
 
 func TestSQLStatsScheduleOperations(t *testing.T) {
