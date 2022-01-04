@@ -380,7 +380,7 @@ func (r *Registry) insertRequestInternal(
 }
 
 // CancelRequest is part of the server.StmtDiagnosticsRequester interface.
-func (r *Registry) CancelRequest(ctx context.Context, stmtFingerprint string) error {
+func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
 	g, err := r.gossip.OptionalErr(48274)
 	if err != nil {
 		return err
@@ -403,18 +403,19 @@ func (r *Registry) CancelRequest(ctx context.Context, stmtFingerprint string) er
 		// allow any queries that are currently being traced for this request to
 		// write their collected bundles.
 		fmt.Sprintf("UPDATE system.statement_diagnostics_requests SET expires_at = '1970-01-01' "+
-			"WHERE completed = false AND statement_fingerprint = '%s' "+
-			"AND (expires_at IS NULL OR expires_at > now()) RETURNING id;", stmtFingerprint),
+			"WHERE completed = false AND id = '%d' "+
+			"AND (expires_at IS NULL OR expires_at > now()) RETURNING id;", requestID),
 	)
 	if err != nil {
 		return err
 	}
+
 	if row == nil {
 		// There is no pending diagnostics request with the given fingerprint.
-		return errors.Newf("no pending request found for the fingerprint: %s", stmtFingerprint)
+		return errors.Newf("no pending request found for the fingerprint: %s", requestID)
 	}
-	reqID := RequestID(tree.MustBeDInt(row[0]))
 
+	reqID := RequestID(requestID)
 	r.cancelRequest(reqID)
 
 	// Notify all the other nodes that this request has been canceled.

@@ -1279,7 +1279,7 @@ message CreateStatementDiagnosticsReportResponse {
 }
 
 message CancelStatementDiagnosticsReportRequest {
-  string statement_fingerprint = 1;
+  int64 request_id = 1;
 }
 
 message CancelStatementDiagnosticsReportResponse {

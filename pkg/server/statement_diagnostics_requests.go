@@ -106,7 +106,7 @@ func (s *statusServer) CancelStatementDiagnosticsReport(
 	}
 
 	var response serverpb.CancelStatementDiagnosticsReportResponse
-	err := s.stmtDiagnosticsRequester.CancelRequest(ctx, req.StatementFingerprint)
+	err := s.stmtDiagnosticsRequester.CancelRequest(ctx, req.RequestId)
 	if err != nil {
 		response.Canceled = false
 		response.Error = err.Error()
