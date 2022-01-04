@@ -10,6 +10,7 @@ go_library(
         "opgen_column.go",
         "opgen_column_name.go",
         "opgen_column_type_reference.go",
+        "opgen_comment.go",
         "opgen_computed_expr_type_reference.go",
         "opgen_constraint_name.go",
         "opgen_database.go",

@@ -56,7 +56,7 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
-			commentType := int(tree.MustBeDInt(row[0]))
+			commentType := keys.CommentType(tree.MustBeDInt(row[0]))
 			switch commentType {
 			case keys.TableCommentType, keys.ColumnCommentType, keys.IndexCommentType:
 				subID := int(tree.MustBeDInt(row[2]))
