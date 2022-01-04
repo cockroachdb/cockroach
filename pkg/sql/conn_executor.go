@@ -2947,6 +2947,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs := &ex.extraTxnState.schemaChangerState
 	deps := newSchemaChangerTxnRunDependencies(
+		ex.planner.SessionData(),
 		ex.planner.User(),
 		ex.server.cfg,
 		ex.planner.txn,

@@ -21,6 +21,11 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - [[Sequence:{DescID: 54}, ABSENT], PUBLIC]
   details:
     sequenceId: 54
+- [[TableComment:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 54
 - [[UserPrivileges:{DescID: 54, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 54
@@ -117,6 +122,11 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - [[Sequence:{DescID: 54}, ABSENT], PUBLIC]
   details:
     sequenceId: 54
+- [[TableComment:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 54
 - [[UserPrivileges:{DescID: 54, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 54
