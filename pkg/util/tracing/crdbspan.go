@@ -66,10 +66,8 @@ type childRef struct {
 type crdbSpanMu struct {
 	syncutil.Mutex
 
-	// parent if set, is the span's local parent. parent is not always set:
-	// - not set if the span is a root or the parent is remote
-	// - not set if the parent wasn't recording at the time when the child was
-	//   created
+	// parent is the span's local parent, if any. parent is not set if the span is
+	// a root or the parent span is remote.
 	//
 	// Note that parent is mutable; a span can start by having a parent but then,
 	// if the parent finishes before the child does (which is uncommon), the
