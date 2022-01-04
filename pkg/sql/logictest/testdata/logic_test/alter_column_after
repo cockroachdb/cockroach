@@ -1,16 +1,8 @@
 statement ok
 CREATE TABLE t (b INT PRIMARY KEY, c INT, a INT)
 
-statement ok
+statement count 2
 INSERT INTO t VALUES (2, 3, 1), (5, 6, 4)
 
-statement ok
+statement error pq: unimplemented: ALTER COLUMN AFTER is currently not supported
 ALTER TABLE t ALTER COLUMN a AFTER b
-
-query TTBTTTB colname
-SHOW COLUMNS FROM t
-----
-column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
-a            INT8       true         NULL            .                      {t_pkey}  false
-b            INT8       false        NULL            .                      {t_pkey}  false
-c            INT8       true         NULL            .                      {t_pkey}  false

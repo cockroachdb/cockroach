@@ -10,13 +10,12 @@
 
 package sql
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 
 var alterColAfterNotSupportedErr = unimplemented.NewWithIssuef(
 	66122, "ALTER COLUMN AFTER is currently not supported")
 
+// AlterColumnAfter returns unimplemented error
 func AlterColumnAfter() error {
 	return alterColAfterNotSupportedErr
 }
