@@ -202,6 +202,11 @@ func (o *OS) WriteFile(filename, contents string) error {
 }
 
 // CopyFile copies a file from one location to another.
+// In practice we frequently use this function to copy `src` to `dst`
+// where `src` is a symlink to the already-existing file `dst`; a naive
+// implementation would wipe `dst` (and `src` accordingly).
+// Unlike a simple io.Copy, this function checks for that case and is a
+// no-op if `src` is already a symlink to `dst`.
 func (o *OS) CopyFile(src, dst string) error {
 	command := fmt.Sprintf("cp %s %s", src, dst)
 	o.logger.Print(command)
@@ -212,7 +217,25 @@ func (o *OS) CopyFile(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		dstFile, err := os.Create(dst)
+		dstFile, err := os.Open(dst)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		} else if err == nil {
+			srcInfo, err := srcFile.Stat()
+			if err != nil {
+				return err
+			}
+			dstInfo, err := dstFile.Stat()
+			if err != nil {
+				return err
+			}
+			// If src points to the same file as dst, there's
+			// nothing to be done.
+			if os.SameFile(srcInfo, dstInfo) {
+				return nil
+			}
+		}
+		dstFile, err = os.Create(dst)
 		if err != nil {
 			return err
 		}
