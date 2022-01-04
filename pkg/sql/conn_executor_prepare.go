@@ -374,14 +374,18 @@ func (ex *connExecutor) execBind(
 
 		// We need to make sure type resolution happens within a transaction.
 		// Otherwise, for user-defined types we won't take the correct leases and
-		// will get back out of date type information.
+		// will get back out of date type information. However, if there are no
+		// user-defined types to resolve, then a transaction is not needed, so
+		// txn is allowed to be nil.
 		// This code path is only used by the wire-level Bind command. The
 		// SQL EXECUTE command (which also needs to bind and resolve types) is
 		// handled separately in conn_executor_exec.
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {
-			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
-			p := &ex.planner
-			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+			if txn != nil {
+				ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
+				p := &ex.planner
+				ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+			}
 
 			for i, arg := range bindCmd.Args {
 				k := tree.PlaceholderIdx(i)
@@ -413,7 +417,21 @@ func (ex *connExecutor) execBind(
 			return nil
 		}
 
-		if txn := ex.state.mu.txn; txn != nil && txn.IsOpen() {
+		needsTxn := false
+		for i, arg := range bindCmd.Args {
+			t := ps.InferredTypes[i]
+			// User-defined types and OID types both need a transaction.
+			if typ, ok := types.OidToType[t]; arg != nil && (!ok || typ.Family() == types.OidFamily) {
+				needsTxn = true
+				break
+			}
+		}
+
+		if !needsTxn {
+			if err := resolve(ctx, nil /* txn */); err != nil {
+				return retErr(err)
+			}
+		} else if txn := ex.state.mu.txn; txn != nil && txn.IsOpen() {
 			// Use the existing transaction.
 			if err := resolve(ctx, txn); err != nil {
 				return retErr(err)
