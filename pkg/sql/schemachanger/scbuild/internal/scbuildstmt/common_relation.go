@@ -232,6 +232,14 @@ func decomposeDescToElements(b BuildCtx, tbl catalog.Descriptor, targetStatus sc
 			Privileges:   user.Privileges,
 		})
 	}
+
+	// When dropping always generate an element for any descriptor related
+	// comments.
+	if targetStatus == scpb.Status_ABSENT {
+		enqueue(b, targetStatus, &scpb.TableComment{
+			TableID: tbl.GetID(),
+		})
+	}
 }
 
 func decomposeColumnIntoElements(
@@ -299,6 +307,12 @@ func decomposeColumnIntoElements(
 				ColumnID:     column.GetID(),
 			})
 		}
+	}
+	if targetStatus == scpb.Status_ABSENT {
+		enqueue(b, targetStatus, &scpb.ColumnComment{
+			TableID:  tbl.GetID(),
+			ColumnID: column.GetID(),
+		})
 	}
 }
 
@@ -385,11 +399,31 @@ func decomposeTableDescToElements(
 				primaryIndex, indexName := primaryIndexElemFromDescriptor(index.IndexDesc(), tbl)
 				enqueue(b, targetStatus, primaryIndex)
 				enqueue(b, targetStatus, indexName)
+				if targetStatus == scpb.Status_ABSENT {
+					enqueue(b, targetStatus, &scpb.ConstraintComment{
+						ConstraintType: scpb.ConstraintType_PrimaryKey,
+						ConstraintName: index.GetName(),
+						TableID:        tbl.GetID(),
+					})
+				}
 
 			} else {
 				secondaryIndex, indexName := secondaryIndexElemFromDescriptor(index.IndexDesc(), tbl)
 				enqueue(b, targetStatus, secondaryIndex)
 				enqueue(b, targetStatus, indexName)
+				if targetStatus == scpb.Status_ABSENT && secondaryIndex.Unique {
+					enqueue(b, targetStatus, &scpb.ConstraintComment{
+						ConstraintType: scpb.ConstraintType_PrimaryKey,
+						ConstraintName: index.GetName(),
+						TableID:        tbl.GetID(),
+					})
+				}
+			}
+			if targetStatus == scpb.Status_ABSENT {
+				enqueue(b, targetStatus, &scpb.IndexComment{
+					TableID: tbl.GetID(),
+					IndexID: index.GetID(),
+				})
 			}
 		}
 	case tbl.IsSequence():
@@ -444,6 +478,13 @@ func decomposeTableDescToElements(
 			IndexID:           0, // Invalid ID
 			ColumnIDs:         constraint.ColumnIDs,
 		})
+		if targetStatus == scpb.Status_ABSENT {
+			enqueue(b, targetStatus, &scpb.ConstraintComment{
+				ConstraintType: scpb.ConstraintType_UniqueWithoutIndex,
+				ConstraintName: constraint.Name,
+				TableID:        tbl.GetID(),
+			})
+		}
 	}
 	// Add any check constraints next.
 	for idx, constraint := range tbl.AllActiveAndInactiveChecks() {
@@ -470,7 +511,25 @@ func decomposeTableDescToElements(
 			ColumnIDs:         constraint.ColumnIDs,
 			Expr:              constraint.Expr,
 		})
+		if targetStatus == scpb.Status_ABSENT {
+			enqueue(b, targetStatus, &scpb.ConstraintComment{
+				ConstraintType: scpb.ConstraintType_Check,
+				ConstraintName: constraint.Name,
+				TableID:        tbl.GetID(),
+			})
+		}
 	}
+	// Clean up comments foreign key constraints.
+	for _, fk := range tbl.AllActiveAndInactiveForeignKeys() {
+		if targetStatus == scpb.Status_ABSENT {
+			enqueue(b, targetStatus, &scpb.ConstraintComment{
+				ConstraintType: scpb.ConstraintType_ForeignKeyConst,
+				ConstraintName: fk.Name,
+				TableID:        tbl.GetID(),
+			})
+		}
+	}
+
 	// Add locality information.
 	enqueue(b, targetStatus, &scpb.Locality{
 		DescriptorID: tbl.GetID(),

@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -37,6 +39,7 @@ type Dependencies interface {
 	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
 	EventLogger() EventLogger
+	CommentUpdater(ctx context.Context) CommentUpdater
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -234,4 +237,28 @@ type BackfillProgressFlusher interface {
 
 	// FlushFractionCompleted writes out the fraction completed.
 	FlushFractionCompleted(ctx context.Context) error
+}
+
+// CommentUpdater is used to update comments associated with schema objects.
+type CommentUpdater interface {
+	// UpsertDescriptorComment updates a comment associated with a schema object.
+	UpsertDescriptorComment(id int64, subID int64, commentType keys.CommentType, comment string) error
+
+	// DeleteDescriptorComment deletes a comment for schema object.
+	DeleteDescriptorComment(id int64, subID int64, commentType keys.CommentType) error
+
+	//UpsertConstraintComment upserts a comment associated with a constraint.
+	UpsertConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintName string, constraintType scpb.ConstraintType, comment string) error
+
+	//DeleteConstraintComment deletes a comment associated with a constraint.
+	DeleteConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintName string, constraintType scpb.ConstraintType) error
+}
+
+// CommentUpdaterFactory is used to construct a CommentUpdater for a given
+// transaction and context.
+type CommentUpdaterFactory interface {
+	// NewCommentUpdater creates a new CommentUpdater.
+	NewCommentUpdater(
+		ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
+	) CommentUpdater
 }

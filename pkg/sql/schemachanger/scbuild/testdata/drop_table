@@ -111,6 +111,30 @@ DROP TABLE defaultdb.shipments CASCADE;
       oid: 100057
       udtMetadata:
         arrayTypeOid: 100058
+- [[ColumnComment:{DescID: 59, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    tableId: 59
+- [[ColumnComment:{DescID: 59, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    tableId: 59
+- [[ColumnComment:{DescID: 59, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    tableId: 59
+- [[ColumnComment:{DescID: 59, ColumnID: 4}, ABSENT], PUBLIC]
+  details:
+    columnId: 4
+    tableId: 59
+- [[ColumnComment:{DescID: 59, ColumnID: 5}, ABSENT], PUBLIC]
+  details:
+    columnId: 5
+    tableId: 59
+- [[ColumnComment:{DescID: 59, ColumnID: 6}, ABSENT], PUBLIC]
+  details:
+    columnId: 6
+    tableId: 59
 - [[ColumnName:{DescID: 59, ColumnID: 1, Name: tracking_number}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -161,6 +185,21 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 6
     tableId: 59
     typeId: 58
+- [[ConstraintComment:{DescID: 59, ConstraintType: ForeignKeyConst, Name: fk_customers}, ABSENT], PUBLIC]
+  details:
+    constraintName: fk_customers
+    constraintType: ForeignKeyConst
+    tableId: 59
+- [[ConstraintComment:{DescID: 59, ConstraintType: ForeignKeyConst, Name: fk_orders}, ABSENT], PUBLIC]
+  details:
+    constraintName: fk_orders
+    constraintType: ForeignKeyConst
+    tableId: 59
+- [[ConstraintComment:{DescID: 59, ConstraintType: PrimaryKey, Name: shipments_pkey}, ABSENT], PUBLIC]
+  details:
+    constraintName: shipments_pkey
+    constraintType: PrimaryKey
+    tableId: 59
 - [[DefaultExpression:{DescID: 59, ColumnID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -210,6 +249,10 @@ DROP TABLE defaultdb.shipments CASCADE;
     referenceColumns:
     - 4
     referenceId: 59
+- [[IndexComment:{DescID: 59, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    indexId: 1
+    tableId: 59
 - [[IndexName:{DescID: 59, IndexID: 1, Name: shipments_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -291,6 +334,15 @@ DROP TABLE defaultdb.shipments CASCADE;
 - [[Table:{DescID: 59}, ABSENT], PUBLIC]
   details:
     tableId: 59
+- [[TableComment:{DescID: 59}, ABSENT], PUBLIC]
+  details:
+    tableId: 59
+- [[TableComment:{DescID: 60}, ABSENT], PUBLIC]
+  details:
+    tableId: 60
+- [[TableComment:{DescID: 61}, ABSENT], PUBLIC]
+  details:
+    tableId: 61
 - [[UserPrivileges:{DescID: 59, Username: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 59
