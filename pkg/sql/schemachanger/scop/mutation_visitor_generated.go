@@ -62,6 +62,12 @@ type MutationVisitor interface {
 	AddJobReference(context.Context, AddJobReference) error
 	CreateDeclarativeSchemaChangerJob(context.Context, CreateDeclarativeSchemaChangerJob) error
 	UpdateSchemaChangerJob(context.Context, UpdateSchemaChangerJob) error
+	RemoveTableComment(context.Context, RemoveTableComment) error
+	RemoveDatabaseComment(context.Context, RemoveDatabaseComment) error
+	RemoveSchemaComment(context.Context, RemoveSchemaComment) error
+	RemoveIndexComment(context.Context, RemoveIndexComment) error
+	RemoveColumnComment(context.Context, RemoveColumnComment) error
+	RemoveConstraintComment(context.Context, RemoveConstraintComment) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -262,4 +268,34 @@ func (op CreateDeclarativeSchemaChangerJob) Visit(ctx context.Context, v Mutatio
 // Visit is part of the MutationOp interface.
 func (op UpdateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.UpdateSchemaChangerJob(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveTableComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveTableComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveDatabaseComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveDatabaseComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveSchemaComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveSchemaComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveIndexComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveIndexComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveColumnComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveColumnComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveConstraintComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveConstraintComment(ctx, op)
 }

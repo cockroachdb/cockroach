@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
@@ -39,37 +40,42 @@ func NewJobRunDependencies(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
+	commentUpdaterFactory scexec.CommentUpdaterFactory,
 	testingKnobs *scrun.TestingKnobs,
 	statements []string,
+	sessionData *sessiondata.SessionData,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
-		collectionFactory:  collectionFactory,
-		db:                 db,
-		internalExecutor:   internalExecutor,
-		backfiller:         backfiller,
-		rangeCounter:       rangeCounter,
-		eventLoggerFactory: eventLoggerFactory,
-		partitioner:        partitioner,
-		jobRegistry:        jobRegistry,
-		job:                job,
-		codec:              codec,
-		settings:           settings,
-		testingKnobs:       testingKnobs,
-		statements:         statements,
-		indexValidator:     indexValidator,
+		collectionFactory:     collectionFactory,
+		db:                    db,
+		internalExecutor:      internalExecutor,
+		backfiller:            backfiller,
+		rangeCounter:          rangeCounter,
+		eventLoggerFactory:    eventLoggerFactory,
+		partitioner:           partitioner,
+		jobRegistry:           jobRegistry,
+		job:                   job,
+		codec:                 codec,
+		settings:              settings,
+		testingKnobs:          testingKnobs,
+		statements:            statements,
+		indexValidator:        indexValidator,
+		commentUpdaterFactory: commentUpdaterFactory,
+		sessionData:           sessionData,
 	}
 }
 
 type jobExecutionDeps struct {
-	collectionFactory  *descs.CollectionFactory
-	db                 *kv.DB
-	internalExecutor   sqlutil.InternalExecutor
-	eventLoggerFactory func(txn *kv.Txn) scexec.EventLogger
-	partitioner        scmutationexec.Partitioner
-	backfiller         scexec.Backfiller
-	rangeCounter       RangeCounter
-	jobRegistry        *jobs.Registry
-	job                *jobs.Job
+	collectionFactory     *descs.CollectionFactory
+	db                    *kv.DB
+	internalExecutor      sqlutil.InternalExecutor
+	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
+	partitioner           scmutationexec.Partitioner
+	backfiller            scexec.Backfiller
+	commentUpdaterFactory scexec.CommentUpdaterFactory
+	rangeCounter          RangeCounter
+	jobRegistry           *jobs.Registry
+	job                   *jobs.Job
 
 	indexValidator scexec.IndexValidator
 
@@ -77,6 +83,7 @@ type jobExecutionDeps struct {
 	settings     *cluster.Settings
 	testingKnobs *scrun.TestingKnobs
 	statements   []string
+	sessionData  *sessiondata.SessionData
 }
 
 var _ scrun.JobRunDependencies = (*jobExecutionDeps)(nil)
@@ -113,6 +120,8 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			statements:              d.statements,
 			partitioner:             d.partitioner,
 			user:                    d.job.Payload().UsernameProto.Decode(),
+			commentUpdaterFactory:   d.commentUpdaterFactory,
+			sessionData:             d.sessionData,
 		})
 	})
 	if err != nil {

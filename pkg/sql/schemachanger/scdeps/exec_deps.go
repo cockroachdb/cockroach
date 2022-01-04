@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,6 +46,7 @@ type JobRegistry interface {
 // from the given arguments.
 func NewExecutorDependencies(
 	codec keys.SQLCodec,
+	sessionData *sessiondata.SessionData,
 	txn *kv.Txn,
 	user security.SQLUsername,
 	descsCollection *descs.Collection,
@@ -54,6 +56,7 @@ func NewExecutorDependencies(
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
 	partitioner scmutationexec.Partitioner,
+	commentUpdaterFactory scexec.CommentUpdaterFactory,
 	eventLogger scexec.EventLogger,
 	schemaChangerJobID jobspb.JobID,
 	statements []string,
@@ -70,10 +73,12 @@ func NewExecutorDependencies(
 		},
 		backfiller:              backfiller,
 		backfillTracker:         backfillTracker,
+		commentUpdaterFactory:   commentUpdaterFactory,
 		periodicProgressFlusher: backfillFlusher,
 		statements:              statements,
 		partitioner:             partitioner,
 		user:                    user,
+		sessionData:             sessionData,
 	}
 }
 
@@ -304,11 +309,13 @@ func (d *txnDeps) SetResumeSpans(
 type execDeps struct {
 	txnDeps
 	partitioner             scmutationexec.Partitioner
+	commentUpdaterFactory   scexec.CommentUpdaterFactory
 	backfiller              scexec.Backfiller
 	backfillTracker         scexec.BackfillTracker
 	periodicProgressFlusher scexec.PeriodicProgressFlusher
 	statements              []string
 	user                    security.SQLUsername
+	sessionData             *sessiondata.SessionData
 }
 
 var _ scexec.Dependencies = (*execDeps)(nil)
@@ -360,6 +367,11 @@ func (d *execDeps) Statements() []string {
 // User implements the scexec.Dependencies interface.
 func (d *execDeps) User() security.SQLUsername {
 	return d.user
+}
+
+// CommentUpdater implements the scexec.Dependencies interface.
+func (d *execDeps) CommentUpdater(ctx context.Context) scexec.CommentUpdater {
+	return d.commentUpdaterFactory.NewCommentUpdater(ctx, d.txn, d.sessionData)
 }
 
 // EventLoggerFactory constructs a new event logger with a txn.

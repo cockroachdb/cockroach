@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/commenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1518,7 +1519,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 			objID := comment[0]
 			objSubID := comment[1]
 			description := comment[2]
-			commentType := tree.MustBeDInt(comment[3])
+			commentType := keys.CommentType(tree.MustBeDInt(comment[3]))
 
 			classOid := oidZero
 
@@ -1566,7 +1567,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
 			return err
 		}
 		for _, comment := range comments {
-			commentType := tree.MustBeDInt(comment[3])
+			commentType := keys.CommentType(tree.MustBeDInt(comment[3]))
 			if commentType != keys.DatabaseCommentType {
 				// Only database comments are exported in this table.
 				continue
@@ -4368,4 +4369,9 @@ func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
 	return h.getOid()
+}
+
+//MakeConstraintOidBuilder constructs an OID builder.
+func MakeConstraintOidBuilder() commenter.ConstraintOidBuilder {
+	return makeOidHasher()
 }

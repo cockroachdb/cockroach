@@ -79,8 +79,10 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.Codec,
 		execCfg.Settings,
 		execCfg.IndexValidator,
+		execCfg.CommentUpdaterFactory,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
+		execCtx.SessionData(),
 	)
 
 	return scrun.RunSchemaChangesInJob(

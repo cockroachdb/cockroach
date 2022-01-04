@@ -364,3 +364,44 @@ type UpdateSchemaChangerJob struct {
 	Current         []scpb.Status
 	IsNonCancelable bool
 }
+
+// RemoveTableComment is used to delete a comment associated with a table.
+type RemoveTableComment struct {
+	mutationOp
+	TableID descpb.ID
+}
+
+// RemoveDatabaseComment is used to delete a comment associated with a database.
+type RemoveDatabaseComment struct {
+	mutationOp
+	DatabaseID descpb.ID
+}
+
+// RemoveSchemaComment is used to delete a comment associated with a schema.
+type RemoveSchemaComment struct {
+	mutationOp
+	SchemaID descpb.ID
+}
+
+// RemoveIndexComment is used to delete a comment associated with an index.
+type RemoveIndexComment struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
+// RemoveColumnComment is used to delete a comment associated with a column.
+type RemoveColumnComment struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// RemoveConstraintComment is used to delete a comment associated with a
+// constraint.
+type RemoveConstraintComment struct {
+	mutationOp
+	TableID        descpb.ID
+	ConstraintType scpb.ConstraintType
+	ConstraintName string
+}
