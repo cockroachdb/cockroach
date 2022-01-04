@@ -2080,3 +2080,30 @@ CREATE TABLE public.t (
 
 statement error multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT t_pkey PRIMARY KEY (id)
+
+# Fixes issues 74360, 73798 which occur because we were not looking up
+# the column names for non-public column mutations and only using the
+# mutation ID when creating the foreign key. As a result the wrong column
+# could be referenced for a foreign key (or an error could occur if the types
+# of the selected column doesn't match) referenced column did not match.
+subtest add_column_with_constraint
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE colref (id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY);
+CREATE TABLE colsource (id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY);
+
+statement ok
+ALTER TABLE colsource ADD COLUMN description STRING NULL, ADD COLUMN customer_id UUID REFERENCES colref(id);
+
+statement ok
+ALTER TABLE colsource DROP COLUMN description, DROP COLUMN customer_id
+
+statement ok
+ALTER TABLE colsource ADD COLUMN customer_id UUID  REFERENCES colref(id), ADD COLUMN description STRING NULL;
+
+
+statement ok
+COMMIT
