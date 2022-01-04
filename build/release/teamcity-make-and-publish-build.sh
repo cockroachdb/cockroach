@@ -11,8 +11,11 @@ build/builder.sh make .buildinfo/tag
 build_name="${TAG_NAME:-$(cat .buildinfo/tag)}"
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
-release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
+release_branch="$(echo "$TC_BUILD_BRANCH" || echo "")"
 is_custom_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
+
+# Prepend release branch onto build_name
+build_name="${release_branch}-${build_name}"
 
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET-cockroach-builds}"
