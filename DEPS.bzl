@@ -1218,10 +1218,10 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sha256 = "6812b1e9a3cc7e810415d30ed87419ede2bfe2bc90cf9f8b3a252c3c3ccff923",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20211019184201-7fec828fc1af",
+        sha256 = "01bbbd8a079753674a8a5698054506ea2db167e94be52a094c2ee0779a88d9c6",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220104184117-a71dc5a033cf",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20211019184201-7fec828fc1af.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220104184117-a71dc5a033cf.zip",
         ],
     )
     go_repository(
