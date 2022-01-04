@@ -81,6 +81,18 @@ DROP SCHEMA defaultdb.SC1 CASCADE
       width: 64
     usesSequenceIds:
     - 56
+- [[ColumnComment:{DescID: 57, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    tableId: 57
+- [[ColumnComment:{DescID: 57, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    tableId: 57
+- [[ColumnComment:{DescID: 57, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    tableId: 57
 - [[ColumnName:{DescID: 57, ColumnID: 1, Name: id}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -96,6 +108,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     columnId: 3
     name: val
     tableId: 57
+- [[ConstraintComment:{DescID: 57, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC]
+  details:
+    constraintName: t1_pkey
+    constraintType: PrimaryKey
+    tableId: 57
 - [[DatabaseSchemaEntry:{DescID: 50, ReferencedDescID: 54}, ABSENT], PUBLIC]
   details:
     databaseId: 50
@@ -107,6 +124,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     tableId: 57
     usesSequenceIDs:
     - 56
+- [[IndexComment:{DescID: 57, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    indexId: 1
+    tableId: 57
 - [[IndexName:{DescID: 57, IndexID: 1, Name: t1_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -295,12 +316,39 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     - 63
     - 64
     schemaId: 54
+- [[SchemaComment:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    schemaId: 54
 - [[Sequence:{DescID: 56}, ABSENT], PUBLIC]
   details:
     sequenceId: 56
 - [[Table:{DescID: 57}, ABSENT], PUBLIC]
   details:
     tableId: 57
+- [[TableComment:{DescID: 56}, ABSENT], PUBLIC]
+  details:
+    tableId: 56
+- [[TableComment:{DescID: 57}, ABSENT], PUBLIC]
+  details:
+    tableId: 57
+- [[TableComment:{DescID: 58}, ABSENT], PUBLIC]
+  details:
+    tableId: 58
+- [[TableComment:{DescID: 59}, ABSENT], PUBLIC]
+  details:
+    tableId: 59
+- [[TableComment:{DescID: 60}, ABSENT], PUBLIC]
+  details:
+    tableId: 60
+- [[TableComment:{DescID: 61}, ABSENT], PUBLIC]
+  details:
+    tableId: 61
+- [[TableComment:{DescID: 64}, ABSENT], PUBLIC]
+  details:
+    tableId: 64
+- [[TableComment:{DescID: 65}, ABSENT], PUBLIC]
+  details:
+    tableId: 65
 - [[Type:{DescID: 62}, ABSENT], PUBLIC]
   details:
     typeId: 62

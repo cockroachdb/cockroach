@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -76,6 +77,17 @@ type MutationVisitorStateUpdater interface {
 
 	// DeleteDescriptor adds a descriptor for deletion.
 	DeleteDescriptor(id descpb.ID)
+
+	// DeleteComment removes comments for a descriptor
+	DeleteComment(id descpb.ID, subID int, commentType keys.CommentType)
+
+	// DeleteConstraintComment removes comments for a descriptor
+	DeleteConstraintComment(
+		ctx context.Context,
+		tbl catalog.TableDescriptor,
+		constraintName string,
+		constraintType scpb.ConstraintType,
+	) error
 
 	// AddNewGCJobForTable enqueues a GC job for the given table.
 	AddNewGCJobForTable(descriptor catalog.TableDescriptor)
@@ -1014,6 +1026,41 @@ func (m *visitor) DeleteDatabaseSchemaEntry(
 	}
 	delete(db.Schemas, sc.GetName())
 	return nil
+}
+
+func (m *visitor) RemoveTableComment(_ context.Context, op scop.RemoveTableComment) error {
+	m.s.DeleteComment(op.DescriptorID, 0, keys.TableCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveDatabaseComment(_ context.Context, op scop.RemoveDatabaseComment) error {
+	m.s.DeleteComment(op.DescriptorID, 0, keys.DatabaseCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveSchemaComment(_ context.Context, op scop.RemoveSchemaComment) error {
+	m.s.DeleteComment(op.DescriptorID, 0, keys.SchemaCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveIndexComment(_ context.Context, op scop.RemoveIndexComment) error {
+	m.s.DeleteComment(op.TableID, int(op.IndexID), keys.IndexCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveColumnComment(_ context.Context, op scop.RemoveColumnComment) error {
+	m.s.DeleteComment(op.TableID, int(op.ColumnID), keys.ColumnCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveConstraintComment(
+	ctx context.Context, op scop.RemoveConstraintComment,
+) error {
+	tbl, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	return m.s.DeleteConstraintComment(ctx, tbl.(catalog.TableDescriptor), op.ConstraintName, op.ConstraintType)
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)

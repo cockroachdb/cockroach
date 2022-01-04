@@ -634,10 +634,32 @@ statement ok
 CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
 
 statement ok
+CREATE INDEX tmp_idx ON db1.sc1.t1(name)
+
+statement ok
+use db1;
+COMMENT ON DATABASE db1 IS 'BLAH';
+COMMENT ON SCHEMA sc1 IS 'BLAH2';
+COMMENT ON TABLE db1.sc1.t1 IS 'BLAH3';
+COMMENT ON COLUMN db1.sc1.t1.id IS 'BLAH4';
+COMMENT ON INDEX db1.sc1.tmp_idx IS 'BLAH5';
+use test;
+
+statement ok
 CREATE TYPE db1.sc1.typ AS ENUM('a')
 
 statement ok
 CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+# Confirm comments exist.
+query T
+SELECT comment FROM system.comments ORDER BY comment ASC
+----
+BLAH
+BLAH2
+BLAH3
+BLAH4
+BLAH5
 
 statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
@@ -683,6 +705,11 @@ select count(*) from system.descriptor
 # Actually drop the database now.
 statement ok
 DROP DATABASE db1 CASCADE
+
+# No comments should be left after.
+query T
+SELECT comment FROM system.comments ORDER BY comment ASC
+----
 
 let $desc_count_post_drop
 select count(*) from system.descriptor
