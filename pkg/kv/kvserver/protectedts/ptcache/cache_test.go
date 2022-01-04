@@ -431,10 +431,10 @@ func protect(
 ) (r *ptpb.Record, createdAt hlc.Timestamp) {
 	protectTS := s.Clock().Now()
 	r = &ptpb.Record{
-		ID:        uuid.MakeV4().GetBytes(),
-		Timestamp: protectTS,
-		Mode:      ptpb.PROTECT_AFTER,
-		Spans:     spans,
+		ID:              uuid.MakeV4().GetBytes(),
+		Timestamp:       protectTS,
+		Mode:            ptpb.PROTECT_AFTER,
+		DeprecatedSpans: spans,
 	}
 	ctx := context.Background()
 	txn := s.DB().NewTxn(ctx, "test")

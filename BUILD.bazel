@@ -25,7 +25,7 @@ load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
 
 # Enable protobuf generation.
 #
-# gazelle:proto package
+# gazelle:proto default
 # gazelle:proto_group go_package
 # gazelle:go_proto_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler
 # gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler

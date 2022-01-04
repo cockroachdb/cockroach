@@ -259,8 +259,8 @@ func (c *Cache) upToDate(asOf hlc.Timestamp) bool {
 }
 
 func overlaps(r *ptpb.Record, sp roachpb.Span) bool {
-	for i := range r.Spans {
-		if r.Spans[i].Overlaps(sp) {
+	for i := range r.DeprecatedSpans {
+		if r.DeprecatedSpans[i].Overlaps(sp) {
 			return true
 		}
 	}

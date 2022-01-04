@@ -38,7 +38,7 @@ go_proto_compiler(
         "Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types",
     ],
     plugin = ":protoc-gen-gogoroach",
-    valid_archive = True,
+    valid_archive = False,
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_gogo_protobuf//proto",
@@ -59,7 +59,7 @@ go_proto_compiler(
         "Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types",
     ],
     plugin = ":protoc-gen-gogoroach",
-    valid_archive = True,
+    valid_archive = False,
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_gogo_protobuf//proto",
