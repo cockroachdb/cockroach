@@ -1,13 +1,13 @@
+load("@bazel_gazelle//:def.bzl", "gazelle")
+load("@io_bazel_rules_go//go:def.bzl", "nogo")
+load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
+
 exports_files([
     "DEPS.bzl",
     "TEAMS.yaml",
     "go.mod",
     "go.sum",
 ])
-
-load("@bazel_gazelle//:def.bzl", "gazelle")
-load("@io_bazel_rules_go//go:def.bzl", "nogo")
-load("//build/bazelutil/staticcheckanalyzers:def.bzl", "STATICCHECK_CHECKS")
 
 # The following directives inform gazelle how to auto-generate BUILD.bazel
 # files throughout the repo. By including them here, we can run gazelle using
