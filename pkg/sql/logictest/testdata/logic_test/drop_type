@@ -124,8 +124,8 @@ CREATE TYPE t4 AS ENUM ('cheers')
 statement ok
 CREATE TABLE expr (
   x BOOL DEFAULT ('hello'::t1 = 'hello'::t1),
-  y STRING AS ('howdy'::t2::STRING) STORED,
-  CHECK ('hi'::t3::string = 'hi'),
+  y t2 AS ('howdy'::t2) STORED,
+  CHECK ('hi'::t3 = 'hi'::t3),
   INDEX i(y) WHERE ('cheers'::t4 = 'cheers'::t4)
 )
 
@@ -184,7 +184,7 @@ ROLLBACK
 
 statement ok
 BEGIN;
-ALTER TABLE expr ADD COLUMN y STRING AS ('howdy'::t2::STRING) STORED
+ALTER TABLE expr ADD COLUMN y t2 AS ('howdy'::t2) STORED
 
 statement error pq: cannot drop type "t2" because other objects \(\[test.public.expr\]\) still depend on it
 DROP TYPE t2
@@ -215,8 +215,8 @@ ROLLBACK
 # Now add all of the schema elements.
 statement ok
 ALTER TABLE expr ADD COLUMN x BOOL DEFAULT ('hello'::t1 = 'hello'::t1);
-ALTER TABLE expr ADD COLUMN y STRING AS ('howdy'::t2::STRING) STORED;
-ALTER TABLE expr ADD CONSTRAINT "check" CHECK ('hi'::t3::string = 'hi');
+ALTER TABLE expr ADD COLUMN y t2 AS ('howdy'::t2) STORED;
+ALTER TABLE expr ADD CONSTRAINT "check" CHECK ('hi'::t3 = 'hi'::t3);
 CREATE INDEX i ON expr (y) WHERE ('cheers'::t4 = 'cheers'::t4)
 
 statement error pq: cannot drop type "t1" because other objects \(\[test.public.expr\]\) still depend on it
