@@ -99,7 +99,7 @@ func getSink(
 
 		switch {
 		case u.Scheme == changefeedbase.SinkSchemeNull:
-			return makeNullSink(sinkURL{URL: u})
+			return makeNullSink(sinkURL{URL: u}, m)
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
 				return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, m)
@@ -371,12 +371,13 @@ func (s *bufferSink) Dial() error {
 }
 
 type nullSink struct {
-	ticker *time.Ticker
+	ticker  *time.Ticker
+	metrics *sliMetrics
 }
 
 var _ Sink = (*nullSink)(nil)
 
-func makeNullSink(u sinkURL) (Sink, error) {
+func makeNullSink(u sinkURL, m *sliMetrics) (Sink, error) {
 	var pacer *time.Ticker
 	if delay := u.consumeParam(`delay`); delay != "" {
 		pace, err := time.ParseDuration(delay)
@@ -385,7 +386,7 @@ func makeNullSink(u sinkURL) (Sink, error) {
 		}
 		pacer = time.NewTicker(pace)
 	}
-	return &nullSink{ticker: pacer}, nil
+	return &nullSink{ticker: pacer, metrics: m}, nil
 }
 
 func (n *nullSink) pace(ctx context.Context) error {
@@ -409,7 +410,7 @@ func (n *nullSink) EmitRow(
 	r kvevent.Alloc,
 ) error {
 	defer r.Release(ctx)
-
+	defer n.metrics.recordEmittedMessages()(1, mvcc, len(key)+len(value), sinkDoesNotCompress)
 	if err := n.pace(ctx); err != nil {
 		return err
 	}
@@ -423,6 +424,7 @@ func (n *nullSink) EmitRow(
 func (n *nullSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	defer n.metrics.recordResolvedCallback()()
 	if err := n.pace(ctx); err != nil {
 		return err
 	}
@@ -435,6 +437,7 @@ func (n *nullSink) EmitResolvedTimestamp(
 
 // Flush implements Sink interface.
 func (n *nullSink) Flush(ctx context.Context) error {
+	defer n.metrics.recordFlushRequestCallback()()
 	if log.V(2) {
 		log.Info(ctx, "flushing")
 	}
