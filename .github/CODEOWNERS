@@ -133,6 +133,7 @@
 /pkg/ccl/oidcccl/            @cockroachdb/sql-queries
 /pkg/ccl/partitionccl/       @cockroachdb/sql-schema @cockroachdb/multiregion
 /pkg/ccl/serverccl/          @cockroachdb/server-prs
+/pkg/ccl/serverccl/statusccl @cockroachdb/sql-observability
 /pkg/ccl/telemetryccl/       @cockroachdb/obs-inf-prs
 /pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-schema

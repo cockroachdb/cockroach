@@ -6,11 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package serverccl
+package statusccl
 
 import (
 	"context"
 	gosql "database/sql"
+	"math/rand"
 	"net/http"
 	"testing"
 
@@ -28,6 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
+
+// serverIdx is the index of the node within a test cluster. A special value
+// `randomServer` can be used to let the test helper to randomly choose to
+// a server from the test cluster.
+type serverIdx int
+
+const randomServer serverIdx = -1
 
 type testTenant struct {
 	tenant         serverutils.TestTenantInterface
@@ -85,7 +93,7 @@ func newTestTenantHelper(
 	t.Helper()
 
 	params, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
 	})
 	server := testCluster.Server(0)
@@ -99,10 +107,12 @@ func newTestTenantHelper(
 			security.EmbeddedTenantIDs()[0],
 			knobs,
 		),
+		// Spin up a small tenant cluster under a different tenant ID to test
+		// tenant isolation.
 		tenantControlCluster: newTenantCluster(
 			t,
 			server,
-			tenantClusterSize,
+			1, /* tenantClusterSize */
 			security.EmbeddedTenantIDs()[1],
 			knobs,
 		),
@@ -146,24 +156,22 @@ func newTenantCluster(
 	return cluster
 }
 
-func (c tenantCluster) tenantConn(idx int) *sqlutils.SQLRunner {
-	return c[idx].tenantDB
+func (c tenantCluster) tenantConn(idx serverIdx) *sqlutils.SQLRunner {
+	return c.tenant(idx).tenantDB
 }
 
-func (c tenantCluster) tenantHTTPJSONClient(idx int) (*httpJSONClient, error) {
-	client, err := c[idx].tenant.RPCContext().GetHTTPClient()
-	if err != nil {
-		return nil, err
-	}
-	return &httpJSONClient{client: client, baseURL: "https://" + c[idx].tenant.HTTPAddr()}, nil
+func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx) *httpClient {
+	client, err := c.tenant(idx).tenant.RPCContext().GetHTTPClient()
+	require.NoError(t, err)
+	return &httpClient{t: t, client: client, baseURL: "https://" + c[idx].tenant.HTTPAddr()}
 }
 
-func (c tenantCluster) tenantSQLStats(idx int) *persistedsqlstats.PersistedSQLStats {
-	return c[idx].tenantSQLStats
+func (c tenantCluster) tenantSQLStats(idx serverIdx) *persistedsqlstats.PersistedSQLStats {
+	return c.tenant(idx).tenantSQLStats
 }
 
-func (c tenantCluster) tenantStatusSrv(idx int) serverpb.SQLStatusServer {
-	return c[idx].tenantStatus
+func (c tenantCluster) tenantStatusSrv(idx serverIdx) serverpb.SQLStatusServer {
+	return c.tenant(idx).tenantStatus
 }
 
 func (c tenantCluster) cleanup(t *testing.T) {
@@ -172,21 +180,32 @@ func (c tenantCluster) cleanup(t *testing.T) {
 	}
 }
 
-type httpJSONClient struct {
+// tenant selects a tenant node from the tenant cluster. If randomServer
+// is passed in, then a random node is selected.
+func (c tenantCluster) tenant(idx serverIdx) *testTenant {
+	if idx == randomServer {
+		return c[rand.Intn(len(c))]
+	}
+
+	return c[idx]
+}
+
+type httpClient struct {
+	t       *testing.T
 	client  http.Client
 	baseURL string
 }
 
-func (c *httpJSONClient) GetJSON(path string, response protoutil.Message) error {
-	return httputil.GetJSON(c.client, c.baseURL+path, response)
+func (c *httpClient) GetJSON(path string, response protoutil.Message) {
+	err := httputil.GetJSON(c.client, c.baseURL+path, response)
+	require.NoError(c.t, err)
 }
 
-func (c *httpJSONClient) PostJSON(
-	path string, request protoutil.Message, response protoutil.Message,
-) error {
-	return httputil.PostJSON(c.client, c.baseURL+path, request, response)
+func (c *httpClient) PostJSON(path string, request protoutil.Message, response protoutil.Message) {
+	err := httputil.PostJSON(c.client, c.baseURL+path, request, response)
+	require.NoError(c.t, err)
 }
 
-func (c *httpJSONClient) Close() {
+func (c *httpClient) Close() {
 	c.client.CloseIdleConnections()
 }
