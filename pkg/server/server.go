@@ -1663,10 +1663,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been initialized or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+
+	httpAddrU := util.NewUnresolvedAddr("http", s.cfg.HTTPAdvertiseAddr)
+
 	if err := s.node.start(
 		ctx,
 		advAddrU,
 		advSQLAddrU,
+		httpAddrU,
 		*state,
 		initialStart,
 		s.cfg.ClusterName,
@@ -2753,33 +2757,38 @@ func (s *Server) Stop() {
 	s.stopper.Stop(context.Background())
 }
 
+func (s *Server) gzipMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ae := r.Header.Get(httputil.AcceptEncodingHeader)
+		switch {
+		case strings.Contains(ae, httputil.GzipEncoding):
+			w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
+			gzw := newGzipResponseWriter(w)
+			defer func() {
+				// Certain requests must not have a body, yet closing the gzip writer will
+				// attempt to write the gzip header. Avoid logging a warning in this case.
+				// This is notably triggered by:
+				//
+				// curl -H 'Accept-Encoding: gzip' \
+				// 	    -H 'If-Modified-Since: Thu, 29 Mar 2018 22:36:32 GMT' \
+				//      -v http://localhost:8080/favicon.ico > /dev/null
+				//
+				// which results in a 304 Not Modified.
+				if err := gzw.Close(); err != nil && !errors.Is(err, http.ErrBodyNotAllowed) {
+					ctx := s.AnnotateCtx(r.Context())
+					log.Ops.Warningf(ctx, "error closing gzip response writer: %v", err)
+				}
+			}()
+			w = gzw
+		}
+		next(w, r)
+	}
+}
+
 // ServeHTTP is necessary to implement the http.Handler interface.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
-
-	ae := r.Header.Get(httputil.AcceptEncodingHeader)
-	switch {
-	case strings.Contains(ae, httputil.GzipEncoding):
-		w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
-		gzw := newGzipResponseWriter(w)
-		defer func() {
-			// Certain requests must not have a body, yet closing the gzip writer will
-			// attempt to write the gzip header. Avoid logging a warning in this case.
-			// This is notably triggered by:
-			//
-			// curl -H 'Accept-Encoding: gzip' \
-			// 	    -H 'If-Modified-Since: Thu, 29 Mar 2018 22:36:32 GMT' \
-			//      -v http://localhost:8080/favicon.ico > /dev/null
-			//
-			// which results in a 304 Not Modified.
-			if err := gzw.Close(); err != nil && !errors.Is(err, http.ErrBodyNotAllowed) {
-				ctx := s.AnnotateCtx(r.Context())
-				log.Ops.Warningf(ctx, "error closing gzip response writer: %v", err)
-			}
-		}()
-		w = gzw
-	}
 
 	// This is our base handler.
 	// Intercept all panics, log them, and return an internal server error as a response.
@@ -2792,7 +2801,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	s.mux.ServeHTTP(w, r)
+	// Proxying to other nodes should happen before the gzip middleware
+	s.nodeRouterMiddleware(s.gzipMiddleware(s.mux.ServeHTTP)).ServeHTTP(w, r)
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
