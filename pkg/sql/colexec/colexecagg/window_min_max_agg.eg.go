@@ -112,8 +112,6 @@ func newMinWindowAggAlloc(
 
 type minBoolWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Bools
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -124,11 +122,6 @@ type minBoolWindowAgg struct {
 }
 
 var _ AggregateFunc = &minBoolWindowAgg{}
-
-func (a *minBoolWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *minBoolWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -219,13 +212,11 @@ func (a *minBoolWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Bool()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -264,8 +255,6 @@ func (*minBoolWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx
 
 type minBytesWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -276,11 +265,6 @@ type minBytesWindowAgg struct {
 }
 
 var _ AggregateFunc = &minBytesWindowAgg{}
-
-func (a *minBytesWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bytes()
-}
 
 func (a *minBytesWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -355,13 +339,11 @@ func (a *minBytesWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Bytes()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = append(a.curAgg[:0], a.curAgg...)
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -404,8 +386,6 @@ func (*minBytesWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startId
 
 type minDecimalWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -416,11 +396,6 @@ type minDecimalWindowAgg struct {
 }
 
 var _ AggregateFunc = &minDecimalWindowAgg{}
-
-func (a *minDecimalWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *minDecimalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -495,13 +470,11 @@ func (a *minDecimalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Decimal()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg.Set(&a.curAgg)
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -540,8 +513,6 @@ func (*minDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 
 type minInt16WindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int16s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -552,11 +523,6 @@ type minInt16WindowAgg struct {
 }
 
 var _ AggregateFunc = &minInt16WindowAgg{}
-
-func (a *minInt16WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int16()
-}
 
 func (a *minInt16WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -653,13 +619,11 @@ func (a *minInt16WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int16()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -698,8 +662,6 @@ func (*minInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startId
 
 type minInt32WindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int32s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -710,11 +672,6 @@ type minInt32WindowAgg struct {
 }
 
 var _ AggregateFunc = &minInt32WindowAgg{}
-
-func (a *minInt32WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int32()
-}
 
 func (a *minInt32WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -811,13 +768,11 @@ func (a *minInt32WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int32()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -856,8 +811,6 @@ func (*minInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startId
 
 type minInt64WindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -868,11 +821,6 @@ type minInt64WindowAgg struct {
 }
 
 var _ AggregateFunc = &minInt64WindowAgg{}
-
-func (a *minInt64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *minInt64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -969,13 +917,11 @@ func (a *minInt64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1014,8 +960,6 @@ func (*minInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startId
 
 type minFloat64WindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Float64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1026,11 +970,6 @@ type minFloat64WindowAgg struct {
 }
 
 var _ AggregateFunc = &minFloat64WindowAgg{}
-
-func (a *minFloat64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Float64()
-}
 
 func (a *minFloat64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1143,13 +1082,11 @@ func (a *minFloat64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Float64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1188,8 +1125,6 @@ func (*minFloat64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 
 type minTimestampWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Times
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1200,11 +1135,6 @@ type minTimestampWindowAgg struct {
 }
 
 var _ AggregateFunc = &minTimestampWindowAgg{}
-
-func (a *minTimestampWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Timestamp()
-}
 
 func (a *minTimestampWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1293,13 +1223,11 @@ func (a *minTimestampWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Timestamp()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1338,8 +1266,6 @@ func (*minTimestampWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, sta
 
 type minIntervalWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Durations
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1350,11 +1276,6 @@ type minIntervalWindowAgg struct {
 }
 
 var _ AggregateFunc = &minIntervalWindowAgg{}
-
-func (a *minIntervalWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Interval()
-}
 
 func (a *minIntervalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1429,13 +1350,11 @@ func (a *minIntervalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Interval()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1474,8 +1393,6 @@ func (*minIntervalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, star
 
 type minJSONWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col *coldata.JSONs
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1486,11 +1403,6 @@ type minJSONWindowAgg struct {
 }
 
 var _ AggregateFunc = &minJSONWindowAgg{}
-
-func (a *minJSONWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.JSON()
-}
 
 func (a *minJSONWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1627,24 +1539,11 @@ func (a *minJSONWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.JSON()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-
-		var _err error
-		var _bytes []byte
-		_bytes, _err = json.EncodeJSON(nil, a.curAgg)
-		if _err != nil {
-			colexecerror.ExpectedError(_err)
-		}
-		a.curAgg, _err = json.FromEncoding(_bytes)
-		if _err != nil {
-			colexecerror.ExpectedError(_err)
-		}
-
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1690,8 +1589,6 @@ func (*minJSONWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx
 
 type minDatumWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.DatumVec
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1702,11 +1599,6 @@ type minDatumWindowAgg struct {
 }
 
 var _ AggregateFunc = &minDatumWindowAgg{}
-
-func (a *minDatumWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Datum()
-}
 
 func (a *minDatumWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1793,13 +1685,11 @@ func (a *minDatumWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Datum()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1915,8 +1805,6 @@ func newMaxWindowAggAlloc(
 
 type maxBoolWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Bools
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1927,11 +1815,6 @@ type maxBoolWindowAgg struct {
 }
 
 var _ AggregateFunc = &maxBoolWindowAgg{}
-
-func (a *maxBoolWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *maxBoolWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2022,13 +1905,11 @@ func (a *maxBoolWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Bool()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2067,8 +1948,6 @@ func (*maxBoolWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx
 
 type maxBytesWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2079,11 +1958,6 @@ type maxBytesWindowAgg struct {
 }
 
 var _ AggregateFunc = &maxBytesWindowAgg{}
-
-func (a *maxBytesWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bytes()
-}
 
 func (a *maxBytesWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2158,13 +2032,11 @@ func (a *maxBytesWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Bytes()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = append(a.curAgg[:0], a.curAgg...)
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2207,8 +2079,6 @@ func (*maxBytesWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startId
 
 type maxDecimalWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2219,11 +2089,6 @@ type maxDecimalWindowAgg struct {
 }
 
 var _ AggregateFunc = &maxDecimalWindowAgg{}
-
-func (a *maxDecimalWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *maxDecimalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2298,13 +2163,11 @@ func (a *maxDecimalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Decimal()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg.Set(&a.curAgg)
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2343,8 +2206,6 @@ func (*maxDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 
 type maxInt16WindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int16s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2355,11 +2216,6 @@ type maxInt16WindowAgg struct {
 }
 
 var _ AggregateFunc = &maxInt16WindowAgg{}
-
-func (a *maxInt16WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int16()
-}
 
 func (a *maxInt16WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2456,13 +2312,11 @@ func (a *maxInt16WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int16()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2501,8 +2355,6 @@ func (*maxInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startId
 
 type maxInt32WindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int32s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2513,11 +2365,6 @@ type maxInt32WindowAgg struct {
 }
 
 var _ AggregateFunc = &maxInt32WindowAgg{}
-
-func (a *maxInt32WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int32()
-}
 
 func (a *maxInt32WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2614,13 +2461,11 @@ func (a *maxInt32WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int32()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2659,8 +2504,6 @@ func (*maxInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startId
 
 type maxInt64WindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2671,11 +2514,6 @@ type maxInt64WindowAgg struct {
 }
 
 var _ AggregateFunc = &maxInt64WindowAgg{}
-
-func (a *maxInt64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *maxInt64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2772,13 +2610,11 @@ func (a *maxInt64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2817,8 +2653,6 @@ func (*maxInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startId
 
 type maxFloat64WindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Float64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2829,11 +2663,6 @@ type maxFloat64WindowAgg struct {
 }
 
 var _ AggregateFunc = &maxFloat64WindowAgg{}
-
-func (a *maxFloat64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Float64()
-}
 
 func (a *maxFloat64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2946,13 +2775,11 @@ func (a *maxFloat64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Float64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2991,8 +2818,6 @@ func (*maxFloat64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 
 type maxTimestampWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Times
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -3003,11 +2828,6 @@ type maxTimestampWindowAgg struct {
 }
 
 var _ AggregateFunc = &maxTimestampWindowAgg{}
-
-func (a *maxTimestampWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Timestamp()
-}
 
 func (a *maxTimestampWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -3096,13 +2916,11 @@ func (a *maxTimestampWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Timestamp()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -3141,8 +2959,6 @@ func (*maxTimestampWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, sta
 
 type maxIntervalWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Durations
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -3153,11 +2969,6 @@ type maxIntervalWindowAgg struct {
 }
 
 var _ AggregateFunc = &maxIntervalWindowAgg{}
-
-func (a *maxIntervalWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Interval()
-}
 
 func (a *maxIntervalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -3232,13 +3043,11 @@ func (a *maxIntervalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Interval()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -3277,8 +3086,6 @@ func (*maxIntervalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, star
 
 type maxJSONWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col *coldata.JSONs
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -3289,11 +3096,6 @@ type maxJSONWindowAgg struct {
 }
 
 var _ AggregateFunc = &maxJSONWindowAgg{}
-
-func (a *maxJSONWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.JSON()
-}
 
 func (a *maxJSONWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -3430,24 +3232,11 @@ func (a *maxJSONWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.JSON()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-
-		var _err error
-		var _bytes []byte
-		_bytes, _err = json.EncodeJSON(nil, a.curAgg)
-		if _err != nil {
-			colexecerror.ExpectedError(_err)
-		}
-		a.curAgg, _err = json.FromEncoding(_bytes)
-		if _err != nil {
-			colexecerror.ExpectedError(_err)
-		}
-
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -3493,8 +3282,6 @@ func (*maxJSONWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx
 
 type maxDatumWindowAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.DatumVec
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -3505,11 +3292,6 @@ type maxDatumWindowAgg struct {
 }
 
 var _ AggregateFunc = &maxDatumWindowAgg{}
-
-func (a *maxDatumWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Datum()
-}
 
 func (a *maxDatumWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -3596,13 +3378,11 @@ func (a *maxDatumWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Datum()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 

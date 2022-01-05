@@ -87,14 +87,14 @@ func newSum_SUMKIND_AGGKINDAggAlloc(
 type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col _RET_GOTYPESLICE
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg _RET_GOTYPE
-	// col points to the output vector we are updating.
-	col []_RET_GOTYPE
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -111,14 +111,13 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 
 var _ AggregateFunc = &sum_SUMKIND_TYPE_AGGKINDAgg{}
 
+// {{if eq "_AGGKIND" "Ordered"}}
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
-	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	// {{else}}
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	// {{end}}
 	a.col = vec._RET_TYPE()
 }
+
+// {{end}}
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -207,17 +206,14 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec._RET_TYPE()
 	// {{end}}
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// {{if eq "_AGGKIND" "Window"}}
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		execgen.COPYVAL(a.col[outputIdx], a.curAgg)
-		// {{else}}
-		a.col[outputIdx] = a.curAgg
-		// {{end}}
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
