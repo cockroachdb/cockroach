@@ -387,8 +387,9 @@ CREATE TABLE system.protected_ts_records (
    num_spans INT8 NOT NULL, -- num spans is important to know how to decode spans
    spans     BYTES NOT NULL,
    verified  BOOL NOT NULL DEFAULT (false),
+   target    BYTES,         -- target is an encoded protobuf that specifies what the pts record will protect
    CONSTRAINT "primary" PRIMARY KEY (id),
-	 FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified)
+	 FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified, target)
 );`
 
 	StatementBundleChunksTableSchema = `
@@ -1661,12 +1662,16 @@ var (
 				{Name: "num_spans", ID: 5, Type: types.Int},
 				{Name: "spans", ID: 6, Type: types.Bytes},
 				{Name: "verified", ID: 7, Type: types.Bool, DefaultExpr: &falseBoolString},
+				// target will store an encoded protobuf indicating what the protected
+				// timestamp record will protect. A record can protect either a cluster,
+				// tenants or a schema objects (databases/tables).
+				{Name: "target", ID: 8, Type: types.Bytes, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
-					ColumnNames: []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+					ColumnNames: []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 				},
 			},
 			descpb.IndexDescriptor{
