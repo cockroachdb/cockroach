@@ -65,7 +65,7 @@ type PrettyCfg struct {
 // configuration.
 func DefaultPrettyCfg() PrettyCfg {
 	return PrettyCfg{
-		LineWidth: DefaultLineWidth,
+		LineWidth: int(DefaultLineWidth),
 		Simplify:  true,
 		TabWidth:  4,
 		UseTabs:   true,
@@ -110,7 +110,7 @@ type LineWidthMode int
 
 const (
 	// DefaultLineWidth is the line width used with the default pretty-printing configuration.
-	DefaultLineWidth = 60
+	DefaultLineWidth LineWidthMode = 60
 	// ConsoleLineWidth is the line width used on the frontend console.
 	ConsoleLineWidth = 108
 )
