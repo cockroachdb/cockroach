@@ -223,14 +223,13 @@ func getTableIndexUsageStats(
 
 	q := makeSQLQuery()
 	// TODO(#72930): Implement virtual indexes on index_usages_statistics and table_indexes
-	q.Append(`
-		SELECT
+	q.Append(`SELECT
 			ti.index_id,
 			ti.index_name,
 			ti.index_type,
 			total_reads,
 			last_read,
-			indexdef
+			prettify_statement(indexdef, $, $, $)
 		FROM crdb_internal.index_usage_statistics AS us
   	JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id 
 		AND us.table_id = ti.descriptor_id
@@ -238,6 +237,9 @@ func getTableIndexUsageStats(
   	JOIN pg_catalog.pg_indexes AS pgidxs ON pgidxs.crdb_oid = indexrelid
 		AND indexname = ti.index_name
  		WHERE ti.descriptor_id = $::REGCLASS`,
+		tree.ConsoleLineWidth,
+		tree.PrettyAlignAndDeindent,
+		tree.UpperCase,
 		tableID,
 	)
 
