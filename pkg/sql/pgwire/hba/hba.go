@@ -205,7 +205,7 @@ func (h Entry) ConnMatches(clientConn ConnType, ip net.IP) (bool, error) {
 	return true, nil
 }
 
-// UserMatches returns true iff the provided username matches the an
+// UserMatches returns true iff the provided username matches an
 // entry in the User list or if the user list is empty (the entry
 // matches all).
 //

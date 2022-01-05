@@ -50,6 +50,7 @@ server.consistency_check.max_rate	byte size	8.0 MiB	the rate limit (bytes/sec) t
 server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog
 server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
 server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
+server.identity_map.configuration	string		system-identity to database-username mappings
 server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint (this feature is experimental)
 server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled) (this feature is experimental)
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid) (this feature is experimental)

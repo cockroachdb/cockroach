@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -80,30 +81,31 @@ var connAuthConf = func() *settings.StringSetting {
 	return s
 }()
 
-// loadLocalAuthConfigUponRemoteSettingChange initializes the local
-// node's cache of the auth configuration each time the cluster
-// setting is updated.
-func loadLocalAuthConfigUponRemoteSettingChange(
+// loadLocalHBAConfigUponRemoteSettingChange initializes the local
+// node's cache of the HBA configuration each time the cluster setting
+// is updated.
+func loadLocalHBAConfigUponRemoteSettingChange(
 	ctx context.Context, server *Server, st *cluster.Settings,
 ) {
 	val := connAuthConf.Get(&st.SV)
 
 	// An empty HBA configuration is special and means "use the
 	// default".
-	conf := DefaultHBAConfig
+	hbaConfig := DefaultHBAConfig
 	if val != "" {
 		var err error
-		conf, err = ParseAndNormalize(val)
+		hbaConfig, err = ParseAndNormalize(val)
 		if err != nil {
 			// The default is also used if the node is unable to load the
 			// config from the cluster setting.
 			log.Ops.Warningf(ctx, "invalid %s: %v", serverHBAConfSetting, err)
-			conf = DefaultHBAConfig
+			hbaConfig = DefaultHBAConfig
 		}
 	}
+
 	server.auth.Lock()
 	defer server.auth.Unlock()
-	server.auth.conf = conf
+	server.auth.conf = hbaConfig
 }
 
 // checkHBASyntaxBeforeUpdatingSetting is run by the SQL gateway each
@@ -260,9 +262,10 @@ local all all      password      # built-in CockroachDB default
 //
 // The data returned by this method is also observable via the debug
 // endpoint /debug/hba_conf.
-func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
+func (s *Server) GetAuthenticationConfiguration() (*hba.Conf, *identmap.Conf) {
 	s.auth.RLock()
 	auth := s.auth.conf
+	idMap := s.auth.identityMap
 	s.auth.RUnlock()
 
 	if auth == nil {
@@ -270,7 +273,10 @@ func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
 		// the cluster setting has ever been set.
 		auth = DefaultHBAConfig
 	}
-	return auth
+	if idMap == nil {
+		idMap = identmap.Empty()
+	}
+	return auth, idMap
 }
 
 // RegisterAuthMethod registers an AuthMethod for pgwire
@@ -326,15 +332,28 @@ type methodInfo struct {
 // configuration of the cluster setting by a SQL client.
 type CheckHBAEntry func(hba.Entry) error
 
+// NoOptionsAllowed is a CheckHBAEntry that returns an error if any
+// options are present in the entry.
+var NoOptionsAllowed CheckHBAEntry = func(e hba.Entry) error {
+	if len(e.Options) != 0 {
+		return errors.Newf("the HBA method %q does not accept options", e.Method)
+	}
+	return nil
+}
+
 // HBADebugFn exposes the computed HBA configuration via the debug
 // interface, for inspection by tests.
 func (s *Server) HBADebugFn() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-		auth := s.GetAuthenticationConfiguration()
+		auth, usernames := s.GetAuthenticationConfiguration()
 
 		_, _ = w.Write([]byte("# Active authentication configuration on this node:\n"))
 		_, _ = w.Write([]byte(auth.String()))
+		if !usernames.Empty() {
+			_, _ = w.Write([]byte("# Active identity mapping on this node:\n"))
+			_, _ = w.Write([]byte(usernames.String()))
+		}
 	}
 }
