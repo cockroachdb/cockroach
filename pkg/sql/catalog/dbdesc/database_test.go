@@ -164,7 +164,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			},
 		},
 		{ // 3
-			err: `schema mapping entry "schema1" (500): referenced schema ID 500: descriptor not found`,
+			err: `schema mapping entry "schema1" (500): referenced schema ID 500: referenced descriptor not found`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
@@ -208,7 +208,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			},
 		},
 		{ // 6
-			err: `multi-region enum: referenced type ID 500: descriptor not found`,
+			err: `multi-region enum: referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",

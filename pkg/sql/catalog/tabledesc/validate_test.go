@@ -1620,7 +1620,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	}{
 		// Foreign keys
 		{ // 0
-			err: `invalid foreign key: missing table=52: referenced table ID 52: descriptor not found`,
+			err: `invalid foreign key: missing table=52: referenced table ID 52: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1666,7 +1666,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			}},
 		},
 		{ // 2
-			err: `invalid foreign key backreference: missing table=52: referenced table ID 52: descriptor not found`,
+			err: `invalid foreign key backreference: missing table=52: referenced table ID 52: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1715,7 +1715,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			}},
 		},
 		{ // 4
-			err: `referenced type ID 500: descriptor not found`,
+			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1738,7 +1738,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		},
 		// Add some expressions with invalid type references.
 		{ // 5
-			err: `referenced type ID 500: descriptor not found`,
+			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1761,7 +1761,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		{ // 6
-			err: `referenced type ID 500: descriptor not found`,
+			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1784,7 +1784,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		{ // 7
-			err: `referenced type ID 500: descriptor not found`,
+			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1798,7 +1798,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		{ // 8
-			err: `referenced type ID 500: descriptor not found`,
+			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,

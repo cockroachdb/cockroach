@@ -86,7 +86,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 			},
 		},
 		{ // 1
-			err: `referenced database ID 500: descriptor not found`,
+			err: `referenced database ID 500: referenced descriptor not found`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
 				ParentID: 500,
