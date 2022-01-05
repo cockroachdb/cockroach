@@ -1259,12 +1259,6 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
 			tBegin := timeutil.Now()
-			// TODO(tbg): don't think we need to check the breaker here because
-			// the lease handle is already breaker-sensitive.
-			brSig := r.breaker.Signal()
-			if isCircuitBreakerProbe(ctx) {
-				brSig = neverTripSignaller{}
-			}
 			for {
 				select {
 				case pErr = <-llHandle.C():
@@ -1324,11 +1318,6 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 						r.store.metrics.SlowLeaseRequests.Dec(1)
 						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
 					}()
-				case <-brSig.C():
-					llHandle.Cancel()
-					err := brSig.Err()
-					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", err)
-					return roachpb.NewError(errors.Wrap(err, "lease acquisition failed"))
 				case <-ctx.Done():
 					llHandle.Cancel()
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
