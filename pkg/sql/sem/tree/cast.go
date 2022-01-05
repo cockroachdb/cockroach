@@ -1772,21 +1772,21 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 	// Enums have dynamic OIDs, so they can't be populated in castMap. Instead,
 	// we dynamically create cast structs for valid enum casts.
 	if srcFamily == types.EnumFamily && tgtFamily == types.StringFamily {
-		// Casts from enum types to strings are immutable and allowed in
+		// Casts from enum types to strings are stable and allowed in
 		// assignment contexts.
 		return cast{
 			maxContext: CastContextAssignment,
-			volatility: VolatilityImmutable,
+			volatility: VolatilityStable,
 		}, true
 	}
 	if tgtFamily == types.EnumFamily {
 		switch srcFamily {
 		case types.StringFamily:
-			// Casts from string types to enums are immutable and allowed in
+			// Casts from string types to enums are stable and allowed in
 			// explicit contexts.
 			return cast{
 				maxContext: CastContextExplicit,
-				volatility: VolatilityImmutable,
+				volatility: VolatilityStable,
 			}, true
 		case types.UnknownFamily:
 			// Casts from unknown to enums are immutable and allowed in implicit
@@ -1796,14 +1796,14 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 				volatility: VolatilityImmutable,
 			}, true
 		case types.BytesFamily:
-			// Casts from byte types to enums are immutable and allowed in
+			// Casts from byte types to enums are stable and allowed in
 			// explicit contexts.
 			// TODO(mgartner): We may not want to support the cast from BYTES to
 			// ENUM because Postgres does not support it, and it's been the
 			// source of at least one minor bug (see #74316).
 			return cast{
 				maxContext: CastContextExplicit,
-				volatility: VolatilityImmutable,
+				volatility: VolatilityStable,
 			}, true
 		}
 	}
@@ -1999,7 +1999,7 @@ var validCasts = []castInfo{
 	{from: types.OidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.INetFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 	{from: types.JsonFamily, to: types.StringFamily, volatility: VolatilityImmutable},
-	{from: types.EnumFamily, to: types.StringFamily, volatility: VolatilityImmutable},
+	{from: types.EnumFamily, to: types.StringFamily, volatility: VolatilityStable},
 	{from: types.VoidFamily, to: types.StringFamily, volatility: VolatilityImmutable},
 
 	// Casts to CollatedStringFamily.
@@ -2027,7 +2027,7 @@ var validCasts = []castInfo{
 	{from: types.OidFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
 	{from: types.INetFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
 	{from: types.JsonFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
-	{from: types.EnumFamily, to: types.CollatedStringFamily, volatility: VolatilityImmutable},
+	{from: types.EnumFamily, to: types.CollatedStringFamily, volatility: VolatilityStable},
 
 	// Casts to BytesFamily.
 	{from: types.UnknownFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
@@ -2156,9 +2156,9 @@ var validCasts = []castInfo{
 
 	// Casts to EnumFamily.
 	{from: types.UnknownFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
-	{from: types.StringFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
+	{from: types.StringFamily, to: types.EnumFamily, volatility: VolatilityStable},
 	{from: types.EnumFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
-	{from: types.BytesFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
+	{from: types.BytesFamily, to: types.EnumFamily, volatility: VolatilityStable},
 
 	// Casts to TupleFamily.
 	{from: types.UnknownFamily, to: types.TupleFamily, volatility: VolatilityImmutable},
