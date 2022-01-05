@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -520,7 +521,12 @@ func (p *planner) dropIndexByName(
 	}
 	tableDesc.RemovePublicNonPrimaryIndex(idxOrdinal)
 
-	if err := p.removeIndexComment(ctx, tableDesc.ID, idxDesc.ID); err != nil {
+	commentUpdater := p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+		ctx,
+		p.txn,
+	)
+	if err := commentUpdater.DeleteDescriptorComment(
+		int64(tableDesc.ID), int64(idxDesc.ID), keys.IndexCommentType); err != nil {
 		return err
 	}
 

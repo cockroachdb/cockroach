@@ -14,18 +14,18 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 type commentOnSchemaNode struct {
 	n          *tree.CommentOnSchema
 	schemaDesc catalog.SchemaDescriptor
+	commenter  scexec.CommentUpdater
 }
 
 // CommentOnSchema add comment on a schema.
@@ -63,25 +63,26 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 		return nil, err
 	}
 
-	return &commentOnSchemaNode{n: n, schemaDesc: schemaDesc}, nil
+	return &commentOnSchemaNode{
+		n:          n,
+		schemaDesc: schemaDesc,
+		commenter: p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+			ctx,
+			p.txn,
+		),
+	}, nil
 }
 
 func (n *commentOnSchemaNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"set-schema-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
-			keys.SchemaCommentType,
-			n.schemaDesc.GetID(),
-			*n.n.Comment)
+		err := n.commenter.UpsertDescriptorComment(
+			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType, *n.n.Comment)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := params.p.removeSchemaComment(params.ctx, n.schemaDesc.GetID())
+		err := n.commenter.DeleteDescriptorComment(
+			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType)
 		if err != nil {
 			return err
 		}
