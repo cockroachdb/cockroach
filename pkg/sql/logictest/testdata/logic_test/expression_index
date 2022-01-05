@@ -652,23 +652,21 @@ DROP TABLE bf
 # Backfill a expression index with a user defined type.
 
 statement ok
-CREATE TYPE enum AS ENUM ('Foo', 'BAR', 'baz')
+CREATE TYPE enum AS ENUM ('foo', 'bar', 'baz')
 
 statement ok
 CREATE TABLE bf (a enum)
 
 statement ok
-INSERT INTO bf VALUES ('Foo'), ('BAR'), ('baz')
+INSERT INTO bf VALUES ('foo'), ('bar'), ('baz')
 
 statement ok
-CREATE INDEX lower_a ON bf (lower(a::STRING))
+CREATE INDEX a_eq_foo ON bf ((a = 'foo'::enum))
 
 query T rowsort
-SELECT a FROM bf@lower_a WHERE lower(a::STRING) IN ('foo', 'bar', 'baz')
+SELECT a FROM bf@a_eq_foo WHERE a = 'foo'::enum
 ----
-Foo
-BAR
-baz
+foo
 
 statement ok
 DROP TABLE bf
@@ -683,20 +681,18 @@ statement ok
 CREATE TABLE bf (a enum)
 
 statement ok
-INSERT INTO bf VALUES ('Foo'), ('BAR'), ('baz')
+INSERT INTO bf VALUES ('foo'), ('bar'), ('baz')
 
 statement ok
-CREATE INDEX lower_a ON bf (lower(a::STRING))
+CREATE INDEX a_eq_foo ON bf ((a = 'foo'::enum))
 
 statement ok
 COMMIT
 
 query T rowsort
-SELECT a FROM bf@lower_a WHERE lower(a::STRING) IN ('foo', 'bar', 'baz')
+SELECT a FROM bf@a_eq_foo WHERE a = 'foo'::enum
 ----
-Foo
-BAR
-baz
+foo
 
 statement ok
 DROP TABLE bf

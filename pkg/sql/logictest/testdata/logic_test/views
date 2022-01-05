@@ -936,7 +936,7 @@ statement ok
 DROP VIEW v
 
 statement ok
-CREATE TABLE t (i INT, k STRING AS ('a'::typ::string) STORED)
+CREATE TABLE t (i INT, k typ AS ('a'::typ) STORED)
 
 statement ok
 CREATE VIEW v AS (SELECT i FROM t)
