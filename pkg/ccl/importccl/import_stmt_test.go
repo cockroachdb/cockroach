@@ -5611,6 +5611,33 @@ func TestImportPgDump(t *testing.T) {
 		sqlDB.Exec(t, "IMPORT PGDUMP ($1)", srv.URL)
 		sqlDB.CheckQueryResults(t, `SELECT * from t`, [][]string{{"2", "42", "1"}, {"4", "42", "3"}})
 	})
+
+	t.Run("more-target-cols-than-data", func(t *testing.T) {
+		data := `
+COPY public.t (a, b, c) FROM stdin;
+a	b	c
+\.
+
+INSERT INTO public.t (a, b, c) VALUES ('a', 'b', 'c');
+			`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		defer sqlDB.Exec(t, "DROP TABLE t")
+		sqlDB.Exec(t, `
+IMPORT TABLE t (
+c STRING,
+a STRING,
+b STRING,
+d STRING
+) PGDUMP DATA ($1) WITH ignore_unsupported_statements`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * from t`,
+			[][]string{{"c", "a", "b", "NULL"}, {"c", "a", "b", "NULL"}})
+	})
+
 	t.Run("import-into-not-supported", func(t *testing.T) {
 		data := `INSERT INTO t VALUES (1, 2), (3, 4)`
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

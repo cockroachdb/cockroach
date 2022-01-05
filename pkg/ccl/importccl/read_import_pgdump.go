@@ -1159,6 +1159,14 @@ func (m *pgDumpReader) readFile(
 					conv.TargetColOrds.Add(idx)
 					targetColMapIdx[j] = idx
 				}
+				// For any missing columns, fill those to NULL.
+				// These will get filled in with the correct default / computed
+				// expression if there are any for these columns.
+				for idx := range conv.VisibleCols {
+					if !conv.TargetColOrds.Contains(idx) {
+						conv.Datums[idx] = tree.DNull
+					}
+				}
 			}
 			for {
 				row, err := ps.Next()
