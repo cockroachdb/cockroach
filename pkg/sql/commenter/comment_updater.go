@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
+//OidFromConstraintCallback call back to get an OID from constraint information.
 type OidFromConstraintCallback func(
 	desc catalog.TableDescriptor,
 	schemaName string,
