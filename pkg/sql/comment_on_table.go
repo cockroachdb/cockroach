@@ -14,17 +14,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnTableNode struct {
 	n         *tree.CommentOnTable
 	tableDesc catalog.TableDescriptor
+	commenter scexec.CommentUpdater
 }
 
 // CommentOnTable add comment on a table.
@@ -49,32 +49,26 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 		return nil, err
 	}
 
-	return &commentOnTableNode{n: n, tableDesc: tableDesc}, nil
+	return &commentOnTableNode{
+		n:         n,
+		tableDesc: tableDesc,
+		commenter: p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+			ctx,
+			p.txn,
+		),
+	}, nil
 }
 
 func (n *commentOnTableNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"set-table-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
-			keys.TableCommentType,
-			n.tableDesc.GetID(),
-			*n.n.Comment)
+		err := n.commenter.UpsertDescriptorComment(
+			int64(n.tableDesc.GetID()), 0, keys.TableCommentType, *n.n.Comment)
 		if err != nil {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"delete-table-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-			keys.TableCommentType,
-			n.tableDesc.GetID())
+		err := n.commenter.DeleteDescriptorComment(
+			int64(n.tableDesc.GetID()), 0, keys.TableCommentType)
 		if err != nil {
 			return err
 		}
