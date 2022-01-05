@@ -95,7 +95,7 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 		_, err := db.Exec(
 			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
 			descID)
-		require.Regexp(t, `pq: relation "foo" \(53\): referenced database ID 52: descriptor not found`, err)
+		require.Regexp(t, `pq: relation "foo" \(53\): referenced database ID 52: referenced descriptor not found`, err)
 
 		// In this case, we're treating the injected descriptor as having no data
 		// so we can clean it up by just deleting the erroneous descriptor and
@@ -146,7 +146,7 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 		_, err := db.Exec(
 			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
 			descID)
-		require.Regexp(t, `pq: relation "foo" \(53\): referenced database ID 52: descriptor not found`, err)
+		require.Regexp(t, `pq: relation "foo" \(53\): referenced database ID 52: referenced descriptor not found`, err)
 
 		// In this case, we're going to inject a parent database
 		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
@@ -208,7 +208,8 @@ SELECT crdb_internal.unsafe_upsert_descriptor(
                 ARRAY['table', 'columns', '0', 'usesSequenceIds'],
                 '[]'
             )
-        )
+        ),
+        true
        )
   FROM system.descriptor
  WHERE id = $1;`,
@@ -695,9 +696,93 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
     },
     "state": "PUBLIC",
     "unexposedParentSchemaId": 29,
-    "version": 1
+    "version": 2
   }
 }
 '))
 `
 )
+
+// TestCorruptDescriptorRepair tests that a corrupt table descriptor can be
+// repaired to a point where it can subsequently be dropped.
+func TestCorruptDescriptorRepair(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Set up the test database with a parent table with a dangling foreign key
+	// back-reference.
+	tdb.Exec(t, `CREATE DATABASE testdb`)
+	tdb.Exec(t, `CREATE TABLE testdb.parent (k INT PRIMARY KEY, v STRING)`)
+	tdb.Exec(t, `CREATE TABLE testdb.child (k INT NOT NULL, FOREIGN KEY (k) REFERENCES testdb.parent (k))`)
+	tdb.Exec(t, `SELECT crdb_internal.unsafe_delete_descriptor(id) FROM system.namespace WHERE name = 'child'`)
+	tdb.Exec(t, `SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id) FROM system.namespace WHERE name = 'child'`)
+
+	// Dropping the table should fail, because the table descriptor will fail
+	// the validation checks when being read from storage.
+	tdb.ExpectErr(t, "invalid foreign key backreference", `DROP TABLE testdb.parent`)
+
+	const parentVersion = `SELECT
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', sd.descriptor, false)->'table'->>'version'
+			FROM
+				system.descriptor AS sd INNER JOIN system.namespace AS sn ON sd.id = sn.id
+			WHERE
+				sn.name = 'parent'`
+	tdb.CheckQueryResults(t, parentVersion, [][]string{{"2"}})
+
+	// Repair query, with the following args:
+	// - $1: new version counter value
+	// - $2: force flag for unsafe_upsert_descriptor
+	const repair = `
+WITH
+	to_json
+		AS (
+			SELECT
+				sd.id,
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', sd.descriptor, false) AS d
+			FROM
+				system.descriptor AS sd INNER JOIN system.namespace AS sn ON sd.id = sn.id
+			WHERE
+				sn.name = 'parent'
+		),
+	modified
+		AS (
+			SELECT
+				id,
+				json_set(
+					json_set(
+						json_set(d, ARRAY['table', 'inboundFks'], '[]'::JSONB),
+						ARRAY['table', 'version'],
+						$1
+					),
+					ARRAY['table', 'modificationTime'],
+					json_build_object(
+						'wallTime',
+						((extract('epoch', now()) * 1000000)::INT8 * 1000)::STRING
+					)
+				)
+					AS d
+			FROM
+				to_json
+		)
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		id,
+		crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', d),
+		$2
+	)
+FROM
+	modified;
+`
+	// Repairing without the force flag should fail.
+	tdb.ExpectErr(t, "invalid foreign key backreference", repair, 3, false)
+
+	// Repairing with the force flag should succeed regardless of the supplied
+	// version.
+	tdb.Exec(t, repair, 12345, true)
+	tdb.Exec(t, `DROP TABLE testdb.parent`)
+}

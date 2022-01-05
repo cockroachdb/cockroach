@@ -588,7 +588,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			`referenced database ID 500: descriptor not found`,
+			`referenced database ID 500: referenced descriptor not found`,
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,
@@ -600,7 +600,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			`referenced schema ID 500: descriptor not found`,
+			`referenced schema ID 500: referenced descriptor not found`,
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,
@@ -612,7 +612,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			`arrayTypeID 500 does not exist for "ENUM": referenced type ID 500: descriptor not found`,
+			`arrayTypeID 500 does not exist for "ENUM": referenced type ID 500: referenced descriptor not found`,
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,
@@ -624,7 +624,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			`arrayTypeID 500 does not exist for "MULTIREGION_ENUM": referenced type ID 500: descriptor not found`,
+			`arrayTypeID 500 does not exist for "MULTIREGION_ENUM": referenced type ID 500: referenced descriptor not found`,
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,
@@ -645,7 +645,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"referenced table ID 500: descriptor not found",
+			"referenced table ID 500: referenced descriptor not found",
 			descpb.TypeDescriptor{
 				Name:                     "t",
 				ID:                       typeDescID,
@@ -658,7 +658,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"referenced table ID 500: descriptor not found",
+			"referenced table ID 500: referenced descriptor not found",
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,
