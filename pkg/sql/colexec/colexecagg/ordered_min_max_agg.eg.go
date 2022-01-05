@@ -363,10 +363,11 @@ func (a *minBoolOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -617,10 +618,11 @@ func (a *minBytesOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	oldCurAggSize := len(a.curAgg)
 	// Release the reference to curAgg eagerly. We can't do this for the window
@@ -880,10 +882,11 @@ func (a *minDecimalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1178,10 +1181,11 @@ func (a *minInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1476,10 +1480,11 @@ func (a *minInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1774,10 +1779,11 @@ func (a *minInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2104,10 +2110,11 @@ func (a *minFloat64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2386,10 +2393,11 @@ func (a *minTimestampOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2640,10 +2648,11 @@ func (a *minIntervalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -3012,10 +3021,11 @@ func (a *minJSONOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
@@ -3297,10 +3307,11 @@ func (a *minDatumOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 
 	var oldCurAggSize uintptr
@@ -3669,10 +3680,11 @@ func (a *maxBoolOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -3923,10 +3935,11 @@ func (a *maxBytesOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	oldCurAggSize := len(a.curAgg)
 	// Release the reference to curAgg eagerly. We can't do this for the window
@@ -4186,10 +4199,11 @@ func (a *maxDecimalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -4484,10 +4498,11 @@ func (a *maxInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -4782,10 +4797,11 @@ func (a *maxInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -5080,10 +5096,11 @@ func (a *maxInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -5410,10 +5427,11 @@ func (a *maxFloat64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -5692,10 +5710,11 @@ func (a *maxTimestampOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -5946,10 +5965,11 @@ func (a *maxIntervalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -6318,10 +6338,11 @@ func (a *maxJSONOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
@@ -6603,10 +6624,11 @@ func (a *maxDatumOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 
 	var oldCurAggSize uintptr

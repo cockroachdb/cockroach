@@ -101,7 +101,7 @@ var aggTypesWithPartial = []aggType{
 	},
 }
 
-var aggTypes = aggTypesWithPartial[:1]
+var aggTypes = aggTypesWithPartial[:2]
 
 func (tc *aggregatorTestCase) init() error {
 	if tc.convToDecimal {

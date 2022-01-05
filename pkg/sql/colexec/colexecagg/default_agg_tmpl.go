@@ -56,14 +56,6 @@ type default_AGGKINDAgg struct {
 
 var _ AggregateFunc = &default_AGGKINDAgg{}
 
-func (a *default_AGGKINDAgg) SetOutput(vec coldata.Vec) {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.SetOutput(vec)
-	// {{else}}
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	// {{end}}
-}
-
 func (a *default_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {

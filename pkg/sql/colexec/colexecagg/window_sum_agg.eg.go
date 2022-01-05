@@ -73,8 +73,6 @@ type sumInt16WindowAgg struct {
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
-	// col points to the output vector we are updating.
-	col []apd.Decimal
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -82,11 +80,6 @@ type sumInt16WindowAgg struct {
 }
 
 var _ AggregateFunc = &sumInt16WindowAgg{}
-
-func (a *sumInt16WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *sumInt16WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -154,12 +147,11 @@ func (a *sumInt16WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
+	col := a.vec.Decimal()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx].Set(&a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -255,8 +247,6 @@ type sumInt32WindowAgg struct {
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
-	// col points to the output vector we are updating.
-	col []apd.Decimal
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -264,11 +254,6 @@ type sumInt32WindowAgg struct {
 }
 
 var _ AggregateFunc = &sumInt32WindowAgg{}
-
-func (a *sumInt32WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *sumInt32WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -336,12 +321,11 @@ func (a *sumInt32WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
+	col := a.vec.Decimal()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx].Set(&a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -437,8 +421,6 @@ type sumInt64WindowAgg struct {
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
-	// col points to the output vector we are updating.
-	col []apd.Decimal
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -446,11 +428,6 @@ type sumInt64WindowAgg struct {
 }
 
 var _ AggregateFunc = &sumInt64WindowAgg{}
-
-func (a *sumInt64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *sumInt64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -518,12 +495,11 @@ func (a *sumInt64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
+	col := a.vec.Decimal()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx].Set(&a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -619,19 +595,12 @@ type sumDecimalWindowAgg struct {
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
-	// col points to the output vector we are updating.
-	col []apd.Decimal
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumDecimalWindowAgg{}
-
-func (a *sumDecimalWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *sumDecimalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -694,12 +663,11 @@ func (a *sumDecimalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
+	col := a.vec.Decimal()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx].Set(&a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -790,19 +758,12 @@ type sumFloat64WindowAgg struct {
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg float64
-	// col points to the output vector we are updating.
-	col []float64
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumFloat64WindowAgg{}
-
-func (a *sumFloat64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Float64()
-}
 
 func (a *sumFloat64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -859,12 +820,11 @@ func (a *sumFloat64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
+	col := a.vec.Float64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -949,19 +909,12 @@ type sumIntervalWindowAgg struct {
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg duration.Duration
-	// col points to the output vector we are updating.
-	col []duration.Duration
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumIntervalWindowAgg{}
-
-func (a *sumIntervalWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Interval()
-}
 
 func (a *sumIntervalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1008,12 +961,11 @@ func (a *sumIntervalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
+	col := a.vec.Interval()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
