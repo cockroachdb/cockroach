@@ -32,6 +32,7 @@ import {
 import { selectStatement } from "./statementDetails";
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
+import { util } from "@cockroachlabs/cluster-ui";
 
 const INTERNAL_STATEMENT_PREFIX = "$ internal";
 
@@ -53,7 +54,6 @@ describe("selectStatements", () => {
     const props = makeEmptyRouteProps();
 
     const result = selectStatements(state, props);
-
     assert.equal(result.length, 3);
 
     const expectedFingerprints = [stmtA, stmtB, stmtC].map(
@@ -276,8 +276,9 @@ describe("selectStatement", () => {
     const stmtB = makeFingerprint(2, "foobar");
     const stmtC = makeFingerprint(3, "another");
     const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
-    const props = makeRoutePropsWithStatement(stmtA.key.key_data.query);
 
+    const stmtAFingerprintID = stmtA.id.toString();
+    const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
@@ -297,8 +298,8 @@ describe("selectStatement", () => {
       .add(stmtB.stats.count.add(stmtC.stats.count))
       .toNumber();
     const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
-    const props = makeRoutePropsWithStatement(stmtA.key.key_data.query);
-
+    const stmtAFingerprintID = stmtA.id.toString();
+    const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
@@ -323,8 +324,8 @@ describe("selectStatement", () => {
       .add(stmtC.stats.count)
       .toNumber();
     const state = makeStateWithStatements([stmtA, stmtB, stmtC]);
-    const props = makeRoutePropsWithStatement(stmtA.key.key_data.query);
-
+    const stmtAFingerprintID = stmtA.id.toString();
+    const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
@@ -364,8 +365,8 @@ describe("selectStatement", () => {
       stmtG,
       stmtH,
     ]);
-    const props = makeRoutePropsWithStatement(stmtA.key.key_data.query);
-
+    const stmtAFingerprintID = stmtA.id.toString();
+    const props = makeRoutePropsWithStatement(stmtAFingerprintID);
     const result = selectStatement(state, props);
 
     assert.equal(result.statement, stmtA.key.key_data.query);
@@ -384,10 +385,8 @@ describe("selectStatement", () => {
       makeFingerprint(2, "bar"),
       makeFingerprint(3, "baz"),
     ]);
-    const props = makeRoutePropsWithStatementAndApp(
-      stmtA.key.key_data.query,
-      "foo",
-    );
+    const stmtAFingerprintID = stmtA.id.toString();
+    const props = makeRoutePropsWithStatementAndApp(stmtAFingerprintID, "foo");
 
     const result = selectStatement(state, props);
 
@@ -407,8 +406,9 @@ describe("selectStatement", () => {
       makeFingerprint(2, "bar"),
       makeFingerprint(3, "baz"),
     ]);
+    const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatementAndApp(
-      stmtA.key.key_data.query,
+      stmtAFingerprintID,
       "(unset)",
     );
 
@@ -430,8 +430,9 @@ describe("selectStatement", () => {
       makeFingerprint(2, "bar"),
       makeFingerprint(3, "baz"),
     ]);
+    const stmtAFingerprintID = stmtA.id.toString();
     const props = makeRoutePropsWithStatementAndApp(
-      stmtA.key.key_data.query,
+      stmtAFingerprintID,
       "$ internal",
     );
 
@@ -467,6 +468,7 @@ function makeFingerprint(
       },
       node_id: nodeId,
     },
+    id: Long.fromNumber(id),
     stats: makeStats(),
   };
 }
