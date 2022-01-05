@@ -1068,6 +1068,12 @@ message HotRangesResponse {
     // on this range.
     // API: PUBLIC ALPHA
     double queries_per_second = 2;
+    // LeaseholderNodeID indicates on Node ID that contains replica that is leaseholder
+    int32 leaseholder_node_id = 3 [
+      (gogoproto.customname) = "LeaseholderNodeID",
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
   }
 
   // StoreResponse contains the part of a hot ranges report that
@@ -1118,26 +1124,40 @@ message HotRangesResponse {
 
 message HotRangesResponseV2 {
   message HotRange {
+    // range_id indicates Range ID that's identified as hot range
     int32 range_id = 1 [
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
       (gogoproto.customname) = "RangeID"
     ];
+    // node_id indicates on node that contains current hot range
     int32 node_id = 2 [
       (gogoproto.customname) = "NodeID",
       (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
     ];
+    // qps (queries per second) shows the amount of queries that interact with current range
     double qps = 3 [
       (gogoproto.customname) = "QPS"
     ];
+    // table_name indicates table which data is stored in this hot range
     string table_name = 4;
+    // database_name indicates on database that has current hot range
     string database_name = 5;
+    // index_name indicates the index name for current range
     string index_name = 6;
+    // replica_node_ids specifies the list of node ids that contain replicas with current hot range
     repeated int32 replica_node_ids = 7 [
       (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
     ];
+    // leaseholder_node_id indicates on Node ID that contains replica that is a leaseholder
+    int32 leaseholder_node_id = 8 [
+      (gogoproto.customname) = "LeaseholderNodeID",
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
   }
+  // ranges contain list of hot ranges info that has highest number of QPS
   repeated HotRange ranges = 1;
 }
 
@@ -1728,7 +1748,7 @@ service Status {
     };
   }
 
-  rpc HotRanges2(HotRangesRequest) returns (HotRangesResponseV2) {
+  rpc HotRangesV2(HotRangesRequest) returns (HotRangesResponseV2) {
     option (google.api.http) = {
       get : "/_status/v2/hotranges"
     };

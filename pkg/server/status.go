@@ -2035,7 +2035,7 @@ func (s *statusServer) HotRanges(
 	return response, nil
 }
 
-func (s *statusServer) HotRanges2(
+func (s *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
 	resp, err := s.HotRanges(ctx, req)
@@ -2103,13 +2103,14 @@ func (s *statusServer) HotRanges2(
 					replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
 				}
 				ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
-					RangeID:        r.Desc.RangeID,
-					NodeID:         nodeID,
-					QPS:            r.QueriesPerSecond,
-					TableName:      tableName,
-					DatabaseName:   dbName,
-					IndexName:      indexName,
-					ReplicaNodeIds: replicaNodeIDs,
+					RangeID:           r.Desc.RangeID,
+					NodeID:            nodeID,
+					QPS:               r.QueriesPerSecond,
+					TableName:         tableName,
+					DatabaseName:      dbName,
+					IndexName:         indexName,
+					ReplicaNodeIds:    replicaNodeIDs,
+					LeaseholderNodeID: r.LeaseholderNodeID,
 				})
 			}
 		}
@@ -2127,6 +2128,10 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 			HotRanges: make([]serverpb.HotRangesResponse_HotRange, len(ranges)),
 		}
 		for i, r := range ranges {
+			replica, err := store.GetReplica(r.Desc.GetRangeID())
+			if err == nil {
+				storeResp.HotRanges[i].LeaseholderNodeID = replica.State(ctx).Lease.Replica.NodeID
+			}
 			storeResp.HotRanges[i].Desc = *r.Desc
 			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
 		}
