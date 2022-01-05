@@ -137,9 +137,7 @@ func (r *Replica) shouldApplyCommand(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
 	)
 	// Consider testing-only filters.
-	feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter
-	filter := r.store.cfg.TestingKnobs.TestingApplyFilter
-	if filter != nil || feFilter != nil {
+	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
@@ -156,8 +154,8 @@ func (r *Replica) shouldApplyCommand(
 			if cmd.proposalRetry == 0 {
 				cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
 			}
-		} else if feFilter != nil {
-			newPropRetry, newForcedErr := feFilter(args)
+		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
+			newPropRetry, newForcedErr := filter(args)
 			cmd.forcedErr = newForcedErr
 			if cmd.proposalRetry == 0 {
 				cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
