@@ -142,7 +142,7 @@ function NodeIDSelector(props: {
   );
 }
 
-const NodeIDSelectorConnected = connect(
+export const NodeIDSelectorConnected = connect(
   (state: AdminUIState) => {
     return {
       nodeIDs: nodeIDsSelector(state),
