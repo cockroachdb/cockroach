@@ -3089,13 +3089,14 @@ target node(s) selected in a HotRangesRequest.
 | ----- | ---- | ----- | ----------- | -------------- |
 | desc | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.HotRangesResponse-cockroach.roachpb.RangeDescriptor) |  | Desc is the descriptor of the range for which the report was produced.<br><br>TODO(knz): This field should be removed. See: https://github.com/cockroachdb/cockroach/issues/53212 | [reserved](#support-status) |
 | queries_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | QueriesPerSecond is the recent number of queries per second on this range. | [alpha](#support-status) |
+| leaseholder_node_id | [int32](#cockroach.server.serverpb.HotRangesResponse-int32) |  | LeaseholderNodeID indicates on Node ID that contains replica that is leaseholder | [reserved](#support-status) |
 
 
 
 
 
 
-## HotRanges2
+## HotRangesV2
 
 `GET /_status/v2/hotranges`
 
@@ -3132,7 +3133,7 @@ of ranges currently considered “hot” by the node(s).
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| ranges | [HotRangesResponseV2.HotRange](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.HotRange) | repeated |  | [reserved](#support-status) |
+| ranges | [HotRangesResponseV2.HotRange](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.HotRange) | repeated | ranges contain list of hot ranges info that has highest number of QPS | [reserved](#support-status) |
 
 
 
@@ -3146,13 +3147,14 @@ of ranges currently considered “hot” by the node(s).
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| range_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  |  | [reserved](#support-status) |
-| node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  |  | [reserved](#support-status) |
-| qps | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  |  | [reserved](#support-status) |
-| table_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  |  | [reserved](#support-status) |
-| database_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  |  | [reserved](#support-status) |
-| index_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  |  | [reserved](#support-status) |
-| replica_node_ids | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) | repeated |  | [reserved](#support-status) |
+| range_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | range_id indicates Range ID that's identified as hot range | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | node_id indicates on node that contains current hot range | [reserved](#support-status) |
+| qps | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | qps (queries per second) shows the amount of queries that interact with current range | [reserved](#support-status) |
+| table_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | table_name indicates table which data is stored in this hot range | [reserved](#support-status) |
+| database_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | database_name indicates on database that has current hot range | [reserved](#support-status) |
+| index_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | index_name indicates the index name for current range | [reserved](#support-status) |
+| replica_node_ids | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) | repeated | replica_node_ids specifies the list of node ids that contain replicas with current hot range | [reserved](#support-status) |
+| leaseholder_node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | leaseholder_node_id indicates on Node ID that contains replica that is a leaseholder | [reserved](#support-status) |
 
 
 
