@@ -145,7 +145,7 @@ func (evalCtx *extendedEvalContext) QueueJob(
 	if err != nil {
 		return nil, err
 	}
-	*evalCtx.Jobs = append(*evalCtx.Jobs, jobID)
+	evalCtx.Jobs.add(jobID)
 	return job, nil
 }
 

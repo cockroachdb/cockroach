@@ -4632,12 +4632,37 @@ value if you rely on the HLC for accuracy.`,
 				if sTenID <= 0 {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
 				}
-				if err := ctx.Tenant.DestroyTenant(ctx.Context, uint64(sTenID)); err != nil {
+				if err := ctx.Tenant.DestroyTenant(
+					ctx.Context, uint64(sTenID), false, /* synchronous */
+				); err != nil {
 					return nil, err
 				}
 				return args[0], nil
 			},
 			Info:       "Destroys a tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"synchronous", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				sTenID := int64(tree.MustBeDInt(args[0]))
+				if sTenID <= 0 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
+				}
+				synchronous := tree.MustBeDBool(args[1])
+				if err := ctx.Tenant.DestroyTenant(
+					ctx.Context, uint64(sTenID), bool(synchronous),
+				); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info: "Destroys a tenant with the provided ID. Must be run by the System tenant. " +
+				"Optionally, synchronously destroy the data",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

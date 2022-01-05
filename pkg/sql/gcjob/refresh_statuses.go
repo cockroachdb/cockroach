@@ -284,6 +284,9 @@ func refreshTenant(
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired bool, deadline time.Time) {
+	if progress.Tenant.Status != jobspb.SchemaChangeGCProgress_WAITING_FOR_GC {
+		return true, time.Time{}
+	}
 	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	tenID := details.Tenant.ID
 	cfg := execCfg.SystemConfig.GetSystemConfig()

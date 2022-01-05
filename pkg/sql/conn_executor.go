@@ -2667,7 +2667,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
-			ex.extraTxnState.jobs); err != nil {
+			ex.extraTxnState.jobs,
+		); err != nil {
 			handleErr(err)
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
