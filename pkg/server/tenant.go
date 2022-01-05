@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -212,7 +213,13 @@ func startTenantInternal(
 	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
 	adminAuthzCheck := &adminPrivilegeChecker{ie: s.execCfg.InternalExecutor}
 
-	httpServer := newHTTPServer(baseCfg)
+	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
+		return roachpb.NodeID(0), false, errors.New("tenants cannot proxy to KV Nodes")
+	}
+	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, error) {
+		return nil, errors.New("tenants cannot proxy to KV Nodes")
+	}
+	httpServer := newHTTPServer(baseCfg, args.rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 
 	httpServer.handleHealth(gwMux)
 
