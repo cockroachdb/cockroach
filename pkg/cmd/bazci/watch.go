@@ -195,15 +195,7 @@ type xmlMessage struct {
 // results.)
 func (w watcher) stageBinaryArtifacts() error {
 	for _, bin := range w.info.goBinaries {
-		// Convert a target like `//pkg/cmd/cockroach-short` to the
-		// relative path atop bazel-bin where that file can be found --
-		// in this example, `pkg/cmd/cockroach-short/cockroach-short_/cockroach-short.
-		head := strings.ReplaceAll(strings.TrimPrefix(bin, "//"), ":", "/")
-		components := strings.Split(bin, ":")
-		relBinPath := path.Join(head+"_", components[len(components)-1])
-		if usingCrossWindowsConfig() {
-			relBinPath = relBinPath + ".exe"
-		}
+		relBinPath := bazelutil.OutputOfBinaryRule(bin, usingCrossWindowsConfig())
 		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0755, finalizePhase,
 			copyContentTo)
 		if err != nil {
