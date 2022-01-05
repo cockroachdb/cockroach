@@ -2990,6 +2990,9 @@ type StatementCounters struct {
 	ReleaseRestartSavepointCount    telemetry.CounterWithMetric
 	RollbackToRestartSavepointCount telemetry.CounterWithMetric
 
+	// CopyCount counts all COPY statements.
+	CopyCount telemetry.CounterWithMetric
+
 	// DdlCount counts all statements whose StatementReturnType is DDL.
 	DdlCount telemetry.CounterWithMetric
 
@@ -3027,6 +3030,8 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaDeleteStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlStarted, internal)),
+		CopyCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaCopyStarted, internal)),
 		MiscCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaMiscStarted, internal)),
 		QueryCount: telemetry.NewCounterWithMetric(
@@ -3064,6 +3069,8 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaDeleteExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlExecuted, internal)),
+		CopyCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaCopyExecuted, internal)),
 		MiscCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaMiscExecuted, internal)),
 		QueryCount: telemetry.NewCounterWithMetric(
@@ -3112,6 +3119,8 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 		} else {
 			sc.RollbackToSavepointCount.Inc()
 		}
+	case *tree.CopyFrom:
+		sc.CopyCount.Inc()
 	default:
 		if tree.CanModifySchema(stmt) {
 			sc.DdlCount.Inc()
