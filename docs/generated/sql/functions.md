@@ -2565,6 +2565,12 @@ The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="pg_collation_for"></a><code>pg_collation_for(str: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the collation of the argument</p>
 </span></td></tr>
+<tr><td><a name="prettify_statement"></a><code>prettify_statement(statement: <a href="string.html">string</a>, line_width: <a href="int.html">int</a>, align_mode: <a href="int.html">int</a>, case_mode: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Prettifies a statement using a user-configured pretty-printing config.
+Align mode values range from 0 - 3, representing no, partial, full, and extra alignment respectively.
+Case mode values range between 0 - 1, representing lower casing and upper casing respectively.</p>
+</span></td></tr>
+<tr><td><a name="prettify_statement"></a><code>prettify_statement(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Prettifies a statement using a the default pretty-printing config.</p>
+</span></td></tr>
 <tr><td><a name="quote_ident"></a><code>quote_ident(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Return <code>val</code> suitably quoted to serve as identifier in a SQL statement.</p>
 </span></td></tr>
 <tr><td><a name="quote_literal"></a><code>quote_literal(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Return <code>val</code> suitably quoted to serve as string literal in a SQL statement.</p>
