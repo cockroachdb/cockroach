@@ -161,7 +161,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, scratch[:0])
 		}
-		vecs.DecimalCols[colIdx][rowIdx] = d
+		vecs.DecimalCols[colIdx][rowIdx].Set(&d)
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
 		if dir == descpb.IndexDescriptor_ASC {
 			// We ask for the deep copy to be made so that scratch doesn't

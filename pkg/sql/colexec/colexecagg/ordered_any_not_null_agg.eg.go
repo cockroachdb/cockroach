@@ -545,7 +545,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col.Set(a.curIdx, a.curAgg)
+								a.col.Set(a.curIdx, &a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -560,7 +560,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						// current value is non-null, then we can pick the current value to be
 						// the output.
 						val := col.Get(i)
-						a.curAgg.Set(&val)
+						a.curAgg.Set(val)
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
@@ -574,7 +574,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col.Set(a.curIdx, a.curAgg)
+								a.col.Set(a.curIdx, &a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -589,7 +589,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						// current value is non-null, then we can pick the current value to be
 						// the output.
 						val := col.Get(i)
-						a.curAgg.Set(&val)
+						a.curAgg.Set(val)
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
@@ -605,7 +605,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col.Set(a.curIdx, a.curAgg)
+								a.col.Set(a.curIdx, &a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -620,7 +620,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						// current value is non-null, then we can pick the current value to be
 						// the output.
 						val := col.Get(i)
-						a.curAgg.Set(&val)
+						a.curAgg.Set(val)
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
@@ -633,7 +633,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col.Set(a.curIdx, a.curAgg)
+								a.col.Set(a.curIdx, &a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -648,7 +648,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 						// current value is non-null, then we can pick the current value to be
 						// the output.
 						val := col.Get(i)
-						a.curAgg.Set(&val)
+						a.curAgg.Set(val)
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
@@ -673,7 +673,7 @@ func (a *anyNotNullDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 

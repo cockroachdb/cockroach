@@ -27,7 +27,7 @@ func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 		"_AGG_TITLE", "{{.AggTitle}}",
 		"_AGG", "{{$agg}}",
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
-		"_GOTYPE", "{{.GoType}}",
+		"_GOTYPE", goTypeWithDecimalValue(".VecMethod", ".GoType"),
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)

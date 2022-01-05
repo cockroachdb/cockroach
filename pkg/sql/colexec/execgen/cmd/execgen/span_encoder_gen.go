@@ -125,7 +125,6 @@ func (info spanEncoderTmplInfo) AssignSpanEncoding(appendTo, valToEncode string)
 		return assignEncoding(funcName, valToEncode)
 	case types.DecimalFamily:
 		funcName := "Decimal"
-		valToEncode = "&" + valToEncode
 		return assignEncoding(funcName, valToEncode)
 	case types.BytesFamily:
 		funcName := "Bytes"

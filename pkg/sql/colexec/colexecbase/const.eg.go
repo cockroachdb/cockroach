@@ -73,7 +73,7 @@ func NewConstOp(
 				OneInputHelper: colexecop.MakeOneInputHelper(input),
 				allocator:      allocator,
 				outputIdx:      outputIdx,
-				constVal:       constVal.(apd.Decimal),
+				constVal:       constVal.(*apd.Decimal),
 			}, nil
 		}
 	case types.IntFamily:
@@ -252,7 +252,7 @@ type constDecimalOp struct {
 
 	allocator *colmem.Allocator
 	outputIdx int
-	constVal  apd.Decimal
+	constVal  *apd.Decimal
 }
 
 func (c constDecimalOp) Next() coldata.Batch {

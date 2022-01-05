@@ -44,6 +44,11 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 		numArgs:             2,
 		replaceWith:         "SetVariableSize",
 	},
+	{
+		templatePlaceholder: "execgen.SET",
+		numArgs:             3,
+		replaceWith:         "Set",
+	},
 }
 
 func init() {

@@ -1012,7 +1012,7 @@ func (ht *HashTable) checkCol(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1062,7 +1062,7 @@ func (ht *HashTable) checkCol(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1114,7 +1114,7 @@ func (ht *HashTable) checkCol(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1163,7 +1163,7 @@ func (ht *HashTable) checkCol(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1218,7 +1218,7 @@ func (ht *HashTable) checkCol(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1268,7 +1268,7 @@ func (ht *HashTable) checkCol(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1320,7 +1320,7 @@ func (ht *HashTable) checkCol(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1369,7 +1369,7 @@ func (ht *HashTable) checkCol(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 

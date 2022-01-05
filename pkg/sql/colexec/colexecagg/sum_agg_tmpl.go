@@ -213,7 +213,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		execgen.SET(col, outputIdx, a.curAgg)
 	}
 }
 
@@ -221,7 +221,8 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Reset() {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Reset()
 	// {{end}}
-	a.curAgg = zero_RET_TYPEValue
+	zero := zero_RET_TYPEValue
+	execgen.COPYVAL(a.curAgg, zero)
 	a.numNonNull = 0
 }
 
@@ -300,14 +301,15 @@ func _ACCUMULATE_SUM(
 		if !a.isFirstGroup {
 			// If we encounter a new group, and we haven't found any non-nulls for the
 			// current group, the output for this group should be null.
+			// {{with .Global}}
 			if a.numNonNull == 0 {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				a.col.Set(a.curIdx, a.curAgg)
+				execgen.SET(a.col, a.curIdx, a.curAgg)
 			}
 			a.curIdx++
-			// {{with .Global}}
-			a.curAgg = zero_RET_TYPEValue
+			zero := zero_RET_TYPEValue
+			execgen.COPYVAL(a.curAgg, zero)
 			// {{end}}
 
 			// {{/*
@@ -333,7 +335,11 @@ func _ACCUMULATE_SUM(
 		//gcassert:bce
 		// {{end}}
 		v := col.Get(i)
+		// {{if eq .Global.RetVecMethod "Decimal"}}
+		_ASSIGN_ADD(&a.curAgg, &a.curAgg, v, _, _, col)
+		// {{else}}
 		_ASSIGN_ADD(a.curAgg, a.curAgg, v, _, _, col)
+		// {{end}}
 		a.numNonNull++
 	}
 	// {{end}}
@@ -355,7 +361,11 @@ func _REMOVE_ROW(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _H
 	if !isNull {
 		//gcassert:bce
 		v := col.Get(i)
+		// {{if eq .Global.RetVecMethod "Decimal"}}
+		_ASSIGN_SUBTRACT(&a.curAgg, &a.curAgg, v, _, _, col)
+		// {{else}}
 		_ASSIGN_SUBTRACT(a.curAgg, a.curAgg, v, _, _, col)
+		// {{end}}
 		a.numNonNull--
 	}
 	// {{end}}

@@ -131,7 +131,8 @@ func (a *sumIntInt16WindowAgg) Flush(outputIdx int) {
 }
 
 func (a *sumIntInt16WindowAgg) Reset() {
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
@@ -294,7 +295,8 @@ func (a *sumIntInt32WindowAgg) Flush(outputIdx int) {
 }
 
 func (a *sumIntInt32WindowAgg) Reset() {
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
@@ -457,7 +459,8 @@ func (a *sumIntInt64WindowAgg) Flush(outputIdx int) {
 }
 
 func (a *sumIntInt64WindowAgg) Reset() {
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 

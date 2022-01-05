@@ -46,8 +46,6 @@ func (s sumAggTmplInfo) AssignAdd(
 	return s.sumOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
 
-var _ = sumAggTmplInfo{}.AssignAdd
-
 func (s sumAggTmplInfo) AssignSubtract(
 	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
 ) string {
@@ -60,7 +58,20 @@ func (s sumAggTmplInfo) AssignSubtract(
 	return s.sumOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
 
-var _ = sumAggTmplInfo{}.AssignSubtract
+func (s sumAggTmplInfo) CopyVal(dest, src string) string {
+	return s.aggTmplInfoBase.CopyVal(dest, src)
+}
+
+func (s sumAggTmplInfo) Set(targetVec, targetIdx, value string) string {
+	return set(s.canonicalTypeFamily, targetVec, targetIdx, value)
+}
+
+var (
+	_ = sumAggTmplInfo{}.AssignAdd
+	_ = sumAggTmplInfo{}.AssignSubtract
+	_ = sumAggTmplInfo{}.CopyVal
+	_ = sumAggTmplInfo{}.Set
+)
 
 // avgAggTypeTmplInfo is similar to lastArgTypeOverload and provides a way to
 // see the type family of the overload. This is the top level of data passed to
@@ -117,7 +128,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_SUMKIND", "{{.SumKind}}",
 		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
-		"_RET_GOTYPE", `{{.RetGoType}}`,
+		"_RET_GOTYPE", goTypeWithDecimalValue(".RetVecMethod", ".RetGoType"),
 		"_RET_TYPE", "{{.RetVecMethod}}",
 		"_TYPE", "{{.InputVecMethod}}",
 		"TemplateType", "{{.InputVecMethod}}",

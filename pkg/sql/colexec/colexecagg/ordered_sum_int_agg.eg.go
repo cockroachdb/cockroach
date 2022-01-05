@@ -96,7 +96,8 @@ func (a *sumIntInt16OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 							a.numNonNull = 0
 						}
@@ -134,7 +135,8 @@ func (a *sumIntInt16OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 						}
 						a.isFirstGroup = false
@@ -173,7 +175,8 @@ func (a *sumIntInt16OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 							a.numNonNull = 0
 						}
@@ -209,7 +212,8 @@ func (a *sumIntInt16OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 						}
 						a.isFirstGroup = false
@@ -259,7 +263,8 @@ func (a *sumIntInt16OrderedAgg) Flush(outputIdx int) {
 
 func (a *sumIntInt16OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
@@ -331,7 +336,8 @@ func (a *sumIntInt32OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 							a.numNonNull = 0
 						}
@@ -369,7 +375,8 @@ func (a *sumIntInt32OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 						}
 						a.isFirstGroup = false
@@ -408,7 +415,8 @@ func (a *sumIntInt32OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 							a.numNonNull = 0
 						}
@@ -444,7 +452,8 @@ func (a *sumIntInt32OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 						}
 						a.isFirstGroup = false
@@ -494,7 +503,8 @@ func (a *sumIntInt32OrderedAgg) Flush(outputIdx int) {
 
 func (a *sumIntInt32OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
@@ -566,7 +576,8 @@ func (a *sumIntInt64OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 							a.numNonNull = 0
 						}
@@ -604,7 +615,8 @@ func (a *sumIntInt64OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 						}
 						a.isFirstGroup = false
@@ -643,7 +655,8 @@ func (a *sumIntInt64OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 							a.numNonNull = 0
 						}
@@ -679,7 +692,8 @@ func (a *sumIntInt64OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
-							a.curAgg = zeroInt64Value
+							zero := zeroInt64Value
+							a.curAgg = zero
 
 						}
 						a.isFirstGroup = false
@@ -729,7 +743,8 @@ func (a *sumIntInt64OrderedAgg) Flush(outputIdx int) {
 
 func (a *sumIntInt64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 

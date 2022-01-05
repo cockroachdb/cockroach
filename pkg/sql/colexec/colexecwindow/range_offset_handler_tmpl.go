@@ -237,6 +237,10 @@ func (h *_OP_STRING) getIdx(ctx context.Context, currRow, lastIdx int) (idx int)
 		seekVal   _CMP_GOTYPE
 		cmpResult int
 	)
+	// {{if eq .VecMethod "Decimal"}}
+	var seekDec apd.Decimal
+	seekVal = &seekDec
+	// {{end}}
 	col := vec.TemplateType()
 	currRowVal := col.Get(vecIdx)
 	_VALUE_BY_OFFSET(seekVal, currRowVal, h.offset)

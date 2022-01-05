@@ -76,7 +76,7 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 		default:
 			return func(datum tree.Datum) interface{} {
 
-				return datum.(*tree.DDecimal).Decimal
+				return &datum.(*tree.DDecimal).Decimal
 			}
 		}
 	case types.DateFamily:

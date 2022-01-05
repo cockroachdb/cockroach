@@ -553,7 +553,9 @@ type partitionerDecimal struct {
 func (p partitionerDecimal) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
 ) {
-	var lastVal apd.Decimal
+	var lastVal *apd.Decimal
+	var lastValValue apd.Decimal
+	lastVal = &lastValValue
 	var lastValNull bool
 	var nulls *coldata.Nulls
 	if colVec.MaybeHasNulls() {
@@ -571,7 +573,7 @@ func (p partitionerDecimal) partitionWithOrder(
 			checkIdx := order[outputIdx]
 			{
 				var (
-					__retval_lastVal     apd.Decimal
+					__retval_lastVal     *apd.Decimal
 					__retval_lastValNull bool
 				)
 				{
@@ -599,7 +601,7 @@ func (p partitionerDecimal) partitionWithOrder(
 
 							{
 								var cmpResult int
-								cmpResult = tree.CompareDecimals(&v, &lastVal)
+								cmpResult = tree.CompareDecimals(v, lastVal)
 								unique = cmpResult != 0
 							}
 
@@ -621,14 +623,14 @@ func (p partitionerDecimal) partitionWithOrder(
 			//gcassert:bce
 			checkIdx := order[outputIdx]
 			{
-				var __retval_0 apd.Decimal
+				var __retval_0 *apd.Decimal
 				{
 					v := col.Get(checkIdx)
 					var unique bool
 
 					{
 						var cmpResult int
-						cmpResult = tree.CompareDecimals(&v, &lastVal)
+						cmpResult = tree.CompareDecimals(v, lastVal)
 						unique = cmpResult != 0
 					}
 
@@ -646,10 +648,12 @@ func (p partitionerDecimal) partitionWithOrder(
 
 func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n int) {
 	var (
-		lastVal     apd.Decimal
+		lastVal     *apd.Decimal
 		lastValNull bool
 		nulls       *coldata.Nulls
 	)
+	var lastValValue apd.Decimal
+	lastVal = &lastValValue
 	if colVec.MaybeHasNulls() {
 		nulls = colVec.Nulls()
 	}
@@ -662,7 +666,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 		for idx := 0; idx < n; idx++ {
 			{
 				var (
-					__retval_lastVal     apd.Decimal
+					__retval_lastVal     *apd.Decimal
 					__retval_lastValNull bool
 				)
 				{
@@ -695,7 +699,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 
 							{
 								var cmpResult int
-								cmpResult = tree.CompareDecimals(&v, &lastVal)
+								cmpResult = tree.CompareDecimals(v, lastVal)
 								unique = cmpResult != 0
 							}
 
@@ -715,7 +719,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 	} else {
 		for idx := 0; idx < n; idx++ {
 			{
-				var __retval_0 apd.Decimal
+				var __retval_0 *apd.Decimal
 				{
 					var (
 						checkIdx  int = idx
@@ -727,7 +731,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 
 					{
 						var cmpResult int
-						cmpResult = tree.CompareDecimals(&v, &lastVal)
+						cmpResult = tree.CompareDecimals(v, lastVal)
 						unique = cmpResult != 0
 					}
 

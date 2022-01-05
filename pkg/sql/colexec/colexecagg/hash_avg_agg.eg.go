@@ -161,7 +161,8 @@ func (a *avgInt16HashAgg) Flush(outputIdx int) {
 }
 
 func (a *avgInt16HashAgg) Reset() {
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -279,7 +280,8 @@ func (a *avgInt32HashAgg) Flush(outputIdx int) {
 }
 
 func (a *avgInt32HashAgg) Reset() {
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -397,7 +399,8 @@ func (a *avgInt64HashAgg) Flush(outputIdx int) {
 }
 
 func (a *avgInt64HashAgg) Reset() {
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -454,7 +457,7 @@ func (a *avgDecimalHashAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -473,7 +476,7 @@ func (a *avgDecimalHashAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -509,7 +512,8 @@ func (a *avgDecimalHashAgg) Flush(outputIdx int) {
 }
 
 func (a *avgDecimalHashAgg) Reset() {
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -611,7 +615,8 @@ func (a *avgFloat64HashAgg) Flush(outputIdx int) {
 }
 
 func (a *avgFloat64HashAgg) Reset() {
-	a.curSum = zeroFloat64Value
+	zero := zeroFloat64Value
+	a.curSum = zero
 	a.curCount = 0
 }
 
@@ -703,7 +708,8 @@ func (a *avgIntervalHashAgg) Flush(outputIdx int) {
 }
 
 func (a *avgIntervalHashAgg) Reset() {
-	a.curSum = zeroIntervalValue
+	zero := zeroIntervalValue
+	a.curSum = zero
 	a.curCount = 0
 }
 

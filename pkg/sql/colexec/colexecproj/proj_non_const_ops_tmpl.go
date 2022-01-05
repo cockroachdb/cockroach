@@ -201,7 +201,11 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool, _HAS_SEL bool) { // */}}
 		//gcassert:bce
 		// {{end}}
 		arg2 := col2.Get(i)
+		// {{if eq .Right.RetVecMethod "Decimal"}}
+		_ASSIGN(&projCol[i], arg1, arg2, projCol, col1, col2)
+		// {{else}}
 		_ASSIGN(projCol[i], arg1, arg2, projCol, col1, col2)
+		// {{end}}
 		// {{if _HAS_NULLS}}
 	}
 	// {{end}}

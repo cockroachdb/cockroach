@@ -474,7 +474,7 @@ if _err != nil {
 }
 `, src, dest)
 	case types.DecimalFamily:
-		return fmt.Sprintf("%s.Set(&%s)", dest, src)
+		return fmt.Sprintf("%s.Set(%s)", dest, src)
 	}
 	return fmt.Sprintf("%s = %s", dest, src)
 }
@@ -519,8 +519,10 @@ func (b *argWidthOverloadBase) AppendSlice(
     if __capToAllocate < 2 * __prevCap {
       __capToAllocate = 2 * __prevCap
     }
-    __new_slice := make([]apd.Decimal, __desiredCap, __capToAllocate)
-    copy(__new_slice, {{.Tgt}}[:{{.TgtIdx}}])
+    __new_slice := make(Decimals, __desiredCap, __capToAllocate)
+    for __i := range {{.Tgt}}[:{{.TgtIdx}}] {
+      __new_slice[__i].Set(&{{.Tgt}}[__i])
+    }
     {{.Tgt}} = __new_slice
   }
   __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
@@ -555,7 +557,7 @@ func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
 	case types.DecimalFamily:
 		return fmt.Sprintf(`%[1]s = append(%[1]s, apd.Decimal{})
-%[1]s[len(%[1]s)-1].Set(&%[2]s)`, target, v)
+%[1]s[len(%[1]s)-1].Set(%[2]s)`, target, v)
 	}
 	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
@@ -593,6 +595,19 @@ func (b *argWidthOverloadBase) SetVariableSize(target, value string) string {
 	return setVariableSize(b.CanonicalTypeFamily, target, value)
 }
 
+func set(canonicalTypeFamily types.Family, targetVec, targetIdx, value string) string {
+	switch canonicalTypeFamily {
+	case types.DecimalFamily:
+		return fmt.Sprintf("%s.Set(%s, &%s)", targetVec, targetIdx, value)
+	default:
+		return fmt.Sprintf("%s.Set(%s, %s)", targetVec, targetIdx, value)
+	}
+}
+
+func (b *argWidthOverloadBase) Set(targetVec, targetIdx, value string) string {
+	return set(b.CanonicalTypeFamily, targetVec, targetIdx, value)
+}
+
 // Remove unused warnings.
 var (
 	lawo = &lastArgWidthOverload{}
@@ -608,6 +623,7 @@ var (
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
 	_    = awob.SetVariableSize
+	_    = awob.Set
 	_    = awob.IsBytesLike
 )
 
@@ -891,7 +907,7 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 	case types.BytesFamily:
 		return "[]byte"
 	case types.DecimalFamily:
-		return "apd.Decimal"
+		return "*apd.Decimal"
 	case types.IntFamily:
 		switch width {
 		case 16:
@@ -921,4 +937,8 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 	}
 	// This code is unreachable, but the compiler cannot infer that.
 	return ""
+}
+
+func goTypeWithDecimalValue(vecMethodPath, goTypePath string) string {
+	return fmt.Sprintf(`{{if eq %s "Decimal"}}apd.Decimal{{else}}{{%s}}{{end}}`, vecMethodPath, goTypePath)
 }

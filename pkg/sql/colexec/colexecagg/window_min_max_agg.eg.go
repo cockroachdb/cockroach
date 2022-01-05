@@ -415,19 +415,19 @@ func (a *minDecimalWindowAgg) Compute(
 			if !isNull {
 				if a.numNonNull == 0 {
 					val := col.Get(i)
-					a.curAgg.Set(&val)
+					a.curAgg.Set(val)
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
 
 					{
 						var cmpResult int
-						cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
+						cmpResult = tree.CompareDecimals(candidate, &a.curAgg)
 						cmp = cmpResult < 0
 					}
 
 					if cmp {
-						a.curAgg.Set(&candidate)
+						a.curAgg.Set(candidate)
 					}
 				}
 				a.numNonNull++
@@ -441,19 +441,19 @@ func (a *minDecimalWindowAgg) Compute(
 			if !isNull {
 				if a.numNonNull == 0 {
 					val := col.Get(i)
-					a.curAgg.Set(&val)
+					a.curAgg.Set(val)
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
 
 					{
 						var cmpResult int
-						cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
+						cmpResult = tree.CompareDecimals(candidate, &a.curAgg)
 						cmp = cmpResult < 0
 					}
 
 					if cmp {
-						a.curAgg.Set(&candidate)
+						a.curAgg.Set(candidate)
 					}
 				}
 				a.numNonNull++
@@ -474,7 +474,7 @@ func (a *minDecimalWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
@@ -2108,19 +2108,19 @@ func (a *maxDecimalWindowAgg) Compute(
 			if !isNull {
 				if a.numNonNull == 0 {
 					val := col.Get(i)
-					a.curAgg.Set(&val)
+					a.curAgg.Set(val)
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
 
 					{
 						var cmpResult int
-						cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
+						cmpResult = tree.CompareDecimals(candidate, &a.curAgg)
 						cmp = cmpResult > 0
 					}
 
 					if cmp {
-						a.curAgg.Set(&candidate)
+						a.curAgg.Set(candidate)
 					}
 				}
 				a.numNonNull++
@@ -2134,19 +2134,19 @@ func (a *maxDecimalWindowAgg) Compute(
 			if !isNull {
 				if a.numNonNull == 0 {
 					val := col.Get(i)
-					a.curAgg.Set(&val)
+					a.curAgg.Set(val)
 				} else {
 					var cmp bool
 					candidate := col.Get(i)
 
 					{
 						var cmpResult int
-						cmpResult = tree.CompareDecimals(&candidate, &a.curAgg)
+						cmpResult = tree.CompareDecimals(candidate, &a.curAgg)
 						cmp = cmpResult > 0
 					}
 
 					if cmp {
-						a.curAgg.Set(&candidate)
+						a.curAgg.Set(candidate)
 					}
 				}
 				a.numNonNull++
@@ -2167,7 +2167,7 @@ func (a *maxDecimalWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 

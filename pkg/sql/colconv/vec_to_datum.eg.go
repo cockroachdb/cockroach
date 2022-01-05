@@ -449,7 +449,7 @@ func ColVecToDatumAndDeselect(
 						}
 						_ = true
 						v := typedCol.Get(srcIdx)
-						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
+						_converted := da.NewDDecimal(tree.DDecimal{Decimal: *v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						_converted.Coeff = big.Int{}
@@ -833,7 +833,7 @@ func ColVecToDatumAndDeselect(
 						}
 						_ = true
 						v := typedCol.Get(srcIdx)
-						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
+						_converted := da.NewDDecimal(tree.DDecimal{Decimal: *v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						_converted.Coeff = big.Int{}
@@ -1224,7 +1224,7 @@ func ColVecToDatum(
 							}
 							_ = true
 							v := typedCol.Get(srcIdx)
-							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
+							_converted := da.NewDDecimal(tree.DDecimal{Decimal: *v})
 							// Clear the Coeff so that the Set below allocates a new slice for the
 							// Coeff.abs field.
 							_converted.Coeff = big.Int{}
@@ -1642,7 +1642,7 @@ func ColVecToDatum(
 							_ = true
 							//gcassert:bce
 							v := typedCol.Get(srcIdx)
-							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
+							_converted := da.NewDDecimal(tree.DDecimal{Decimal: *v})
 							// Clear the Coeff so that the Set below allocates a new slice for the
 							// Coeff.abs field.
 							_converted.Coeff = big.Int{}
@@ -2028,7 +2028,7 @@ func ColVecToDatum(
 							}
 							_ = true
 							v := typedCol.Get(srcIdx)
-							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
+							_converted := da.NewDDecimal(tree.DDecimal{Decimal: *v})
 							// Clear the Coeff so that the Set below allocates a new slice for the
 							// Coeff.abs field.
 							_converted.Coeff = big.Int{}
@@ -2374,7 +2374,7 @@ func ColVecToDatum(
 							_ = true
 							//gcassert:bce
 							v := typedCol.Get(srcIdx)
-							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
+							_converted := da.NewDDecimal(tree.DDecimal{Decimal: *v})
 							// Clear the Coeff so that the Set below allocates a new slice for the
 							// Coeff.abs field.
 							_converted.Coeff = big.Int{}

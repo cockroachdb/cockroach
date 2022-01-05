@@ -358,7 +358,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 						// current value is non-null, then we can pick the current value to be
 						// the output.
 						val := col.Get(i)
-						a.curAgg.Set(&val)
+						a.curAgg.Set(val)
 						a.foundNonNullForCurrentGroup = true
 						// We have already seen non-null for the current group, and since there
 						// is at most a single group when performing hash aggregation, we can
@@ -376,7 +376,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 						// current value is non-null, then we can pick the current value to be
 						// the output.
 						val := col.Get(i)
-						a.curAgg.Set(&val)
+						a.curAgg.Set(val)
 						a.foundNonNullForCurrentGroup = true
 						// We have already seen non-null for the current group, and since there
 						// is at most a single group when performing hash aggregation, we can
@@ -401,7 +401,7 @@ func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 

@@ -227,7 +227,8 @@ func (a *avg_TYPE_AGGKINDAgg) Reset() {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.Reset()
 	// {{end}}
-	a.curSum = zero_RET_TYPEValue
+	zero := zero_RET_TYPEValue
+	execgen.COPYVAL(a.curSum, zero)
 	a.curCount = 0
 }
 
@@ -313,7 +314,8 @@ func _ACCUMULATE_AVG(
 			}
 			a.curIdx++
 			// {{with .Global}}
-			a.curSum = zero_RET_TYPEValue
+			zero := zero_RET_TYPEValue
+			execgen.COPYVAL(a.curSum, zero)
 			// {{end}}
 			a.curCount = 0
 		}
@@ -332,7 +334,11 @@ func _ACCUMULATE_AVG(
 		//gcassert:bce
 		// {{end}}
 		v := col.Get(i)
+		// {{if eq .Global.RetVecMethod "Decimal"}}
+		_ASSIGN_ADD(&a.curSum, &a.curSum, v, _, _, col)
+		// {{else}}
 		_ASSIGN_ADD(a.curSum, a.curSum, v, _, _, col)
+		// {{end}}
 		a.curCount++
 	}
 	// {{end}}
@@ -354,7 +360,11 @@ func _REMOVE_ROW(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULL
 	if !isNull {
 		//gcassert:bce
 		v := col.Get(i)
+		// {{if eq .Global.RetVecMethod "Decimal"}}
+		_ASSIGN_SUBTRACT(&a.curSum, &a.curSum, v, _, _, col)
+		// {{else}}
 		_ASSIGN_SUBTRACT(a.curSum, a.curSum, v, _, _, col)
+		// {{end}}
 		a.curCount--
 	}
 	// {{end}}

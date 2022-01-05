@@ -543,7 +543,7 @@ func (s *sortDecimalAscWithNullsOp) Less(i, j int) bool {
 
 	{
 		var cmpResult int
-		cmpResult = tree.CompareDecimals(&arg1, &arg2)
+		cmpResult = tree.CompareDecimals(arg1, arg2)
 		lt = cmpResult < 0
 	}
 
@@ -1515,7 +1515,7 @@ func (s *sortDecimalDescWithNullsOp) Less(i, j int) bool {
 
 	{
 		var cmpResult int
-		cmpResult = tree.CompareDecimals(&arg1, &arg2)
+		cmpResult = tree.CompareDecimals(arg1, arg2)
 		lt = cmpResult > 0
 	}
 
@@ -2457,7 +2457,7 @@ func (s *sortDecimalAscOp) Less(i, j int) bool {
 
 	{
 		var cmpResult int
-		cmpResult = tree.CompareDecimals(&arg1, &arg2)
+		cmpResult = tree.CompareDecimals(arg1, arg2)
 		lt = cmpResult < 0
 	}
 
@@ -3322,7 +3322,7 @@ func (s *sortDecimalDescOp) Less(i, j int) bool {
 
 	{
 		var cmpResult int
-		cmpResult = tree.CompareDecimals(&arg1, &arg2)
+		cmpResult = tree.CompareDecimals(arg1, arg2)
 		lt = cmpResult > 0
 	}
 

@@ -25,7 +25,7 @@ func genAnyNotNullAgg(inputFileContents string, wr io.Writer) error {
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
-		"_GOTYPE", "{{.GoType}}",
+		"_GOTYPE", goTypeWithDecimalValue(".VecMethod", ".GoType"),
 		"_TYPE", "{{.VecMethod}}",
 		"TemplateType", "{{.VecMethod}}",
 	)

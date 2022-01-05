@@ -119,7 +119,7 @@ func valuesDiffer(
 
 			{
 				var cmpResult int
-				cmpResult = tree.CompareDecimals(&arg1, &arg2)
+				cmpResult = tree.CompareDecimals(arg1, arg2)
 				unique = cmpResult != 0
 			}
 

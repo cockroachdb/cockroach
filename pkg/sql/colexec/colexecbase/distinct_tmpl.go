@@ -24,6 +24,7 @@ package colexecbase
 import (
 	"context"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -145,7 +146,7 @@ type distinct_TYPEOp struct {
 
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
-	lastVal _GOTYPE
+	lastVal _VAL_GOTYPE
 
 	colexecop.OneInputHelper
 
@@ -185,7 +186,11 @@ func (p *distinct_TYPEOp) Next() coldata.Batch {
 	col := vec.TemplateType()
 
 	// We always output the first row.
+	// {{if eq .VecMethod "Decimal"}}
+	lastVal := &p.lastVal
+	// {{else}}
 	lastVal := p.lastVal
+	// {{end}}
 	lastValNull := p.lastValNull
 	sel := batch.Selection()
 	firstIdx := 0
@@ -258,6 +263,10 @@ func (p partitioner_TYPE) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
 ) {
 	var lastVal _GOTYPE
+	// {{if eq .VecMethod "Decimal"}}
+	var lastValValue apd.Decimal
+	lastVal = &lastValValue
+	// {{end}}
 	var lastValNull bool
 	var nulls *coldata.Nulls
 	if colVec.MaybeHasNulls() {
@@ -290,6 +299,10 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 		lastValNull bool
 		nulls       *coldata.Nulls
 	)
+	// {{if eq .VecMethod "Decimal"}}
+	var lastValValue apd.Decimal
+	lastVal = &lastValValue
+	// {{end}}
 	if colVec.MaybeHasNulls() {
 		nulls = colVec.Nulls()
 	}
@@ -323,7 +336,7 @@ func checkDistinct(
 	checkIdx int,
 	outputIdx int,
 	lastVal _GOTYPE,
-	col []_GOTYPE,
+	col _GOTYPESLICE,
 	outputCol []bool,
 	colBCE bool,
 	outputBCE bool,
@@ -354,7 +367,7 @@ func checkDistinctWithNulls(
 	lastVal _GOTYPE,
 	nulls *coldata.Nulls,
 	lastValNull bool,
-	col []_GOTYPE,
+	col _GOTYPESLICE,
 	outputCol []bool,
 	nullsAreDistinct bool,
 	colBCE bool,

@@ -281,8 +281,10 @@ func (m *memColumn) Append(args SliceArgs) {
 						if __capToAllocate < 2*__prevCap {
 							__capToAllocate = 2 * __prevCap
 						}
-						__new_slice := make([]apd.Decimal, __desiredCap, __capToAllocate)
-						copy(__new_slice, toCol[:args.DestIdx])
+						__new_slice := make(Decimals, __desiredCap, __capToAllocate)
+						for __i := range toCol[:args.DestIdx] {
+							__new_slice[__i].Set(&toCol[__i])
+						}
 						toCol = __new_slice
 					}
 					__src_slice := fromCol[args.SrcStartIdx:args.SrcEndIdx]
@@ -299,7 +301,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol = append(toCol, apd.Decimal{})
-					toCol[len(toCol)-1].Set(&val)
+					toCol[len(toCol)-1].Set(val)
 				}
 			}
 			m.nulls.set(args)
@@ -1447,7 +1449,7 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int) {
 		case -1:
 		default:
 			target := v.Decimal()
-			newVal := elem.(apd.Decimal)
+			newVal := elem.(*apd.Decimal)
 			target.Set(rowIdx, newVal)
 		}
 	case types.IntFamily:

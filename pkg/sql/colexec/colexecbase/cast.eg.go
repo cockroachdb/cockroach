@@ -1738,7 +1738,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1777,7 +1777,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1819,7 +1819,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1858,7 +1858,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1935,7 +1935,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1974,7 +1974,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2016,7 +2016,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2055,7 +2055,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2132,7 +2132,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2165,7 +2165,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2201,7 +2201,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2234,7 +2234,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 
 							{
 								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2444,10 +2444,10 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
-							r.Set(&v)
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							r.Set(v)
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -2469,10 +2469,10 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
-							r.Set(&v)
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							r.Set(v)
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -2497,10 +2497,10 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
-							r.Set(&v)
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							r.Set(v)
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -2522,10 +2522,10 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
-							r.Set(&v)
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							r.Set(v)
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -2936,11 +2936,11 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -2962,11 +2962,11 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -2991,11 +2991,11 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -3017,11 +3017,11 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -3580,11 +3580,11 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -3606,11 +3606,11 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -3635,11 +3635,11 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -3661,11 +3661,11 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -4248,11 +4248,11 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -4274,11 +4274,11 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -4303,11 +4303,11 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -4329,11 +4329,11 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -4636,13 +4636,13 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							if _, err := r.SetFloat64(float64(v)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -4664,13 +4664,13 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							if _, err := r.SetFloat64(float64(v)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -4695,13 +4695,13 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							if _, err := r.SetFloat64(float64(v)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -4723,13 +4723,13 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							if _, err := r.SetFloat64(float64(v)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -5712,11 +5712,11 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -5738,11 +5738,11 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -5767,11 +5767,11 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -5793,11 +5793,11 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 							}
 							//gcassert:bce
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							r.SetInt64(int64(v))
 
-							if err := tree.LimitDecimalWidth(&r, int(toType.Precision()), int(toType.Scale())); err != nil {
+							if err := tree.LimitDecimalWidth(r, int(toType.Precision()), int(toType.Scale())); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 
@@ -7474,14 +7474,14 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							{
 								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								r = converter(_castedDatum).(apd.Decimal)
+								r = converter(_castedDatum).(*apd.Decimal)
 							}
 
 							outputCol.Set(tupleIdx, r)
@@ -7500,14 +7500,14 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							{
 								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								r = converter(_castedDatum).(apd.Decimal)
+								r = converter(_castedDatum).(*apd.Decimal)
 							}
 
 							//gcassert:bce
@@ -7531,14 +7531,14 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							{
 								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								r = converter(_castedDatum).(apd.Decimal)
+								r = converter(_castedDatum).(*apd.Decimal)
 							}
 
 							outputCol.Set(tupleIdx, r)
@@ -7557,14 +7557,14 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 								continue
 							}
 							v := inputCol.Get(tupleIdx)
-							var r apd.Decimal
+							var r *apd.Decimal
 
 							{
 								_castedDatum, err := tree.PerformCast(evalCtx, v.(tree.Datum), toType)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								r = converter(_castedDatum).(apd.Decimal)
+								r = converter(_castedDatum).(*apd.Decimal)
 							}
 
 							//gcassert:bce

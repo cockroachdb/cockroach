@@ -153,7 +153,7 @@ func (c *DecimalVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 in
 	left := c.vecs[vecIdx1].Get(valIdx1)
 	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
-	cmp = tree.CompareDecimals(&left, &right)
+	cmp = tree.CompareDecimals(left, right)
 	return cmp
 }
 

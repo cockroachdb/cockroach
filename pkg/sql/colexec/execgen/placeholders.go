@@ -23,6 +23,7 @@ var (
 	_ = APPENDSLICE
 	_ = APPENDVAL
 	_ = SETVARIABLESIZE
+	_ = SET
 )
 
 // COPYVAL is a template function that can be used to set a scalar to the value
@@ -44,6 +45,12 @@ func APPENDVAL(target, v interface{}) {
 
 // SETVARIABLESIZE is a template function.
 func SETVARIABLESIZE(target, value interface{}) interface{} {
+	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
+	return nil
+}
+
+// SET is a template function.
+func SET(targetVec, targetIdx, value interface{}) interface{} {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 	return nil
 }

@@ -151,12 +151,13 @@ func (a *sumInt16HashAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
 func (a *sumInt16HashAgg) Reset() {
-	a.curAgg = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curAgg.Set(zero)
 	a.numNonNull = 0
 }
 
@@ -264,12 +265,13 @@ func (a *sumInt32HashAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
 func (a *sumInt32HashAgg) Reset() {
-	a.curAgg = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curAgg.Set(zero)
 	a.numNonNull = 0
 }
 
@@ -377,12 +379,13 @@ func (a *sumInt64HashAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
 func (a *sumInt64HashAgg) Reset() {
-	a.curAgg = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curAgg.Set(zero)
 	a.numNonNull = 0
 }
 
@@ -438,7 +441,7 @@ func (a *sumDecimalHashAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &v)
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -457,7 +460,7 @@ func (a *sumDecimalHashAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &v)
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -484,12 +487,13 @@ func (a *sumDecimalHashAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
 func (a *sumDecimalHashAgg) Reset() {
-	a.curAgg = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curAgg.Set(zero)
 	a.numNonNull = 0
 }
 
@@ -590,7 +594,8 @@ func (a *sumFloat64HashAgg) Flush(outputIdx int) {
 }
 
 func (a *sumFloat64HashAgg) Reset() {
-	a.curAgg = zeroFloat64Value
+	zero := zeroFloat64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
@@ -681,7 +686,8 @@ func (a *sumIntervalHashAgg) Flush(outputIdx int) {
 }
 
 func (a *sumIntervalHashAgg) Reset() {
-	a.curAgg = zeroIntervalValue
+	zero := zeroIntervalValue
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 

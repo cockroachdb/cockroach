@@ -724,7 +724,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 	col := vec.Decimal()
 
 	// We always output the first row.
-	lastVal := p.lastVal
+	lastVal := &p.lastVal
 	lastValNull := p.lastValNull
 	sel := batch.Selection()
 	firstIdx := 0
@@ -748,7 +748,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 			for _, idx := range sel {
 				{
 					var (
-						__retval_lastVal     apd.Decimal
+						__retval_lastVal     *apd.Decimal
 						__retval_lastValNull bool
 					)
 					{
@@ -778,7 +778,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 
 								{
 									var cmpResult int
-									cmpResult = tree.CompareDecimals(&v, &lastVal)
+									cmpResult = tree.CompareDecimals(v, lastVal)
 									unique = cmpResult != 0
 								}
 
@@ -797,7 +797,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 		} else {
 			for _, idx := range sel {
 				{
-					var __retval_0 apd.Decimal
+					var __retval_0 *apd.Decimal
 					{
 						var (
 							checkIdx  int = idx
@@ -808,7 +808,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 
 						{
 							var cmpResult int
-							cmpResult = tree.CompareDecimals(&v, &lastVal)
+							cmpResult = tree.CompareDecimals(v, lastVal)
 							unique = cmpResult != 0
 						}
 
@@ -830,7 +830,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 			for idx := 0; idx < n; idx++ {
 				{
 					var (
-						__retval_lastVal     apd.Decimal
+						__retval_lastVal     *apd.Decimal
 						__retval_lastValNull bool
 					)
 					{
@@ -863,7 +863,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 
 								{
 									var cmpResult int
-									cmpResult = tree.CompareDecimals(&v, &lastVal)
+									cmpResult = tree.CompareDecimals(v, lastVal)
 									unique = cmpResult != 0
 								}
 
@@ -883,7 +883,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 		} else {
 			for idx := 0; idx < n; idx++ {
 				{
-					var __retval_0 apd.Decimal
+					var __retval_0 *apd.Decimal
 					{
 						var (
 							checkIdx  int = idx
@@ -895,7 +895,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 
 						{
 							var cmpResult int
-							cmpResult = tree.CompareDecimals(&v, &lastVal)
+							cmpResult = tree.CompareDecimals(v, lastVal)
 							unique = cmpResult != 0
 						}
 
@@ -914,7 +914,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 	if !lastValNull {
 		// We need to perform a deep copy for the next iteration if we didn't have
 		// a null value.
-		p.lastVal.Set(&lastVal)
+		p.lastVal.Set(lastVal)
 	}
 	p.lastValNull = lastValNull
 

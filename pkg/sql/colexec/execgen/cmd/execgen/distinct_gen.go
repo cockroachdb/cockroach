@@ -66,6 +66,7 @@ func genDistinctOps(targetPkg, targetTmpl string) generator {
 			"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 			"_TYPE_WIDTH", typeWidthReplacement,
 			"_GOTYPESLICE", "{{.GoTypeSliceName}}",
+			"_VAL_GOTYPE", goTypeWithDecimalValue(".VecMethod", ".GoType"),
 			"_GOTYPE", "{{.GoType}}",
 			"_TYPE", "{{.VecMethod}}",
 			"TemplateType", "{{.VecMethod}}")

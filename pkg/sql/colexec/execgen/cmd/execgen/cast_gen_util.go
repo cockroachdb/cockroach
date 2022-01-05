@@ -129,7 +129,7 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 		convStr := `
 		{
 			tmpDec := &_overloadHelper.TmpDec1
-			_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &%[2]s)
+			_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, %[2]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
@@ -167,7 +167,7 @@ func decimalToFloat(to, from, _, _ string) string {
 }
 
 func decimalToDecimal(to, from, _, toType string) string {
-	return toDecimal(fmt.Sprintf(`%[1]s.Set(&%[2]s)`, to, from), to, toType)
+	return toDecimal(fmt.Sprintf(`%[1]s.Set(%[2]s)`, to, from), to, toType)
 }
 
 // toDecimal returns the templated code that performs the cast to a decimal. It
@@ -176,7 +176,7 @@ func decimalToDecimal(to, from, _, toType string) string {
 func toDecimal(conv, to, toType string) string {
 	convStr := `
 		%[1]s
-		if err := tree.LimitDecimalWidth(&%[2]s, int(%[3]s.Precision()), int(%[3]s.Scale())); err != nil {
+		if err := tree.LimitDecimalWidth(%[2]s, int(%[3]s.Precision()), int(%[3]s.Scale())); err != nil {
 			colexecerror.ExpectedError(err)
 		}
 	`

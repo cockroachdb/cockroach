@@ -821,7 +821,7 @@ func (pi *projectInOpBytes) Next() coldata.Batch {
 type selectInOpDecimal struct {
 	colexecop.OneInputHelper
 	colIdx    int
-	filterRow []apd.Decimal
+	filterRow []*apd.Decimal
 	hasNulls  bool
 	negate    bool
 }
@@ -833,7 +833,7 @@ type projectInOpDecimal struct {
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
-	filterRow []apd.Decimal
+	filterRow []*apd.Decimal
 	hasNulls  bool
 	negate    bool
 }
@@ -842,19 +842,19 @@ var _ colexecop.Operator = &projectInOpDecimal{}
 
 func fillDatumRowDecimal(
 	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
-) ([]apd.Decimal, bool) {
+) ([]*apd.Decimal, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
 	datumTuple.Normalize(evalCtx)
 
 	conv := colconv.GetDatumToPhysicalFn(t)
-	var result []apd.Decimal
+	var result []*apd.Decimal
 	hasNulls := false
 	for _, d := range datumTuple.D {
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
 			convRaw := conv(d)
-			converted := convRaw.(apd.Decimal)
+			converted := convRaw.(*apd.Decimal)
 			result = append(result, converted)
 		}
 	}
@@ -862,7 +862,7 @@ func fillDatumRowDecimal(
 }
 
 func cmpInDecimal(
-	targetElem apd.Decimal, targetCol coldata.Decimals, filterRow []apd.Decimal, hasNulls bool,
+	targetElem *apd.Decimal, targetCol coldata.Decimals, filterRow []*apd.Decimal, hasNulls bool,
 ) comparisonResult {
 	// Filter row input was already sorted in fillDatumRowDecimal, so we can
 	// perform a binary search.
@@ -871,7 +871,7 @@ func cmpInDecimal(
 	for lo < hi {
 		i := (lo + hi) / 2
 		var cmpResult int
-		cmpResult = tree.CompareDecimals(&targetElem, &filterRow[i])
+		cmpResult = tree.CompareDecimals(targetElem, filterRow[i])
 		if cmpResult == 0 {
 			return siTrue
 		} else if cmpResult > 0 {

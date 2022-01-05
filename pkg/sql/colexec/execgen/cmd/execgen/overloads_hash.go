@@ -92,7 +92,7 @@ func (decimalCustomizer) getHashAssignFunc() assignFunc {
 			// In order for equal decimals to hash to the same value we need to
 			// remove the trailing zeroes if there are any.
 			tmpDec := &_overloadHelper.TmpDec1
-			tmpDec.Reduce(&%[1]s)
+			tmpDec.Reduce(%[1]s)
 			b := []byte(tmpDec.String())`, vElem) +
 			fmt.Sprintf(hashByteSliceString, targetElem, "b")
 	}

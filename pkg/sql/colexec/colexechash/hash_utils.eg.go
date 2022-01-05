@@ -266,7 +266,7 @@ func rehash(
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
 						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.Reduce(&v)
+						tmpDec.Reduce(v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
@@ -291,7 +291,7 @@ func rehash(
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
 						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.Reduce(&v)
+						tmpDec.Reduce(v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
@@ -317,7 +317,7 @@ func rehash(
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
 						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.Reduce(&v)
+						tmpDec.Reduce(v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))
@@ -339,7 +339,7 @@ func rehash(
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
 						tmpDec := &_overloadHelper.TmpDec1
-						tmpDec.Reduce(&v)
+						tmpDec.Reduce(v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(b)))

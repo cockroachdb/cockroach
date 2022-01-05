@@ -151,12 +151,13 @@ func (a *sumInt16WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
 func (a *sumInt16WindowAgg) Reset() {
-	a.curAgg = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curAgg.Set(zero)
 	a.numNonNull = 0
 }
 
@@ -325,12 +326,13 @@ func (a *sumInt32WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
 func (a *sumInt32WindowAgg) Reset() {
-	a.curAgg = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curAgg.Set(zero)
 	a.numNonNull = 0
 }
 
@@ -499,12 +501,13 @@ func (a *sumInt64WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
 func (a *sumInt64WindowAgg) Reset() {
-	a.curAgg = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curAgg.Set(zero)
 	a.numNonNull = 0
 }
 
@@ -623,7 +626,7 @@ func (a *sumDecimalWindowAgg) Compute(
 
 				{
 
-					_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &v)
+					_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, v)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -643,7 +646,7 @@ func (a *sumDecimalWindowAgg) Compute(
 
 				{
 
-					_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &v)
+					_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, v)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -667,12 +670,13 @@ func (a *sumDecimalWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, &a.curAgg)
 	}
 }
 
 func (a *sumDecimalWindowAgg) Reset() {
-	a.curAgg = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curAgg.Set(zero)
 	a.numNonNull = 0
 }
 
@@ -717,7 +721,7 @@ func (a *sumDecimalWindowAgg) Remove(
 
 				{
 
-					_, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, &v)
+					_, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, v)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -737,7 +741,7 @@ func (a *sumDecimalWindowAgg) Remove(
 
 				{
 
-					_, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, &v)
+					_, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, v)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -829,7 +833,8 @@ func (a *sumFloat64WindowAgg) Flush(outputIdx int) {
 }
 
 func (a *sumFloat64WindowAgg) Reset() {
-	a.curAgg = zeroFloat64Value
+	zero := zeroFloat64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
@@ -970,7 +975,8 @@ func (a *sumIntervalWindowAgg) Flush(outputIdx int) {
 }
 
 func (a *sumIntervalWindowAgg) Reset() {
-	a.curAgg = zeroIntervalValue
+	zero := zeroIntervalValue
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 

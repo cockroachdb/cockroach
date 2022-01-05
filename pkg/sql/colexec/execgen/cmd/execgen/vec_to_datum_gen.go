@@ -69,7 +69,7 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 	// INT8, so there is a single conversion template for IntFamily.
 	types.IntFamily:   `%[1]s := %[3]s.NewDInt(tree.DInt(%[2]s))`,
 	types.FloatFamily: `%[1]s := %[3]s.NewDFloat(tree.DFloat(%[2]s))`,
-	types.DecimalFamily: `  %[1]s := %[3]s.NewDDecimal(tree.DDecimal{Decimal: %[2]s})
+	types.DecimalFamily: `  %[1]s := %[3]s.NewDDecimal(tree.DDecimal{Decimal: *%[2]s})
 							// Clear the Coeff so that the Set below allocates a new slice for the
 							// Coeff.abs field.
 							%[1]s.Coeff = big.Int{}

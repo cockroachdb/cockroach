@@ -466,7 +466,7 @@ func ProcessAggregations(
 }
 
 var (
-	zeroDecimalValue  apd.Decimal
+	zeroDecimalValue  = apd.New(0, 0)
 	zeroFloat64Value  float64
 	zeroInt64Value    int64
 	zeroIntervalValue duration.Duration

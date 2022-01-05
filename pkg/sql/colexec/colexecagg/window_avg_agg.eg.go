@@ -161,7 +161,8 @@ func (a *avgInt16WindowAgg) Flush(outputIdx int) {
 }
 
 func (a *avgInt16WindowAgg) Reset() {
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -338,7 +339,8 @@ func (a *avgInt32WindowAgg) Flush(outputIdx int) {
 }
 
 func (a *avgInt32WindowAgg) Reset() {
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -515,7 +517,8 @@ func (a *avgInt64WindowAgg) Flush(outputIdx int) {
 }
 
 func (a *avgInt64WindowAgg) Reset() {
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -633,7 +636,7 @@ func (a *avgDecimalWindowAgg) Compute(
 
 				{
 
-					_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
+					_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, v)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -653,7 +656,7 @@ func (a *avgDecimalWindowAgg) Compute(
 
 				{
 
-					_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
+					_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, v)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -686,7 +689,8 @@ func (a *avgDecimalWindowAgg) Flush(outputIdx int) {
 }
 
 func (a *avgDecimalWindowAgg) Reset() {
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -729,7 +733,7 @@ func (a *avgDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, sta
 
 				{
 
-					_, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, &v)
+					_, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, v)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -749,7 +753,7 @@ func (a *avgDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, sta
 
 				{
 
-					_, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, &v)
+					_, err := tree.ExactCtx.Sub(&a.curSum, &a.curSum, v)
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
@@ -842,7 +846,8 @@ func (a *avgFloat64WindowAgg) Flush(outputIdx int) {
 }
 
 func (a *avgFloat64WindowAgg) Reset() {
-	a.curSum = zeroFloat64Value
+	zero := zeroFloat64Value
+	a.curSum = zero
 	a.curCount = 0
 }
 
@@ -982,7 +987,8 @@ func (a *avgIntervalWindowAgg) Flush(outputIdx int) {
 }
 
 func (a *avgIntervalWindowAgg) Reset() {
-	a.curSum = zeroIntervalValue
+	zero := zeroIntervalValue
+	a.curSum = zero
 	a.curCount = 0
 }
 

@@ -312,7 +312,7 @@ func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.Spilli
 			case *tree.DFloat:
 				vec.Float64()[0] = float64(*t)
 			case *tree.DDecimal:
-				vec.Decimal()[0] = t.Decimal
+				vec.Decimal()[0].Set(&t.Decimal)
 			case *tree.DInterval:
 				vec.Interval()[0] = t.Duration
 			case *tree.DTimestampTZ:

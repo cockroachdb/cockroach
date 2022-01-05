@@ -104,7 +104,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(*apd.Decimal),
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -207,7 +207,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(*apd.Decimal),
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -313,7 +313,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(*apd.Decimal),
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -416,7 +416,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(*apd.Decimal),
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -525,7 +525,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(*apd.Decimal),
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -628,7 +628,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(*apd.Decimal),
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -734,7 +734,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(*apd.Decimal),
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -837,7 +837,7 @@ func newRangeOffsetHandler(
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescDecimal{
-							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
+							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(*apd.Decimal),
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -1372,7 +1372,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscInt64) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingStartAscDecimal struct {
 	rangeOffsetHandlerBase
-	offset apd.Decimal
+	offset *apd.Decimal
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDecimal{}
@@ -1423,15 +1423,17 @@ func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(ctx context.Context,
 	// The current row is not null. Retrieve the value that is equal to that at
 	// the current row plus (minus if descending) 'offset' logical units.
 	var (
-		seekVal   apd.Decimal
+		seekVal   *apd.Decimal
 		cmpResult int
 	)
+	var seekDec apd.Decimal
+	seekVal = &seekDec
 	col := vec.Decimal()
 	currRowVal := col.Get(vecIdx)
 
 	{
 
-		_, err := tree.ExactCtx.Sub(&seekVal, &currRowVal, &h.offset)
+		_, err := tree.ExactCtx.Sub(seekVal, currRowVal, h.offset)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
@@ -1491,7 +1493,7 @@ func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(ctx context.Context,
 			//gcassert:bce
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
-				cmpResult = tree.CompareDecimals(&cmpVal, &seekVal)
+				cmpResult = tree.CompareDecimals(cmpVal, seekVal)
 				if cmpResult >= 0 {
 					return idx
 				}
@@ -2603,7 +2605,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescInt64) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingStartDescDecimal struct {
 	rangeOffsetHandlerBase
-	offset apd.Decimal
+	offset *apd.Decimal
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDecimal{}
@@ -2654,15 +2656,17 @@ func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(ctx context.Context
 	// The current row is not null. Retrieve the value that is equal to that at
 	// the current row plus (minus if descending) 'offset' logical units.
 	var (
-		seekVal   apd.Decimal
+		seekVal   *apd.Decimal
 		cmpResult int
 	)
+	var seekDec apd.Decimal
+	seekVal = &seekDec
 	col := vec.Decimal()
 	currRowVal := col.Get(vecIdx)
 
 	{
 
-		_, err := tree.ExactCtx.Add(&seekVal, &currRowVal, &h.offset)
+		_, err := tree.ExactCtx.Add(seekVal, currRowVal, h.offset)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
@@ -2695,7 +2699,7 @@ func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(ctx context.Context
 					return idx
 				}
 				cmpVal := col.Get(vecIdx)
-				cmpResult = tree.CompareDecimals(&cmpVal, &seekVal)
+				cmpResult = tree.CompareDecimals(cmpVal, seekVal)
 				if cmpResult <= 0 {
 					return idx
 				}
@@ -3804,7 +3808,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscInt64) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingEndAscDecimal struct {
 	rangeOffsetHandlerBase
-	offset apd.Decimal
+	offset *apd.Decimal
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDecimal{}
@@ -3872,15 +3876,17 @@ func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(ctx context.Context, c
 	// The current row is not null. Retrieve the value that is equal to that at
 	// the current row plus (minus if descending) 'offset' logical units.
 	var (
-		seekVal   apd.Decimal
+		seekVal   *apd.Decimal
 		cmpResult int
 	)
+	var seekDec apd.Decimal
+	seekVal = &seekDec
 	col := vec.Decimal()
 	currRowVal := col.Get(vecIdx)
 
 	{
 
-		_, err := tree.ExactCtx.Sub(&seekVal, &currRowVal, &h.offset)
+		_, err := tree.ExactCtx.Sub(seekVal, currRowVal, h.offset)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
@@ -3940,7 +3946,7 @@ func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(ctx context.Context, c
 			//gcassert:bce
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
-				cmpResult = tree.CompareDecimals(&cmpVal, &seekVal)
+				cmpResult = tree.CompareDecimals(cmpVal, seekVal)
 				if cmpResult > 0 {
 					return idx
 				}
@@ -5188,7 +5194,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescInt64) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingEndDescDecimal struct {
 	rangeOffsetHandlerBase
-	offset apd.Decimal
+	offset *apd.Decimal
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDecimal{}
@@ -5256,15 +5262,17 @@ func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(ctx context.Context, 
 	// The current row is not null. Retrieve the value that is equal to that at
 	// the current row plus (minus if descending) 'offset' logical units.
 	var (
-		seekVal   apd.Decimal
+		seekVal   *apd.Decimal
 		cmpResult int
 	)
+	var seekDec apd.Decimal
+	seekVal = &seekDec
 	col := vec.Decimal()
 	currRowVal := col.Get(vecIdx)
 
 	{
 
-		_, err := tree.ExactCtx.Add(&seekVal, &currRowVal, &h.offset)
+		_, err := tree.ExactCtx.Add(seekVal, currRowVal, h.offset)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
@@ -5297,7 +5305,7 @@ func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(ctx context.Context, 
 					return idx
 				}
 				cmpVal := col.Get(vecIdx)
-				cmpResult = tree.CompareDecimals(&cmpVal, &seekVal)
+				cmpResult = tree.CompareDecimals(cmpVal, seekVal)
 				if cmpResult < 0 {
 					return idx
 				}
@@ -6440,7 +6448,7 @@ func (h *rangeHandlerOffsetFollowingStartAscInt64) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingStartAscDecimal struct {
 	rangeOffsetHandlerBase
-	offset apd.Decimal
+	offset *apd.Decimal
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDecimal{}
@@ -6491,15 +6499,17 @@ func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(ctx context.Context,
 	// The current row is not null. Retrieve the value that is equal to that at
 	// the current row plus (minus if descending) 'offset' logical units.
 	var (
-		seekVal   apd.Decimal
+		seekVal   *apd.Decimal
 		cmpResult int
 	)
+	var seekDec apd.Decimal
+	seekVal = &seekDec
 	col := vec.Decimal()
 	currRowVal := col.Get(vecIdx)
 
 	{
 
-		_, err := tree.ExactCtx.Add(&seekVal, &currRowVal, &h.offset)
+		_, err := tree.ExactCtx.Add(seekVal, currRowVal, h.offset)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
@@ -6559,7 +6569,7 @@ func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(ctx context.Context,
 			//gcassert:bce
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
-				cmpResult = tree.CompareDecimals(&cmpVal, &seekVal)
+				cmpResult = tree.CompareDecimals(cmpVal, seekVal)
 				if cmpResult >= 0 {
 					return idx
 				}
@@ -7671,7 +7681,7 @@ func (h *rangeHandlerOffsetFollowingStartDescInt64) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingStartDescDecimal struct {
 	rangeOffsetHandlerBase
-	offset apd.Decimal
+	offset *apd.Decimal
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDecimal{}
@@ -7722,15 +7732,17 @@ func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(ctx context.Context
 	// The current row is not null. Retrieve the value that is equal to that at
 	// the current row plus (minus if descending) 'offset' logical units.
 	var (
-		seekVal   apd.Decimal
+		seekVal   *apd.Decimal
 		cmpResult int
 	)
+	var seekDec apd.Decimal
+	seekVal = &seekDec
 	col := vec.Decimal()
 	currRowVal := col.Get(vecIdx)
 
 	{
 
-		_, err := tree.ExactCtx.Sub(&seekVal, &currRowVal, &h.offset)
+		_, err := tree.ExactCtx.Sub(seekVal, currRowVal, h.offset)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
@@ -7763,7 +7775,7 @@ func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(ctx context.Context
 					return idx
 				}
 				cmpVal := col.Get(vecIdx)
-				cmpResult = tree.CompareDecimals(&cmpVal, &seekVal)
+				cmpResult = tree.CompareDecimals(cmpVal, seekVal)
 				if cmpResult <= 0 {
 					return idx
 				}
@@ -8872,7 +8884,7 @@ func (h *rangeHandlerOffsetFollowingEndAscInt64) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingEndAscDecimal struct {
 	rangeOffsetHandlerBase
-	offset apd.Decimal
+	offset *apd.Decimal
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDecimal{}
@@ -8940,15 +8952,17 @@ func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(ctx context.Context, c
 	// The current row is not null. Retrieve the value that is equal to that at
 	// the current row plus (minus if descending) 'offset' logical units.
 	var (
-		seekVal   apd.Decimal
+		seekVal   *apd.Decimal
 		cmpResult int
 	)
+	var seekDec apd.Decimal
+	seekVal = &seekDec
 	col := vec.Decimal()
 	currRowVal := col.Get(vecIdx)
 
 	{
 
-		_, err := tree.ExactCtx.Add(&seekVal, &currRowVal, &h.offset)
+		_, err := tree.ExactCtx.Add(seekVal, currRowVal, h.offset)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
@@ -9008,7 +9022,7 @@ func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(ctx context.Context, c
 			//gcassert:bce
 			if peersCol[vecIdx] {
 				cmpVal := col.Get(vecIdx)
-				cmpResult = tree.CompareDecimals(&cmpVal, &seekVal)
+				cmpResult = tree.CompareDecimals(cmpVal, seekVal)
 				if cmpResult > 0 {
 					return idx
 				}
@@ -10256,7 +10270,7 @@ func (h *rangeHandlerOffsetFollowingEndDescInt64) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingEndDescDecimal struct {
 	rangeOffsetHandlerBase
-	offset apd.Decimal
+	offset *apd.Decimal
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDecimal{}
@@ -10324,15 +10338,17 @@ func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(ctx context.Context, 
 	// The current row is not null. Retrieve the value that is equal to that at
 	// the current row plus (minus if descending) 'offset' logical units.
 	var (
-		seekVal   apd.Decimal
+		seekVal   *apd.Decimal
 		cmpResult int
 	)
+	var seekDec apd.Decimal
+	seekVal = &seekDec
 	col := vec.Decimal()
 	currRowVal := col.Get(vecIdx)
 
 	{
 
-		_, err := tree.ExactCtx.Sub(&seekVal, &currRowVal, &h.offset)
+		_, err := tree.ExactCtx.Sub(seekVal, currRowVal, h.offset)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
@@ -10365,7 +10381,7 @@ func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(ctx context.Context, 
 					return idx
 				}
 				cmpVal := col.Get(vecIdx)
-				cmpResult = tree.CompareDecimals(&cmpVal, &seekVal)
+				cmpResult = tree.CompareDecimals(cmpVal, seekVal)
 				if cmpResult < 0 {
 					return idx
 				}

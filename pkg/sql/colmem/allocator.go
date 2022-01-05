@@ -659,7 +659,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 		var newVarLengthDatumSize int64
 		for _, decimalVec := range h.decimalVecs {
 			d := decimalVec.Get(rowIdx)
-			newVarLengthDatumSize += int64(tree.SizeOfDecimal(&d))
+			newVarLengthDatumSize += int64(tree.SizeOfDecimal(d))
 		}
 		for _, datumVec := range h.datumVecs {
 			datumSize := datumVec.Get(rowIdx).(tree.Datum).Size()

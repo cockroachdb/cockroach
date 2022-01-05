@@ -1044,7 +1044,7 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1097,7 +1097,7 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1152,7 +1152,7 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1204,7 +1204,7 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1260,7 +1260,7 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1311,7 +1311,7 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1364,7 +1364,7 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -1414,7 +1414,7 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -6554,7 +6554,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -6608,7 +6608,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -6664,7 +6664,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -6717,7 +6717,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -6777,7 +6777,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -6831,7 +6831,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -6887,7 +6887,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 
@@ -6940,7 +6940,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+												cmpResult = tree.CompareDecimals(probeVal, buildVal)
 												unique = cmpResult != 0
 											}
 

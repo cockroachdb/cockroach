@@ -199,7 +199,7 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col.Set(outputIdx, a.curAgg)
+		execgen.SET(col, outputIdx, a.curAgg)
 	}
 	// {{if and (not (eq "_AGGKIND" "Window")) (or (.IsBytesLike) (eq .VecMethod "Datum"))}}
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
@@ -280,7 +280,9 @@ func _ACCUMULATE_MINMAX(
 			if a.numNonNull == 0 {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				a.col.Set(a.curIdx, a.curAgg)
+				// {{with .Global}}
+				execgen.SET(a.col, a.curIdx, a.curAgg)
+				// {{end}}
 			}
 			a.curIdx++
 			a.numNonNull = 0
@@ -311,7 +313,11 @@ func _ACCUMULATE_MINMAX(
 			// {{end}}
 			candidate := col.Get(i)
 			// {{with .Global}}
+			// {{if eq .VecMethod "Decimal"}}
+			_ASSIGN_CMP(cmp, candidate, &a.curAgg, _, col, _)
+			// {{else}}
 			_ASSIGN_CMP(cmp, candidate, a.curAgg, _, col, _)
+			// {{end}}
 			if cmp {
 				execgen.COPYVAL(a.curAgg, candidate)
 			}

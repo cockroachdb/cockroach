@@ -69,7 +69,7 @@ func (c Float64s) Get(idx int) float64 { return c[idx] }
 // Get returns the element at index idx of the vector. The element cannot be
 // used anymore once the vector is modified.
 //gcassert:inline
-func (c Decimals) Get(idx int) apd.Decimal { return c[idx] }
+func (c Decimals) Get(idx int) *apd.Decimal { return &c[idx] }
 
 // Get returns the element at index idx of the vector. The element cannot be
 // used anymore once the vector is modified.
@@ -106,9 +106,7 @@ func (c Float64s) Set(idx int, val float64) { c[idx] = val }
 // Note that this method is usually inlined, but it isn't in case of the merge
 // joiner generated code (probably because of the size of the functions), so we
 // don't assert the inlining with the GCAssert linter.
-// TODO(yuzefovich): consider whether Get and Set on Decimals should operate on
-// pointers to apd.Decimal.
-func (c Decimals) Set(idx int, val apd.Decimal) { c[idx].Set(&val) }
+func (c Decimals) Set(idx int, val *apd.Decimal) { c[idx].Set(val) }
 
 // Set sets the element at index idx of the vector to val.
 //gcassert:inline

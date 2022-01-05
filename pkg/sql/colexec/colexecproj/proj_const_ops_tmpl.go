@@ -196,9 +196,17 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool, _HAS_SEL bool) { // */}}
 		// {{end}}
 		arg := col.Get(i)
 		// {{if _IS_CONST_LEFT}}
+		// {{if eq .Right.RetVecMethod "Decimal"}}
+		_ASSIGN(&projCol[i], p.constArg, arg, projCol, _, col)
+		// {{else}}
 		_ASSIGN(projCol[i], p.constArg, arg, projCol, _, col)
+		// {{end}}
+		// {{else}}
+		// {{if eq .Right.RetVecMethod "Decimal"}}
+		_ASSIGN(&projCol[i], arg, p.constArg, projCol, col, _)
 		// {{else}}
 		_ASSIGN(projCol[i], arg, p.constArg, projCol, col, _)
+		// {{end}}
 		// {{end}}
 		// {{if _HAS_NULLS}}
 	}

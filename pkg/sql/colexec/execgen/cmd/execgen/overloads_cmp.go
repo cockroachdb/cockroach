@@ -141,7 +141,7 @@ func (bytesCustomizer) getCmpOpCompareFunc() compareFunc {
 
 func (decimalCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
-		return fmt.Sprintf("%s = tree.CompareDecimals(&%s, &%s)", targetElem, leftElem, rightElem)
+		return fmt.Sprintf("%s = tree.CompareDecimals(%s, %s)", targetElem, leftElem, rightElem)
 	}
 }
 
@@ -226,7 +226,7 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
+				{{.Target}} = tree.CompareDecimals({{.Left}}, tmpDec)
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -244,7 +244,7 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 			{
 				tmpDec := &_overloadHelper.TmpDec1
 				tmpDec.SetInt64(int64({{.Right}}))
-				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
+				{{.Target}} = tree.CompareDecimals({{.Left}}, tmpDec)
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -264,7 +264,7 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
+				{{.Target}} = tree.CompareDecimals(tmpDec, {{.Right}})
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -282,7 +282,7 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 			{
 				tmpDec := &_overloadHelper.TmpDec1
 				tmpDec.SetInt64(int64({{.Left}}))
-				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
+				{{.Target}} = tree.CompareDecimals(tmpDec, {{.Right}})
 			}
 		`))
 

@@ -396,7 +396,7 @@ func (o *mergeJoinInnerOp) probeBodyLSeltrueRSeltrue() {
 					lGroup, rGroup   group
 					cmp              int
 					match            bool
-					lVal, rVal       apd.Decimal
+					lVal, rVal       *apd.Decimal
 					lSelIdx, rSelIdx int
 				)
 
@@ -431,7 +431,7 @@ func (o *mergeJoinInnerOp) probeBodyLSeltrueRSeltrue() {
 							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = rSel[curRIdx]
 							rVal = rKeys.Get(rSelIdx)
-							cmp = tree.CompareDecimals(&lVal, &rVal)
+							cmp = tree.CompareDecimals(lVal, rVal)
 						}
 
 						if cmp == 0 {
@@ -457,7 +457,7 @@ func (o *mergeJoinInnerOp) probeBodyLSeltrueRSeltrue() {
 
 									{
 										var cmpResult int
-										cmpResult = tree.CompareDecimals(&newLVal, &lVal)
+										cmpResult = tree.CompareDecimals(newLVal, lVal)
 										match = cmpResult == 0
 									}
 
@@ -482,7 +482,7 @@ func (o *mergeJoinInnerOp) probeBodyLSeltrueRSeltrue() {
 
 									{
 										var cmpResult int
-										cmpResult = tree.CompareDecimals(&newRVal, &rVal)
+										cmpResult = tree.CompareDecimals(newRVal, rVal)
 										match = cmpResult == 0
 									}
 
@@ -2307,7 +2307,7 @@ func (o *mergeJoinInnerOp) probeBodyLSeltrueRSelfalse() {
 					lGroup, rGroup   group
 					cmp              int
 					match            bool
-					lVal, rVal       apd.Decimal
+					lVal, rVal       *apd.Decimal
 					lSelIdx, rSelIdx int
 				)
 
@@ -2342,7 +2342,7 @@ func (o *mergeJoinInnerOp) probeBodyLSeltrueRSelfalse() {
 							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = curRIdx
 							rVal = rKeys.Get(rSelIdx)
-							cmp = tree.CompareDecimals(&lVal, &rVal)
+							cmp = tree.CompareDecimals(lVal, rVal)
 						}
 
 						if cmp == 0 {
@@ -2368,7 +2368,7 @@ func (o *mergeJoinInnerOp) probeBodyLSeltrueRSelfalse() {
 
 									{
 										var cmpResult int
-										cmpResult = tree.CompareDecimals(&newLVal, &lVal)
+										cmpResult = tree.CompareDecimals(newLVal, lVal)
 										match = cmpResult == 0
 									}
 
@@ -2393,7 +2393,7 @@ func (o *mergeJoinInnerOp) probeBodyLSeltrueRSelfalse() {
 
 									{
 										var cmpResult int
-										cmpResult = tree.CompareDecimals(&newRVal, &rVal)
+										cmpResult = tree.CompareDecimals(newRVal, rVal)
 										match = cmpResult == 0
 									}
 
@@ -4218,7 +4218,7 @@ func (o *mergeJoinInnerOp) probeBodyLSelfalseRSeltrue() {
 					lGroup, rGroup   group
 					cmp              int
 					match            bool
-					lVal, rVal       apd.Decimal
+					lVal, rVal       *apd.Decimal
 					lSelIdx, rSelIdx int
 				)
 
@@ -4253,7 +4253,7 @@ func (o *mergeJoinInnerOp) probeBodyLSelfalseRSeltrue() {
 							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = rSel[curRIdx]
 							rVal = rKeys.Get(rSelIdx)
-							cmp = tree.CompareDecimals(&lVal, &rVal)
+							cmp = tree.CompareDecimals(lVal, rVal)
 						}
 
 						if cmp == 0 {
@@ -4279,7 +4279,7 @@ func (o *mergeJoinInnerOp) probeBodyLSelfalseRSeltrue() {
 
 									{
 										var cmpResult int
-										cmpResult = tree.CompareDecimals(&newLVal, &lVal)
+										cmpResult = tree.CompareDecimals(newLVal, lVal)
 										match = cmpResult == 0
 									}
 
@@ -4304,7 +4304,7 @@ func (o *mergeJoinInnerOp) probeBodyLSelfalseRSeltrue() {
 
 									{
 										var cmpResult int
-										cmpResult = tree.CompareDecimals(&newRVal, &rVal)
+										cmpResult = tree.CompareDecimals(newRVal, rVal)
 										match = cmpResult == 0
 									}
 
@@ -6129,7 +6129,7 @@ func (o *mergeJoinInnerOp) probeBodyLSelfalseRSelfalse() {
 					lGroup, rGroup   group
 					cmp              int
 					match            bool
-					lVal, rVal       apd.Decimal
+					lVal, rVal       *apd.Decimal
 					lSelIdx, rSelIdx int
 				)
 
@@ -6164,7 +6164,7 @@ func (o *mergeJoinInnerOp) probeBodyLSelfalseRSelfalse() {
 							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = curRIdx
 							rVal = rKeys.Get(rSelIdx)
-							cmp = tree.CompareDecimals(&lVal, &rVal)
+							cmp = tree.CompareDecimals(lVal, rVal)
 						}
 
 						if cmp == 0 {
@@ -6190,7 +6190,7 @@ func (o *mergeJoinInnerOp) probeBodyLSelfalseRSelfalse() {
 
 									{
 										var cmpResult int
-										cmpResult = tree.CompareDecimals(&newLVal, &lVal)
+										cmpResult = tree.CompareDecimals(newLVal, lVal)
 										match = cmpResult == 0
 									}
 
@@ -6215,7 +6215,7 @@ func (o *mergeJoinInnerOp) probeBodyLSelfalseRSelfalse() {
 
 									{
 										var cmpResult int
-										cmpResult = tree.CompareDecimals(&newRVal, &rVal)
+										cmpResult = tree.CompareDecimals(newRVal, rVal)
 										match = cmpResult == 0
 									}
 
@@ -7867,7 +7867,7 @@ func (o *mergeJoinInnerOp) buildLeftGroupsFromBatch(
 								srcCol = src.Decimal()
 							}
 							outCol := out.Decimal()
-							var val apd.Decimal
+							var val *apd.Decimal
 							var srcStartIdx int
 
 							// Loop over every group.
@@ -8549,7 +8549,7 @@ func (o *mergeJoinInnerOp) buildLeftGroupsFromBatch(
 								srcCol = src.Decimal()
 							}
 							outCol := out.Decimal()
-							var val apd.Decimal
+							var val *apd.Decimal
 							var srcStartIdx int
 
 							// Loop over every group.

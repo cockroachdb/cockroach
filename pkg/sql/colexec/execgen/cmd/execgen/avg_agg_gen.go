@@ -82,10 +82,15 @@ func (a avgTmplInfo) AssignDivInt64(
 	return ""
 }
 
+func (a avgTmplInfo) CopyVal(dest, src string) string {
+	return a.aggTmplInfoBase.CopyVal(dest, src)
+}
+
 var (
 	_ = avgTmplInfo{}.AssignAdd
 	_ = avgTmplInfo{}.AssignDivInt64
 	_ = avgTmplInfo{}.AssignSubtract
+	_ = avgTmplInfo{}.CopyVal
 )
 
 // avgAggTypeTmplInfo is similar to lastArgTypeOverload and provides a way to
@@ -114,7 +119,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
-		"_RET_GOTYPE", `{{.RetGoType}}`,
+		"_RET_GOTYPE", goTypeWithDecimalValue(".RetVecMethod", ".RetGoType"),
 		"_RET_TYPE", "{{.RetVecMethod}}",
 		"_TYPE", "{{.InputVecMethod}}",
 		"TemplateType", "{{.InputVecMethod}}",

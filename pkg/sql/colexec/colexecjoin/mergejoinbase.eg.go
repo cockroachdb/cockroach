@@ -159,7 +159,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 
 				{
 					var cmpResult int
-					cmpResult = tree.CompareDecimals(&prevVal, &curVal)
+					cmpResult = tree.CompareDecimals(prevVal, curVal)
 					match = cmpResult == 0
 				}
 

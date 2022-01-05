@@ -782,7 +782,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 
 	case types.DecimalFamily:
 		v := vecs.DecimalCols[colIdx].Get(rowIdx)
-		writeBinaryDecimal(b, &v)
+		writeBinaryDecimal(b, v)
 
 	case types.BytesFamily:
 		writeBinaryBytes(b, vecs.BytesCols[colIdx].Get(rowIdx))

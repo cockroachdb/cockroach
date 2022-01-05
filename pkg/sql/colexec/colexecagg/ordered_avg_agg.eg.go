@@ -124,7 +124,8 @@ func (a *avgInt16OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -166,7 +167,8 @@ func (a *avgInt16OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -210,7 +212,8 @@ func (a *avgInt16OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -250,7 +253,8 @@ func (a *avgInt16OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -305,7 +309,8 @@ func (a *avgInt16OrderedAgg) Flush(outputIdx int) {
 
 func (a *avgInt16OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -386,7 +391,8 @@ func (a *avgInt32OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -428,7 +434,8 @@ func (a *avgInt32OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -472,7 +479,8 @@ func (a *avgInt32OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -512,7 +520,8 @@ func (a *avgInt32OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -567,7 +576,8 @@ func (a *avgInt32OrderedAgg) Flush(outputIdx int) {
 
 func (a *avgInt32OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -648,7 +658,8 @@ func (a *avgInt64OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -690,7 +701,8 @@ func (a *avgInt64OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -734,7 +746,8 @@ func (a *avgInt64OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -774,7 +787,8 @@ func (a *avgInt64OrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -829,7 +843,8 @@ func (a *avgInt64OrderedAgg) Flush(outputIdx int) {
 
 func (a *avgInt64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -906,7 +921,8 @@ func (a *avgDecimalOrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -920,7 +936,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -947,7 +963,8 @@ func (a *avgDecimalOrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -961,7 +978,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -990,7 +1007,8 @@ func (a *avgDecimalOrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1003,7 +1021,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1029,7 +1047,8 @@ func (a *avgDecimalOrderedAgg) Compute(
 								}
 							}
 							a.curIdx++
-							a.curSum = zeroDecimalValue
+							zero := zeroDecimalValue
+							a.curSum.Set(zero)
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1042,7 +1061,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1083,7 +1102,8 @@ func (a *avgDecimalOrderedAgg) Flush(outputIdx int) {
 
 func (a *avgDecimalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curSum = zeroDecimalValue
+	zero := zeroDecimalValue
+	a.curSum.Set(zero)
 	a.curCount = 0
 }
 
@@ -1156,7 +1176,8 @@ func (a *avgFloat64OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curSum/float64(a.curCount))
 							}
 							a.curIdx++
-							a.curSum = zeroFloat64Value
+							zero := zeroFloat64Value
+							a.curSum = zero
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1190,7 +1211,8 @@ func (a *avgFloat64OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curSum/float64(a.curCount))
 							}
 							a.curIdx++
-							a.curSum = zeroFloat64Value
+							zero := zeroFloat64Value
+							a.curSum = zero
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1226,7 +1248,8 @@ func (a *avgFloat64OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curSum/float64(a.curCount))
 							}
 							a.curIdx++
-							a.curSum = zeroFloat64Value
+							zero := zeroFloat64Value
+							a.curSum = zero
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1258,7 +1281,8 @@ func (a *avgFloat64OrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curSum/float64(a.curCount))
 							}
 							a.curIdx++
-							a.curSum = zeroFloat64Value
+							zero := zeroFloat64Value
+							a.curSum = zero
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1305,7 +1329,8 @@ func (a *avgFloat64OrderedAgg) Flush(outputIdx int) {
 
 func (a *avgFloat64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curSum = zeroFloat64Value
+	zero := zeroFloat64Value
+	a.curSum = zero
 	a.curCount = 0
 }
 
@@ -1378,7 +1403,8 @@ func (a *avgIntervalOrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curSum.Div(int64(a.curCount)))
 							}
 							a.curIdx++
-							a.curSum = zeroIntervalValue
+							zero := zeroIntervalValue
+							a.curSum = zero
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1407,7 +1433,8 @@ func (a *avgIntervalOrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curSum.Div(int64(a.curCount)))
 							}
 							a.curIdx++
-							a.curSum = zeroIntervalValue
+							zero := zeroIntervalValue
+							a.curSum = zero
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1438,7 +1465,8 @@ func (a *avgIntervalOrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curSum.Div(int64(a.curCount)))
 							}
 							a.curIdx++
-							a.curSum = zeroIntervalValue
+							zero := zeroIntervalValue
+							a.curSum = zero
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1465,7 +1493,8 @@ func (a *avgIntervalOrderedAgg) Compute(
 								a.col.Set(a.curIdx, a.curSum.Div(int64(a.curCount)))
 							}
 							a.curIdx++
-							a.curSum = zeroIntervalValue
+							zero := zeroIntervalValue
+							a.curSum = zero
 							a.curCount = 0
 						}
 						a.isFirstGroup = false
@@ -1507,7 +1536,8 @@ func (a *avgIntervalOrderedAgg) Flush(outputIdx int) {
 
 func (a *avgIntervalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
-	a.curSum = zeroIntervalValue
+	zero := zeroIntervalValue
+	a.curSum = zero
 	a.curCount = 0
 }
 

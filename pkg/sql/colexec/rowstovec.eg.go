@@ -201,8 +201,8 @@ func EncDatumRowsToColVec(
 								vec.Nulls().SetNull(i)
 							} else {
 
-								v = datum.(*tree.DDecimal).Decimal
-								castV := v.(apd.Decimal)
+								v = &datum.(*tree.DDecimal).Decimal
+								castV := v.(*apd.Decimal)
 								col.Set(i, castV)
 							}
 						}

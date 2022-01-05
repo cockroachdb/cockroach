@@ -68,9 +68,7 @@ func (t Tuple) String() string {
 		if i != 0 {
 			sb.WriteString(", ")
 		}
-		if d, ok := t[i].(apd.Decimal); ok {
-			sb.WriteString(d.String())
-		} else if d, ok := t[i].(*apd.Decimal); ok {
+		if d, ok := t[i].(*apd.Decimal); ok {
 			sb.WriteString(d.String())
 		} else if d, ok := t[i].([]byte); ok {
 			sb.WriteString(string(d))
@@ -82,6 +80,17 @@ func (t Tuple) String() string {
 	}
 	sb.WriteString("]")
 	return sb.String()
+}
+
+func getDecimalPtr(val reflect.Value) *apd.Decimal {
+	if val.Type().Kind() == reflect.Ptr && val.Type().Elem().Name() == "Decimal" && val.CanInterface() {
+		return val.Interface().(*apd.Decimal)
+	}
+	if val.Type().Name() == "Decimal" && val.CanInterface() {
+		decimal := val.Interface().(apd.Decimal)
+		return &decimal
+	}
+	return nil
 }
 
 func (t Tuple) less(other Tuple, evalCtx *tree.EvalContext, tupleFromOtherSet Tuple) bool {
@@ -109,10 +118,10 @@ func (t Tuple) less(other Tuple, evalCtx *tree.EvalContext, tupleFromOtherSet Tu
 		rhsVal := reflect.ValueOf(other[i])
 
 		// apd.Decimal are not comparable, so we check that first.
-		if lhsVal.Type().Name() == "Decimal" && lhsVal.CanInterface() {
-			lhsDecimal := lhsVal.Interface().(apd.Decimal)
-			rhsDecimal := rhsVal.Interface().(apd.Decimal)
-			cmp := (&lhsDecimal).CmpTotal(&rhsDecimal)
+		lhsDecimalPtr := getDecimalPtr(lhsVal)
+		rhsDecimalPtr := getDecimalPtr(rhsVal)
+		if lhsDecimalPtr != nil && rhsDecimalPtr != nil {
+			cmp := lhsDecimalPtr.CmpTotal(rhsDecimalPtr)
 			if cmp == 0 {
 				continue
 			} else if cmp == -1 {
@@ -120,6 +129,11 @@ func (t Tuple) less(other Tuple, evalCtx *tree.EvalContext, tupleFromOtherSet Tu
 			} else {
 				return false
 			}
+		}
+		if lhsDecimalPtr != nil || rhsDecimalPtr != nil {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"unexpectedly decimal only on one side: left %s\tright %s", lhsVal.Type().Name(), rhsVal.Type().Name(),
+			))
 		}
 
 		// json.JSON are not comparable.
@@ -758,6 +772,8 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 		// or apd.Decimal.
 		if decimalVal, ok := val.(apd.Decimal); ok {
 			vec.Decimal()[idx].Set(&decimalVal)
+		} else if decimalPtr, ok := val.(*apd.Decimal); ok {
+			vec.Decimal()[idx].Set(decimalPtr)
 		} else {
 			floatVal := val.(float64)
 			decimalVal, _, err := apd.NewFromString(fmt.Sprintf("%f", floatVal))
@@ -974,7 +990,6 @@ func (s *opTestInput) Next() coldata.Batch {
 		vec := s.batch.ColVec(i)
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
-		col := reflect.ValueOf(vec.Col())
 		for j := 0; j < batchSize; j++ {
 			// If useSel is false, then the selection vector will contain
 			// [0, ..., batchSize] in ascending order.
@@ -996,7 +1011,7 @@ func (s *opTestInput) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "error setting float"))
 						}
-						col.Index(outputIdx).Set(reflect.ValueOf(d))
+						setColVal(vec, outputIdx, &d, s.evalCtx)
 					case types.BytesFamily:
 						newBytes := make([]byte, rng.Intn(16)+1)
 						rng.Read(newBytes)
@@ -1225,7 +1240,7 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 				colDec := vec.Decimal()
 				var newDec apd.Decimal
 				newDec.Set(&colDec[tupleIdx])
-				val = reflect.ValueOf(newDec)
+				val = reflect.ValueOf(&newDec)
 			} else if family == types.JsonFamily {
 				colJSON := vec.JSON()
 				newJSON := colJSON.Get(tupleIdx)
@@ -1400,7 +1415,13 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
 				}
 			}
 			// Special case for decimals.
-			if d1, ok := actual[i].(apd.Decimal); ok {
+			if d1, ok := actual[i].(*apd.Decimal); ok {
+				if d2, ok := expected[i].(apd.Decimal); ok {
+					if d1.Cmp(&d2) != 0 {
+						return false
+					}
+					continue
+				}
 				if f2, ok := expected[i].(float64); ok {
 					d2, _, err := apd.NewFromString(fmt.Sprintf("%f", f2))
 					if err == nil && d1.Cmp(d2) == 0 {

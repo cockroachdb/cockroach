@@ -336,7 +336,7 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
-				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &{{.Right}})
+				_, err := tree.{{.Ctx}}.{{.Op}}({{.Target}}, {{.Left}}, {{.Right}})
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -475,7 +475,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
 				leftTmpDec.SetInt64(int64({{.Left}}))
 				rightTmpDec.SetInt64(int64({{.Right}}))
-				if _, err := tree.{{.Ctx}}.Quo(&{{.Target}}, leftTmpDec, rightTmpDec); err != nil {
+				if _, err := tree.{{.Ctx}}.Quo({{.Target}}, leftTmpDec, rightTmpDec); err != nil {
 					colexecerror.ExpectedError(err)
 				}
 			}
@@ -552,7 +552,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 				{{end}}
 				tmpDec := &_overloadHelper.TmpDec1
 				tmpDec.SetInt64(int64({{.Right}}))
-				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
+				if _, err := tree.{{.Ctx}}.{{.Op}}({{.Target}}, {{.Left}}, tmpDec); err != nil {
 					colexecerror.ExpectedError(err)
 				}
 			}
@@ -585,7 +585,7 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 				{{end}}
 				tmpDec := &_overloadHelper.TmpDec1
 				tmpDec.SetInt64(int64({{.Left}}))
-				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
+				_, err := tree.{{.Ctx}}.{{.Op}}({{.Target}}, tmpDec, {{.Right}})
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -1011,7 +1011,7 @@ func convertNativeToDatum(
 	case types.FloatFamily:
 		runtimeConversion = fmt.Sprintf("tree.DFloat(%s)", nativeElem)
 	case types.DecimalFamily:
-		runtimeConversion = fmt.Sprintf("tree.DDecimal{Decimal: %s}", nativeElem)
+		runtimeConversion = fmt.Sprintf("tree.DDecimal{Decimal: *%s}", nativeElem)
 	case types.IntervalFamily:
 		runtimeConversion = fmt.Sprintf("tree.DInterval{Duration: %s}", nativeElem)
 	case types.BytesFamily:

@@ -391,7 +391,7 @@ func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int)
 						continue
 					}
 					val := col.Get(i)
-					op.scratch = encoding.EncodeDecimalAscending(op.scratch, &val)
+					op.scratch = encoding.EncodeDecimalAscending(op.scratch, val)
 					op.outputBytes.AppendVal(op.scratch)
 				}
 			}
@@ -400,7 +400,7 @@ func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int)
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
-					op.scratch = encoding.EncodeDecimalAscending(op.scratch, &val)
+					op.scratch = encoding.EncodeDecimalAscending(op.scratch, val)
 					op.outputBytes.AppendVal(op.scratch)
 				}
 			}
@@ -418,7 +418,7 @@ func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int)
 					}
 					//gcassert:bce
 					val := col.Get(i)
-					op.scratch = encoding.EncodeDecimalAscending(op.scratch, &val)
+					op.scratch = encoding.EncodeDecimalAscending(op.scratch, val)
 					op.outputBytes.AppendVal(op.scratch)
 				}
 			}
@@ -428,7 +428,7 @@ func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int)
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
-					op.scratch = encoding.EncodeDecimalAscending(op.scratch, &val)
+					op.scratch = encoding.EncodeDecimalAscending(op.scratch, val)
 					op.outputBytes.AppendVal(op.scratch)
 				}
 			}
@@ -1243,7 +1243,7 @@ func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int
 						continue
 					}
 					val := col.Get(i)
-					op.scratch = encoding.EncodeDecimalDescending(op.scratch, &val)
+					op.scratch = encoding.EncodeDecimalDescending(op.scratch, val)
 					op.outputBytes.AppendVal(op.scratch)
 				}
 			}
@@ -1252,7 +1252,7 @@ func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int
 				{
 					op.scratch = op.scratch[:0]
 					val := col.Get(i)
-					op.scratch = encoding.EncodeDecimalDescending(op.scratch, &val)
+					op.scratch = encoding.EncodeDecimalDescending(op.scratch, val)
 					op.outputBytes.AppendVal(op.scratch)
 				}
 			}
@@ -1270,7 +1270,7 @@ func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int
 					}
 					//gcassert:bce
 					val := col.Get(i)
-					op.scratch = encoding.EncodeDecimalDescending(op.scratch, &val)
+					op.scratch = encoding.EncodeDecimalDescending(op.scratch, val)
 					op.outputBytes.AppendVal(op.scratch)
 				}
 			}
@@ -1280,7 +1280,7 @@ func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int
 					op.scratch = op.scratch[:0]
 					//gcassert:bce
 					val := col.Get(i)
-					op.scratch = encoding.EncodeDecimalDescending(op.scratch, &val)
+					op.scratch = encoding.EncodeDecimalDescending(op.scratch, val)
 					op.outputBytes.AppendVal(op.scratch)
 				}
 			}

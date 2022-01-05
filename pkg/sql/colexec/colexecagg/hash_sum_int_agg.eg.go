@@ -131,7 +131,8 @@ func (a *sumIntInt16HashAgg) Flush(outputIdx int) {
 }
 
 func (a *sumIntInt16HashAgg) Reset() {
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
@@ -238,7 +239,8 @@ func (a *sumIntInt32HashAgg) Flush(outputIdx int) {
 }
 
 func (a *sumIntInt32HashAgg) Reset() {
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
@@ -345,7 +347,8 @@ func (a *sumIntInt64HashAgg) Flush(outputIdx int) {
 }
 
 func (a *sumIntInt64HashAgg) Reset() {
-	a.curAgg = zeroInt64Value
+	zero := zeroInt64Value
+	a.curAgg = zero
 	a.numNonNull = 0
 }
 
