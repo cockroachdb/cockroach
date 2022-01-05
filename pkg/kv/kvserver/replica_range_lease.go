@@ -47,7 +47,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -56,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -317,12 +315,9 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// cancellation of all contexts onto this new one, only canceling it if all
 	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
 	// cancel function that must be called; calling just cancel is insufficient.
-	//
-	// TODO(tbg): the multiplexing makes less sense with circuit breakers. Or
-	// rather it does make sense but only if we also multiplex a "circuit breaker
-	// client" on top (who is ready to wait for up to base.SlowRequestThreshold).
-	// That seems like a reasonable approach and could be integrated with the
-	// time.AfterFunc below.
+	// The Context is given a verbose Span, which facilitates investigating
+	// stuck lease proposals. For example, when replication is slow/stuck,
+	// the recording will be printed (see executeWriteBatch).
 	ctx := p.repl.AnnotateCtx(context.Background())
 	const opName = "request range lease"
 	tr := p.repl.AmbientContext.Tracer
@@ -337,11 +332,13 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			opName,
 			tracing.WithParent(parentSp),
 			tracing.WithFollowsFrom(),
+			tracing.WithForceRealSpan(),
 			tagsOpt,
 		)
 	} else {
-		ctx, sp = tr.StartSpanCtx(ctx, opName, tagsOpt)
+		ctx, sp = tr.StartSpanCtx(ctx, opName, tracing.WithForceRealSpan(), tagsOpt)
 	}
+	sp.SetVerbose(true)
 
 	ctx, cancel := context.WithCancel(ctx)
 
