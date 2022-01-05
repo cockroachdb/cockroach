@@ -14,14 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -29,6 +28,7 @@ type commentOnConstraintNode struct {
 	n         *tree.CommentOnConstraint
 	tableDesc catalog.TableDescriptor
 	oid       *tree.DOid
+	commenter scexec.CommentUpdater
 }
 
 //CommentOnConstraint add comment on a constraint
@@ -52,7 +52,14 @@ func (p *planner) CommentOnConstraint(
 		return nil, err
 	}
 
-	return &commentOnConstraintNode{n: n, tableDesc: tableDesc}, nil
+	return &commentOnConstraintNode{
+		n:         n,
+		tableDesc: tableDesc,
+		commenter: p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+			ctx,
+			p.txn,
+		),
+	}, nil
 
 }
 
@@ -94,28 +101,20 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	// Setting the comment to NULL is the
 	// equivalent of deleting the comment.
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"set-constraint-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
+		err := n.commenter.UpsertDescriptorComment(
+			int64(n.oid.DInt),
+			0,
 			keys.ConstraintCommentType,
-			n.oid.DInt,
 			*n.n.Comment,
 		)
 		if err != nil {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"delete-constraint-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
+		err := n.commenter.DeleteDescriptorComment(
+			int64(n.oid.DInt),
+			0,
 			keys.ConstraintCommentType,
-			n.oid.DInt,
 		)
 		if err != nil {
 			return err
