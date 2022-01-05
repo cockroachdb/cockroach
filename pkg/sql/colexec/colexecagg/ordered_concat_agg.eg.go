@@ -25,10 +25,10 @@ func newConcatOrderedAggAlloc(allocator *colmem.Allocator, allocSize int64) aggr
 
 type concatOrderedAgg struct {
 	orderedAggregateFuncBase
-	// curAgg holds the running total.
-	curAgg []byte
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
+	// curAgg holds the running total.
+	curAgg []byte
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -177,10 +177,11 @@ func (a *concatOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))

@@ -40,10 +40,6 @@ type defaultHashAgg struct {
 
 var _ AggregateFunc = &defaultHashAgg{}
 
-func (a *defaultHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-}
-
 func (a *defaultHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {

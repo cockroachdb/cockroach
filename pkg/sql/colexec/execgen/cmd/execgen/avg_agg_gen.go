@@ -28,6 +28,7 @@ type avgTmplInfo struct {
 	NeedsHelper    bool
 	InputVecMethod string
 	RetGoType      string
+	RetGoTypeSlice string
 	RetVecMethod   string
 
 	avgOverload assignFunc
@@ -109,6 +110,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
+		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
 		"_RET_GOTYPE", `{{.RetGoType}}`,
 		"_RET_TYPE", "{{.RetVecMethod}}",
 		"_TYPE", "{{.InputVecMethod}}",
@@ -165,6 +167,7 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 					NeedsHelper:    needsHelper,
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
 					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),
+					RetGoTypeSlice: goTypeSliceName(retTypeFamily, retTypeWidth),
 					RetVecMethod:   toVecMethod(retTypeFamily, retTypeWidth),
 					avgOverload:    getSumAddOverload(inputTypeFamily),
 				}})
