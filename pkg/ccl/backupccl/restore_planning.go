@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1359,13 +1358,6 @@ func RewriteTableDescs(
 		table.Lease = nil
 	}
 	return nil
-}
-
-func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
-	return errors.Errorf(
-		"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
-		start, end, roachpb.Key(span.Start), roachpb.Key(span.End),
-	)
 }
 
 // resolveOptionsForRestoreJobDescription creates a copy of

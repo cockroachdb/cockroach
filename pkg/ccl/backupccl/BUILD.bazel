@@ -147,7 +147,6 @@ go_test(
         "create_scheduled_backup_test.go",
         "full_cluster_backup_restore_test.go",
         "helpers_test.go",
-        "import_spans_test.go",
         "insert_missing_public_schema_namespace_entry_restore_test.go",
         "key_rewriter_test.go",
         "main_test.go",
