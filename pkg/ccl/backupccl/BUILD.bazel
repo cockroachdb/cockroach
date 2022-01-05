@@ -16,7 +16,6 @@ go_library(
         "create_scheduled_backup.go",
         "key_rewriter.go",
         "manifest_handling.go",
-        "memory_utils.go",
         "restoration_data.go",
         "restore_data_processor.go",
         "restore_job.go",
