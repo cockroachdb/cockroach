@@ -87,14 +87,14 @@ func newSum_SUMKIND_AGGKINDAggAlloc(
 type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col _RET_GOTYPESLICE
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg _RET_GOTYPE
-	// col points to the output vector we are updating.
-	col _RET_GOTYPESLICE
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -114,10 +114,10 @@ var _ AggregateFunc = &sum_SUMKIND_TYPE_AGGKINDAgg{}
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec._RET_TYPE()
 	// {{else}}
 	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.col = vec._RET_TYPE()
 }
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
@@ -207,11 +207,14 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec._RET_TYPE()
 	// {{end}}
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 

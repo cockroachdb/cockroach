@@ -59,10 +59,10 @@ func newBool_OP_TYPE_AGGKINDAggAlloc(
 type bool_OP_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	col []bool
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -74,10 +74,10 @@ var _ AggregateFunc = &bool_OP_TYPE_AGGKINDAgg{}
 func (a *bool_OP_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Bool()
 	// {{else}}
 	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.col = vec.Bool()
 }
 
 func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
@@ -153,11 +153,14 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec.Bool()
 	// {{end}}
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 

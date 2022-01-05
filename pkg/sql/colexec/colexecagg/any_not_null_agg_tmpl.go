@@ -88,10 +88,10 @@ func newAnyNotNull_AGGKINDAggAlloc(
 type anyNotNull_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	col _GOTYPESLICE
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
-	col                         _GOTYPESLICE
 	curAgg                      _GOTYPE
 	foundNonNullForCurrentGroup bool
 }
@@ -101,10 +101,10 @@ var _ AggregateFunc = &anyNotNull_TYPE_AGGKINDAgg{}
 func (a *anyNotNull_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.TemplateType()
 	// {{else}}
 	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.col = vec.TemplateType()
 }
 
 func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
@@ -175,11 +175,14 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec.TemplateType()
 	// {{end}}
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
 	// Release the reference to curAgg eagerly.

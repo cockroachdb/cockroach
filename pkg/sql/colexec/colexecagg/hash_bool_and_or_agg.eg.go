@@ -31,7 +31,6 @@ func newBoolAndHashAggAlloc(
 
 type boolAndHashAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -42,7 +41,6 @@ var _ AggregateFunc = &boolAndHashAgg{}
 
 func (a *boolAndHashAgg) SetOutput(vec coldata.Vec) {
 	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
 }
 
 func (a *boolAndHashAgg) Compute(
@@ -87,10 +85,11 @@ func (a *boolAndHashAgg) Compute(
 }
 
 func (a *boolAndHashAgg) Flush(outputIdx int) {
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 
@@ -132,7 +131,6 @@ func newBoolOrHashAggAlloc(
 
 type boolOrHashAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -143,7 +141,6 @@ var _ AggregateFunc = &boolOrHashAgg{}
 
 func (a *boolOrHashAgg) SetOutput(vec coldata.Vec) {
 	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
 }
 
 func (a *boolOrHashAgg) Compute(
@@ -188,10 +185,11 @@ func (a *boolOrHashAgg) Compute(
 }
 
 func (a *boolOrHashAgg) Flush(outputIdx int) {
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 

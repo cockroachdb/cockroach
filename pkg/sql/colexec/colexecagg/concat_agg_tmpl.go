@@ -39,13 +39,13 @@ func newConcat_AGGKINDAggAlloc(allocator *colmem.Allocator, allocSize int64) agg
 type concat_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col *coldata.Bytes
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
 	// curAgg holds the running total.
 	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -54,10 +54,10 @@ type concat_AGGKINDAgg struct {
 func (a *concat_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Bytes()
 	// {{else}}
 	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.col = vec.Bytes()
 }
 
 func (a *concat_AGGKINDAgg) Compute(
@@ -130,11 +130,14 @@ func (a *concat_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec.Bytes()
 	// {{end}}
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))

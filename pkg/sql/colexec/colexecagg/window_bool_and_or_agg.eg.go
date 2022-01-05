@@ -31,7 +31,6 @@ func newBoolAndWindowAggAlloc(
 
 type boolAndWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -42,7 +41,6 @@ var _ AggregateFunc = &boolAndWindowAgg{}
 
 func (a *boolAndWindowAgg) SetOutput(vec coldata.Vec) {
 	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
 }
 
 func (a *boolAndWindowAgg) Compute(
@@ -87,10 +85,11 @@ func (a *boolAndWindowAgg) Compute(
 }
 
 func (a *boolAndWindowAgg) Flush(outputIdx int) {
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 
@@ -132,7 +131,6 @@ func newBoolOrWindowAggAlloc(
 
 type boolOrWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -143,7 +141,6 @@ var _ AggregateFunc = &boolOrWindowAgg{}
 
 func (a *boolOrWindowAgg) SetOutput(vec coldata.Vec) {
 	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
 }
 
 func (a *boolOrWindowAgg) Compute(
@@ -188,10 +185,11 @@ func (a *boolOrWindowAgg) Compute(
 }
 
 func (a *boolOrWindowAgg) Flush(outputIdx int) {
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 

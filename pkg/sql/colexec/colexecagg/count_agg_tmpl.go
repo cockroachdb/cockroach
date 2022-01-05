@@ -43,10 +43,10 @@ func newCount_COUNTKIND_AGGKINDAggAlloc(
 type count_COUNTKIND_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	col []int64
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
-	col    []int64
 	curAgg int64
 }
 
@@ -55,10 +55,10 @@ var _ AggregateFunc = &count_COUNTKIND_AGGKINDAgg{}
 func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.Int64()
 	// {{else}}
 	a.unorderedAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.col = vec.Int64()
 }
 
 func (a *count_COUNTKIND_AGGKINDAgg) Compute(
@@ -146,8 +146,11 @@ func (a *count_COUNTKIND_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec.Int64()
 	// {{end}}
-	a.col[outputIdx] = a.curAgg
+	col[outputIdx] = a.curAgg
 }
 
 // {{if eq "_AGGKIND" "Ordered"}}

@@ -27,8 +27,6 @@ type concatWindowAgg struct {
 	unorderedAggregateFuncBase
 	// curAgg holds the running total.
 	curAgg []byte
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -36,7 +34,6 @@ type concatWindowAgg struct {
 
 func (a *concatWindowAgg) SetOutput(vec coldata.Vec) {
 	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bytes()
 }
 
 func (a *concatWindowAgg) Compute(
@@ -76,10 +73,11 @@ func (a *concatWindowAgg) Compute(
 }
 
 func (a *concatWindowAgg) Flush(outputIdx int) {
+	col := a.vec.Bytes()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
