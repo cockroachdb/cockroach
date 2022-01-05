@@ -211,13 +211,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// {{if eq "_AGGKIND" "Window"}}
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		execgen.COPYVAL(a.col[outputIdx], a.curAgg)
-		// {{else}}
-		a.col[outputIdx] = a.curAgg
-		// {{end}}
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
