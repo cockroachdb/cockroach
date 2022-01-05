@@ -99,6 +99,11 @@ func init() {
 	cloud.RegisterKMSFromURIFactory(MakeTestKMS, "testkms")
 }
 
+func makeTableSpan(tableID uint32) roachpb.Span {
+	k := keys.SystemSQLCodec.TablePrefix(tableID)
+	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
+}
+
 type sqlDBKey struct {
 	server string
 	user   string
