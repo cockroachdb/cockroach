@@ -94,6 +94,8 @@ func newAvg_AGGKINDAggAlloc(
 type avg_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col _RET_GOTYPESLICE
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
@@ -104,8 +106,6 @@ type avg_TYPE_AGGKINDAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col _RET_GOTYPESLICE
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers
@@ -118,14 +118,13 @@ type avg_TYPE_AGGKINDAgg struct {
 
 var _ AggregateFunc = &avg_TYPE_AGGKINDAgg{}
 
+// {{if eq "_AGGKIND" "Ordered"}}
 func (a *avg_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
-	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	// {{else}}
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	// {{end}}
 	a.col = vec._RET_TYPE()
 }
+
+// {{end}}
 
 func (a *avg_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -213,11 +212,14 @@ func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec._RET_TYPE()
 	// {{end}}
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		_ASSIGN_DIV_INT64(a.col[outputIdx], a.curSum, a.curCount, a.col, _, _)
+		_ASSIGN_DIV_INT64(col[outputIdx], a.curSum, a.curCount, a.col, _, _)
 	}
 }
 

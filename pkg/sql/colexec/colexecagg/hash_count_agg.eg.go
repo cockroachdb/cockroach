@@ -28,16 +28,10 @@ func newCountRowsHashAggAlloc(
 // countRowsHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsHashAgg struct {
 	unorderedAggregateFuncBase
-	col    coldata.Int64s
 	curAgg int64
 }
 
 var _ AggregateFunc = &countRowsHashAgg{}
-
-func (a *countRowsHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *countRowsHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -57,7 +51,8 @@ func (a *countRowsHashAgg) Compute(
 }
 
 func (a *countRowsHashAgg) Flush(outputIdx int) {
-	a.col[outputIdx] = a.curAgg
+	col := a.vec.Int64()
+	col[outputIdx] = a.curAgg
 }
 
 func (a *countRowsHashAgg) Reset() {
@@ -97,16 +92,10 @@ func newCountHashAggAlloc(
 // countHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countHashAgg struct {
 	unorderedAggregateFuncBase
-	col    coldata.Int64s
 	curAgg int64
 }
 
 var _ AggregateFunc = &countHashAgg{}
-
-func (a *countHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *countHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -140,7 +129,8 @@ func (a *countHashAgg) Compute(
 }
 
 func (a *countHashAgg) Flush(outputIdx int) {
-	a.col[outputIdx] = a.curAgg
+	col := a.vec.Int64()
+	col[outputIdx] = a.curAgg
 }
 
 func (a *countHashAgg) Reset() {

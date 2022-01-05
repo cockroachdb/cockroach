@@ -76,18 +76,11 @@ type avgInt16HashAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt16HashAgg{}
-
-func (a *avgInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *avgInt16HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -155,12 +148,13 @@ func (a *avgInt16HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Decimal()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -200,18 +194,11 @@ type avgInt32HashAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt32HashAgg{}
-
-func (a *avgInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *avgInt32HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -279,12 +266,13 @@ func (a *avgInt32HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Decimal()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -324,18 +312,11 @@ type avgInt64HashAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt64HashAgg{}
-
-func (a *avgInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *avgInt64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -403,12 +384,13 @@ func (a *avgInt64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Decimal()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -449,16 +431,9 @@ type avgDecimalHashAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Decimals
 }
 
 var _ AggregateFunc = &avgDecimalHashAgg{}
-
-func (a *avgDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *avgDecimalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -521,12 +496,13 @@ func (a *avgDecimalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Decimal()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -567,16 +543,9 @@ type avgFloat64HashAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Float64s
 }
 
 var _ AggregateFunc = &avgFloat64HashAgg{}
-
-func (a *avgFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Float64()
-}
 
 func (a *avgFloat64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -633,10 +602,11 @@ func (a *avgFloat64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Float64()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curSum / float64(a.curCount)
+		col[outputIdx] = a.curSum / float64(a.curCount)
 	}
 }
 
@@ -675,16 +645,9 @@ type avgIntervalHashAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Durations
 }
 
 var _ AggregateFunc = &avgIntervalHashAgg{}
-
-func (a *avgIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Interval()
-}
 
 func (a *avgIntervalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -731,10 +694,11 @@ func (a *avgIntervalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Interval()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
+		col[outputIdx] = a.curSum.Div(int64(a.curCount))
 	}
 }
 

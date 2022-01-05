@@ -92,11 +92,11 @@ func new_AGG_TITLE_AGGKINDAggAlloc(
 type _AGG_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col _GOTYPESLICE
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
-	// col points to the output vector we are updating.
-	col _GOTYPESLICE
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -108,14 +108,13 @@ type _AGG_TYPE_AGGKINDAgg struct {
 
 var _ AggregateFunc = &_AGG_TYPE_AGGKINDAgg{}
 
+// {{if eq "_AGGKIND" "Ordered"}}
 func (a *_AGG_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
-	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	// {{else}}
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	// {{end}}
 	a.col = vec._TYPE()
 }
+
+// {{end}}
 
 func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -193,11 +192,14 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec._TYPE()
 	// {{end}}
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// {{if and (not (eq "_AGGKIND" "Window")) (or (.IsBytesLike) (eq .VecMethod "Datum"))}}
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)

@@ -28,16 +28,10 @@ func newCountRowsWindowAggAlloc(
 // countRowsWindowAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    coldata.Int64s
 	curAgg int64
 }
 
 var _ AggregateFunc = &countRowsWindowAgg{}
-
-func (a *countRowsWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *countRowsWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -56,7 +50,8 @@ func (a *countRowsWindowAgg) Compute(
 }
 
 func (a *countRowsWindowAgg) Flush(outputIdx int) {
-	a.col[outputIdx] = a.curAgg
+	col := a.vec.Int64()
+	col[outputIdx] = a.curAgg
 }
 
 func (a *countRowsWindowAgg) Reset() {
@@ -96,16 +91,10 @@ func newCountWindowAggAlloc(
 // countWindowAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    coldata.Int64s
 	curAgg int64
 }
 
 var _ AggregateFunc = &countWindowAgg{}
-
-func (a *countWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *countWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -138,7 +127,8 @@ func (a *countWindowAgg) Compute(
 }
 
 func (a *countWindowAgg) Flush(outputIdx int) {
-	a.col[outputIdx] = a.curAgg
+	col := a.vec.Int64()
+	col[outputIdx] = a.curAgg
 }
 
 func (a *countWindowAgg) Reset() {

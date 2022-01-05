@@ -112,8 +112,6 @@ func newMinHashAggAlloc(
 
 type minBoolHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Bools
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -124,11 +122,6 @@ type minBoolHashAgg struct {
 }
 
 var _ AggregateFunc = &minBoolHashAgg{}
-
-func (a *minBoolHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *minBoolHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -221,10 +214,11 @@ func (a *minBoolHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Bool()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -255,8 +249,6 @@ func (a *minBoolHashAggAlloc) newAggFunc() AggregateFunc {
 
 type minBytesHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -267,11 +259,6 @@ type minBytesHashAgg struct {
 }
 
 var _ AggregateFunc = &minBytesHashAgg{}
-
-func (a *minBytesHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bytes()
-}
 
 func (a *minBytesHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -348,10 +335,11 @@ func (a *minBytesHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Bytes()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	oldCurAggSize := len(a.curAgg)
 	// Release the reference to curAgg eagerly. We can't do this for the window
@@ -391,8 +379,6 @@ func (a *minBytesHashAggAlloc) newAggFunc() AggregateFunc {
 
 type minDecimalHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -403,11 +389,6 @@ type minDecimalHashAgg struct {
 }
 
 var _ AggregateFunc = &minDecimalHashAgg{}
-
-func (a *minDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *minDecimalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -484,10 +465,11 @@ func (a *minDecimalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Decimal()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -518,8 +500,6 @@ func (a *minDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 
 type minInt16HashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int16s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -530,11 +510,6 @@ type minInt16HashAgg struct {
 }
 
 var _ AggregateFunc = &minInt16HashAgg{}
-
-func (a *minInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int16()
-}
 
 func (a *minInt16HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -633,10 +608,11 @@ func (a *minInt16HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int16()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -667,8 +643,6 @@ func (a *minInt16HashAggAlloc) newAggFunc() AggregateFunc {
 
 type minInt32HashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int32s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -679,11 +653,6 @@ type minInt32HashAgg struct {
 }
 
 var _ AggregateFunc = &minInt32HashAgg{}
-
-func (a *minInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int32()
-}
 
 func (a *minInt32HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -782,10 +751,11 @@ func (a *minInt32HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int32()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -816,8 +786,6 @@ func (a *minInt32HashAggAlloc) newAggFunc() AggregateFunc {
 
 type minInt64HashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -828,11 +796,6 @@ type minInt64HashAgg struct {
 }
 
 var _ AggregateFunc = &minInt64HashAgg{}
-
-func (a *minInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *minInt64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -931,10 +894,11 @@ func (a *minInt64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -965,8 +929,6 @@ func (a *minInt64HashAggAlloc) newAggFunc() AggregateFunc {
 
 type minFloat64HashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Float64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -977,11 +939,6 @@ type minFloat64HashAgg struct {
 }
 
 var _ AggregateFunc = &minFloat64HashAgg{}
-
-func (a *minFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Float64()
-}
 
 func (a *minFloat64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1096,10 +1053,11 @@ func (a *minFloat64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Float64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1130,8 +1088,6 @@ func (a *minFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 
 type minTimestampHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Times
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1142,11 +1098,6 @@ type minTimestampHashAgg struct {
 }
 
 var _ AggregateFunc = &minTimestampHashAgg{}
-
-func (a *minTimestampHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Timestamp()
-}
 
 func (a *minTimestampHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1237,10 +1188,11 @@ func (a *minTimestampHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Timestamp()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1271,8 +1223,6 @@ func (a *minTimestampHashAggAlloc) newAggFunc() AggregateFunc {
 
 type minIntervalHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Durations
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1283,11 +1233,6 @@ type minIntervalHashAgg struct {
 }
 
 var _ AggregateFunc = &minIntervalHashAgg{}
-
-func (a *minIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Interval()
-}
 
 func (a *minIntervalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1364,10 +1309,11 @@ func (a *minIntervalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Interval()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1398,8 +1344,6 @@ func (a *minIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 
 type minJSONHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col *coldata.JSONs
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1410,11 +1354,6 @@ type minJSONHashAgg struct {
 }
 
 var _ AggregateFunc = &minJSONHashAgg{}
-
-func (a *minJSONHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.JSON()
-}
 
 func (a *minJSONHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1553,10 +1492,11 @@ func (a *minJSONHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.JSON()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
@@ -1602,8 +1542,6 @@ func (a *minJSONHashAggAlloc) newAggFunc() AggregateFunc {
 
 type minDatumHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.DatumVec
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1614,11 +1552,6 @@ type minDatumHashAgg struct {
 }
 
 var _ AggregateFunc = &minDatumHashAgg{}
-
-func (a *minDatumHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Datum()
-}
 
 func (a *minDatumHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1707,10 +1640,11 @@ func (a *minDatumHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Datum()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 
 	var oldCurAggSize uintptr
@@ -1827,8 +1761,6 @@ func newMaxHashAggAlloc(
 
 type maxBoolHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Bools
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1839,11 +1771,6 @@ type maxBoolHashAgg struct {
 }
 
 var _ AggregateFunc = &maxBoolHashAgg{}
-
-func (a *maxBoolHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *maxBoolHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1936,10 +1863,11 @@ func (a *maxBoolHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Bool()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1970,8 +1898,6 @@ func (a *maxBoolHashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxBytesHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col *coldata.Bytes
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -1982,11 +1908,6 @@ type maxBytesHashAgg struct {
 }
 
 var _ AggregateFunc = &maxBytesHashAgg{}
-
-func (a *maxBytesHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bytes()
-}
 
 func (a *maxBytesHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2063,10 +1984,11 @@ func (a *maxBytesHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Bytes()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	oldCurAggSize := len(a.curAgg)
 	// Release the reference to curAgg eagerly. We can't do this for the window
@@ -2106,8 +2028,6 @@ func (a *maxBytesHashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxDecimalHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Decimals
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2118,11 +2038,6 @@ type maxDecimalHashAgg struct {
 }
 
 var _ AggregateFunc = &maxDecimalHashAgg{}
-
-func (a *maxDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *maxDecimalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2199,10 +2114,11 @@ func (a *maxDecimalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Decimal()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2233,8 +2149,6 @@ func (a *maxDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxInt16HashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int16s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2245,11 +2159,6 @@ type maxInt16HashAgg struct {
 }
 
 var _ AggregateFunc = &maxInt16HashAgg{}
-
-func (a *maxInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int16()
-}
 
 func (a *maxInt16HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2348,10 +2257,11 @@ func (a *maxInt16HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int16()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2382,8 +2292,6 @@ func (a *maxInt16HashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxInt32HashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int32s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2394,11 +2302,6 @@ type maxInt32HashAgg struct {
 }
 
 var _ AggregateFunc = &maxInt32HashAgg{}
-
-func (a *maxInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int32()
-}
 
 func (a *maxInt32HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2497,10 +2400,11 @@ func (a *maxInt32HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int32()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2531,8 +2435,6 @@ func (a *maxInt32HashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxInt64HashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Int64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2543,11 +2445,6 @@ type maxInt64HashAgg struct {
 }
 
 var _ AggregateFunc = &maxInt64HashAgg{}
-
-func (a *maxInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *maxInt64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2646,10 +2543,11 @@ func (a *maxInt64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Int64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2680,8 +2578,6 @@ func (a *maxInt64HashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxFloat64HashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Float64s
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2692,11 +2588,6 @@ type maxFloat64HashAgg struct {
 }
 
 var _ AggregateFunc = &maxFloat64HashAgg{}
-
-func (a *maxFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Float64()
-}
 
 func (a *maxFloat64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2811,10 +2702,11 @@ func (a *maxFloat64HashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Float64()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2845,8 +2737,6 @@ func (a *maxFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxTimestampHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Times
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2857,11 +2747,6 @@ type maxTimestampHashAgg struct {
 }
 
 var _ AggregateFunc = &maxTimestampHashAgg{}
-
-func (a *maxTimestampHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Timestamp()
-}
 
 func (a *maxTimestampHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -2952,10 +2837,11 @@ func (a *maxTimestampHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Timestamp()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -2986,8 +2872,6 @@ func (a *maxTimestampHashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxIntervalHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.Durations
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -2998,11 +2882,6 @@ type maxIntervalHashAgg struct {
 }
 
 var _ AggregateFunc = &maxIntervalHashAgg{}
-
-func (a *maxIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Interval()
-}
 
 func (a *maxIntervalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -3079,10 +2958,11 @@ func (a *maxIntervalHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Interval()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -3113,8 +2993,6 @@ func (a *maxIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxJSONHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col *coldata.JSONs
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -3125,11 +3003,6 @@ type maxJSONHashAgg struct {
 }
 
 var _ AggregateFunc = &maxJSONHashAgg{}
-
-func (a *maxJSONHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.JSON()
-}
 
 func (a *maxJSONHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -3268,10 +3141,11 @@ func (a *maxJSONHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.JSON()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	var oldCurAggSize uintptr
 	if a.curAgg != nil {
@@ -3317,8 +3191,6 @@ func (a *maxJSONHashAggAlloc) newAggFunc() AggregateFunc {
 
 type maxDatumHashAgg struct {
 	unorderedAggregateFuncBase
-	// col points to the output vector we are updating.
-	col coldata.DatumVec
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if numNonNull is zero, curAgg is undefined.
@@ -3329,11 +3201,6 @@ type maxDatumHashAgg struct {
 }
 
 var _ AggregateFunc = &maxDatumHashAgg{}
-
-func (a *maxDatumHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Datum()
-}
 
 func (a *maxDatumHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -3422,10 +3289,11 @@ func (a *maxDatumHashAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
+	col := a.vec.Datum()
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 
 	var oldCurAggSize uintptr

@@ -70,15 +70,15 @@ func newAvgOrderedAggAlloc(
 
 type avgInt16OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Decimals
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -291,12 +291,13 @@ func (a *avgInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -331,15 +332,15 @@ func (a *avgInt16OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgInt32OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Decimals
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -552,12 +553,13 @@ func (a *avgInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -592,15 +594,15 @@ func (a *avgInt32OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgInt64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Decimals
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -813,12 +815,13 @@ func (a *avgInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -853,6 +856,8 @@ func (a *avgInt64OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Decimals
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -860,8 +865,6 @@ type avgDecimalOrderedAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Decimals
 }
 
 var _ AggregateFunc = &avgDecimalOrderedAgg{}
@@ -1066,12 +1069,13 @@ func (a *avgDecimalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -1106,6 +1110,8 @@ func (a *avgDecimalOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgFloat64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Float64s
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -1113,8 +1119,6 @@ type avgFloat64OrderedAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Float64s
 }
 
 var _ AggregateFunc = &avgFloat64OrderedAgg{}
@@ -1291,10 +1295,11 @@ func (a *avgFloat64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curSum / float64(a.curCount)
+		col[outputIdx] = a.curSum / float64(a.curCount)
 	}
 }
 
@@ -1327,6 +1332,8 @@ func (a *avgFloat64OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgIntervalOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Durations
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
@@ -1334,8 +1341,6 @@ type avgIntervalOrderedAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Durations
 }
 
 var _ AggregateFunc = &avgIntervalOrderedAgg{}
@@ -1492,10 +1497,11 @@ func (a *avgIntervalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
+		col[outputIdx] = a.curSum.Div(int64(a.curCount))
 	}
 }
 

@@ -51,11 +51,11 @@ func newSumIntOrderedAggAlloc(
 
 type sumIntInt16OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int64s
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col coldata.Int64s
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -249,10 +249,11 @@ func (a *sumIntInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -285,11 +286,11 @@ func (a *sumIntInt16OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type sumIntInt32OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int64s
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col coldata.Int64s
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -483,10 +484,11 @@ func (a *sumIntInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -519,11 +521,11 @@ func (a *sumIntInt32OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type sumIntInt64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col coldata.Int64s
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col coldata.Int64s
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -717,10 +719,11 @@ func (a *sumIntInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 

@@ -76,18 +76,11 @@ type avgInt16WindowAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt16WindowAgg{}
-
-func (a *avgInt16WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *avgInt16WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -155,12 +148,13 @@ func (a *avgInt16WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Decimal()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -259,18 +253,11 @@ type avgInt32WindowAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt32WindowAgg{}
-
-func (a *avgInt32WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *avgInt32WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -338,12 +325,13 @@ func (a *avgInt32WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Decimal()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -442,18 +430,11 @@ type avgInt64WindowAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount int64
-	// col points to the statically-typed output vector.
-	col            coldata.Decimals
+	curCount       int64
 	overloadHelper execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt64WindowAgg{}
-
-func (a *avgInt64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *avgInt64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -521,12 +502,13 @@ func (a *avgInt64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Decimal()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -626,16 +608,9 @@ type avgDecimalWindowAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Decimals
 }
 
 var _ AggregateFunc = &avgDecimalWindowAgg{}
-
-func (a *avgDecimalWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *avgDecimalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -698,12 +673,13 @@ func (a *avgDecimalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Decimal()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -798,16 +774,9 @@ type avgFloat64WindowAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Float64s
 }
 
 var _ AggregateFunc = &avgFloat64WindowAgg{}
-
-func (a *avgFloat64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Float64()
-}
 
 func (a *avgFloat64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -864,10 +833,11 @@ func (a *avgFloat64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Float64()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curSum / float64(a.curCount)
+		col[outputIdx] = a.curSum / float64(a.curCount)
 	}
 }
 
@@ -954,16 +924,9 @@ type avgIntervalWindowAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col coldata.Durations
 }
 
 var _ AggregateFunc = &avgIntervalWindowAgg{}
-
-func (a *avgIntervalWindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Interval()
-}
 
 func (a *avgIntervalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1010,10 +973,11 @@ func (a *avgIntervalWindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// NULL.
+	col := a.vec.Interval()
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
+		col[outputIdx] = a.curSum.Div(int64(a.curCount))
 	}
 }
 

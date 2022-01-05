@@ -106,17 +106,11 @@ func newAnyNotNullHashAggAlloc(
 // first non-null value in the input column.
 type anyNotNullBoolHashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.Bools
 	curAgg                      bool
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullBoolHashAgg{}
-
-func (a *anyNotNullBoolHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bool()
-}
 
 func (a *anyNotNullBoolHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -183,10 +177,11 @@ func (a *anyNotNullBoolHashAgg) Compute(
 func (a *anyNotNullBoolHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Bool()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -219,17 +214,11 @@ func (a *anyNotNullBoolHashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullBytesHashAgg struct {
 	unorderedAggregateFuncBase
-	col                         *coldata.Bytes
 	curAgg                      []byte
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullBytesHashAgg{}
-
-func (a *anyNotNullBytesHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Bytes()
-}
 
 func (a *anyNotNullBytesHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -296,10 +285,11 @@ func (a *anyNotNullBytesHashAgg) Compute(
 func (a *anyNotNullBytesHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Bytes()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
 	oldCurAggSize := len(a.curAgg)
@@ -336,17 +326,11 @@ func (a *anyNotNullBytesHashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullDecimalHashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.Decimals
 	curAgg                      apd.Decimal
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullDecimalHashAgg{}
-
-func (a *anyNotNullDecimalHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Decimal()
-}
 
 func (a *anyNotNullDecimalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -413,10 +397,11 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Decimal()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -449,17 +434,11 @@ func (a *anyNotNullDecimalHashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullInt16HashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.Int16s
 	curAgg                      int16
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullInt16HashAgg{}
-
-func (a *anyNotNullInt16HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int16()
-}
 
 func (a *anyNotNullInt16HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -526,10 +505,11 @@ func (a *anyNotNullInt16HashAgg) Compute(
 func (a *anyNotNullInt16HashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Int16()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -562,17 +542,11 @@ func (a *anyNotNullInt16HashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullInt32HashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.Int32s
 	curAgg                      int32
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullInt32HashAgg{}
-
-func (a *anyNotNullInt32HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int32()
-}
 
 func (a *anyNotNullInt32HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -639,10 +613,11 @@ func (a *anyNotNullInt32HashAgg) Compute(
 func (a *anyNotNullInt32HashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Int32()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -675,17 +650,11 @@ func (a *anyNotNullInt32HashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullInt64HashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.Int64s
 	curAgg                      int64
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullInt64HashAgg{}
-
-func (a *anyNotNullInt64HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *anyNotNullInt64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -752,10 +721,11 @@ func (a *anyNotNullInt64HashAgg) Compute(
 func (a *anyNotNullInt64HashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Int64()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -788,17 +758,11 @@ func (a *anyNotNullInt64HashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullFloat64HashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.Float64s
 	curAgg                      float64
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullFloat64HashAgg{}
-
-func (a *anyNotNullFloat64HashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Float64()
-}
 
 func (a *anyNotNullFloat64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -865,10 +829,11 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 func (a *anyNotNullFloat64HashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Float64()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -901,17 +866,11 @@ func (a *anyNotNullFloat64HashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullTimestampHashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.Times
 	curAgg                      time.Time
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullTimestampHashAgg{}
-
-func (a *anyNotNullTimestampHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Timestamp()
-}
 
 func (a *anyNotNullTimestampHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -978,10 +937,11 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 func (a *anyNotNullTimestampHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Timestamp()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1014,17 +974,11 @@ func (a *anyNotNullTimestampHashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullIntervalHashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.Durations
 	curAgg                      duration.Duration
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullIntervalHashAgg{}
-
-func (a *anyNotNullIntervalHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Interval()
-}
 
 func (a *anyNotNullIntervalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1091,10 +1045,11 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 func (a *anyNotNullIntervalHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Interval()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1127,17 +1082,11 @@ func (a *anyNotNullIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullJSONHashAgg struct {
 	unorderedAggregateFuncBase
-	col                         *coldata.JSONs
 	curAgg                      json.JSON
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullJSONHashAgg{}
-
-func (a *anyNotNullJSONHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.JSON()
-}
 
 func (a *anyNotNullJSONHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1232,10 +1181,11 @@ func (a *anyNotNullJSONHashAgg) Compute(
 func (a *anyNotNullJSONHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.JSON()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
 	var oldCurAggSize uintptr
@@ -1275,17 +1225,11 @@ func (a *anyNotNullJSONHashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullDatumHashAgg struct {
 	unorderedAggregateFuncBase
-	col                         coldata.DatumVec
 	curAgg                      interface{}
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNullDatumHashAgg{}
-
-func (a *anyNotNullDatumHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Datum()
-}
 
 func (a *anyNotNullDatumHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -1359,10 +1303,11 @@ func (a *anyNotNullDatumHashAgg) Compute(
 func (a *anyNotNullDatumHashAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
+	col := a.vec.Datum()
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
 
