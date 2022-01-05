@@ -227,7 +227,7 @@ func NewSequenceTableDesc(
 	opts := &descpb.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
-	if err := assignSequenceOptions(
+	if _, err := assignSequenceOptions(
 		opts,
 		sequenceOptions,
 		true, /* setDefaults */
