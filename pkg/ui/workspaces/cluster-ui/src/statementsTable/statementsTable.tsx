@@ -10,7 +10,6 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import Long from "long";
 
 import {
   FixLong,
@@ -204,6 +203,7 @@ function makeCommonColumns(
 }
 
 export interface AggregateStatistics {
+  aggregatedFingerprintID: string;
   // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
   // summary exists only for SELECT/INSERT/UPSERT/UPDATE statements, and is
