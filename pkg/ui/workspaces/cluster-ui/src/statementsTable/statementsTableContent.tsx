@@ -47,6 +47,7 @@ export const StatementTableCell = {
     onStatementClick?: (statement: string) => void,
   ) => (stmt: AggregateStatistics): React.ReactElement => (
     <StatementLink
+      statementFingerprintID={stmt.aggregateFingerprintID}
       statement={stmt.label}
       statementSummary={stmt.summary}
       aggregatedTs={stmt.aggregatedTs}
@@ -134,7 +135,7 @@ export const StatementTableCell = {
 };
 
 type StatementLinkTargetProps = {
-  statement: string;
+  statementFingerprintID: string;
   aggregatedTs?: number;
   aggregationInterval?: number;
   app: string;
@@ -149,7 +150,7 @@ export const StatementLinkTarget = (
   props: StatementLinkTargetProps,
 ): string => {
   const base = `/statement/${props.implicitTxn}`;
-  const linkStatement = props.statementNoConstants || props.statement;
+  const statementFingerprintID = props.statementFingerprintID;
 
   const searchParams = propsToQueryString({
     [databaseAttr]: props.database,
@@ -158,10 +159,13 @@ export const StatementLinkTarget = (
     [aggregationIntervalAttr]: props.aggregationInterval,
   });
 
-  return `${base}/${encodeURIComponent(linkStatement)}?${searchParams}`;
+  return `${base}/${encodeURIComponent(
+    statementFingerprintID,
+  )}?${searchParams}`;
 };
 
 interface StatementLinkProps {
+  statementFingerprintID: string;
   aggregatedTs?: number;
   aggregationInterval?: number;
   statement: string;
@@ -175,6 +179,7 @@ interface StatementLinkProps {
 }
 
 export const StatementLink = ({
+  statementFingerprintID,
   aggregatedTs,
   aggregationInterval,
   statement,
@@ -193,6 +198,7 @@ export const StatementLink = ({
   }, [onClick, statement]);
 
   const linkProps = {
+    statementFingerprintID,
     aggregatedTs,
     aggregationInterval,
     statement,
