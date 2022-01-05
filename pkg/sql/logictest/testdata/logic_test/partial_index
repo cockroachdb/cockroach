@@ -1753,6 +1753,7 @@ ALTER TABLE t58390 ALTER PRIMARY KEY USING COLUMNS (b, a)
 # Regression tests for #61414. Upsert execution should not error if partial
 # index PUT and DEL columns are not the last columns in the input of the
 # mutation.
+subtest regression_61414
 
 statement ok
 create table t61414_a (
@@ -1800,6 +1801,7 @@ UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
 # expressions, there should not be ambiguous column errors if there exists
 # columns in an UPDATE FROM clause that match column names in the partial index
 # predicate.
+subtest regression_61284
 
 statement ok
 CREATE TABLE t61284 (
@@ -1809,3 +1811,24 @@ CREATE TABLE t61284 (
 
 statement ok
 UPDATE t61284 SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE t61284.a = v.a
+
+# Regression test for #74385. Correctly maintain multiple partial indexes with
+# the same predicate.
+subtest regression_74385
+
+statement ok
+CREATE TABLE t74385 (
+  k INT PRIMARY KEY,
+  a STRING,
+  b STRING,
+  c STRING,
+  INDEX b_idx (b) WHERE c IS NULL,
+  INDEX a_idx (a) WHERE c IS NULL
+);
+INSERT INTO t74385 (k, a, b, c) VALUES (10, 'a', 'b', NULL);
+UPDATE t74385 SET b = NULL
+
+query ITTT
+SELECT * FROM t74385@b_idx
+WHERE b = 'b' AND c IS NULL;
+----
