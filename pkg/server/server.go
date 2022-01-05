@@ -636,7 +636,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor}
 	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
-	sHTTP := newHTTPServer(cfg)
+
+	// These callbacks help us avoid a dependency on gossip in httpServer.
+	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
+		return parseNodeID(g, s)
+	}
+	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, error) {
+		return g.GetNodeIDHTTPAddress(id)
+	}
+	sHTTP := newHTTPServer(cfg, rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
+
 	sessionRegistry := sql.NewSessionRegistry()
 	contentionRegistry := contention.NewRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
@@ -1099,11 +1108,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	}
 
-	// NB: This needs to come after `startListenRPCAndSQL`, which determines
-	// what the advertised addr is going to be if nothing is explicitly
-	// provided.
-	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
-
 	if s.cfg.DelayedBootstrapFn != nil {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
@@ -1251,6 +1255,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	onSuccessfulReturnFn()
 
+	// NB: This needs to come after `startListenRPCAndSQL`, which determines
+	// what the advertised addr is going to be if nothing is explicitly
+	// provided.
+	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
+
 	// We're going to need to start gossip before we spin up Node below.
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
@@ -1259,10 +1268,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been initialized or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+
+	advHTTPAddrU := util.NewUnresolvedAddr("tcp", s.cfg.HTTPAdvertiseAddr)
+
 	if err := s.node.start(
 		ctx,
 		advAddrU,
 		advSQLAddrU,
+		advHTTPAddrU,
 		*state,
 		initialStart,
 		s.cfg.ClusterName,

@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -30,12 +31,26 @@ import (
 )
 
 type httpServer struct {
-	cfg Config
-	mux http.ServeMux
+	cfg   Config
+	mux   http.ServeMux
+	proxy *nodeProxy
 }
 
-func newHTTPServer(cfg Config) *httpServer {
-	return &httpServer{cfg: cfg}
+func newHTTPServer(
+	cfg Config,
+	rpcContext *rpc.Context,
+	parseNodeID ParseNodeIDFn,
+	getNodeIDHTTPAddress GetNodeIDHTTPAddressFn,
+) *httpServer {
+	return &httpServer{
+		cfg: cfg,
+		proxy: &nodeProxy{
+			scheme:               cfg.HTTPRequestScheme(),
+			parseNodeID:          parseNodeID,
+			getNodeIDHTTPAddress: getNodeIDHTTPAddress,
+			rpcContext:           rpcContext,
+		},
+	}
 }
 
 const healthPath = "/health"
@@ -200,7 +215,7 @@ func (s *httpServer) start(
 
 		// Serve the plain HTTP (non-TLS) connection over clearL.
 		// This produces a HTTP redirect to the `https` URL for the path /,
-		// handles the request normally (via s.ServeHTTP) for the path /health,
+		// handles the request normally (via s.baseHandler) for the path /health,
 		// and produces 404 for anything else.
 		if err := stopper.RunAsyncTask(workersCtx, "serve-health", func(context.Context) {
 			mux := http.NewServeMux()
@@ -228,12 +243,10 @@ func (s *httpServer) start(
 	})
 }
 
-// baseHandler is the top-level HTTP handler for all HTTP traffic, before
-// authentication and authorization.
-func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
-	// Disable caching of responses.
-	w.Header().Set("Cache-control", "no-cache")
-
+// gzipHandler intercepts HTTP Requests and will gzip the response if
+// the request contains the `Accept-Encoding: gzip` header. Requests
+// are then delegated to the server mux.
+func (s *httpServer) gzipHandler(w http.ResponseWriter, r *http.Request) {
 	ae := r.Header.Get(httputil.AcceptEncodingHeader)
 	switch {
 	case strings.Contains(ae, httputil.GzipEncoding):
@@ -256,6 +269,17 @@ func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 		}()
 		w = gzw
 	}
+	s.mux.ServeHTTP(w, r)
+}
+
+// baseHandler is the top-level HTTP handler for all HTTP traffic, before
+// authentication and authorization.
+//
+// The server handles the node-to-node proxying first, and then runs the
+// gzip middleware, then delegates to the mux for handling the request.
+func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
+	// Disable caching of responses.
+	w.Header().Set("Cache-control", "no-cache")
 
 	// This is our base handler.
 	// Intercept all panics, log them, and return an internal server error as a response.
@@ -268,5 +292,5 @@ func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	s.mux.ServeHTTP(w, r)
+	s.proxy.nodeProxyHandler(w, r, s.gzipHandler)
 }
