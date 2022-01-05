@@ -1663,10 +1663,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// init all the replicas. At this point *some* store has been initialized or
 	// we're joining an existing cluster for the first time.
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+
+	httpAddrU := util.NewUnresolvedAddr("http", s.cfg.HTTPAdvertiseAddr)
+
 	if err := s.node.start(
 		ctx,
 		advAddrU,
 		advSQLAddrU,
+		httpAddrU,
 		*state,
 		initialStart,
 		s.cfg.ClusterName,
@@ -2792,7 +2796,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	s.mux.ServeHTTP(w, r)
+	s.nodeRouterMiddleware(s.mux.ServeHTTP).ServeHTTP(w, r)
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.

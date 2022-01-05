@@ -382,6 +382,8 @@ message NodeDescriptor {
   // is also used to accept SQL connections.
   optional util.UnresolvedAddr sql_address = 10 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "SQLAddress"];
+  optional util.UnresolvedAddr http_address = 11 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "HTTPAddress"];
 }
 
 // LocalityAddress holds the private address accessible only from other nodes

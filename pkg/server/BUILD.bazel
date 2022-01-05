@@ -26,6 +26,7 @@ go_library(
         "loopback.go",
         "migration.go",
         "node.go",
+        "node_http_router.go",
         "node_tenant.go",
         "node_tombstone_storage.go",
         "pagination.go",

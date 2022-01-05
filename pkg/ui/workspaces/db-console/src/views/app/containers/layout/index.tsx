@@ -39,12 +39,39 @@ import {
 
 import "./layout.styl";
 import "./layoutPanel.styl";
+import { NodeIDSelectorConnected } from "oss/src/views/reports/containers/debug";
 
 export interface LayoutProps {
   clusterName: string;
   clusterVersion: string;
   clusterId: string;
 }
+
+const NodeChooser = () => {
+  const currentNodeIDCookie = document.cookie
+    .split(";")
+    .map(x => {
+      return x.split("=").map(x => {
+        return x.trim();
+      });
+    })
+    .find(x => {
+      return x[0] === "node_id";
+    });
+  const currentNodeID =
+    currentNodeIDCookie.length == 2 ? currentNodeIDCookie[1] : undefined;
+  const setNodeIDCookie = (nodeID: string) => {
+    document.cookie = `node_id=${nodeID}`;
+    location.reload();
+  };
+
+  return (
+    <NodeIDSelectorConnected
+      nodeID={currentNodeID || "local"}
+      setNodeID={setNodeIDCookie}
+    />
+  );
+};
 
 /**
  * Defines the main layout of all admin ui pages. This includes static
@@ -82,6 +109,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
                 <CockroachLabsLockupIcon height={26} />
               </Left>
               <Right>
+                <NodeChooser />
                 <FeedbackSurveyLink />
                 <LoginIndicator />
               </Right>

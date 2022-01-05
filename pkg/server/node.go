@@ -404,7 +404,7 @@ func (n *Node) AnnotateCtxWithSpan(
 // NodeDescriptor is available, to help bootstrapping.
 func (n *Node) start(
 	ctx context.Context,
-	addr, sqlAddr net.Addr,
+	addr, sqlAddr, httpAddr net.Addr,
 	state initState,
 	initialStart bool,
 	clusterName string,
@@ -426,6 +426,7 @@ func (n *Node) start(
 		ServerVersion:   n.storeCfg.Settings.Version.BinaryVersion(),
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
+		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),
 	}
 	// Invoke any passed in nodeDescriptorCallback as soon as it's available, to
 	// ensure that other components (currently the DistSQLPlanner) are initialized

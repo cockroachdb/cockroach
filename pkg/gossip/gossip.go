@@ -538,6 +538,21 @@ func (g *Gossip) GetNodeIDSQLAddress(nodeID roachpb.NodeID) (*util.UnresolvedAdd
 	return g.getNodeIDSQLAddressLocked(nodeID)
 }
 
+func (g *Gossip) getNodeIDHTTPAddressLocked(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
+	nd, err := g.getNodeDescriptorLocked(nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return &nd.HTTPAddress, nil
+}
+
+// GetNodeIDHTTPAddress looks up the HTTP address of the node by ID.
+func (g *Gossip) GetNodeIDHTTPAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.getNodeIDHTTPAddressLocked(nodeID)
+}
+
 // GetNodeDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	g.mu.RLock()
