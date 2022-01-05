@@ -372,9 +372,14 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				status.Lease.Type() == roachpb.LeaseEpoch {
 				var err error
 				// If this replica is previous & next lease holder, manually heartbeat to become live.
-				if status.OwnedBy(nextLeaseHolder.StoreID) &&
-					p.repl.store.StoreID() == nextLeaseHolder.StoreID {
-					if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
+				if status.OwnedBy(nextLeaseHolder.StoreID) && p.repl.store.StoreID() == nextLeaseHolder.StoreID {
+					err = contextutil.RunWithTimeout(
+						ctx, "manual-liveness-heartbeat", p.repl.slowReplicationThreshold(nil),
+						func(ctx context.Context) error {
+							return p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness)
+						},
+					)
+					if err != nil {
 						log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
 					}
 				} else if status.Liveness.Epoch == status.Lease.Epoch {
@@ -391,7 +396,11 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 								status.Liveness.NodeID, nextLeaseHolder.NodeID)
 						}
 						log.VEventf(ctx, 1, "%v", err)
-					} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
+					} else if err = contextutil.RunWithTimeout(
+						ctx, "increment-liveness-epoch", p.repl.slowReplicationThreshold(nil), func(ctx context.Context) error {
+							return p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness)
+						},
+					); err != nil {
 						// If we get ErrEpochAlreadyIncremented, someone else beat
 						// us to it. This proves that the target node is truly
 						// dead *now*, but it doesn't prove that it was dead at
