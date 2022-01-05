@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -65,8 +67,8 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("sequence"))
 	desc := n.seqDesc
 
-	oldMinValue := desc.SequenceOpts.MinValue
-	oldMaxValue := desc.SequenceOpts.MaxValue
+	oldIncrement := desc.SequenceOpts.Increment
+	oldStart := desc.SequenceOpts.Start
 
 	existingType := types.Int
 	if desc.GetSequenceOpts().AsIntegerType != "" {
@@ -81,7 +83,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("sequence has unexpected type %s", desc.GetSequenceOpts().AsIntegerType)
 		}
 	}
-	if err := assignSequenceOptions(
+	hasNewStart, err := assignSequenceOptions(
 		desc.SequenceOpts,
 		n.n.Options,
 		false, /* setDefaults */
@@ -89,7 +91,8 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		desc.GetID(),
 		desc.ParentID,
 		existingType,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 	opts := desc.SequenceOpts
@@ -112,33 +115,50 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	// value of the sequence must be restored to the original MinValue or MaxValue transactionally.
 	// The code below handles the second case.
 
-	// The sequence is decreasing and the minvalue is being decreased.
-	if opts.Increment < 0 && desc.SequenceOpts.MinValue < oldMinValue {
-		sequenceVal, err := getSequenceValue()
-		if err != nil {
-			return err
-		}
+	sequenceVal, err := getSequenceValue()
+	if err != nil {
+		return err
+	}
 
-		// If the sequence exceeded the old MinValue, it must be changed to start at the old MinValue.
-		if sequenceVal < oldMinValue {
-			err := params.p.txn.Put(params.ctx, seqValueKey, oldMinValue)
+	currentVal := sequenceVal
+	// If the sequenceVal exceeded the old MinValue or MaxValue, we must set sequenceVal to the last valid one.
+	// Set the initial value to the newStartValue if there is a start param in alter_sequence_stmt.
+	if hasNewStart {
+		sequenceVal = opts.Start - opts.Increment
+		currentVal = opts.Start
+	} else {
+		// 1. Values is just init, when the sequence is altered before it has ever been used
+		if sequenceVal == oldStart-oldIncrement {
+			sequenceVal = oldStart - opts.Increment
+			currentVal = oldStart
+		} else {
+			// 2. The sequence is altered after it has ever been used
+			sequenceVal, err = params.p.SessionData().SequenceState.GetLastValue()
 			if err != nil {
 				return err
 			}
-		}
-	} else if opts.Increment > 0 && desc.SequenceOpts.MaxValue > oldMaxValue {
-		sequenceVal, err := getSequenceValue()
-		if err != nil {
-			return err
-		}
-
-		if sequenceVal > oldMaxValue {
-			err := params.p.txn.Put(params.ctx, seqValueKey, oldMaxValue)
-			if err != nil {
-				return err
-			}
+			currentVal = sequenceVal
 		}
 	}
+
+	if currentVal > opts.MaxValue {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"MAXVALUE (%d) cannot be made to be less than the current value (%d) ", opts.MaxValue, currentVal)
+	} else if currentVal < opts.MinValue {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"MINVALUE (%d) cannot be made to be exceed than the current value (%d) ", opts.MinValue, currentVal)
+	}
+
+	if err := params.p.txn.Put(params.ctx, seqValueKey, sequenceVal); err != nil {
+		return err
+	}
+	// Clear out the cache and update the last value.
+	params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.initSequenceCache()
+		m.RecordLatestSequenceVal(uint32(n.seqDesc.GetID()), sequenceVal)
+	})
 
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
