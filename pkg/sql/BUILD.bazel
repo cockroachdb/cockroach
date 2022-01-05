@@ -306,6 +306,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/colexec",
         "//pkg/sql/colflow",
+        "//pkg/sql/commenter",
         "//pkg/sql/contention",
         "//pkg/sql/covering",
         "//pkg/sql/delegate",

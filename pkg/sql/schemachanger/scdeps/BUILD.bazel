@@ -6,7 +6,6 @@ go_library(
         "backfill_tracker.go",
         "build_deps.go",
         "ccl_deps.go",
-        "comment_updater.go",
         "exec_deps.go",
         "index_validator.go",
         "periodic_progress_flusher.go",
