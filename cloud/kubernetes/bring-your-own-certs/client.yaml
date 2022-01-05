@@ -24,7 +24,7 @@ spec:
     # and run cockroach client commands, such as cockroach sql, cockroach node status, etc.
     command:
     - sleep
-    - "2147483648" # 2^31
+    - inf
     volumeMounts:
     - name: client-certs
       mountPath: /cockroach-certs

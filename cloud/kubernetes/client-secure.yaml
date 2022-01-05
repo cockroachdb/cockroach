@@ -40,7 +40,7 @@ spec:
     # and run cockroach client commands, such as cockroach sql, cockroach node status, etc.
     command:
     - sleep
-    - "2147483648" # 2^31
+    - inf
   # This pod isn't doing anything important, so don't bother waiting to terminate it.
   terminationGracePeriodSeconds: 0
   volumes:
