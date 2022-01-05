@@ -4,6 +4,7 @@
 ALL_TESTS = [
     "//pkg/base:base_test",
     "//pkg/bench/rttanalysis:rttanalysis_test",
+    "//pkg/bench/tpcc:tpcc_test",
     "//pkg/bench:bench_test",
     "//pkg/blobs:blobs_test",
     "//pkg/build/util:util_test",
