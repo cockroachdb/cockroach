@@ -2727,7 +2727,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
-			ex.extraTxnState.jobs); err != nil {
+			ex.extraTxnState.jobs,
+		); err != nil {
 			handleErr(err)
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
@@ -2956,7 +2957,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs.state = after
 	scs.jobID = jobID
 	if jobID != jobspb.InvalidJobID {
-		ex.extraTxnState.jobs = append(ex.extraTxnState.jobs, jobID)
+		ex.extraTxnState.jobs.add(jobID)
 		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
 	}
 	return nil

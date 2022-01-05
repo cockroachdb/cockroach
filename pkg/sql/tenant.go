@@ -370,7 +370,7 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 }
 
 // DestroyTenant implements the tree.TenantOperator interface.
-func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
+func (p *planner) DestroyTenant(ctx context.Context, tenID uint64, synchronous bool) error {
 	const op = "destroy"
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
 		return err
@@ -395,7 +395,14 @@ func (p *planner) DestroyTenant(ctx context.Context, tenID uint64) error {
 		return errors.Wrap(err, "destroying tenant")
 	}
 
-	return errors.Wrap(gcTenantJob(ctx, p.execCfg, p.txn, p.User(), tenID), "scheduling gc job")
+	jobID, err := gcTenantJob(ctx, p.execCfg, p.txn, p.User(), tenID, synchronous)
+	if err != nil {
+		return errors.Wrap(err, "scheduling gc job")
+	}
+	if synchronous {
+		p.extendedEvalCtx.Jobs.add(jobID)
+	}
+	return nil
 }
 
 // GCTenantSync clears the tenant's data and removes its record.
@@ -462,7 +469,8 @@ func gcTenantJob(
 	txn *kv.Txn,
 	user security.SQLUsername,
 	tenID uint64,
-) error {
+	synchronous bool,
+) (jobspb.JobID, error) {
 	// Queue a GC job that will delete the tenant data and finally remove the
 	// row from `system.tenants`.
 	gcDetails := jobspb.SchemaChangeGCDetails{}
@@ -470,18 +478,26 @@ func gcTenantJob(
 		ID:       tenID,
 		DropTime: timeutil.Now().UnixNano(),
 	}
+	progress := jobspb.SchemaChangeGCProgress{}
+	if synchronous {
+		progress.Tenant = &jobspb.SchemaChangeGCProgress_TenantProgress{
+			Status: jobspb.SchemaChangeGCProgress_DELETING,
+		}
+	}
 	gcJobRecord := jobs.Record{
 		Description:   fmt.Sprintf("GC for tenant %d", tenID),
 		Username:      user,
 		Details:       gcDetails,
-		Progress:      jobspb.SchemaChangeGCProgress{},
+		Progress:      progress,
 		NonCancelable: true,
 	}
+	jobID := execCfg.JobRegistry.MakeJobID()
 	if _, err := execCfg.JobRegistry.CreateJobWithTxn(
-		ctx, gcJobRecord, execCfg.JobRegistry.MakeJobID(), txn); err != nil {
-		return err
+		ctx, gcJobRecord, jobID, txn,
+	); err != nil {
+		return 0, err
 	}
-	return nil
+	return jobID, nil
 }
 
 // GCTenant implements the tree.TenantOperator interface.
@@ -505,7 +521,10 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 		return errors.Errorf("tenant %d is not in state DROP", info.ID)
 	}
 
-	return gcTenantJob(ctx, p.ExecCfg(), p.Txn(), p.User(), tenID)
+	_, err := gcTenantJob(
+		ctx, p.ExecCfg(), p.Txn(), p.User(), tenID, false, /* synchronous */
+	)
+	return err
 }
 
 // UpdateTenantResourceLimits implements the tree.TenantOperator interface.
