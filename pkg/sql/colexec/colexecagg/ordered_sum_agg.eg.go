@@ -74,7 +74,7 @@ type sumInt16OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -279,7 +279,7 @@ func (a *sumInt16OrderedAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -316,7 +316,7 @@ type sumInt32OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -521,7 +521,7 @@ func (a *sumInt32OrderedAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -558,7 +558,7 @@ type sumInt64OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -763,7 +763,7 @@ func (a *sumInt64OrderedAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -800,7 +800,7 @@ type sumDecimalOrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -997,7 +997,7 @@ func (a *sumDecimalOrderedAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1034,7 +1034,7 @@ type sumFloat64OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg float64
 	// col points to the output vector we are updating.
-	col []float64
+	col coldata.Float64s
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -1219,7 +1219,7 @@ func (a *sumFloat64OrderedAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -1256,7 +1256,7 @@ type sumIntervalOrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg duration.Duration
 	// col points to the output vector we are updating.
-	col []duration.Duration
+	col coldata.Durations
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -1421,7 +1421,7 @@ func (a *sumIntervalOrderedAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

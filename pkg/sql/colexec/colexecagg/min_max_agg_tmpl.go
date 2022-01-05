@@ -197,11 +197,6 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// {{if eq "_AGGKIND" "Window"}}
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		execgen.COPYVAL(a.curAgg, a.curAgg)
-		// {{end}}
 		a.col.Set(outputIdx, a.curAgg)
 	}
 	// {{if and (not (eq "_AGGKIND" "Window")) (or (.IsBytesLike) (eq .VecMethod "Datum"))}}

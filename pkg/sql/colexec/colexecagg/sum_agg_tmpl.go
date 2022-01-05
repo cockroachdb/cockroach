@@ -94,7 +94,7 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// group, instead of on each iteration.
 	curAgg _RET_GOTYPE
 	// col points to the output vector we are updating.
-	col []_RET_GOTYPE
+	col _RET_GOTYPESLICE
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -211,13 +211,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// {{if eq "_AGGKIND" "Window"}}
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		execgen.COPYVAL(a.col[outputIdx], a.curAgg)
-		// {{else}}
-		a.col[outputIdx] = a.curAgg
-		// {{end}}
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

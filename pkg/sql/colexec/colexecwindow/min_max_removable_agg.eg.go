@@ -239,9 +239,6 @@ func (a *minBoolAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -406,9 +403,6 @@ func (a *minBytesAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = append(a.curAgg[:0], a.curAgg...)
-
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -557,9 +551,6 @@ func (a *minDecimalAggregator) processBatch(batch coldata.Batch, startIdx, endId
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg.Set(&a.curAgg)
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -709,9 +700,6 @@ func (a *minInt16Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -883,9 +871,6 @@ func (a *minInt32Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -1057,9 +1042,6 @@ func (a *minInt64Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -1231,9 +1213,6 @@ func (a *minFloat64Aggregator) processBatch(batch coldata.Batch, startIdx, endId
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -1421,9 +1400,6 @@ func (a *minTimestampAggregator) processBatch(batch coldata.Batch, startIdx, end
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -1587,9 +1563,6 @@ func (a *minIntervalAggregator) processBatch(batch coldata.Batch, startIdx, endI
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -1749,19 +1722,6 @@ func (a *minJSONAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-
-				var _err error
-				var _bytes []byte
-				_bytes, _err = json.EncodeJSON(nil, a.curAgg)
-				if _err != nil {
-					colexecerror.ExpectedError(_err)
-				}
-				a.curAgg, _err = json.FromEncoding(_bytes)
-				if _err != nil {
-					colexecerror.ExpectedError(_err)
-				}
-
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -1933,9 +1893,6 @@ func (a *minDatumAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -2172,9 +2129,6 @@ func (a *maxBoolAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -2339,9 +2293,6 @@ func (a *maxBytesAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = append(a.curAgg[:0], a.curAgg...)
-
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -2490,9 +2441,6 @@ func (a *maxDecimalAggregator) processBatch(batch coldata.Batch, startIdx, endId
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg.Set(&a.curAgg)
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -2642,9 +2590,6 @@ func (a *maxInt16Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -2816,9 +2761,6 @@ func (a *maxInt32Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -2990,9 +2932,6 @@ func (a *maxInt64Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -3164,9 +3103,6 @@ func (a *maxFloat64Aggregator) processBatch(batch coldata.Batch, startIdx, endId
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -3354,9 +3290,6 @@ func (a *maxTimestampAggregator) processBatch(batch coldata.Batch, startIdx, end
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -3520,9 +3453,6 @@ func (a *maxIntervalAggregator) processBatch(batch coldata.Batch, startIdx, endI
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
@@ -3682,19 +3612,6 @@ func (a *maxJSONAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-
-				var _err error
-				var _bytes []byte
-				_bytes, _err = json.EncodeJSON(nil, a.curAgg)
-				if _err != nil {
-					colexecerror.ExpectedError(_err)
-				}
-				a.curAgg, _err = json.FromEncoding(_bytes)
-				if _err != nil {
-					colexecerror.ExpectedError(_err)
-				}
-
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -3866,9 +3783,6 @@ func (a *maxDatumAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				a.curAgg = a.curAgg
-
 				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}

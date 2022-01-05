@@ -28,6 +28,7 @@ type sumAggTmplInfo struct {
 	NeedsHelper    bool
 	InputVecMethod string
 	RetGoType      string
+	RetGoTypeSlice string
 	RetVecMethod   string
 
 	sumOverload assignFunc
@@ -115,6 +116,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 		"_TYPE_FAMILY", "{{.TypeFamily}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
 		"_SUMKIND", "{{.SumKind}}",
+		"_RET_GOTYPESLICE", `{{.RetGoTypeSlice}}`,
 		"_RET_GOTYPE", `{{.RetGoType}}`,
 		"_RET_TYPE", "{{.RetVecMethod}}",
 		"_TYPE", "{{.InputVecMethod}}",
@@ -188,6 +190,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 					NeedsHelper:    needsHelper,
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
 					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),
+					RetGoTypeSlice: goTypeSliceName(retTypeFamily, retTypeWidth),
 					RetVecMethod:   toVecMethod(retTypeFamily, retTypeWidth),
 					sumOverload:    getAddOverload(inputTypeFamily),
 				}})
