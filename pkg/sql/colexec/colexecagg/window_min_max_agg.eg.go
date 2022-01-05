@@ -222,9 +222,6 @@ func (a *minBoolWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -358,9 +355,6 @@ func (a *minBytesWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = append(a.curAgg[:0], a.curAgg...)
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -498,9 +492,6 @@ func (a *minDecimalWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg.Set(&a.curAgg)
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -656,9 +647,6 @@ func (a *minInt16WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -814,9 +802,6 @@ func (a *minInt32WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -972,9 +957,6 @@ func (a *minInt64WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -1146,9 +1128,6 @@ func (a *minFloat64WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -1296,9 +1275,6 @@ func (a *minTimestampWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -1432,9 +1408,6 @@ func (a *minIntervalWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -1630,20 +1603,6 @@ func (a *minJSONWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-
-		var _err error
-		var _bytes []byte
-		_bytes, _err = json.EncodeJSON(nil, a.curAgg)
-		if _err != nil {
-			colexecerror.ExpectedError(_err)
-		}
-		a.curAgg, _err = json.FromEncoding(_bytes)
-		if _err != nil {
-			colexecerror.ExpectedError(_err)
-		}
-
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -1796,9 +1755,6 @@ func (a *minDatumWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -2025,9 +1981,6 @@ func (a *maxBoolWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -2161,9 +2114,6 @@ func (a *maxBytesWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = append(a.curAgg[:0], a.curAgg...)
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -2301,9 +2251,6 @@ func (a *maxDecimalWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg.Set(&a.curAgg)
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -2459,9 +2406,6 @@ func (a *maxInt16WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -2617,9 +2561,6 @@ func (a *maxInt32WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -2775,9 +2716,6 @@ func (a *maxInt64WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -2949,9 +2887,6 @@ func (a *maxFloat64WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -3099,9 +3034,6 @@ func (a *maxTimestampWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -3235,9 +3167,6 @@ func (a *maxIntervalWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -3433,20 +3362,6 @@ func (a *maxJSONWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-
-		var _err error
-		var _bytes []byte
-		_bytes, _err = json.EncodeJSON(nil, a.curAgg)
-		if _err != nil {
-			colexecerror.ExpectedError(_err)
-		}
-		a.curAgg, _err = json.FromEncoding(_bytes)
-		if _err != nil {
-			colexecerror.ExpectedError(_err)
-		}
-
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }
@@ -3599,9 +3514,6 @@ func (a *maxDatumWindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.curAgg = a.curAgg
 		a.col.Set(outputIdx, a.curAgg)
 	}
 }

@@ -132,9 +132,7 @@ func (a *sumIntInt16WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -303,9 +301,7 @@ func (a *sumIntInt32WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -474,9 +470,7 @@ func (a *sumIntInt64WindowAgg) Flush(outputIdx int) {
 	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		// We need to copy the value because window functions reuse the aggregation
-		// between rows.
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

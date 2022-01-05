@@ -220,9 +220,6 @@ func (a *_AGG_TYPEAggregator) processBatch(batch coldata.Batch, startIdx, endIdx
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// The aggregate may be reused between rows, so we need to copy it.
-				execgen.COPYVAL(a.curAgg, a.curAgg)
-
 				// {{if not .IsBytesLike}}
 				// gcassert:bce
 				// {{end}}
