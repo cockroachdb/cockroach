@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -123,8 +124,8 @@ type backupDataProcessor struct {
 	progCh                 chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 	backupErr              error
 
-	// Memory accumulator that reserves the memory usage of the backup processor.
-	backupMem *memoryAccumulator
+	// BoundAccount that reserves the memory usage of the backup processor.
+	memAcc *mon.BoundAccount
 }
 
 var _ execinfra.Processor = &backupDataProcessor{}
@@ -143,12 +144,13 @@ func newBackupDataProcessor(
 			memMonitor = knobs.BackupMemMonitor
 		}
 	}
+	ba := memMonitor.MakeBoundAccount()
 	bp := &backupDataProcessor{
-		flowCtx:   flowCtx,
-		spec:      spec,
-		output:    output,
-		progCh:    make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
-		backupMem: newMemoryAccumulator(memMonitor),
+		flowCtx: flowCtx,
+		spec:    spec,
+		output:  output,
+		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
+		memAcc:  &ba,
 	}
 	if err := bp.Init(bp, post, backupOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -177,7 +179,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		TaskName: "backup-worker",
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
-		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.backupMem)
+		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.memAcc)
 		cancel()
 		close(bp.progCh)
 	}); err != nil {
@@ -213,7 +215,7 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
 	bp.ProcessorBase.InternalClose()
-	bp.backupMem.close(bp.Ctx)
+	bp.memAcc.Close(bp.Ctx)
 }
 
 // ConsumerClosed is part of the RowSource interface. We have to override the
@@ -245,7 +247,7 @@ func runBackupProcessor(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.BackupDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-	backupMem *memoryAccumulator,
+	memAcc *mon.BoundAccount,
 ) error {
 	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
@@ -544,7 +546,7 @@ func runBackupProcessor(
 			return err
 		}
 
-		sink, err := makeSSTSink(ctx, sinkConf, storage, backupMem)
+		sink, err := makeSSTSink(ctx, sinkConf, storage, memAcc)
 		if err != nil {
 			return err
 		}
@@ -602,16 +604,16 @@ type sstSink struct {
 		spanGrows   int
 	}
 
-	backupMem *memoryAccumulator
+	memAcc *mon.BoundAccount
 }
 
 func makeSSTSink(
-	ctx context.Context, conf sstSinkConf, dest cloud.ExternalStorage, backupMem *memoryAccumulator,
+	ctx context.Context, conf sstSinkConf, dest cloud.ExternalStorage, backupMem *mon.BoundAccount,
 ) (*sstSink, error) {
-	s := &sstSink{conf: conf, dest: dest, backupMem: backupMem}
+	s := &sstSink{conf: conf, dest: dest, memAcc: backupMem}
 
 	// Reserve memory for the file buffer.
-	if err := s.backupMem.request(ctx, smallFileBuffer.Get(s.conf.settings)); err != nil {
+	if err := s.memAcc.Grow(ctx, smallFileBuffer.Get(s.conf.settings)); err != nil {
 		return nil, errors.Wrap(err, "failed to reserve memory for sstSink queue")
 	}
 	return s, nil
@@ -626,9 +628,8 @@ func (s *sstSink) Close() error {
 		s.cancel()
 	}
 
-	// Release the memory reserved for the file buffer back to the memory
-	// accumulator.
-	s.backupMem.release(smallFileBuffer.Get(s.conf.settings))
+	// Release the memory reserved for the file buffer.
+	s.memAcc.Shrink(s.ctx, smallFileBuffer.Get(s.conf.settings))
 	if s.out != nil {
 		return s.out.Close()
 	}
