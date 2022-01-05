@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1621,33 +1620,13 @@ func getBackupDetailAndManifest(
 			}
 		}
 
-		var err error
-		_, coveredTime, err := makeImportSpans(
-			spans,
-			prevBackups,
-			nil,         /*backupLocalityMaps*/
-			keys.MinKey, /* lowWatermark */
-			func(span covering.Range, start, end hlc.Timestamp) error {
-				if start.IsEmpty() {
-					newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
-					return nil
-				}
-				return errOnMissingRange(span, start, end)
-			},
-		)
-		if err != nil {
-			return jobspb.BackupDetails{}, BackupManifest{}, errors.Wrap(err, "invalid previous backups")
-		}
+		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 
 		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
 		}
 		newSpans = append(newSpans, tableSpans...)
-
-		if coveredTime != startTime {
-			return jobspb.BackupDetails{}, BackupManifest{}, errors.Errorf("expected previous backups to cover until time %v, got %v", startTime, coveredTime)
-		}
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
@@ -1679,20 +1658,8 @@ func getBackupDetailAndManifest(
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
 	}
-
-	// Sanity check: re-run the validation that RESTORE will do, but this time
-	// including this backup, to ensure that the this backup plus any previous
-	// backups does cover the interval expected.
-	if _, coveredEnd, err := makeImportSpans(
-		spans,
-		append(prevBackups, backupManifest),
-		nil, /*backupLocalityInfo*/
-		keys.MinKey,
-		errOnMissingRange,
-	); err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
-	} else if coveredEnd != endTime {
-		return jobspb.BackupDetails{}, BackupManifest{}, errors.Errorf("expected backup (along with any previous backups) to cover to %v, not %v", endTime, coveredEnd)
+	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
+		return jobspb.BackupDetails{}, BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
 	}
 
 	// If we didn't load any prior backups from which get encryption info, we
