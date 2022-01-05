@@ -777,3 +777,15 @@ query T
 EXECUTE s73450_c('foo')
 ----
 f
+
+# Regression test for #74470. Casts to and from ENUMs should have stable
+# volatility so that they are not allowed in check constraints, computed column
+# expressions, and partial index predicates.
+statement ok
+CREATE TYPE typ74470 AS ENUM ('foo', 'bar');
+
+statement error context-dependent operators are not allowed in computed column
+CREATE TABLE tab74470 (a typ74470, b TEXT AS (a::TEXT) STORED);
+
+statement error context-dependent operators are not allowed in computed column
+CREATE TABLE tab74470 (a TEXT, b typ74470 AS (a::typ74470) STORED);
