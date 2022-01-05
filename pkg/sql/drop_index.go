@@ -16,12 +16,14 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/commenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -520,7 +522,15 @@ func (p *planner) dropIndexByName(
 	}
 	tableDesc.RemovePublicNonPrimaryIndex(idxOrdinal)
 
-	if err := p.removeIndexComment(ctx, tableDesc.ID, idxDesc.ID); err != nil {
+	commentUpdater := commenter.NewCommentUpdater(
+		ctx,
+		p.execCfg.InternalExecutorFactory,
+		p.SessionData(),
+		p.txn,
+		OidFromConstraint,
+	)
+	if err := commentUpdater.DeleteDescriptorComment(
+		tableDesc.ID, int(idxDesc.ID), keys.IndexCommentType); err != nil {
 		return err
 	}
 

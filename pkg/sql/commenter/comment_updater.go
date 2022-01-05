@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
+//OidFromConstraintCallback call back to get an OID from constraint information.
 type OidFromConstraintCallback func(
 	desc catalog.TableDescriptor,
 	schemaName string,
@@ -83,7 +84,7 @@ func (cu commentUpdater) DeleteDescriptorComment(id descpb.ID, subID int, commen
 	return err
 }
 
-//UpdateConstraintComment updates  a comment associated with a constraint.
+//UpsertConstraintComment updates  a comment associated with a constraint.
 func (cu commentUpdater) UpsertConstraintComment(
 	desc catalog.TableDescriptor,
 	schemaName string,

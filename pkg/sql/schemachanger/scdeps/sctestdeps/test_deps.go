@@ -847,7 +847,7 @@ func (s *TestState) DeleteDescriptorComment(id descpb.ID, subID int, commentType
 	return nil
 }
 
-//UpdateConstraintComment updates  a comment associated with a constraint.
+//UpsertConstraintComment updates a comment associated with a constraint.
 func (s *TestState) UpsertConstraintComment(
 	desc catalog.TableDescriptor,
 	_ string,
