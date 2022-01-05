@@ -363,29 +363,6 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		},
 		func(ctx context.Context) {
 			defer sp.Finish()
-			// TODO(during review): needs RunWithTimeout or linter will complain.
-			ctx, cancel := context.WithTimeout(ctx, base.SlowRequestThreshold)
-			ctx, finishAndGet := tracing.ContextWithRecordingSpan(ctx, p.repl.Tracer, "lease")
-			defer finishAndGet()
-			tBegin := timeutil.Now()
-			tmr := time.AfterFunc(base.SlowRequestThreshold, func() {
-				// TODO(tbg): this should replace the other "have been waiting ... to acquire lease"
-				// logsite that is downstream of this call (on the actual proposal). This location here
-				// is better because it closes over all interactions with the liveness range as well.
-				//
-				// TODO(tbg): a test would be nice, even if it's a manual one, to make sure the traces
-				// here are useful in the first place. In particular, it would be nice if we could
-				// temporarily configure the raft logger to report to the trace we have open. This
-				// shouldn't be too hard and would be nifty to use for the probe trace as well.
-				err := errors.Errorf(
-					"have been waiting %.2fs attempting to acquire lease", timeutil.Since(tBegin).Seconds(),
-				)
-				// TODO(during review): can't use this API since we don't want to cancel
-				// the span here. Peel back the abstraction and create span manually.
-				log.Warningf(ctx, "%s:\n%s", err, finishAndGet())
-			})
-			defer tmr.Stop()
-			defer cancel()
 			// If requesting an epoch-based lease & current state is expired,
 			// potentially heartbeat our own liveness or increment epoch of
 			// prior owner. Note we only do this if the previous lease was
