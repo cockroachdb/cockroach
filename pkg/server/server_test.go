@@ -104,7 +104,7 @@ func TestPanicRecovery(t *testing.T) {
 	// Create a ResponseRecorder to record the response.
 	rr := httptest.NewRecorder()
 	require.NotPanics(t, func() {
-		ts.http.baseHandler(rr, req)
+		ts.http.ServeHTTP(rr, req)
 	})
 
 	// Check that the status code is correct.
