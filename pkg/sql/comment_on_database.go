@@ -14,17 +14,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnDatabaseNode struct {
-	n      *tree.CommentOnDatabase
-	dbDesc catalog.DatabaseDescriptor
+	n         *tree.CommentOnDatabase
+	dbDesc    catalog.DatabaseDescriptor
+	commenter scexec.CommentUpdater
 }
 
 // CommentOnDatabase add comment on a database.
@@ -50,46 +50,40 @@ func (p *planner) CommentOnDatabase(
 		return nil, err
 	}
 
-	return &commentOnDatabaseNode{n: n, dbDesc: dbDesc}, nil
+	return &commentOnDatabaseNode{n: n,
+		dbDesc: dbDesc,
+		commenter: p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+			ctx,
+			p.txn,
+			p.SessionData(),
+		),
+	}, nil
 }
 
 func (n *commentOnDatabaseNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"set-db-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
-			keys.DatabaseCommentType,
-			n.dbDesc.GetID(),
-			*n.n.Comment)
+		err := n.commenter.UpsertDescriptorComment(
+			int64(n.dbDesc.GetID()), 0, keys.DatabaseCommentType, *n.n.Comment)
 		if err != nil {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"delete-db-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-			keys.DatabaseCommentType,
-			n.dbDesc.GetID())
+		err := n.commenter.DeleteDescriptorComment(
+			int64(n.dbDesc.GetID()), 0, keys.DatabaseCommentType)
 		if err != nil {
 			return err
 		}
 	}
 
-	comment := ""
+	dbComment := ""
 	if n.n.Comment != nil {
-		comment = *n.n.Comment
+		dbComment = *n.n.Comment
 	}
 	return params.p.logEvent(params.ctx,
 		n.dbDesc.GetID(),
 		&eventpb.CommentOnDatabase{
 			DatabaseName: n.n.Name.String(),
-			Comment:      comment,
+			Comment:      dbComment,
 			NullComment:  n.n.Comment == nil,
 		})
 }
