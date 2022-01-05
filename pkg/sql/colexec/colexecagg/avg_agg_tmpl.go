@@ -105,7 +105,7 @@ type avg_TYPE_AGGKINDAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []_RET_GOTYPE
+	col _RET_GOTYPESLICE
 	// {{if .NeedsHelper}}
 	// {{/*
 	// overloadHelper is used only when we perform the summation of integers

@@ -28,7 +28,7 @@ func newCountRowsOrderedAggAlloc(
 // countRowsOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 
@@ -139,7 +139,7 @@ func newCountOrderedAggAlloc(
 // countOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 

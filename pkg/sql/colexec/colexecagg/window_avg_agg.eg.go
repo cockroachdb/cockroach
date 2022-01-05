@@ -78,7 +78,7 @@ type avgInt16WindowAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -261,7 +261,7 @@ type avgInt32WindowAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -444,7 +444,7 @@ type avgInt64WindowAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -627,7 +627,7 @@ type avgDecimalWindowAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []apd.Decimal
+	col coldata.Decimals
 }
 
 var _ AggregateFunc = &avgDecimalWindowAgg{}
@@ -799,7 +799,7 @@ type avgFloat64WindowAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []float64
+	col coldata.Float64s
 }
 
 var _ AggregateFunc = &avgFloat64WindowAgg{}
@@ -955,7 +955,7 @@ type avgIntervalWindowAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []duration.Duration
+	col coldata.Durations
 }
 
 var _ AggregateFunc = &avgIntervalWindowAgg{}

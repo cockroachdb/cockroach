@@ -31,7 +31,7 @@ func newBoolAndOrderedAggAlloc(
 
 type boolAndOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -223,7 +223,7 @@ func newBoolOrOrderedAggAlloc(
 
 type boolOrOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
