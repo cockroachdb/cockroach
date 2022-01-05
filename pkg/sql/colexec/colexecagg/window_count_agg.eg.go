@@ -28,7 +28,7 @@ func newCountRowsWindowAggAlloc(
 // countRowsWindowAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 
@@ -96,7 +96,7 @@ func newCountWindowAggAlloc(
 // countWindowAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 

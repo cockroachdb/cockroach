@@ -28,7 +28,7 @@ func newCountRowsHashAggAlloc(
 // countRowsHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsHashAgg struct {
 	unorderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 
@@ -97,7 +97,7 @@ func newCountHashAggAlloc(
 // countHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countHashAgg struct {
 	unorderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 

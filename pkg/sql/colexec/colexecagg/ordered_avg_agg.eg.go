@@ -78,7 +78,7 @@ type avgInt16OrderedAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -339,7 +339,7 @@ type avgInt32OrderedAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -600,7 +600,7 @@ type avgInt64OrderedAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -861,7 +861,7 @@ type avgDecimalOrderedAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []apd.Decimal
+	col coldata.Decimals
 }
 
 var _ AggregateFunc = &avgDecimalOrderedAgg{}
@@ -1114,7 +1114,7 @@ type avgFloat64OrderedAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []float64
+	col coldata.Float64s
 }
 
 var _ AggregateFunc = &avgFloat64OrderedAgg{}
@@ -1335,7 +1335,7 @@ type avgIntervalOrderedAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []duration.Duration
+	col coldata.Durations
 }
 
 var _ AggregateFunc = &avgIntervalOrderedAgg{}

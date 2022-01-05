@@ -55,7 +55,7 @@ type sumIntInt16OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -289,7 +289,7 @@ type sumIntInt32OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -523,7 +523,7 @@ type sumIntInt64OrderedAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64

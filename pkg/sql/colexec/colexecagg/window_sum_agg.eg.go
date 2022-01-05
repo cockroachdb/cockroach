@@ -74,7 +74,7 @@ type sumInt16WindowAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -256,7 +256,7 @@ type sumInt32WindowAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -438,7 +438,7 @@ type sumInt64WindowAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull     uint64
@@ -620,7 +620,7 @@ type sumDecimalWindowAgg struct {
 	// group, instead of on each iteration.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -791,7 +791,7 @@ type sumFloat64WindowAgg struct {
 	// group, instead of on each iteration.
 	curAgg float64
 	// col points to the output vector we are updating.
-	col []float64
+	col coldata.Float64s
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
@@ -950,7 +950,7 @@ type sumIntervalWindowAgg struct {
 	// group, instead of on each iteration.
 	curAgg duration.Duration
 	// col points to the output vector we are updating.
-	col []duration.Duration
+	col coldata.Durations
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64

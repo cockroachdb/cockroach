@@ -78,7 +78,7 @@ type avgInt16HashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -202,7 +202,7 @@ type avgInt32HashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -326,7 +326,7 @@ type avgInt64HashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col            []apd.Decimal
+	col            coldata.Decimals
 	overloadHelper execgen.OverloadHelper
 }
 
@@ -450,7 +450,7 @@ type avgDecimalHashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []apd.Decimal
+	col coldata.Decimals
 }
 
 var _ AggregateFunc = &avgDecimalHashAgg{}
@@ -568,7 +568,7 @@ type avgFloat64HashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []float64
+	col coldata.Float64s
 }
 
 var _ AggregateFunc = &avgFloat64HashAgg{}
@@ -676,7 +676,7 @@ type avgIntervalHashAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []duration.Duration
+	col coldata.Durations
 }
 
 var _ AggregateFunc = &avgIntervalHashAgg{}

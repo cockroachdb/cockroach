@@ -46,7 +46,7 @@ type count_COUNTKIND_AGGKINDAgg struct {
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 

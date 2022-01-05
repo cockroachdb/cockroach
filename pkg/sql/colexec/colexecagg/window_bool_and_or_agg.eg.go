@@ -31,7 +31,7 @@ func newBoolAndWindowAggAlloc(
 
 type boolAndWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -132,7 +132,7 @@ func newBoolOrWindowAggAlloc(
 
 type boolOrWindowAgg struct {
 	unorderedAggregateFuncBase
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.

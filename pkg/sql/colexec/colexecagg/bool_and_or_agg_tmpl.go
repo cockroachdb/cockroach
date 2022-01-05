@@ -62,7 +62,7 @@ type bool_OP_TYPE_AGGKINDAgg struct {
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.

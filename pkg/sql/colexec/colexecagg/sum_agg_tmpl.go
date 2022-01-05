@@ -94,7 +94,7 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// group, instead of on each iteration.
 	curAgg _RET_GOTYPE
 	// col points to the output vector we are updating.
-	col []_RET_GOTYPE
+	col _RET_GOTYPESLICE
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
