@@ -119,7 +119,6 @@ function NodeIDSelector(props: {
   refreshNodes: typeof refreshNodes;
 }) {
   const { nodeID, setNodeID, nodeIDs, refreshNodes } = props;
-  const nodeIDsWithLocal = ["local", ...nodeIDs];
 
   useEffect(() => {
     refreshNodes();
@@ -127,16 +126,13 @@ function NodeIDSelector(props: {
 
   return (
     <select
+      value={nodeID}
       onChange={e => {
         setNodeID(e.target.value);
       }}
     >
-      {nodeIDsWithLocal.map(n => {
-        return (
-          <option value={n} selected={n === nodeID}>
-            {n}
-          </option>
-        );
+      {nodeIDs.map(n => {
+        return <option value={n}>{n}</option>;
       })}
     </select>
   );
@@ -153,8 +149,67 @@ const NodeIDSelectorConnected = connect(
   },
 )(NodeIDSelector);
 
+interface ProxyToNodeSelectorProps {
+  nodeID: string;
+}
+
+// ProxyToNodeSelector is a dropdown that allows the user to select a
+// remote nodeID to proxy their DB Console connection to. When a nodeID
+// is selected from the dropdown a cookie is set in the browser that
+// will instruct CRDB to proxy HTTP requests to that nodeID. Selecting
+// "local" will reset the connection back to this specific node.
+const ProxyToNodeSelector = (props: ProxyToNodeSelectorProps) => {
+  const remoteNodeIDCookieName = "remote_node_id";
+
+  // currentNodeIDCookie will either be empty or contain two elements
+  // with the cookie name and value we're looking for
+  const currentNodeIDCookie: string[] = document.cookie
+    .split(";")
+    .map(cookieString => {
+      return cookieString.split("=").map(kv => {
+        return kv.trim();
+      });
+    })
+    .find(cookie => {
+      return cookie[0] === remoteNodeIDCookieName;
+    });
+  const setNodeIDCookie = (nodeID: string) => {
+    document.cookie = `${remoteNodeIDCookieName}=${nodeID}`;
+    location.reload();
+  };
+  let currentNodeID = props.nodeID;
+  let proxyEnabled = false;
+  if (
+    currentNodeIDCookie &&
+    currentNodeIDCookie.length == 2 &&
+    currentNodeIDCookie[1] !== ""
+  ) {
+    currentNodeID = currentNodeIDCookie[1];
+    if (currentNodeID !== "local" && currentNodeID !== "") {
+      proxyEnabled = true;
+    }
+  }
+  return proxyEnabled ? (
+    <span>
+      Proxied to {currentNodeID}{" "}
+      <button
+        onClick={() =>
+          setNodeIDCookie(";expires=Thu, 01 Jan 1970 00:00:01 GMT")
+        }
+      >
+        Reset
+      </button>
+    </span>
+  ) : (
+    <NodeIDSelectorConnected
+      nodeID={currentNodeID}
+      setNodeID={setNodeIDCookie}
+    />
+  );
+};
+
 export default function Debug() {
-  const [nodeID, setNodeID] = useState<string>("local");
+  const [nodeID, setNodeID] = useState<string>(NODE_ID);
   return (
     <div className="section">
       <Helmet title="Debug" />
@@ -171,7 +226,10 @@ export default function Debug() {
 
         <div className="debug-header__annotations">
           <LicenseType />
-          <DebugAnnotation label="Web server" value={`n${NODE_ID}`} />
+          <DebugAnnotation
+            label="Web server"
+            value={<ProxyToNodeSelector nodeID={nodeID} />}
+          />
         </div>
       </div>
       <PanelSection>

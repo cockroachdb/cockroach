@@ -39,6 +39,7 @@ import {
 
 import "./layout.styl";
 import "./layoutPanel.styl";
+import { NodeIDSelectorConnected } from "oss/src/views/reports/containers/debug";
 
 export interface LayoutProps {
   clusterName: string;

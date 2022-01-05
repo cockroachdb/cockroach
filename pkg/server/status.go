@@ -467,17 +467,23 @@ func (s *statusServer) RegisterGateway(
 }
 
 func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
+	return parseNodeID(s.gossip, nodeIDParam)
+}
+
+func parseNodeID(
+	gossip *gossip.Gossip, nodeIDParam string,
+) (nodeID roachpb.NodeID, isLocal bool, err error) {
 	// No parameter provided or set to local.
 	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
-		return s.gossip.NodeID.Get(), true, nil
+		return gossip.NodeID.Get(), true, nil
 	}
 
 	id, err := strconv.ParseInt(nodeIDParam, 0, 32)
 	if err != nil {
 		return 0, false, errors.Wrap(err, "node ID could not be parsed")
 	}
-	nodeID := roachpb.NodeID(id)
-	return nodeID, nodeID == s.gossip.NodeID.Get(), nil
+	nodeID = roachpb.NodeID(id)
+	return nodeID, nodeID == gossip.NodeID.Get(), nil
 }
 
 func (s *statusServer) dialNode(
