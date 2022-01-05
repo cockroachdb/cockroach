@@ -923,7 +923,7 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	*ex.planner.extendedEvalCtx.Jobs = append(*ex.planner.extendedEvalCtx.Jobs, jobIDs...)
+	ex.planner.extendedEvalCtx.Jobs.add(jobIDs...)
 	return nil
 }
 
