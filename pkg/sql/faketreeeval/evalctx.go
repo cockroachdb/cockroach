@@ -441,7 +441,9 @@ func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ uint64) error {
 }
 
 // DestroyTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) DestroyTenant(_ context.Context, _ uint64) error {
+func (c *DummyTenantOperator) DestroyTenant(
+	ctx context.Context, tenantID uint64, synchronous bool,
+) error {
 	return errors.WithStack(errEvalTenant)
 }
 
