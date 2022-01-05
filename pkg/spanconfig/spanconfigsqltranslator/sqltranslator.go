@@ -87,6 +87,12 @@ func (s *SQLTranslator) Translate(
 			}
 		}
 
+		pseudoTableEntries, err := s.maybeGeneratePseudoTableEntries(ctx, txn, ids)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, pseudoTableEntries...)
+
 		// For every unique leaf ID, generate span configurations.
 		for _, leafID := range leafIDs {
 			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol)
@@ -468,4 +474,64 @@ func (s *SQLTranslator) findDescendantLeafIDsForNamedZone(
 		}
 	}
 	return descendantIDs, nil
+}
+
+// maybeGeneratePseudoTableEntries generates span configs for
+// pseudo table ID key spans, if applicable.
+func (s *SQLTranslator) maybeGeneratePseudoTableEntries(
+	ctx context.Context, txn *kv.Txn, ids descpb.IDs,
+) ([]roachpb.SpanConfigEntry, error) {
+	if !s.codec.ForSystemTenant() {
+		return nil, nil
+	}
+
+	for _, id := range ids {
+		if id != keys.SystemDatabaseID && id != keys.RootNamespaceID {
+			continue // nothing to do
+		}
+
+		// We have special handling for the system database (and RANGE DEFAULT,
+		// which the system database inherits from). The system config span
+		// infrastructure generates splits along (empty) pseudo table
+		// boundaries[1] -- we do the same. Not doing so is safe, but this helps
+		// reduce the differences between the two subsystems which has practical
+		// implications for our bootstrap code and tests that bake in
+		// assumptions about these splits. While the two systems exist
+		// side-by-side, it's easier to just minimize these differences (it also
+		// removes the tiny re-splitting costs when switching between them). We
+		// can get rid of this special handling once the system config span is
+		// removed (#70560).
+		//
+		// [1]: Consider the liveness range [/System/NodeLiveness,
+		//      /System/NodeLivenessMax). It's identified using the pseudo ID 22
+		//      (i.e. keys.LivenessRangesID). Because we're using a pseudo ID,
+		//      what of [/Table/22-/Table/23)? This is a keyspan with no
+		//      contents, yet one the system config span splits along to create
+		//      an empty range. It's precisely this "feature" we're looking to
+		//      emulate. As for what config to apply over said range -- we do as
+		//      the system config span does, applying the config for the system
+		//      database.
+		var entries []roachpb.SpanConfigEntry
+		for _, pseudoTableID := range keys.PseudoTableIDs {
+			zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.SystemDatabaseID)
+			if err != nil {
+				return nil, err
+			}
+
+			tableStartKey := s.codec.TablePrefix(pseudoTableID)
+			tableEndKey := tableStartKey.PrefixEnd()
+			tableSpanConfig := zone.AsSpanConfig()
+			entries = append(entries, roachpb.SpanConfigEntry{
+				Span: roachpb.Span{
+					Key:    tableStartKey,
+					EndKey: tableEndKey,
+				},
+				Config: tableSpanConfig,
+			})
+		}
+
+		return entries, nil
+	}
+
+	return nil, nil
 }
