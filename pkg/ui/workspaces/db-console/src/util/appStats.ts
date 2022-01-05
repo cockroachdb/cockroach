@@ -187,6 +187,7 @@ export function aggregateStatementStats(
 }
 
 export interface ExecutionStatistics {
+  statement_fingerprint_id: Long;
   statement: string;
   statement_summary: string;
   aggregated_ts: number;
@@ -206,6 +207,7 @@ export function flattenStatementStats(
   statementStats: CollectedStatementStatistics[],
 ): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
+    statement_fingerprint_id: stmt.id,
     statement: stmt.key.key_data.query,
     statement_summary: stmt.key.key_data.query_summary,
     aggregated_ts: util.TimestampToNumber(stmt.key.aggregated_ts),
@@ -234,9 +236,7 @@ export function combineStatementStats(
 // aggregated_ts and aggregation_interval.
 export function statementKey(stmt: ExecutionStatistics): string {
   return (
-    stmt.statement +
-    stmt.implicit_txn +
-    stmt.database +
+    stmt.statement_fingerprint_id.toString() +
     stmt.aggregated_ts +
     stmt.aggregation_interval
   );
