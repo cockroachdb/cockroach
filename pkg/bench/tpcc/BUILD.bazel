@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tpcc",
+    srcs = ["tpcc_bench.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/bench/tpcc",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "tpcc_test",
+    srcs = [
+        "main_test.go",
+        "tpcc_bench_client_test.go",
+        "tpcc_bench_generate_data_test.go",
+        "tpcc_bench_options_test.go",
+        "tpcc_bench_test.go",
+    ],
+    embed = [":tpcc"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/envutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
+        "//pkg/workload/tpcc",
+        "//pkg/workload/workloadsql",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_stretchr_testify//require",
+    ],
+)
