@@ -240,6 +240,9 @@ func TestDataDriven(t *testing.T) {
 					Context:  2,
 				})
 				require.NoError(t, err)
+				if diff == "" {
+					return ""
+				}
 
 				lines := strings.Split(strings.TrimSpace(diff), "\n")
 				headerLines, diffLines := lines[:2], lines[2:]
