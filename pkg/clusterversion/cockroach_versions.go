@@ -225,6 +225,10 @@ const (
 	SeedTenantSpanConfigs
 	// Public schema is backed by a descriptor.
 	PublicSchemasWithDescriptors
+	// AlterSystemProtectedTimestampAddColumn adds a target column to the
+	// system.protected_ts_records table that describes what is protected by the
+	// record.
+	AlterSystemProtectedTimestampAddColumn
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -328,6 +332,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PublicSchemasWithDescriptors,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
+	},
+	{
+		Key:     AlterSystemProtectedTimestampAddColumn,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
 	},
 
 	// *************************************************
