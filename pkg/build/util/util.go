@@ -21,9 +21,9 @@ import (
 
 // OutputOfBinaryRule returns the path of the binary produced by the
 // given build target, relative to bazel-bin. That is,
-//    filepath.Join(bazelBin, OutputOfBinaryRule(target)) is the absolute
+//    filepath.Join(bazelBin, OutputOfBinaryRule(target, isWindows)) is the absolute
 // path to the build binary for the target.
-func OutputOfBinaryRule(target string) string {
+func OutputOfBinaryRule(target string, isWindows bool) string {
 	colon := strings.Index(target, ":")
 	var bin string
 	if colon >= 0 {
@@ -41,6 +41,9 @@ func OutputOfBinaryRule(target string) string {
 		head = strings.TrimPrefix(target[:colon], "//")
 	} else {
 		head = strings.TrimPrefix(target, "//")
+	}
+	if isWindows {
+		return filepath.Join(head, bin+"_", bin+".exe")
 	}
 	return filepath.Join(head, bin+"_", bin)
 }
