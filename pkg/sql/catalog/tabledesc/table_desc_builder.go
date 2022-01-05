@@ -310,20 +310,32 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	idx *descpb.IndexDescriptor,
 	skipFKsWithNoMatchingTable bool,
 ) (bool, error) {
+	updateUnupgradedTablesMap := func(id descpb.ID) (err error) {
+		defer func() {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
+				err = nil
+			}
+		}()
+		if _, found := otherUnupgradedTables[id]; found {
+			return nil
+		}
+		d, err := dg.GetDesc(ctx, id)
+		if err != nil {
+			return err
+		}
+		tbl, ok := d.(catalog.TableDescriptor)
+		if !ok {
+			return catalog.WrapTableDescRefErr(id, catalog.ErrDescriptorNotFound)
+		}
+		otherUnupgradedTables[id] = tbl
+		return nil
+	}
+
 	var changed bool
 	if idx.ForeignKey.IsSet() {
 		ref := &idx.ForeignKey
-		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := catalog.GetTableDescFromID(ctx, dg, ref.Table)
-			if err != nil {
-				if errors.Is(err, catalog.ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
-					// Ignore this FK and keep going.
-				} else {
-					return false, err
-				}
-			} else {
-				otherUnupgradedTables[ref.Table] = tbl
-			}
+		if err := updateUnupgradedTablesMap(ref.Table); err != nil {
+			return false, err
 		}
 		if tbl, ok := otherUnupgradedTables[ref.Table]; ok {
 			referencedIndex, err := tbl.FindIndexWithID(ref.Index)
@@ -350,19 +362,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 
 	for refIdx := range idx.ReferencedBy {
 		ref := &(idx.ReferencedBy[refIdx])
-		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := catalog.GetTableDescFromID(ctx, dg, ref.Table)
-			if err != nil {
-				if errors.Is(err, catalog.ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
-					// Ignore this FK and keep going.
-				} else {
-					return false, err
-				}
-			} else {
-				otherUnupgradedTables[ref.Table] = tbl
-			}
+		if err := updateUnupgradedTablesMap(ref.Table); err != nil {
+			return false, err
 		}
-
 		if otherTable, ok := otherUnupgradedTables[ref.Table]; ok {
 			originIndexI, err := otherTable.FindIndexWithID(ref.Index)
 			if err != nil {

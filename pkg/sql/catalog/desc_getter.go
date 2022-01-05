@@ -35,21 +35,6 @@ type BatchDescGetter interface {
 	GetNamespaceEntries(ctx context.Context, requests []descpb.NameInfo) ([]descpb.ID, error)
 }
 
-// GetTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing proto getter. Returns an error if the
-// descriptor doesn't exist or if it exists and is not a table.
-func GetTableDescFromID(ctx context.Context, dg DescGetter, id descpb.ID) (TableDescriptor, error) {
-	desc, err := dg.GetDesc(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	table, ok := desc.(TableDescriptor)
-	if !ok {
-		return nil, WrapTableDescRefErr(id, ErrDescriptorNotFound)
-	}
-	return table, nil
-}
-
 // MapDescGetter is an in-memory DescGetter implementation.
 type MapDescGetter struct {
 	Descriptors map[descpb.ID]Descriptor
