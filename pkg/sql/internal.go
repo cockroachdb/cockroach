@@ -662,15 +662,15 @@ func (ie *InternalExecutor) execInternal(
 		//
 		// TODO(knz): track the callers and check whether opName could be turned
 		// into a type safe for reporting.
-		if retErr != nil {
+		switch {
+		case retErr != nil:
 			if !errIsRetriable(retErr) {
 				retErr = errors.Wrapf(retErr, "%s", opName)
 			}
 			stmtBuf.Close()
 			wg.Wait()
 			sp.Finish()
-		} else {
-			// r must be non-nil here.
+		case r != nil:
 			r.errCallback = func(err error) error {
 				if err != nil && !errIsRetriable(err) {
 					err = errors.Wrapf(err, "%s", opName)
@@ -678,6 +678,11 @@ func (ie *InternalExecutor) execInternal(
 				return err
 			}
 			r.sp = sp
+		default:
+			// This is likely a panic situation, we should perform a cleanup only.
+			stmtBuf.Close()
+			wg.Wait()
+			sp.Finish()
 		}
 	}()
 
