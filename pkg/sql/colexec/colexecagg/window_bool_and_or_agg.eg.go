@@ -85,7 +85,7 @@ func (a *boolAndWindowAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -181,7 +181,7 @@ func (a *boolOrWindowAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 

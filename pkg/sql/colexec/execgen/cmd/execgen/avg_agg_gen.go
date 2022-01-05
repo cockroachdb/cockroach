@@ -57,11 +57,14 @@ func (a avgTmplInfo) AssignSubtract(
 	return a.avgOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
 
-func (a avgTmplInfo) AssignDivInt64(targetElem, leftElem, rightElem, _, _, _ string) string {
+func (a avgTmplInfo) AssignDivInt64(
+	targetVec, targetIdx, leftElem, rightElem, _, _, _ string,
+) string {
 	switch a.RetVecMethod {
 	case toVecMethod(types.DecimalFamily, anyWidth):
 		// Note that the result of summation of integers is stored as a
 		// decimal, so ints and decimals share the division code.
+		targetElem := fmt.Sprintf("%s[%s]", targetVec, targetIdx)
 		return fmt.Sprintf(`
 			%s.SetInt64(%s)
 			if _, err := tree.DecimalCtx.Quo(&%s, &%s, &%s); err != nil {
@@ -70,9 +73,9 @@ func (a avgTmplInfo) AssignDivInt64(targetElem, leftElem, rightElem, _, _, _ str
 			targetElem, rightElem, targetElem, leftElem, targetElem,
 		)
 	case toVecMethod(types.FloatFamily, anyWidth):
-		return fmt.Sprintf("%s = %s / float64(%s)", targetElem, leftElem, rightElem)
+		return fmt.Sprintf("%s.Set(%s, %s / float64(%s))", targetVec, targetIdx, leftElem, rightElem)
 	case toVecMethod(types.IntervalFamily, anyWidth):
-		return fmt.Sprintf("%s = %s.Div(int64(%s))", targetElem, leftElem, rightElem)
+		return fmt.Sprintf("%s.Set(%s, %s.Div(int64(%s)))", targetVec, targetIdx, leftElem, rightElem)
 	}
 	colexecerror.InternalError(errors.AssertionFailedf("unsupported avg agg type"))
 	// This code is unreachable, but the compiler cannot infer that.
@@ -118,8 +121,8 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	assignDivRe := makeFunctionRegex("_ASSIGN_DIV_INT64", 6)
-	s = assignDivRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignDivInt64", 6))
+	assignDivRe := makeFunctionRegex("_ASSIGN_DIV_INT64", 7)
+	s = assignDivRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignDivInt64", 7))
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
 	assignSubtractRe := makeFunctionRegex("_ASSIGN_SUBTRACT", 6)

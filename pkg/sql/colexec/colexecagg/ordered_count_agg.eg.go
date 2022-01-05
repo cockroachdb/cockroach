@@ -28,7 +28,7 @@ func newCountRowsOrderedAggAlloc(
 // countRowsOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 
@@ -53,7 +53,7 @@ func (a *countRowsOrderedAgg) Compute(
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 							a.curIdx++
 							a.curAgg = int64(0)
 						}
@@ -70,7 +70,7 @@ func (a *countRowsOrderedAgg) Compute(
 				for _, i := range sel[startIdx:endIdx] {
 					if groups[i] {
 						if !a.isFirstGroup {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 							a.curIdx++
 							a.curAgg = int64(0)
 						}
@@ -93,13 +93,13 @@ func (a *countRowsOrderedAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	col := a.col
-	col[outputIdx] = a.curAgg
+	col.Set(outputIdx, a.curAgg)
 }
 
 func (a *countRowsOrderedAgg) HandleEmptyInputScalar() {
 	// COUNT aggregates are special because they return zero in case of an
 	// empty input in the scalar context.
-	a.col[0] = 0
+	a.col.Set(0, 0)
 }
 
 func (a *countRowsOrderedAgg) Reset() {
@@ -140,7 +140,7 @@ func newCountOrderedAggAlloc(
 // countOrderedAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []int64
+	col    coldata.Int64s
 	curAgg int64
 }
 
@@ -169,7 +169,7 @@ func (a *countOrderedAgg) Compute(
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 							a.curIdx++
 							a.curAgg = int64(0)
 						}
@@ -188,7 +188,7 @@ func (a *countOrderedAgg) Compute(
 					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 							a.curIdx++
 							a.curAgg = int64(0)
 						}
@@ -205,7 +205,7 @@ func (a *countOrderedAgg) Compute(
 				for _, i := range sel[startIdx:endIdx] {
 					if groups[i] {
 						if !a.isFirstGroup {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 							a.curIdx++
 							a.curAgg = int64(0)
 						}
@@ -223,7 +223,7 @@ func (a *countOrderedAgg) Compute(
 				for _, i := range sel[startIdx:endIdx] {
 					if groups[i] {
 						if !a.isFirstGroup {
-							a.col[a.curIdx] = a.curAgg
+							a.col.Set(a.curIdx, a.curAgg)
 							a.curIdx++
 							a.curAgg = int64(0)
 						}
@@ -246,13 +246,13 @@ func (a *countOrderedAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	col := a.col
-	col[outputIdx] = a.curAgg
+	col.Set(outputIdx, a.curAgg)
 }
 
 func (a *countOrderedAgg) HandleEmptyInputScalar() {
 	// COUNT aggregates are special because they return zero in case of an
 	// empty input in the scalar context.
-	a.col[0] = 0
+	a.col.Set(0, 0)
 }
 
 func (a *countOrderedAgg) Reset() {

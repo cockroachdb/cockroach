@@ -1153,7 +1153,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curSum / float64(a.curCount)
+								a.col.Set(a.curIdx, a.curSum/float64(a.curCount))
 							}
 							a.curIdx++
 							a.curSum = zeroFloat64Value
@@ -1187,7 +1187,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curSum / float64(a.curCount)
+								a.col.Set(a.curIdx, a.curSum/float64(a.curCount))
 							}
 							a.curIdx++
 							a.curSum = zeroFloat64Value
@@ -1223,7 +1223,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curSum / float64(a.curCount)
+								a.col.Set(a.curIdx, a.curSum/float64(a.curCount))
 							}
 							a.curIdx++
 							a.curSum = zeroFloat64Value
@@ -1255,7 +1255,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curSum / float64(a.curCount)
+								a.col.Set(a.curIdx, a.curSum/float64(a.curCount))
 							}
 							a.curIdx++
 							a.curSum = zeroFloat64Value
@@ -1299,7 +1299,7 @@ func (a *avgFloat64OrderedAgg) Flush(outputIdx int) {
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curSum / float64(a.curCount)
+		col.Set(outputIdx, a.curSum/float64(a.curCount))
 	}
 }
 
@@ -1375,7 +1375,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
+								a.col.Set(a.curIdx, a.curSum.Div(int64(a.curCount)))
 							}
 							a.curIdx++
 							a.curSum = zeroIntervalValue
@@ -1404,7 +1404,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
+								a.col.Set(a.curIdx, a.curSum.Div(int64(a.curCount)))
 							}
 							a.curIdx++
 							a.curSum = zeroIntervalValue
@@ -1435,7 +1435,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
+								a.col.Set(a.curIdx, a.curSum.Div(int64(a.curCount)))
 							}
 							a.curIdx++
 							a.curSum = zeroIntervalValue
@@ -1462,7 +1462,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
+								a.col.Set(a.curIdx, a.curSum.Div(int64(a.curCount)))
 							}
 							a.curIdx++
 							a.curSum = zeroIntervalValue
@@ -1501,7 +1501,7 @@ func (a *avgIntervalOrderedAgg) Flush(outputIdx int) {
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curSum.Div(int64(a.curCount))
+		col.Set(outputIdx, a.curSum.Div(int64(a.curCount)))
 	}
 }
 

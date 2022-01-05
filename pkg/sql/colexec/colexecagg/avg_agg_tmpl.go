@@ -46,10 +46,10 @@ var (
 // {{/*
 // Declarations to make the template compile properly
 
-// _ASSIGN_DIV_INT64 is the template division function for assigning the first
-// input to the result of the second input / the third input, where the third
-// input is an int64.
-func _ASSIGN_DIV_INT64(_, _, _, _, _, _ string) {
+// _ASSIGN_DIV_INT64 is the template division function for assigning the
+// first[second] input to the result of the third input / the fourth input,
+// where the fourth input is an int64.
+func _ASSIGN_DIV_INT64(outputVec, outputIdx, _, _, _, _, _ string) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
@@ -219,7 +219,7 @@ func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		_ASSIGN_DIV_INT64(col[outputIdx], a.curSum, a.curCount, a.col, _, _)
+		_ASSIGN_DIV_INT64(col, outputIdx, a.curSum, a.curCount, _, _, _)
 	}
 }
 
@@ -308,7 +308,7 @@ func _ACCUMULATE_AVG(
 				a.nulls.SetNull(a.curIdx)
 			} else {
 				// {{with .Global}}
-				_ASSIGN_DIV_INT64(a.col[a.curIdx], a.curSum, a.curCount, a.col, _, _)
+				_ASSIGN_DIV_INT64(a.col, a.curIdx, a.curSum, a.curCount, _, _, _)
 				// {{end}}
 			}
 			a.curIdx++

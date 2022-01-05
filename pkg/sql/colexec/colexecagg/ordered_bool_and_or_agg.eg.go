@@ -31,7 +31,7 @@ func newBoolAndOrderedAggAlloc(
 
 type boolAndOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -67,7 +67,7 @@ func (a *boolAndOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = true
@@ -93,7 +93,7 @@ func (a *boolAndOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = true
@@ -121,7 +121,7 @@ func (a *boolAndOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = true
@@ -145,7 +145,7 @@ func (a *boolAndOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = true
@@ -181,7 +181,7 @@ func (a *boolAndOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -224,7 +224,7 @@ func newBoolOrOrderedAggAlloc(
 
 type boolOrOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -260,7 +260,7 @@ func (a *boolOrOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = false
@@ -286,7 +286,7 @@ func (a *boolOrOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = false
@@ -314,7 +314,7 @@ func (a *boolOrOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = false
@@ -338,7 +338,7 @@ func (a *boolOrOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = false
@@ -374,7 +374,7 @@ func (a *boolOrOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 

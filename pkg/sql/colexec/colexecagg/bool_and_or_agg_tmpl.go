@@ -59,7 +59,7 @@ func newBool_OP_TYPE_AGGKINDAggAlloc(
 type bool_OP_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
-	col []bool
+	col coldata.Bools
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
@@ -159,7 +159,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -216,7 +216,7 @@ func _ACCUMULATE_BOOLEAN(
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				a.col[a.curIdx] = a.curAgg
+				a.col.Set(a.curIdx, a.curAgg)
 			}
 			a.curIdx++
 			// {{with .Global}}

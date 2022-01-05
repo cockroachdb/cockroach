@@ -837,7 +837,7 @@ func (a *avgFloat64WindowAgg) Flush(outputIdx int) {
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curSum / float64(a.curCount)
+		col.Set(outputIdx, a.curSum/float64(a.curCount))
 	}
 }
 
@@ -977,7 +977,7 @@ func (a *avgIntervalWindowAgg) Flush(outputIdx int) {
 	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		col[outputIdx] = a.curSum.Div(int64(a.curCount))
+		col.Set(outputIdx, a.curSum.Div(int64(a.curCount)))
 	}
 }
 

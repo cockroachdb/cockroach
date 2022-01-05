@@ -51,7 +51,7 @@ func (a *countRowsWindowAgg) Compute(
 
 func (a *countRowsWindowAgg) Flush(outputIdx int) {
 	col := a.vec.Int64()
-	col[outputIdx] = a.curAgg
+	col.Set(outputIdx, a.curAgg)
 }
 
 func (a *countRowsWindowAgg) Reset() {
@@ -128,7 +128,7 @@ func (a *countWindowAgg) Compute(
 
 func (a *countWindowAgg) Flush(outputIdx int) {
 	col := a.vec.Int64()
-	col[outputIdx] = a.curAgg
+	col.Set(outputIdx, a.curAgg)
 }
 
 func (a *countWindowAgg) Reset() {

@@ -116,7 +116,7 @@ func (a *sumInt16OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -155,7 +155,7 @@ func (a *sumInt16OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -195,7 +195,7 @@ func (a *sumInt16OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -232,7 +232,7 @@ func (a *sumInt16OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -359,7 +359,7 @@ func (a *sumInt32OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -398,7 +398,7 @@ func (a *sumInt32OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -438,7 +438,7 @@ func (a *sumInt32OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -475,7 +475,7 @@ func (a *sumInt32OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -602,7 +602,7 @@ func (a *sumInt64OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -641,7 +641,7 @@ func (a *sumInt64OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -681,7 +681,7 @@ func (a *sumInt64OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -718,7 +718,7 @@ func (a *sumInt64OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -841,7 +841,7 @@ func (a *sumDecimalOrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -879,7 +879,7 @@ func (a *sumDecimalOrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -918,7 +918,7 @@ func (a *sumDecimalOrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -954,7 +954,7 @@ func (a *sumDecimalOrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroDecimalValue
@@ -1076,7 +1076,7 @@ func (a *sumFloat64OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroFloat64Value
@@ -1111,7 +1111,7 @@ func (a *sumFloat64OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroFloat64Value
@@ -1147,7 +1147,7 @@ func (a *sumFloat64OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroFloat64Value
@@ -1180,7 +1180,7 @@ func (a *sumFloat64OrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroFloat64Value
@@ -1299,7 +1299,7 @@ func (a *sumIntervalOrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroIntervalValue
@@ -1329,7 +1329,7 @@ func (a *sumIntervalOrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroIntervalValue
@@ -1360,7 +1360,7 @@ func (a *sumIntervalOrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroIntervalValue
@@ -1388,7 +1388,7 @@ func (a *sumIntervalOrderedAgg) Compute(
 							if a.numNonNull == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.curAgg = zeroIntervalValue

@@ -43,7 +43,7 @@ func newCount_COUNTKIND_AGGKINDAggAlloc(
 type count_COUNTKIND_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
-	col []int64
+	col coldata.Int64s
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
@@ -149,14 +149,14 @@ func (a *count_COUNTKIND_AGGKINDAgg) Flush(outputIdx int) {
 	// {{else}}
 	col := a.vec.Int64()
 	// {{end}}
-	col[outputIdx] = a.curAgg
+	col.Set(outputIdx, a.curAgg)
 }
 
 // {{if eq "_AGGKIND" "Ordered"}}
 func (a *count_COUNTKIND_AGGKINDAgg) HandleEmptyInputScalar() {
 	// COUNT aggregates are special because they return zero in case of an
 	// empty input in the scalar context.
-	a.col[0] = 0
+	a.col.Set(0, 0)
 }
 
 // {{end}}
@@ -226,7 +226,7 @@ func _ACCUMULATE_COUNT(
 	// {{end}}
 	if groups[i] {
 		if !a.isFirstGroup {
-			a.col[a.curIdx] = a.curAgg
+			a.col.Set(a.curIdx, a.curAgg)
 			a.curIdx++
 			a.curAgg = int64(0)
 		}

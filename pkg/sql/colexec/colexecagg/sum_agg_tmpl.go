@@ -303,7 +303,7 @@ func _ACCUMULATE_SUM(
 			if a.numNonNull == 0 {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				a.col[a.curIdx] = a.curAgg
+				a.col.Set(a.curIdx, a.curAgg)
 			}
 			a.curIdx++
 			// {{with .Global}}

@@ -52,7 +52,7 @@ func (a *countRowsHashAgg) Compute(
 
 func (a *countRowsHashAgg) Flush(outputIdx int) {
 	col := a.vec.Int64()
-	col[outputIdx] = a.curAgg
+	col.Set(outputIdx, a.curAgg)
 }
 
 func (a *countRowsHashAgg) Reset() {
@@ -130,7 +130,7 @@ func (a *countHashAgg) Compute(
 
 func (a *countHashAgg) Flush(outputIdx int) {
 	col := a.vec.Int64()
-	col[outputIdx] = a.curAgg
+	col.Set(outputIdx, a.curAgg)
 }
 
 func (a *countHashAgg) Reset() {
