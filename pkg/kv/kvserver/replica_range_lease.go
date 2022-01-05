@@ -383,12 +383,6 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				err := errors.Errorf(
 					"have been waiting %.2fs attempting to acquire lease", timeutil.Since(tBegin).Seconds(),
 				)
-				p.repl.breaker.Report(err)
-				// NB: careful to not do anything unless the breaker actually got
-				// tripped. (Breakers could be disabled altogether).
-				if breakerErr := p.repl.breaker.Signal().Err(); breakerErr != nil {
-					cancel()
-				}
 				// TODO(during review): can't use this API since we don't want to cancel
 				// the span here. Peel back the abstraction and create span manually.
 				log.Warningf(ctx, "%s:\n%s", err, finishAndGet())
@@ -1255,10 +1249,6 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		// against this in checkRequestTimeRLocked). So instead of assuming
 		// anything, we iterate and check again.
 		pErr = func() (pErr *roachpb.Error) {
-			slowTimer := timeutil.NewTimer()
-			defer slowTimer.Stop()
-			slowTimer.Reset(base.SlowRequestThreshold)
-			tBegin := timeutil.Now()
 			for {
 				select {
 				case pErr = <-llHandle.C():
@@ -1306,18 +1296,6 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					}
 					log.VEventf(ctx, 2, "lease acquisition succeeded: %+v", status.Lease)
 					return nil
-				case <-slowTimer.C:
-					// TODO(tbg): this is the one that should go away, see other "have been ... acquire lease" message
-					// introduced in this diff.
-					slowTimer.Read = true
-					err := errors.Errorf("have been waiting %s attempting to acquire lease", base.SlowRequestThreshold)
-					r.breaker.Report(err)
-					log.Warningf(ctx, "%s", err)
-					r.store.metrics.SlowLeaseRequests.Inc(1)
-					defer func() {
-						r.store.metrics.SlowLeaseRequests.Dec(1)
-						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
-					}()
 				case <-ctx.Done():
 					llHandle.Cancel()
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
