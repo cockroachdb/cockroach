@@ -23,14 +23,18 @@ import (
 // It is safe for concurrent use.
 type memoryAccumulator struct {
 	syncutil.Mutex
-	ba       mon.BoundAccount
+	ba       *mon.BoundAccount
 	reserved int64
 }
 
 // newMemoryAccumulator creates a new accumulator backed by a bound account created
 // from the given memory monitor.
 func newMemoryAccumulator(mm *mon.BytesMonitor) *memoryAccumulator {
-	return &memoryAccumulator{ba: mm.MakeBoundAccount()}
+	if mm == nil {
+		return &memoryAccumulator{}
+	}
+	ba := mm.MakeBoundAccount()
+	return &memoryAccumulator{ba: &ba}
 }
 
 // request checks that the given number of bytes is available, requesting some

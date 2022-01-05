@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -91,6 +92,13 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 	"feature.backup.enabled",
 	"set to true to enable backups, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
+).WithPublic()
+
+// featureBackupEnabled is used to enable and disable the BACKUP feature.
+var memMonitorBackupEnabled = settings.RegisterBoolSetting(
+	"bulkio.backup.memory_monitor.enabled",
+	"set to true to enable memory monitoring for parts of backup execution, false to disable; default is false",
+	util.ConstantWithMetamorphicTestBool("bulkio.backup.memory_monitor.enabled", false /* defaultValue */),
 ).WithPublic()
 
 func (p *backupKMSEnv) ClusterSettings() *cluster.Settings {

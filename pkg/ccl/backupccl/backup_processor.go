@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -123,7 +124,10 @@ func newBackupDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	memMonitor := flowCtx.Cfg.BackupMonitor
+	var memMonitor *mon.BytesMonitor
+	if memMonitorBackupEnabled.Get(&flowCtx.Cfg.Settings.SV) {
+		memMonitor = flowCtx.Cfg.BackupMonitor
+	}
 	if knobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
 		if knobs.BackupMemMonitor != nil {
 			memMonitor = knobs.BackupMemMonitor
