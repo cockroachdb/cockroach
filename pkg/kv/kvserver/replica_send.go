@@ -126,6 +126,35 @@ func (r *Replica) sendWithRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
+	parCtx := ctx
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	brSig := r.breaker.Signal()
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
+	if err := brSig.Err(); err != nil {
+		// TODO(tbg): we may want to exclude some requests from this check, or allow requests
+		// to exclude themselves from the check (via their header).
+		return nil, roachpb.NewError(err)
+	}
+	defer func() {
+		// HACK (or rather crude version of final thing):
+		if parCtx.Err() == nil && ctx.Err() != nil && errors.Is(rErr.GoError(), context.Canceled) {
+			if brErr := brSig.Err(); brErr != nil {
+				rErr = roachpb.NewError(brErr)
+			}
+		}
+	}()
+	r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-brSig.C():
+			cancel()
+		}
+	})
+
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -400,11 +429,6 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
 			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
-		}
-		// Also exit loop if breaker is open. Not failing fast here will lead to requests
-		// stuck acquiring latches.
-		if err := r.breaker.Signal().Err(); err != nil {
-			return nil, roachpb.NewError(err)
 		}
 
 		// Acquire latches to prevent overlapping requests from executing until

@@ -12,11 +12,13 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -88,7 +90,11 @@ func newReplicaCircuitBreaker(
 					ctx, finishAndGet := tracing.ContextWithRecordingSpan(ctx, ambientCtx.Tracer, "probe")
 					defer finishAndGet()
 
-					err := checkShouldUntripBreaker(ctx, r)
+					// TODO(tbg): plumb r.slowReplicationThreshold here.
+					const probeTimeout = 10 * time.Second
+					err := contextutil.RunWithTimeout(ctx, "probe", probeTimeout, func(ctx context.Context) error {
+						return checkShouldUntripBreaker(ctx, r)
+					})
 					report(err)
 					if err != nil {
 						rec := finishAndGet()

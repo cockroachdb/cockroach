@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -437,6 +438,29 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				}
 				// Set error for propagation to all waiters below.
 				if err != nil {
+					// If we timed out talking to the liveness range above, then
+					// the breaker should trip.
+					//
+					// TODO(tbg): It is somewhat unsatisfying to have bespoke code in the
+					// lease acquisition path. The way this "should" work is that any
+					// client request that arrives at a replica has a budget for the
+					// various things it might have to do, and that exceeding that budget
+					// trips the breaker. For example, acquiring a lease and waiting for
+					// latches or replication should have finite budgets, but sitting in a
+					// txnwaitqueue should have an infinite one.
+					//
+					// TODO(tbg): probably just remove this for now (it's disabled
+					// anyway), it seems wrong to have this call even if the lease
+					// acquisition is triggered by the probe. When the probe is active, I
+					// generally want its errors to be the ones handed out by the breaker.
+					// Handling liveness outages satisfyingly isn't as straightforward and
+					// should be out of scope initially. This limitation is documented and
+					// discussed in TestReplicaCircuitBreaker.
+					if false {
+						if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+							p.repl.breaker.Report(err)
+						}
+					}
 					// TODO(bdarnell): is status.Lease really what we want to put in the NotLeaseHolderError here?
 					pErr = roachpb.NewError(newNotLeaseHolderError(
 						status.Lease, p.repl.store.StoreID(), p.repl.Desc(),
