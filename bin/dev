@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+# Bump this counter (YYYYMMDD) to force rebuilding `dev` on all machines.
+# Keep in sync with constant in pkg/cmd/dev/build.go.
+DEV_VERSION=20220117
+
+THIS_DIR=$(cd "$(dirname "$0")" && pwd)
+BINARY_PATH=$THIS_DIR/dev-versions/dev.$DEV_VERSION
+
+if [ ! -f "$BINARY_PATH" ]; then
+    echo "$BINARY_PATH not found, building..."
+    mkdir -p $THIS_DIR/dev-versions
+
+    # TODO(irfansharif): We could use bazel to generate the binary as well, but
+    # this is slightly easier when it comes to placing the binary in the right
+    # place. That said, if we care about supporting machines that don't have
+    # already have go installed, perhaps we could? In any case, to get bazel
+    # built dev binary, `dev build dev` would do it.
+    (cd $THIS_DIR && go build -o $BINARY_PATH ../pkg/cmd/dev)
+    BUILD_STATUS=$?
+    if [ $BUILD_STATUS -ne 0 ]; then
+      exit $BUILD_STATUS
+    fi
+fi
+
+$BINARY_PATH "$@"

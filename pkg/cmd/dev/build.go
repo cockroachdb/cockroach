@@ -34,6 +34,10 @@ type buildTarget struct {
 	isGoBinary bool
 }
 
+// devVersion (YYYYMMDD) is used to stamp dev-built dev binaries. It has to be
+// kept in sync with bin/dev; look there for more details.
+const devVersion = 20220117
+
 // makeBuildCmd constructs the subcommand used to build the specified binaries.
 func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	buildCmd := &cobra.Command{
@@ -171,6 +175,8 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget, skipGen
 		// the top of the workspace; others go in the `bin` directory.
 		if strings.HasPrefix(base, "cockroach") {
 			symlinkPath = filepath.Join(workspace, base)
+		} else if base == "dev" {
+			symlinkPath = filepath.Join(workspace, "bin", "dev-versions", fmt.Sprintf("%s.%d", base, devVersion))
 		} else {
 			symlinkPath = filepath.Join(workspace, "bin", base)
 		}
