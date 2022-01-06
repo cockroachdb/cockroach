@@ -76,6 +76,8 @@ type StatsMetrics struct {
 	SQLStatsFlushFailure  *metric.Counter
 	SQLStatsFlushDuration *metric.Histogram
 	SQLStatsRemovedRows   *metric.Counter
+
+	SQLTxnStatsCollectionOverhead *metric.Histogram
 }
 
 // StatsMetrics is part of the metric.Struct interface.
