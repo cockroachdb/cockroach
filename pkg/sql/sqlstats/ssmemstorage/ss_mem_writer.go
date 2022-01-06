@@ -74,6 +74,7 @@ func (s *Container) RecordStatement(
 		key.ImplicitTxn,
 		key.Database,
 		key.Failed,
+		key.PlanHash,
 		key.TransactionFingerprintID,
 		createIfNonExistent,
 	)
@@ -123,6 +124,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
 	stats.mu.data.LastExecTimestamp = s.getTimeNow()
 	stats.mu.data.Nodes = util.CombineUniqueInt64(stats.mu.data.Nodes, value.Nodes)
+	stats.mu.data.PlanGists = util.CombineUniqueString(stats.mu.data.PlanGists, []string{value.PlanGist})
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -170,6 +172,7 @@ func (s *Container) RecordStatementExecStats(
 			key.ImplicitTxn,
 			key.Database,
 			key.Failed,
+			key.PlanHash,
 			key.TransactionFingerprintID,
 			false, /* createIfNotExists */
 		)

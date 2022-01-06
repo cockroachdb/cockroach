@@ -92,6 +92,7 @@ const statementStats: Required<IStatementStatistics> = {
     mean: 2,
     squared_diffs: 0.005,
   },
+  plan_gists: ["Ais="],
   exec_stats: execStats,
   last_exec_timestamp: {
     seconds: Long.fromInt(1599670292),

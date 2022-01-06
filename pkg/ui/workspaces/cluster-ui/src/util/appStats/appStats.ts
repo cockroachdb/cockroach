@@ -174,6 +174,7 @@ export function addStatementStats(
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    plan_gists: ["Ais="],
   };
 }
 
