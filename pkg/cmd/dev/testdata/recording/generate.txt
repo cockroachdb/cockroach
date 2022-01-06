@@ -102,7 +102,7 @@ MOCK_REDACT_SAFE_OUTPUT
 echo MOCK_REDACT_SAFE_OUTPUT > go/src/github.com/cockroachdb/cockroach/docs/generated/redact_safe.md
 ----
 
-bazel build //:go_path
+bazel build //:go_path --show_result=0
 ----
 
 bazel info workspace --color=no
