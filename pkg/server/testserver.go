@@ -113,10 +113,7 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 }
 
 func makeTestKVConfig() KVConfig {
-	kvCfg := MakeKVConfig(base.DefaultTestStoreSpec)
-	// Enable web session authentication.
-	kvCfg.EnableWebSessionAuthentication = true
-	return kvCfg
+	return MakeKVConfig(base.DefaultTestStoreSpec)
 }
 
 func makeTestSQLConfig(st *cluster.Settings, tenID roachpb.TenantID) SQLConfig {
@@ -231,7 +228,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	cfg.SecurityOverrides.SetFlag(base.DisableHTTPTLS, params.DisableTLSForHTTP)
 	if params.DisableWebSessionAuthentication {
-		cfg.EnableWebSessionAuthentication = false
+		cfg.SecurityOverrides.SetFlag(base.DisableHTTPAuthn, true)
 	}
 	if params.EnableDemoLoginEndpoint {
 		cfg.EnableDemoLoginEndpoint = true

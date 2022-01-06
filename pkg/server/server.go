@@ -1827,7 +1827,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
 		s.authentication,
 		ui.Handler(ui.Config{
-			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
+			ExperimentalUseLogin: s.cfg.RequireWebSession(),
 			LoginEnabled:         s.cfg.RequireWebSession(),
 			NodeID:               s.nodeIDContainer,
 			OIDC:                 oidc,
