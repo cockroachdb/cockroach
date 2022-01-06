@@ -1093,10 +1093,19 @@ func (r *Replica) refreshProposalsLocked(
 
 	var reproposals pendingCmdSlice
 	for _, p := range r.mu.proposals {
-		if p.command.MaxLeaseIndex == 0 {
+		if p.command.MaxLeaseIndex == 0 && !p.command.ReplicatedEvalResult.IsLeaseRequest {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
+			// Leases are an exception - they have replay protection using the lease sequence
+			// numbers. Also, terminating them early here complicates the circuit breaking
+			// story, where we rely on executeWriteBatch reporting an error to the breaker
+			// after SlowReplicationThreshold has passed.
+			//
+			// TODO(tbg): perhaps this method is actually the better place to trip the breaker?
+			// It's where "slow" replication is truly being detected. Ultimately we also want to
+			// trip the breaker on other sources of unavailability, but right now de facto the
+			// only one we are reliably trying to catch is slow replication.
 			r.cleanupFailedProposalLocked(p)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)

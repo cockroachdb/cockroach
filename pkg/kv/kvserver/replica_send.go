@@ -126,7 +126,6 @@ func (r *Replica) sendWithRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
-	parCtx := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	brSig := r.breaker.Signal()
@@ -139,11 +138,26 @@ func (r *Replica) sendWithRangeID(
 		return nil, roachpb.NewError(err)
 	}
 	defer func() {
-		// HACK (or rather crude version of final thing):
-		if parCtx.Err() == nil && ctx.Err() != nil && errors.Is(rErr.GoError(), context.Canceled) {
-			if brErr := brSig.Err(); brErr != nil {
-				rErr = roachpb.NewError(brErr)
+		if rErr == nil {
+			return
+		}
+		brErr := brSig.Err()
+		if brErr == nil {
+			return
+		}
+		if ae := (&roachpb.AmbiguousResultError{}); errors.As(rErr.GoError(), &ae) {
+			// TODO(tbg): this is pretty janky. Basically when the breaker first trips
+			// some proposals are bound to get an ambiguous result, which we must propagate.
+			// But we also want this case to be presentable as a nice error in SQL, so it
+			// needs to contain the information coming from the breaker.
+			wrappedErr := brErr
+			// TODO(tbg): this is the only write to WrappedErr in the codebase, so should
+			// simplify and avoid nesting `roachpb.Error` here.
+			if ae.WrappedErr != nil {
+				wrappedErr = errors.Wrapf(brErr, "%v", ae.WrappedErr)
 			}
+			ae.WrappedErr = roachpb.NewError(wrappedErr)
+			rErr = roachpb.NewError(ae)
 		}
 	}()
 	if r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {

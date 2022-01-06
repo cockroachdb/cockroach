@@ -91,6 +91,8 @@ func newReplicaCircuitBreaker(
 					defer finishAndGet()
 
 					// TODO(tbg): plumb r.slowReplicationThreshold here.
+					// TODO(tbg): generate a nicer error on timeout (the common case). Right now it will
+					// just say "timed out after 10s: context canceled".
 					const probeTimeout = 10 * time.Second
 					err := contextutil.RunWithTimeout(ctx, "probe", probeTimeout, func(ctx context.Context) error {
 						return checkShouldUntripBreaker(ctx, r)
