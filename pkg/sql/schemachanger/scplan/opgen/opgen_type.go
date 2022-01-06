@@ -17,16 +17,18 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.Type)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
+			equiv(scpb.Status_TXN_DROPPED),
+			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Type) scop.Op {
 					return notImplemented(this)
 				}),
 			),
-			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
-			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Type) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
@@ -35,8 +37,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_DROPPED,
-				// TODO(ajwerner): The move to DELETE_ONLY should be marked
-				// non-revertible.
 				minPhase(scop.PreCommitPhase),
 				revertible(false),
 				emit(func(this *scpb.Type) scop.Op {
@@ -47,12 +47,12 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				revertible(false),
 				emit(func(this *scpb.Type, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.TypeID,
-						Element:   &scpb.ElementProto{Type: this},
-						Direction: scpb.Target_DROP,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.TypeID,
+						Element:      &scpb.ElementProto{Type: this},
+						TargetStatus: scpb.Status_ABSENT,
 					}
 				}),
 				emit(func(this *scpb.Type) scop.Op {

@@ -11,20 +11,20 @@ DROP VIEW defaultdb.v1
 ----
 StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
-    [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [[View:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
 PreCommitPhase stage 1 of 1 with 6 MutationType ops
   transitions:
-    [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
-    [Owner:{DescID: 55}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 55, Username: admin}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
+    [[View:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 55, Name: v1}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 55, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 55, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 55
@@ -48,11 +48,10 @@ PreCommitPhase stage 1 of 1 with 6 MutationType ops
         - statement: DROP VIEW defaultdb.v1
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
-    [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
+    [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       DescID: 55
-      Direction: 2
       Element:
         view:
           tableId: 55
@@ -62,6 +61,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 55
     *scop.RemoveJobReference
@@ -135,11 +135,11 @@ DROP VIEW defaultdb.v1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 5 MutationType ops
   transitions:
-    [View:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
-    [View:{DescID: 56}, PUBLIC, DROP] -> TXN_DROPPED
-    [View:{DescID: 57}, PUBLIC, DROP] -> TXN_DROPPED
-    [View:{DescID: 58}, PUBLIC, DROP] -> TXN_DROPPED
-    [View:{DescID: 61}, PUBLIC, DROP] -> TXN_DROPPED
+    [[View:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[View:{DescID: 56}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[View:{DescID: 57}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[View:{DescID: 58}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[View:{DescID: 61}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
@@ -153,49 +153,49 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
       DescID: 61
 PreCommitPhase stage 1 of 1 with 25 MutationType ops
   transitions:
-    [View:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 55, Name: v1}, PUBLIC, DROP] -> ABSENT
-    [Owner:{DescID: 55}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 55, Username: admin}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 55, Username: public}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 55, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Locality:{DescID: 55}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 56}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 56, Name: v2}, PUBLIC, DROP] -> ABSENT
-    [Owner:{DescID: 56}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 56, Username: admin}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 56, Username: public}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 56, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Locality:{DescID: 56}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 57}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 57, Name: v3}, PUBLIC, DROP] -> ABSENT
-    [Owner:{DescID: 57}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 57, Username: admin}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 57, Username: public}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 57, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Locality:{DescID: 57}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 58}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 58, Name: v4}, PUBLIC, DROP] -> ABSENT
-    [Owner:{DescID: 58}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 58, Username: admin}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 58, Username: public}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 58, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Locality:{DescID: 58}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, PUBLIC, DROP] -> ABSENT
-    [View:{DescID: 61}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 61, Name: v5}, PUBLIC, DROP] -> ABSENT
-    [Owner:{DescID: 61}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 61, Username: admin}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 61, Username: public}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 61, Username: root}, PUBLIC, DROP] -> ABSENT
-    [ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, PUBLIC, DROP] -> ABSENT
-    [ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, PUBLIC, DROP] -> ABSENT
-    [Locality:{DescID: 61}, PUBLIC, DROP] -> ABSENT
+    [[View:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 55, Name: v1}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 55, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 55, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 56}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 56, Name: v2}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 56, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 56, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 56, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 57}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 57, Name: v3}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 57, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 57, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 57, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 58}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 58, Name: v4}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 58, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 58, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 58, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 61}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 61, Name: v5}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 61}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 61, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 61, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 61, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, ABSENT], PUBLIC] -> ABSENT
+    [[ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 61}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 55
@@ -268,15 +268,14 @@ PreCommitPhase stage 1 of 1 with 25 MutationType ops
         - statement: DROP VIEW defaultdb.v1 CASCADE
 PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
   transitions:
-    [View:{DescID: 55}, DROPPED, DROP] -> ABSENT
-    [View:{DescID: 56}, DROPPED, DROP] -> ABSENT
-    [View:{DescID: 57}, DROPPED, DROP] -> ABSENT
-    [View:{DescID: 58}, DROPPED, DROP] -> ABSENT
-    [View:{DescID: 61}, DROPPED, DROP] -> ABSENT
+    [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 56}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 57}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 58}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 61}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       DescID: 55
-      Direction: 2
       Element:
         view:
           tableId: 55
@@ -286,11 +285,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 55
     *scop.LogEvent
       DescID: 56
-      Direction: 2
       Element:
         view:
           tableId: 56
@@ -300,11 +299,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 56
     *scop.LogEvent
       DescID: 57
-      Direction: 2
       Element:
         view:
           tableId: 57
@@ -314,11 +313,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 57
     *scop.LogEvent
       DescID: 58
-      Direction: 2
       Element:
         view:
           tableId: 58
@@ -328,11 +327,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 58
     *scop.LogEvent
       DescID: 61
-      Direction: 2
       Element:
         view:
           tableId: 61
@@ -342,6 +341,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
           SourceElementID: 5
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 61
     *scop.RemoveJobReference

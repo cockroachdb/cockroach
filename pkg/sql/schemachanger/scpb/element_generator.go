@@ -63,24 +63,22 @@ func run(in, out string) error {
 package scpb
 
 type NodeIterator interface {
-	ForEachNode(fn func(status Status, dir Target_Direction, elem Element))
+	ForEachNode(fn func(status, targetStatus Status, elem Element))
 }
-
 {{ range . }}
+
 func (e {{ . }}) element() {}
 
 // ForEach{{ . }} iterates over nodes of type {{ . }}.
-func ForEach{{ . }} (b NodeIterator, elementFunc func(status Status,
-	dir Target_Direction,  
-	element *{{ . }}) ) {
-	b.ForEachNode(func(status Status, dir Target_Direction, elem Element) {
-		e, ok := elem.(*{{ . }})
-		if ok {
-		elementFunc(status, dir, e)
-	}
-  })
+func ForEach{{ . }}(
+	b NodeIterator, elementFunc func(status, targetStatus Status, element *{{ . }}),
+) {
+	b.ForEachNode(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*{{ . }}); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
 }
-
 {{- end -}}
 `)).Execute(&buf, elementNames); err != nil {
 		return err

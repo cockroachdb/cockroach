@@ -17,16 +17,18 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.Database)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
+			equiv(scpb.Status_TXN_DROPPED),
+			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Database) scop.Op {
 					return notImplemented(this)
 				}),
 			),
-			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
-			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Database) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
@@ -43,18 +45,17 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
-				revertible(false),
 				emit(func(this *scpb.Database) scop.Op {
 					return &scop.DrainDescriptorName{
 						TableID: this.DatabaseID,
 					}
 				}),
 				emit(func(this *scpb.Database, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.DatabaseID,
-						Element:   &scpb.ElementProto{Database: this},
-						Direction: scpb.Target_DROP,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.DatabaseID,
+						Element:      &scpb.ElementProto{Database: this},
+						TargetStatus: scpb.Status_ABSENT,
 					}
 				}),
 				emit(func(this *scpb.Database) scop.Op {

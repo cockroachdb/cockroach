@@ -17,7 +17,8 @@ import (
 
 func init() {
 	opRegistry.register((*scpb.Column)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
@@ -42,10 +43,11 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.Column, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.TableID,
-						Element:   &scpb.ElementProto{Column: this},
-						Direction: scpb.Target_ADD,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.TableID,
+						Element:      &scpb.ElementProto{Column: this},
+						TargetStatus: scpb.Status_PUBLIC,
 					}
 				}),
 			),
@@ -67,7 +69,8 @@ func init() {
 				}),
 			),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_DELETE_AND_WRITE_ONLY,
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeDroppedColumnDeleteAndWriteOnly{
@@ -76,16 +79,17 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.Column, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.TableID,
-						Element:   &scpb.ElementProto{Column: this},
-						Direction: scpb.Target_DROP,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.TableID,
+						Element:      &scpb.ElementProto{Column: this},
+						TargetStatus: scpb.Status_ABSENT,
 					}
 				}),
 			),
 			to(scpb.Status_DELETE_ONLY,
-				revertible(false),
 				minPhase(scop.PostCommitPhase),
+				revertible(false),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeDroppedColumnDeleteOnly{
 						TableID:  this.TableID,
@@ -94,7 +98,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeColumnAbsent{
 						TableID:  this.TableID,

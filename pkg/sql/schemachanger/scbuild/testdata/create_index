@@ -5,14 +5,12 @@ CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 build
 CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 ----
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: id1}
-  state: ABSENT
+- [[IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id1
     tableId: 54
-- ADD SecondaryIndex:{DescID: 54, IndexID: 2}
-  state: ABSENT
+- [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -30,14 +28,12 @@ build
 CREATE INVERTED INDEX CONCURRENTLY id2
 	ON defaultdb.t1 (id, name) STORING (money)
 ----
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: id2}
-  state: ABSENT
+- [[IndexName:{DescID: 54, IndexID: 2, Name: id2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id2
     tableId: 54
-- ADD SecondaryIndex:{DescID: 54, IndexID: 2}
-  state: ABSENT
+- [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
   details:
     concurrently: true
     indexId: 2
@@ -59,14 +55,12 @@ CREATE INDEX id3
 	STORING (money)
 	PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: id3}
-  state: ABSENT
+- [[IndexName:{DescID: 54, IndexID: 2, Name: id3}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id3
     tableId: 54
-- ADD Partitioning:{DescID: 54, IndexID: 2}
-  state: ABSENT
+- [[Partitioning:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
   details:
     fields:
     - id
@@ -77,8 +71,7 @@ CREATE INDEX id3
       name: p1
     rangePartitions: []
     tableId: 54
-- ADD SecondaryIndex:{DescID: 54, IndexID: 2}
-  state: ABSENT
+- [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -96,8 +89,7 @@ build
 CREATE INDEX id4
 	ON defaultdb.t1 (id, name) USING HASH WITH BUCKET_COUNT =  8 STORING (money)
 ----
-- ADD Column:{DescID: 54, ColumnID: 4}
-  state: ABSENT
+- [[Column:{DescID: 54, ColumnID: 4}, PUBLIC], ABSENT]
   details:
     columnId: 4
     computerExpr: mod(fnv32("crdb_internal.datums_to_bytes"(id, name)), 8:::INT8)
@@ -109,20 +101,36 @@ CREATE INDEX id4
       family: IntFamily
       oid: 23
       width: 32
-- ADD IndexName:{DescID: 54, IndexID: 2, Name: t1_pkey}
-  state: ABSENT
+- [[IndexName:{DescID: 54, IndexID: 1, Name: t1_pkey}, ABSENT], PUBLIC]
+  details:
+    indexId: 1
+    name: t1_pkey
+    tableId: 54
+- [[IndexName:{DescID: 54, IndexID: 2, Name: t1_pkey}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: t1_pkey
     tableId: 54
-- ADD IndexName:{DescID: 54, IndexID: 3, Name: id4}
-  state: ABSENT
+- [[IndexName:{DescID: 54, IndexID: 3, Name: id4}, PUBLIC], ABSENT]
   details:
     indexId: 3
     name: id4
     tableId: 54
-- ADD PrimaryIndex:{DescID: 54, IndexID: 2}
-  state: ABSENT
+- [[PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    indexId: 1
+    keyColumnDirection:
+    - ASC
+    keyColumnIds:
+    - 1
+    shardedDescriptor: {}
+    sourceIndexId: 1
+    storingColumnIds:
+    - 2
+    - 3
+    tableId: 54
+    unique: true
+- [[PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -137,8 +145,7 @@ CREATE INDEX id4
     - 4
     tableId: 54
     unique: true
-- ADD SecondaryIndex:{DescID: 54, IndexID: 3}
-  state: ABSENT
+- [[SecondaryIndex:{DescID: 54, IndexID: 3}, PUBLIC], ABSENT]
   details:
     indexId: 3
     keyColumnDirection:
@@ -158,24 +165,3 @@ CREATE INDEX id4
     storingColumnIds:
     - 3
     tableId: 54
-- DROP IndexName:{DescID: 54, IndexID: 1, Name: t1_pkey}
-  state: PUBLIC
-  details:
-    indexId: 1
-    name: t1_pkey
-    tableId: 54
-- DROP PrimaryIndex:{DescID: 54, IndexID: 1}
-  state: PUBLIC
-  details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    - 3
-    tableId: 54
-    unique: true

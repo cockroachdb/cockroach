@@ -21,7 +21,7 @@ var _ scbuildstmt.BuilderState = (*builderState)(nil)
 
 // AddNode implements the scbuildstmt.BuilderState interface.
 func (b *builderState) AddNode(
-	dir scpb.Target_Direction, elem scpb.Element, meta scpb.TargetMetadata,
+	status, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata,
 ) {
 	for _, node := range b.output {
 		if screl.EqualElements(node.Element(), elem) {
@@ -29,27 +29,14 @@ func (b *builderState) AddNode(
 		}
 	}
 	b.output = append(b.output, &scpb.Node{
-		Target: scpb.NewTarget(dir, elem, &meta),
-		Status: nodeStatusFromDirection(dir),
+		Target: scpb.NewTarget(targetStatus, elem, &meta),
+		Status: status,
 	})
 }
 
-func nodeStatusFromDirection(dir scpb.Target_Direction) scpb.Status {
-	switch dir {
-	case scpb.Target_ADD:
-		return scpb.Status_ABSENT
-	case scpb.Target_DROP:
-		return scpb.Status_PUBLIC
-	default:
-		panic(errors.AssertionFailedf("unknown direction %s", dir))
-	}
-}
-
 // ForEachNode implements the scbuildstmt.BuilderState interface.
-func (b *builderState) ForEachNode(
-	fn func(status scpb.Status, dir scpb.Target_Direction, elem scpb.Element),
-) {
+func (b *builderState) ForEachNode(fn func(status, targetStatus scpb.Status, elem scpb.Element)) {
 	for _, node := range b.output {
-		fn(node.Status, node.Direction, node.Element())
+		fn(node.Status, node.TargetStatus, node.Element())
 	}
 }
