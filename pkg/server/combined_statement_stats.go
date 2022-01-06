@@ -68,8 +68,8 @@ func getCombinedStatementStats(
 	startTime := getTimeFromSeconds(req.Start)
 	endTime := getTimeFromSeconds(req.End)
 	limit := SQLStatsResponseMax.Get(&settings.SV)
-	whereClause, args := getFilterAndParams(startTime, endTime, limit, testingKnobs)
-	statements, err := collectCombinedStatements(ctx, ie, whereClause, args)
+	whereClause, args := getFilterAndParams(startTime, endTime, testingKnobs)
+	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func getCombinedStatementStats(
 }
 
 func getFilterAndParams(
-	start, end *time.Time, limit int64, testingKnobs *sqlstats.TestingKnobs,
+	start, end *time.Time, testingKnobs *sqlstats.TestingKnobs,
 ) (string, []interface{}) {
 	var args []interface{}
 	var buffer strings.Builder
@@ -109,17 +109,15 @@ func getFilterAndParams(
 		args = append(args, *end)
 	}
 
-	// Retrieve the top rows ordered by aggregation time and service latency.
-	buffer.WriteString(fmt.Sprintf(`
-ORDER BY aggregated_ts DESC,(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float DESC
-LIMIT $%d`, len(args)+1))
-	args = append(args, limit)
-
 	return buffer.String(), args
 }
 
 func collectCombinedStatements(
-	ctx context.Context, ie *sql.InternalExecutor, whereClause string, qargs []interface{},
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	whereClause string,
+	qargs []interface{},
+	limit int64,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
 	query := fmt.Sprintf(
@@ -133,7 +131,19 @@ func collectCombinedStatements(
 				sampled_plan,
         aggregation_interval
 			FROM crdb_internal.statement_statistics
-			%s`, whereClause)
+			%s
+			ORDER BY aggregated_ts DESC,(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float DESC
+			LIMIT $%d`, whereClause, len(qargs)+1)
+
+	qargs = append(qargs, limit)
+
+	//buffer.WriteString(`GROUP BY
+	//	aggregated_ts,
+	//	fingerprint_id,
+	//	transaction_fingerprint_id,
+	//	app_name,
+	//	aggregation_interval,
+	//	statistics`)
 
 	const expectedNumDatums = 8
 
