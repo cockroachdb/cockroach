@@ -3416,8 +3416,9 @@ type TenantOperator interface {
 	CreateTenant(ctx context.Context, tenantID uint64) error
 
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
-	// It returns an error if the tenant does not exist.
-	DestroyTenant(ctx context.Context, tenantID uint64) error
+	// It returns an error if the tenant does not exist. If synchronous is true
+	// the gc job will not wait for a GC ttl.
+	DestroyTenant(ctx context.Context, tenantID uint64, synchronous bool) error
 
 	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
 	// success it also removes the tenant record.
