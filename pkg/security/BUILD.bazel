@@ -42,6 +42,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_xdg_go_stringprep//:stringprep",
         "@org_golang_x_crypto//bcrypt",
         "@org_golang_x_crypto//ocsp",
         "@org_golang_x_sync//errgroup",

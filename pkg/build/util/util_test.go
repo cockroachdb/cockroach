@@ -17,17 +17,26 @@ import (
 )
 
 func TestOutputOfBinaryRule(t *testing.T) {
-	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short"),
+	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short", false),
 		"pkg/cmd/cockroach-short/cockroach-short_/cockroach-short")
-	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short:cockroach-short"),
+	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short", true),
+		"pkg/cmd/cockroach-short/cockroach-short_/cockroach-short.exe")
+	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short:cockroach-short", false),
 		"pkg/cmd/cockroach-short/cockroach-short_/cockroach-short")
-	require.Equal(t, OutputOfBinaryRule("pkg/cmd/cockroach-short"),
+	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short:cockroach-short", true),
+		"pkg/cmd/cockroach-short/cockroach-short_/cockroach-short.exe")
+	require.Equal(t, OutputOfBinaryRule("pkg/cmd/cockroach-short", false),
 		"pkg/cmd/cockroach-short/cockroach-short_/cockroach-short")
-
-	require.Equal(t, OutputOfBinaryRule("@com_github_cockroachdb_stress//:stress"),
+	require.Equal(t, OutputOfBinaryRule("pkg/cmd/cockroach-short", true),
+		"pkg/cmd/cockroach-short/cockroach-short_/cockroach-short.exe")
+	require.Equal(t, OutputOfBinaryRule("@com_github_cockroachdb_stress//:stress", false),
 		"external/com_github_cockroachdb_stress/stress_/stress")
-	require.Equal(t, OutputOfBinaryRule("@com_github_bazelbuild_buildtools//buildifier:buildifier"),
+	require.Equal(t, OutputOfBinaryRule("@com_github_cockroachdb_stress//:stress", true),
+		"external/com_github_cockroachdb_stress/stress_/stress.exe")
+	require.Equal(t, OutputOfBinaryRule("@com_github_bazelbuild_buildtools//buildifier:buildifier", false),
 		"external/com_github_bazelbuild_buildtools/buildifier/buildifier_/buildifier")
+	require.Equal(t, OutputOfBinaryRule("@com_github_bazelbuild_buildtools//buildifier:buildifier", true),
+		"external/com_github_bazelbuild_buildtools/buildifier/buildifier_/buildifier.exe")
 }
 
 func TestOutputsOfGenrule(t *testing.T) {
