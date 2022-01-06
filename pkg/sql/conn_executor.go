@@ -448,6 +448,9 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 				MetaSQLStatsFlushDuration, 6*metricsSampleInterval,
 			),
 			SQLStatsRemovedRows: metric.NewCounter(MetaSQLStatsRemovedRows),
+			SQLTxnStatsCollectionOverhead: metric.NewLatency(
+				MetaSQLTxnStatsCollectionOverhead, 6*metricsSampleInterval,
+			),
 		},
 	}
 }
