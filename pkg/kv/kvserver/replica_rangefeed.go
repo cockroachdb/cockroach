@@ -39,6 +39,9 @@ import (
 )
 
 // RangefeedEnabled is a cluster setting that enables rangefeed requests.
+// Certain ranges have span configs that specifically enable rangefeeds (system
+// ranges and ranges covering tables in the system database); this setting
+// covers everything else.
 var RangefeedEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.rangefeed.enabled",
@@ -150,7 +153,7 @@ func (r *Replica) rangeFeedWithRangeID(
 	args *roachpb.RangeFeedRequest,
 	stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
-	if !r.isSystemRange() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
