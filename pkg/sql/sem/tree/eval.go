@@ -1428,10 +1428,11 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 				if rInt == 0 {
 					return nil, ErrDivByZero
 				}
-				div := ctx.getTmpDec().SetInt64(int64(rInt))
+				var div apd.Decimal
+				div.SetInt64(int64(rInt))
 				dd := &DDecimal{}
 				dd.SetInt64(int64(MustBeDInt(left)))
-				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
+				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &div)
 				return dd, err
 			},
 			Volatility: VolatilityImmutable,
@@ -3928,10 +3929,6 @@ func (ctx *EvalContext) GetDateStyle() pgdate.DateStyle {
 // Ctx returns the session's context.
 func (ctx *EvalContext) Ctx() context.Context {
 	return ctx.Context
-}
-
-func (ctx *EvalContext) getTmpDec() *apd.Decimal {
-	return &ctx.tmpDec
 }
 
 // Eval implements the TypedExpr interface.

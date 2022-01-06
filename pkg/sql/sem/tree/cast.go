@@ -2755,12 +2755,12 @@ func performCastWithoutPrecisionTruncation(
 		case *DTime:
 			return NewDInterval(duration.MakeDuration(int64(*v)*1000, 0, 0), itm), nil
 		case *DDecimal:
-			d := ctx.getTmpDec()
+			var d apd.Decimal
 			dnanos := v.Decimal
 			dnanos.Exponent += 9
 			// We need HighPrecisionCtx because duration values can contain
 			// upward of 35 decimal digits and DecimalCtx only provides 25.
-			_, err := HighPrecisionCtx.Quantize(d, &dnanos, 0)
+			_, err := HighPrecisionCtx.Quantize(&d, &dnanos, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -2921,8 +2921,8 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 }
 
 func roundDecimalToInt(ctx *EvalContext, d *apd.Decimal) (int64, error) {
-	newD := ctx.getTmpDec()
-	if _, err := DecimalCtx.RoundToIntegralValue(newD, d); err != nil {
+	var newD apd.Decimal
+	if _, err := DecimalCtx.RoundToIntegralValue(&newD, d); err != nil {
 		return 0, err
 	}
 	i, err := newD.Int64()
