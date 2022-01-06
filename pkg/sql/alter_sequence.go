@@ -121,7 +121,10 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	}
 
 	// If the sequenceVal exceeded the old MinValue or MaxValue, we must set sequenceVal to the last valid one.
-	// Set the initial value to the newStartValue if there is a start param in alter_sequence_stmt.
+
+	// I think we should set the current value to the newStartValue if there is a start param in alter_sequence_stmt,
+	// but in pg it needs RESTART. Now newStartValue has no effect on the current value before use RESTART.
+	hasNewStart = false
 	if hasNewStart {
 		sequenceVal = opts.Start - opts.Increment
 	} else {

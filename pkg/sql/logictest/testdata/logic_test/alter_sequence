@@ -331,11 +331,6 @@ select nextval('customer_seq_alter_1')
 ----
 1
 
-# expect statement error: MAXVALUE \(0\) cannot be made to be less than the current value \(1\)
-# There might be a bug in func assignSequenceOptions() in sequence.go
-# Now in assignSequenceOptions(), when checking the descriptor of sequence, the oldStart(MAXVALUE) is compared with the new bounds, in the following case.
-# In fact, we should compare the last valid sequence value with the new bounds after assignSequenceOptions() when alter sequence.
-# If a new start parameter is passed, start is used, otherwise the last valid sequence value is used.
 statement error pq: START value \(15\) cannot be greater than MAXVALUE \(0\)
 ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 1 MINVALUE -5 MAXVALUE 0
 
@@ -349,5 +344,5 @@ select nextval('customer_seq_alter_1')
 ----
 0
 
-statement ok
-drop sequence customer_seq_alter_1
+statement error pq: START value \(15\) cannot be greater than MAXVALUE \(10\)
+ALTER SEQUENCE customer_seq_alter_1 INCREMENT  BY 3  MINVALUE 0 MAXVALUE 10
