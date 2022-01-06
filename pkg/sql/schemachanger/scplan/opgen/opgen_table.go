@@ -16,18 +16,19 @@ import (
 )
 
 func init() {
-	// TODO(ajwerner): This needs more steps.
 	opRegistry.register((*scpb.Table)(nil),
-		add(
+		toPublic(
+			scpb.Status_ABSENT,
+			equiv(scpb.Status_TXN_DROPPED),
+			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Table) scop.Op {
 					return notImplemented(this)
 				}),
 			),
-			equiv(scpb.Status_TXN_DROPPED, scpb.Status_ABSENT),
-			equiv(scpb.Status_DROPPED, scpb.Status_ABSENT),
 		),
-		drop(
+		toAbsent(
+			scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Table) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
@@ -46,13 +47,12 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				// TODO(fqazi): We need to revisit if at this phase anything is revertible.
-				revertible(false),
 				emit(func(this *scpb.Table, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{Metadata: *md,
-						DescID:    this.TableID,
-						Element:   &scpb.ElementProto{Table: this},
-						Direction: scpb.Target_DROP,
+					return &scop.LogEvent{
+						Metadata:     *md,
+						DescID:       this.TableID,
+						Element:      &scpb.ElementProto{Table: this},
+						TargetStatus: scpb.Status_ABSENT,
 					}
 				}),
 				emit(func(this *scpb.Table) scop.Op {

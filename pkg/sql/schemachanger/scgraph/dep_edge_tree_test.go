@@ -131,8 +131,8 @@ func TestDepEdgeTree(t *testing.T) {
 // TestGraphCompareNodes ensures the semantics of (*Graph).compareNodes is sane.
 func TestGraphCompareNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t1 := scpb.NewTarget(scpb.Target_ADD, &scpb.Table{TableID: 1}, nil)
-	t2 := scpb.NewTarget(scpb.Target_DROP, &scpb.Table{TableID: 2}, nil)
+	t1 := scpb.NewTarget(scpb.Status_PUBLIC, &scpb.Table{TableID: 1}, nil)
+	t2 := scpb.NewTarget(scpb.Status_ABSENT, &scpb.Table{TableID: 2}, nil)
 	mkNode := func(t *scpb.Target, s scpb.Status) *scpb.Node {
 		return &scpb.Node{Target: t, Status: s}
 	}

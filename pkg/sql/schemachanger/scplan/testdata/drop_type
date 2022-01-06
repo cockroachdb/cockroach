@@ -7,8 +7,8 @@ DROP TYPE defaultdb.typ
 ----
 StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
-    [Type:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
-    [Type:{DescID: 55}, PUBLIC, DROP] -> TXN_DROPPED
+    [[Type:{DescID: 54}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Type:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
@@ -16,10 +16,10 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
       DescID: 55
 PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
-    [Type:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 54, Name: typ}, PUBLIC, DROP] -> ABSENT
-    [Type:{DescID: 55}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 55, Name: _typ}, PUBLIC, DROP] -> ABSENT
+    [[Type:{DescID: 54}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 54, Name: typ}, ABSENT], PUBLIC] -> ABSENT
+    [[Type:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 55, Name: _typ}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
@@ -44,12 +44,11 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
         - statement: DROP TYPE defaultdb.typ
 PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
-    [Type:{DescID: 54}, DROPPED, DROP] -> ABSENT
-    [Type:{DescID: 55}, DROPPED, DROP] -> ABSENT
+    [[Type:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
+    [[Type:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       DescID: 54
-      Direction: 2
       Element:
         type:
           typeId: 54
@@ -59,11 +58,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 54
     *scop.LogEvent
       DescID: 55
-      Direction: 2
       Element:
         type:
           typeId: 55
@@ -73,6 +72,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 55
     *scop.RemoveJobReference

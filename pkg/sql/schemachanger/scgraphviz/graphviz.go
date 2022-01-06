@@ -157,7 +157,7 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 		tn := targetNodes[n.Target]
 		e := tn.Edge(tsn)
 		e.Dashed()
-		e.Label(n.Target.Direction.String())
+		e.Label(fmt.Sprintf("to %s", n.Target.TargetStatus.String()))
 		curNodes[i] = tsn
 	}
 	for _, st := range p.Stages {
@@ -237,7 +237,7 @@ func drawDeps(p scplan.Plan) (*dot.Graph, error) {
 		nn := nodeNodes[n]
 		tn := targetNodes[n.Target]
 		e := tn.Edge(nn)
-		e.Label(n.Target.Direction.String())
+		e.Label(fmt.Sprintf("to %s", n.Target.TargetStatus.String()))
 		e.Dashed()
 	}
 

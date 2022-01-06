@@ -11,27 +11,27 @@ rules
     - $parent-target[Element] = $parent
     - $parent-node[Type] = '*scpb.Node'
     - $parent-node[Target] = $parent-target
-    - $parent-target[Direction] = DROP
-    - $parent-node[Status] IN [ABSENT]
+    - $parent-target[TargetStatus] = ABSENT
+    - $parent-node[Status] = ABSENT
     - $other-target[Type] = '*scpb.Target'
     - $other-target[Element] = $other
     - $other-node[Type] = '*scpb.Node'
     - $other-node[Target] = $other-target
-    - $other-target[Direction] = DROP
+    - $other-target[TargetStatus] = ABSENT
     - $other-node[Status] = ABSENT
 - name: column depends on indexes
   from: index-node
   to: column-node
   query:
     - $status IN [DELETE_AND_WRITE_ONLY, PUBLIC]
-    - $direction = ADD
+    - $target-status = PUBLIC
     - $column[Type] = '*scpb.Column'
     - $index[Type] = '*scpb.PrimaryIndex'
     - $column[DescID] = $id
     - $index[DescID] = $id
     - columnInIndex(*scpb.Column, scpb.Element)($column, $index)
-    - $column-target[Direction] = $direction
-    - $index-target[Direction] = $direction
+    - $column-target[TargetStatus] = $target-status
+    - $index-target[TargetStatus] = $target-status
     - $column-node[Status] = $status
     - $index-node[Status] = $status
     - $column-target[Type] = '*scpb.Target'
@@ -55,13 +55,13 @@ rules
     - $column-target[Element] = $column
     - $column-node[Type] = '*scpb.Node'
     - $column-node[Target] = $column-target
-    - $column-target[Direction] = ADD
+    - $column-target[TargetStatus] = PUBLIC
     - $column-node[Status] = DELETE_ONLY
     - $index-target[Type] = '*scpb.Target'
     - $index-target[Element] = $index
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
-    - $index-target[Direction] = ADD
+    - $index-target[TargetStatus] = PUBLIC
     - $index-node[Status] = DELETE_ONLY
 - name: primary index add depends on drop
   from: drop-idx-node
@@ -76,13 +76,13 @@ rules
     - $add-idx-target[Element] = $add-idx
     - $add-idx-node[Type] = '*scpb.Node'
     - $add-idx-node[Target] = $add-idx-target
-    - $add-idx-target[Direction] = ADD
+    - $add-idx-target[TargetStatus] = PUBLIC
     - $add-idx-node[Status] = PUBLIC
     - $drop-idx-target[Type] = '*scpb.Target'
     - $drop-idx-target[Element] = $drop-idx
     - $drop-idx-node[Type] = '*scpb.Node'
     - $drop-idx-node[Target] = $drop-idx-target
-    - $drop-idx-target[Direction] = DROP
+    - $drop-idx-target[TargetStatus] = ABSENT
     - $drop-idx-node[Status] = VALIDATED
 - name: partitioning information needs the basic index as created
   from: add-idx-node
@@ -98,13 +98,13 @@ rules
     - $add-idx-target[Element] = $add-idx
     - $add-idx-node[Type] = '*scpb.Node'
     - $add-idx-node[Target] = $add-idx-target
-    - $add-idx-target[Direction] = ADD
+    - $add-idx-target[TargetStatus] = PUBLIC
     - $add-idx-node[Status] = DELETE_ONLY
     - $partitioning-target[Type] = '*scpb.Target'
     - $partitioning-target[Element] = $partitioning
     - $partitioning-node[Type] = '*scpb.Node'
     - $partitioning-node[Target] = $partitioning-target
-    - $partitioning-target[Direction] = ADD
+    - $partitioning-target[TargetStatus] = PUBLIC
     - $partitioning-node[Status] = PUBLIC
 - name: index needs partitioning information to be filled
   from: add-idx-node
@@ -120,13 +120,13 @@ rules
     - $add-idx-target[Element] = $add-idx
     - $add-idx-node[Type] = '*scpb.Node'
     - $add-idx-node[Target] = $add-idx-target
-    - $add-idx-target[Direction] = ADD
+    - $add-idx-target[TargetStatus] = PUBLIC
     - $add-idx-node[Status] = DELETE_AND_WRITE_ONLY
     - $partitioning-target[Type] = '*scpb.Target'
     - $partitioning-target[Element] = $partitioning
     - $partitioning-node[Type] = '*scpb.Node'
     - $partitioning-node[Target] = $partitioning-target
-    - $partitioning-target[Direction] = ADD
+    - $partitioning-target[TargetStatus] = PUBLIC
     - $partitioning-node[Status] = PUBLIC
 - name: dependency needs relation/type as non-synthetically dropped
   from: relation-node
@@ -140,13 +140,13 @@ rules
     - $relation-target[Element] = $relation
     - $relation-node[Type] = '*scpb.Node'
     - $relation-node[Target] = $relation-target
-    - $relation-target[Direction] = DROP
+    - $relation-target[TargetStatus] = ABSENT
     - $relation-node[Status] = DROPPED
     - $dep-target[Type] = '*scpb.Target'
     - $dep-target[Element] = $dep
     - $dep-node[Type] = '*scpb.Node'
     - $dep-node[Target] = $dep-target
-    - $dep-target[Direction] = DROP
+    - $dep-target[TargetStatus] = ABSENT
     - $dep-node[Status] = ABSENT
 - name: dependency needs relation/type as non-synthetically dropped
   from: relation-node
@@ -160,13 +160,13 @@ rules
     - $relation-target[Element] = $relation
     - $relation-node[Type] = '*scpb.Node'
     - $relation-node[Target] = $relation-target
-    - $relation-target[Direction] = DROP
+    - $relation-target[TargetStatus] = ABSENT
     - $relation-node[Status] = DROPPED
     - $dep-target[Type] = '*scpb.Target'
     - $dep-target[Element] = $dep
     - $dep-node[Type] = '*scpb.Node'
     - $dep-node[Target] = $dep-target
-    - $dep-target[Direction] = DROP
+    - $dep-target[TargetStatus] = ABSENT
     - $dep-node[Status] = ABSENT
 - name: namespace needs descriptor to be dropped
   from: dep-node
@@ -180,13 +180,13 @@ rules
     - $namespace-target[Element] = $namespace
     - $namespace-node[Type] = '*scpb.Node'
     - $namespace-node[Target] = $namespace-target
-    - $namespace-target[Direction] = DROP
+    - $namespace-target[TargetStatus] = ABSENT
     - $namespace-node[Status] = ABSENT
     - $dep-target[Type] = '*scpb.Target'
     - $dep-target[Element] = $dep
     - $dep-node[Type] = '*scpb.Node'
     - $dep-node[Target] = $dep-target
-    - $dep-target[Direction] = DROP
+    - $dep-target[TargetStatus] = ABSENT
     - $dep-node[Status] = DROPPED
 - name: descriptor can only be cleaned up once the name is drained
   from: namespace-node
@@ -200,13 +200,13 @@ rules
     - $namespace-target[Element] = $namespace
     - $namespace-node[Type] = '*scpb.Node'
     - $namespace-node[Target] = $namespace-target
-    - $namespace-target[Direction] = DROP
+    - $namespace-target[TargetStatus] = ABSENT
     - $namespace-node[Status] = ABSENT
     - $dep-target[Type] = '*scpb.Target'
     - $dep-target[Element] = $dep
     - $dep-node[Type] = '*scpb.Node'
     - $dep-node[Target] = $dep-target
-    - $dep-target[Direction] = DROP
+    - $dep-target[TargetStatus] = ABSENT
     - $dep-node[Status] = ABSENT
 - name: column named after column existence
   from: column-node
@@ -222,13 +222,13 @@ rules
     - $column-target[Element] = $column
     - $column-node[Type] = '*scpb.Node'
     - $column-node[Target] = $column-target
-    - $column-target[Direction] = ADD
+    - $column-target[TargetStatus] = PUBLIC
     - $column-node[Status] = DELETE_ONLY
     - $column-name-target[Type] = '*scpb.Target'
     - $column-name-target[Element] = $column-name
     - $column-name-node[Type] = '*scpb.Node'
     - $column-name-node[Target] = $column-name-target
-    - $column-name-target[Direction] = ADD
+    - $column-name-target[TargetStatus] = PUBLIC
     - $column-name-node[Status] = PUBLIC
 - name: column named right before column becomes public
   from: column-name-node
@@ -244,13 +244,13 @@ rules
     - $column-name-target[Element] = $column-name
     - $column-name-node[Type] = '*scpb.Node'
     - $column-name-node[Target] = $column-name-target
-    - $column-name-target[Direction] = ADD
+    - $column-name-target[TargetStatus] = PUBLIC
     - $column-name-node[Status] = PUBLIC
     - $column-target[Type] = '*scpb.Target'
     - $column-target[Element] = $column
     - $column-node[Type] = '*scpb.Node'
     - $column-node[Target] = $column-target
-    - $column-target[Direction] = ADD
+    - $column-target[TargetStatus] = PUBLIC
     - $column-node[Status] = PUBLIC
 - name: column unnamed after column no longer public
   from: column-node
@@ -266,13 +266,13 @@ rules
     - $column-target[Element] = $column
     - $column-node[Type] = '*scpb.Node'
     - $column-node[Target] = $column-target
-    - $column-target[Direction] = DROP
+    - $column-target[TargetStatus] = ABSENT
     - $column-node[Status] = DELETE_AND_WRITE_ONLY
     - $column-name-target[Type] = '*scpb.Target'
     - $column-name-target[Element] = $column-name
     - $column-name-node[Type] = '*scpb.Node'
     - $column-name-node[Target] = $column-name-target
-    - $column-name-target[Direction] = DROP
+    - $column-name-target[TargetStatus] = ABSENT
     - $column-name-node[Status] = ABSENT
 - name: column unnamed before column no longer exists
   from: column-name-node
@@ -288,13 +288,13 @@ rules
     - $column-name-target[Element] = $column-name
     - $column-name-node[Type] = '*scpb.Node'
     - $column-name-node[Target] = $column-name-target
-    - $column-name-target[Direction] = DROP
+    - $column-name-target[TargetStatus] = ABSENT
     - $column-name-node[Status] = ABSENT
     - $column-target[Type] = '*scpb.Target'
     - $column-target[Element] = $column
     - $column-node[Type] = '*scpb.Node'
     - $column-node[Target] = $column-target
-    - $column-target[Direction] = DROP
+    - $column-target[TargetStatus] = ABSENT
     - $column-node[Status] = ABSENT
 - name: index named after index existence
   from: index-node
@@ -310,13 +310,13 @@ rules
     - $index-target[Element] = $index
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
-    - $index-target[Direction] = ADD
+    - $index-target[TargetStatus] = PUBLIC
     - $index-node[Status] = DELETE_ONLY
     - $index-name-target[Type] = '*scpb.Target'
     - $index-name-target[Element] = $index-name
     - $index-name-node[Type] = '*scpb.Node'
     - $index-name-node[Target] = $index-name-target
-    - $index-name-target[Direction] = ADD
+    - $index-name-target[TargetStatus] = PUBLIC
     - $index-name-node[Status] = PUBLIC
 - name: index named right before index becomes public
   from: index-name-node
@@ -332,13 +332,13 @@ rules
     - $index-name-target[Element] = $index-name
     - $index-name-node[Type] = '*scpb.Node'
     - $index-name-node[Target] = $index-name-target
-    - $index-name-target[Direction] = ADD
+    - $index-name-target[TargetStatus] = PUBLIC
     - $index-name-node[Status] = PUBLIC
     - $index-target[Type] = '*scpb.Target'
     - $index-target[Element] = $index
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
-    - $index-target[Direction] = ADD
+    - $index-target[TargetStatus] = PUBLIC
     - $index-node[Status] = PUBLIC
 - name: index unnamed after index no longer public
   from: index-node
@@ -354,13 +354,13 @@ rules
     - $index-target[Element] = $index
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
-    - $index-target[Direction] = DROP
-    - $index-node[Status] IN [VALIDATED, BACKFILLED, DELETE_AND_WRITE_ONLY]
+    - $index-target[TargetStatus] = ABSENT
+    - $index-node[Status] = VALIDATED
     - $index-name-target[Type] = '*scpb.Target'
     - $index-name-target[Element] = $index-name
     - $index-name-node[Type] = '*scpb.Node'
     - $index-name-node[Target] = $index-name-target
-    - $index-name-target[Direction] = DROP
+    - $index-name-target[TargetStatus] = ABSENT
     - $index-name-node[Status] = ABSENT
 - name: index unnamed before index no longer exists
   from: index-name-node
@@ -376,13 +376,13 @@ rules
     - $index-name-target[Element] = $index-name
     - $index-name-node[Type] = '*scpb.Node'
     - $index-name-node[Target] = $index-name-target
-    - $index-name-target[Direction] = DROP
+    - $index-name-target[TargetStatus] = ABSENT
     - $index-name-node[Status] = ABSENT
     - $index-target[Type] = '*scpb.Target'
     - $index-target[Element] = $index
     - $index-node[Type] = '*scpb.Node'
     - $index-node[Target] = $index-target
-    - $index-target[Direction] = DROP
+    - $index-target[TargetStatus] = ABSENT
     - $index-node[Status] = ABSENT
 - name: type ref drop is no-op if ref is being added
   from: type-ref-drop-node
@@ -398,13 +398,13 @@ rules
     - $type-ref-drop-target[Element] = $type-ref-drop
     - $type-ref-drop-node[Type] = '*scpb.Node'
     - $type-ref-drop-node[Target] = $type-ref-drop-target
-    - $type-ref-drop-target[Direction] = DROP
+    - $type-ref-drop-target[TargetStatus] = ABSENT
     - $type-ref-drop-node[Status] = ABSENT
     - $type-ref-add-target[Type] = '*scpb.Target'
     - $type-ref-add-target[Element] = $type-ref-add
     - $type-ref-add-node[Type] = '*scpb.Node'
     - $type-ref-add-node[Target] = $type-ref-add-target
-    - $type-ref-add-target[Direction] = ADD
+    - $type-ref-add-target[TargetStatus] = PUBLIC
     - $type-ref-add-node[Status] = PUBLIC
 - name: table deps removal happens after table marked as dropped
   from: table-drop-node
@@ -418,13 +418,13 @@ rules
     - $dep-drop-target[Element] = $dep-drop
     - $dep-drop-node[Type] = '*scpb.Node'
     - $dep-drop-node[Target] = $dep-drop-target
-    - $dep-drop-target[Direction] = DROP
+    - $dep-drop-target[TargetStatus] = ABSENT
     - $dep-drop-node[Status] = ABSENT
     - $table-drop-target[Type] = '*scpb.Target'
     - $table-drop-target[Element] = $table-drop
     - $table-drop-node[Type] = '*scpb.Node'
     - $table-drop-node[Target] = $table-drop-target
-    - $table-drop-target[Direction] = DROP
+    - $table-drop-target[TargetStatus] = ABSENT
     - $table-drop-node[Status] = DROPPED
 - name: schema can be dropped after schema entry inside the database
   from: schema-entry-node
@@ -438,13 +438,13 @@ rules
     - $schema-target[Element] = $schema
     - $schema-node[Type] = '*scpb.Node'
     - $schema-node[Target] = $schema-target
-    - $schema-target[Direction] = DROP
+    - $schema-target[TargetStatus] = ABSENT
     - $schema-node[Status] = ABSENT
     - $schema-entry-target[Type] = '*scpb.Target'
     - $schema-entry-target[Element] = $schema-entry
     - $schema-entry-node[Type] = '*scpb.Node'
     - $schema-entry-node[Target] = $schema-entry-target
-    - $schema-entry-target[Direction] = DROP
+    - $schema-entry-target[TargetStatus] = ABSENT
     - $schema-entry-node[Status] = ABSENT
 - name: schema entry can be dropped after the database has exited synth drop
   from: database-node
@@ -458,11 +458,11 @@ rules
     - $database-target[Element] = $database
     - $database-node[Type] = '*scpb.Node'
     - $database-node[Target] = $database-target
-    - $database-target[Direction] = DROP
+    - $database-target[TargetStatus] = ABSENT
     - $database-node[Status] = DROPPED
     - $schema-entry-target[Type] = '*scpb.Target'
     - $schema-entry-target[Element] = $schema-entry
     - $schema-entry-node[Type] = '*scpb.Node'
     - $schema-entry-node[Target] = $schema-entry-target
-    - $schema-entry-target[Direction] = DROP
+    - $schema-entry-target[TargetStatus] = ABSENT
     - $schema-entry-node[Status] = ABSENT

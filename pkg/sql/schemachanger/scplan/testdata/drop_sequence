@@ -7,19 +7,19 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
-    [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [[Sequence:{DescID: 54}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
 PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
-    [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
-    [Owner:{DescID: 54}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 54, Username: admin}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 54, Username: public}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
+    [[Sequence:{DescID: 54}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 54, Name: sq1}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 54}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 54, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 54, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 54, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 54}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
@@ -37,11 +37,10 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
         - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
 PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
   transitions:
-    [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
+    [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       DescID: 54
-      Direction: 2
       Element:
         sequence:
           sequenceId: 54
@@ -51,6 +50,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 54
     *scop.RemoveJobReference
@@ -73,23 +73,23 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 1 MutationType ops
   transitions:
-    [Sequence:{DescID: 54}, PUBLIC, DROP] -> TXN_DROPPED
+    [[Sequence:{DescID: 54}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
 PreCommitPhase stage 1 of 1 with 12 MutationType ops
   transitions:
-    [Sequence:{DescID: 54}, TXN_DROPPED, DROP] -> DROPPED
-    [Namespace:{DescID: 54, Name: sq1}, PUBLIC, DROP] -> ABSENT
-    [Owner:{DescID: 54}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 54, Username: admin}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 54, Username: public}, PUBLIC, DROP] -> ABSENT
-    [UserPrivileges:{DescID: 54, Username: root}, PUBLIC, DROP] -> ABSENT
-    [Locality:{DescID: 54}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, PUBLIC, DROP] -> ABSENT
-    [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, PUBLIC, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 55, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
-    [DefaultExpression:{DescID: 56, ColumnID: 2}, PUBLIC, DROP] -> ABSENT
+    [[Sequence:{DescID: 54}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 54, Name: sq1}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 54}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 54, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 54, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 54, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 54}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}, ABSENT], PUBLIC] -> ABSENT
+    [[DefaultExpression:{DescID: 55, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[DefaultExpression:{DescID: 56, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescID: 54
@@ -129,11 +129,10 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
         - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
 PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   transitions:
-    [Sequence:{DescID: 54}, DROPPED, DROP] -> ABSENT
+    [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       DescID: 54
-      Direction: 2
       Element:
         sequence:
           sequenceId: 54
@@ -143,6 +142,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
         Username: root
+      TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 54
     *scop.RemoveJobReference

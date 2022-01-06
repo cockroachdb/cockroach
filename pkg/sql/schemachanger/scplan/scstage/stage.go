@@ -99,17 +99,9 @@ func ValidateStages(stages []Stage, g *scgraph.Graph) error {
 	// Check that the final state is valid.
 	final := stages[len(stages)-1].After.Nodes
 	for i, node := range final {
-		switch node.Direction {
-		case scpb.Target_ADD:
-			if node.Status != scpb.Status_PUBLIC {
-				return errors.Errorf("final status is %s instead of public at index %d for adding %+v",
-					node.Status, i, node.Element())
-			}
-		case scpb.Target_DROP:
-			if node.Status != scpb.Status_ABSENT {
-				return errors.Errorf("final status is %s instead of absent at index %d for dropping %+v",
-					node.Status, i, node.Element())
-			}
+		if node.TargetStatus != node.Status {
+			return errors.Errorf("final status is %s instead of %s at index %d for adding %+v",
+				node.Status, node.TargetStatus, i, node.Element())
 		}
 	}
 
@@ -144,9 +136,9 @@ func validateInternalStageStates(stage Stage) error {
 			return errors.Errorf("target at index %d has Before element %+v and After element %+v",
 				j, eb, ea)
 		}
-		if da, db := afterTarget.Direction, beforeTarget.Direction; da != db {
-			return errors.Errorf("target at index %d has Before direction %s and After direction %s",
-				j, db, da)
+		if ta, tb := afterTarget.TargetStatus, beforeTarget.TargetStatus; ta != tb {
+			return errors.Errorf("target at index %d has Before status %s and After status %s",
+				j, tb, ta)
 		}
 	}
 	return nil
@@ -165,9 +157,9 @@ func validateAdjacentStagesStates(previous, next Stage) error {
 			return errors.Errorf("node status mismatch at index %d: %s != %s",
 				j, afterNode.Status.String(), beforeNode.Status.String())
 		}
-		if da, db := afterNode.Direction, beforeNode.Direction; da != db {
-			return errors.Errorf("target direction mismatch at index %d: %s != %s",
-				j, da.String(), db.String())
+		if ta, tb := afterNode.TargetStatus, beforeNode.TargetStatus; ta != tb {
+			return errors.Errorf("target status mismatch at index %d: %s != %s",
+				j, ta.String(), tb.String())
 		}
 		if ea, eb := afterNode.Element(), beforeNode.Element(); ea != eb {
 			return errors.Errorf("target element mismatch at index %d: %+v != %+v",
@@ -264,8 +256,8 @@ func validateStageSubgraph(stage Stage, g *scgraph.Graph) error {
 	// When we stop making progress we expect to have reached the After state.
 	for i, n := range current {
 		if n != stage.After.Nodes[i] {
-			return errors.Errorf("internal inconsistency, expected %s after walking the graph in direction %s, ended in %s",
-				screl.NodeString(stage.After.Nodes[i]), n.Direction.String(), n.Status)
+			return errors.Errorf("internal inconsistency, ended in non-terminal node %s after walking the graph",
+				screl.NodeString(stage.After.Nodes[i]))
 		}
 	}
 

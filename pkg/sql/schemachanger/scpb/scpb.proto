@@ -54,16 +54,9 @@ message ElementProto {
 }
 
 message Target {
-  enum Direction {
-    UNKNOWN = 0;
-    ADD = 1;
-    DROP = 2;
-    STATIC = 3;
-  }
-
   ElementProto element_proto = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
   TargetMetadata metadata = 2  [(gogoproto.nullable) = false];
-  Direction direction = 4;
+  Status target_status = 3;
 }
 
 enum Status {

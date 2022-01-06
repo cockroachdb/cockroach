@@ -5,8 +5,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 go_library(
     name = "scpb",
     srcs = [
+        "metadata.go",
         "node.go",
-        "structured.go",
         ":gen-elements-interface",  # keep
     ],
     embed = [":scpb_go_proto"],

@@ -165,20 +165,20 @@ func validateColumnName(
 		}
 		panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), table.GetName()))
 	}
-	scpb.ForEachColumnName(b, func(_ scpb.Status, dir scpb.Target_Direction, t *scpb.ColumnName) {
+	scpb.ForEachColumnName(b, func(_, targetStatus scpb.Status, t *scpb.ColumnName) {
 		if t.TableID != table.GetID() || t.Name != d.Name.String() {
 			return
 		}
-		switch dir {
-		case scpb.Target_ADD:
+		switch targetStatus {
+		case scpb.Status_PUBLIC:
 			panic(pgerror.Newf(pgcode.DuplicateColumn,
 				"duplicate: column %q in the middle of being added, not yet public",
 				col.Name))
-		case scpb.Target_DROP:
+		case scpb.Status_ABSENT:
 			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"column %q being dropped, try again later", col.Name))
 		default:
-			panic(errors.AssertionFailedf("unknown direction %v", dir))
+			panic(errors.AssertionFailedf("unknown target status %s", targetStatus.String()))
 		}
 	})
 }
@@ -204,8 +204,8 @@ func findOrAddColumnFamily(
 	// name is being dropped and then if there is or isn't a create directive.
 	found := false
 	var familyID descpb.FamilyID
-	scpb.ForEachColumn(b, func(_ scpb.Status, dir scpb.Target_Direction, col *scpb.Column) {
-		if dir == scpb.Target_ADD && col.FamilyName == family {
+	scpb.ForEachColumn(b, func(_, targetStatus scpb.Status, col *scpb.Column) {
+		if targetStatus == scpb.Status_PUBLIC && col.FamilyName == family {
 			if create && !ifNotExists {
 				panic(errors.Errorf("family %q already exists", family))
 			}
@@ -265,8 +265,8 @@ func addOrUpdatePrimaryIndexTargetsForAddColumn(
 	// storing columns.
 	{
 		var latestAdded *scpb.PrimaryIndex
-		scpb.ForEachPrimaryIndex(b, func(_ scpb.Status, dir scpb.Target_Direction, idx *scpb.PrimaryIndex) {
-			if dir == scpb.Target_ADD && idx.TableID == table.GetID() {
+		scpb.ForEachPrimaryIndex(b, func(_, targetStatus scpb.Status, idx *scpb.PrimaryIndex) {
+			if targetStatus == scpb.Status_PUBLIC && idx.TableID == table.GetID() {
 				latestAdded = idx
 			}
 		})
