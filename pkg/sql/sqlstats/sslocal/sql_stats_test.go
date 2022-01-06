@@ -484,3 +484,38 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 			"testCase: %+v", tc)
 	}
 }
+
+func TestTxnStatsDiscardedAfterPrematureStatementExecutionAbortion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	server, sqlConn, _ := serverutils.StartServer(t, params)
+
+	defer server.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlConn)
+
+	sqlDB.Exec(t, "CREATE TABLE t AS SELECT generate_series(1, 50)")
+	sqlDB.Exec(t, "SET large_full_scan_rows=49")
+	sqlDB.Exec(t, "SET disallow_full_table_scans=on")
+
+	// Simulate a premature statement exec abort by violating the full table
+	// scan constraint.
+	sqlDB.ExpectErr(t,
+		".*contains a full table/index scan.*", /* errRe */
+		"SELECT * FROM t",                      /* query */
+	)
+
+	// Ensure we don't generate transaction stats entry where the list of stmt
+	// fingerprint IDs is nil.
+	sqlDB.CheckQueryResults(t, `
+SELECT
+  count(*)
+FROM
+  crdb_internal.transaction_statistics
+WHERE
+  jsonb_array_length(metadata -> 'stmtFingerprintIDs') = 0
+`,
+		[][]string{{"0"}})
+}
