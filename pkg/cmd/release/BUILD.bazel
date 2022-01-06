@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "release_lib",
+    srcs = [
+        "git.go",
+        "jira.go",
+        "mail.go",
+        "main.go",
+        "metadata.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_andygrunwald_go_jira//:go-jira",
+        "@com_github_jordan_wright_email//:email",
+        "@com_github_masterminds_semver_v3//:semver",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_google_cloud_go_storage//:storage",
+    ],
+)
+
+go_binary(
+    name = "release",
+    embed = [":release_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "release_test",
+    srcs = ["jira_test.go"],
+    embed = [":release_lib"],
+    deps = [
+        "@com_github_andygrunwald_go_jira//:go-jira",
+        "@com_github_stretchr_testify//require",
+    ],
+)
