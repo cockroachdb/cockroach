@@ -9,7 +9,6 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb:roachpb_proto",
-        "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@go_googleapis//google/api:annotations_proto",
@@ -24,7 +23,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb:with-mocks",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descpb",  # keep
         "//pkg/util/hlc",
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
