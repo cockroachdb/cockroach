@@ -603,7 +603,7 @@ func NewRangeKeyMismatchError(
 		end,
 		desc,
 		lease,
-		LAG_BY_CLUSTER_SETTING, /* defaut closed timestsamp policy*/
+		LAG_BY_CLUSTER_SETTING, /* default closed timestsamp policy*/
 	)
 }
 
