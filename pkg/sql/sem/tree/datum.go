@@ -15,7 +15,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"math/big"
 	"regexp"
 	"sort"
 	"strconv"
@@ -24,7 +23,7 @@ import (
 	"unicode"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -1149,23 +1148,14 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 	}
 }
 
-// shallowDecimalSize is the size of the fixed-size part of apd.Decimal in
-// bytes.
-const shallowDecimalSize = unsafe.Sizeof(apd.Decimal{})
-
-// SizeOfDecimal returns the size in bytes of an apd.Decimal.
-func SizeOfDecimal(d *apd.Decimal) uintptr {
-	return shallowDecimalSize + uintptr(cap(d.Coeff.Bits()))*unsafe.Sizeof(big.Word(0))
-}
-
 // Size implements the Datum interface.
 func (d *DDecimal) Size() uintptr {
-	return SizeOfDecimal(&d.Decimal)
+	return d.Decimal.Size()
 }
 
 var (
 	decimalNegativeZero = &apd.Decimal{Negative: true}
-	bigTen              = big.NewInt(10)
+	bigTen              = apd.NewBigInt(10)
 )
 
 // IsComposite implements the CompositeDatum interface.
@@ -1176,7 +1166,7 @@ func (d *DDecimal) IsComposite() bool {
 	}
 
 	// Check if d is divisible by 10.
-	var r big.Int
+	var r apd.BigInt
 	r.Rem(&d.Decimal.Coeff, bigTen)
 	return r.Sign() == 0
 }

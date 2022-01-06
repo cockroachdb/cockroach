@@ -14,13 +14,12 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/big"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -75,8 +74,8 @@ var (
 	// ErrShiftArgOutOfRange is reported when a shift argument is out of range.
 	ErrShiftArgOutOfRange = pgerror.New(pgcode.InvalidParameterValue, "shift argument out of range")
 
-	big10E6  = big.NewInt(1e6)
-	big10E10 = big.NewInt(1e10)
+	big10E6  = apd.NewBigInt(1e6)
+	big10E10 = apd.NewBigInt(1e10)
 )
 
 // NewCannotMixBitArraySizesError creates an error for the case when a bitwise
@@ -3773,7 +3772,7 @@ func TimestampToDecimal(ts hlc.Timestamp) apd.Decimal {
 	val := &res.Coeff
 	val.SetInt64(ts.WallTime)
 	val.Mul(val, big10E10)
-	val.Add(val, big.NewInt(int64(ts.Logical)))
+	val.Add(val, apd.NewBigInt(int64(ts.Logical)))
 
 	// val must be positive. If it was set to a negative value above,
 	// transfer the sign to res.Negative.
@@ -3798,7 +3797,7 @@ func DecimalToInexactDTimestampTZ(d *DDecimal) (*DTimestampTZ, error) {
 }
 
 func decimalToHLC(d *DDecimal) (hlc.Timestamp, error) {
-	var coef big.Int
+	var coef apd.BigInt
 	coef.Set(&d.Decimal.Coeff)
 	// The physical portion of the HLC is stored shifted up by 10^10, so shift
 	// it down and clear out the logical component.

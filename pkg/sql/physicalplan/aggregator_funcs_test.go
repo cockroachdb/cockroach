@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/big"
 	"testing"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -47,7 +47,7 @@ var (
 	// decimal calculations.
 	diffCtx = tree.DecimalCtx.WithPrecision(0)
 	// Use to check for 1ulp.
-	bigOne = big.NewInt(1)
+	bigOne = apd.NewBigInt(1)
 	// floatPrecFmt is the format string with a precision of 3 (after
 	// decimal point) specified for float comparisons. Float aggregation
 	// operations involve unavoidable off-by-last-few-digits errors, which

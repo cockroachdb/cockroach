@@ -575,7 +575,7 @@ if %[2]s != nil {
     %[1]s = %[2]s.Size()
 }`, target, value)
 	case types.DecimalFamily:
-		return fmt.Sprintf(`%s := tree.SizeOfDecimal(&%s)`, target, value)
+		return fmt.Sprintf(`%s := %s.Size()`, target, value)
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf(`
 		var %[1]s uintptr

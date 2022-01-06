@@ -12,7 +12,7 @@ go_library(
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/util/duration",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_go_cmp//cmp",
         "@com_github_google_go_cmp//cmp/cmpopts",
@@ -28,7 +28,7 @@ go_test(
     srcs = ["compare_test.go"],
     embed = [":cmpconn"],
     deps = [
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_jackc_pgtype//:pgtype",
     ],
 )
