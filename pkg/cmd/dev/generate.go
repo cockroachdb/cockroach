@@ -161,6 +161,7 @@ func (d *dev) generateGo(cmd *cobra.Command) error {
 	args = append(args, "build")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	args = append(args, "//:go_path")
+	args = append(args, "--show_result=0")
 	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
 		return err
