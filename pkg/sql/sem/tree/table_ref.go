@@ -10,11 +10,13 @@
 
 package tree
 
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+
 // ID is a custom type for {Database,Table}Descriptor IDs.
-type ID uint32
+type ID = catid.ColumnID
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
-type ColumnID uint32
+type ColumnID = catid.ColumnID
 
 // TableRef represents a numeric table reference.
 // (Syntax !NNN in SQL.)
@@ -56,9 +58,3 @@ func (n *TableRef) String() string { return AsString(n) }
 
 // tableExpr implements the TableExpr interface.
 func (n *TableRef) tableExpr() {}
-
-// SafeValue implements the redact.SafeValue interface.
-func (ID) SafeValue() {}
-
-// SafeValue implements the redact.SafeValue interface.
-func (ColumnID) SafeValue() {}

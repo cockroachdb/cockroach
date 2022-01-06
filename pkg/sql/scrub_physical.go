@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -74,25 +73,25 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	// Collect all of the columns being scanned.
 	if o.index.GetID() == o.tableDesc.GetPrimaryIndexID() {
 		for _, c := range o.tableDesc.PublicColumns() {
-			columnIDs = append(columnIDs, tree.ColumnID(c.GetID()))
+			columnIDs = append(columnIDs, c.GetID())
 		}
 	} else {
 		for i := 0; i < o.index.NumKeyColumns(); i++ {
 			id := o.index.GetKeyColumnID(i)
-			columnIDs = append(columnIDs, tree.ColumnID(id))
+			columnIDs = append(columnIDs, id)
 		}
 		for i := 0; i < o.index.NumKeySuffixColumns(); i++ {
 			id := o.index.GetKeySuffixColumnID(i)
-			columnIDs = append(columnIDs, tree.ColumnID(id))
+			columnIDs = append(columnIDs, id)
 		}
 		for i := 0; i < o.index.NumSecondaryStoredColumns(); i++ {
 			id := o.index.GetStoredColumnID(i)
-			columnIDs = append(columnIDs, tree.ColumnID(id))
+			columnIDs = append(columnIDs, id)
 		}
 	}
 
 	for i := range columnIDs {
-		idx := colIDToIdx.GetDefault(descpb.ColumnID(columnIDs[i]))
+		idx := colIDToIdx.GetDefault(columnIDs[i])
 		columns = append(columns, o.tableDesc.PublicColumns()[idx])
 	}
 
@@ -103,7 +102,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 
 	indexFlags := &tree.IndexFlags{
-		IndexID:     tree.IndexID(o.index.GetID()),
+		IndexID:     o.index.GetID(),
 		NoIndexJoin: true,
 	}
 	scan := params.p.Scan()
