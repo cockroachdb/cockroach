@@ -553,6 +553,8 @@ func runSinglePrivilegeCheck(
 	switch d {
 	case tree.DBoolFalse, tree.DNull:
 	case tree.DBoolTrue:
+		// todo remove this check after migrating from evalPrivilegeCheck to hasPrivilege
+		// https://github.com/cockroachdb/cockroach/issues/66173
 		if priv.GrantOption {
 			// GrantOption is set, so AND the result with check(GRANT).
 			d, err = check(privilege.Privilege{Kind: privilege.GRANT})
@@ -2267,7 +2269,7 @@ SELECT description
 					if typmod != -1 {
 						// This logics matches the postgres implementation
 						// of how to calculate the precision based on the typmod
-						//https://github.com/postgres/postgres/blob/d84ffffe582b8e036a14c6bc2378df29167f3a00/src/backend/catalog/information_schema.sql#L109
+						// https://github.com/postgres/postgres/blob/d84ffffe582b8e036a14c6bc2378df29167f3a00/src/backend/catalog/information_schema.sql#L109
 						return tree.NewDInt(((typmod - 4) >> 16) & 65535), nil
 					}
 					return tree.DNull, nil
