@@ -1133,22 +1133,6 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	}
 }
 
-// TestStoreSendBadRange passes a bad range.
-func TestStoreSendBadRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
-	args := getArgs([]byte("0"))
-	if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
-		RangeID: 2, // no such range
-	}, &args); pErr == nil {
-		t.Error("expected invalid range")
-	}
-}
-
 // splitTestRange splits a range. This does *not* fully emulate a real split
 // and should not be used in new tests. Tests that need splits should either live in
 // client_split_test.go and use AdminSplit instead of this function or use the
@@ -1168,7 +1152,8 @@ func splitTestRange(store *Store, splitKey roachpb.RKey, t *testing.T) *Replica 
 }
 
 // TestStoreSendOutOfRange passes a key not contained
-// within the range's key range.
+// within the range's key range and not present in any
+// adjacent ranges on a store.
 func TestStoreSendOutOfRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1177,24 +1162,25 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	defer stopper.Stop(ctx)
 	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
 
-	splitKey := roachpb.RKey("b")
-	repl2 := splitTestRange(store, splitKey, t)
-
-	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
-	// fail because it's just after the range boundary.
-	args := getArgs([]byte("b"))
+	// key 'a' isn't in Range 1000 and Range 1000 doesn't exist
+	// adjacent on this store
+	args := getArgs([]byte("a"))
 	if _, err := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
-		RangeID: 1,
+		RangeID: 1000, // doesn't exist
 	}, &args); err == nil {
 		t.Error("expected key to be out of range")
 	}
 
-	// Range 2 is from "b" to KeyMax, so reading "a" from range 2 should
-	// fail because it's before the start of the range.
-	args = getArgs([]byte("a"))
+	splitKey := roachpb.RKey("b")
+	repl2 := splitTestRange(store, splitKey, t)
+
+	// Range 2 is from "b" to KeyMax, so reading "a"-"c" from range 2 should
+	// fail because it's before the start of the range and straddles multiple ranges
+	// so it cannot be server side retried.
+	scanArgs := scanArgs([]byte("a"), []byte("c"))
 	if _, err := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 		RangeID: repl2.RangeID,
-	}, &args); err == nil {
+	}, scanArgs); err == nil {
 		t.Error("expected key to be out of range")
 	}
 }

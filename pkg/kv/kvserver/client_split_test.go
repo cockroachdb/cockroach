@@ -496,11 +496,16 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	}
 	replCount := store.ReplicaCount()
 
-	// An AdminSplit request sent to the end of the old range
-	// should fail with a RangeKeyMismatchError.
-	_, pErr := kv.SendWrappedWith(ctx, store, h, args)
-	if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
-		t.Fatalf("expected RangeKeyMismatchError, found: %v", pErr)
+	// An AdminSplit request sent to the end of the old range should be re-routed
+	// to the start of the new range, succeeding but no new ranges should be created
+	if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	postEndSplitReplCount := store.ReplicaCount()
+	if replCount != postEndSplitReplCount {
+		t.Fatalf("splitting at the end of a range should not create a new range; before second split "+
+			"found %d ranges, after second split found %d ranges", replCount, postEndSplitReplCount)
 	}
 
 	// An AdminSplit request sent to the start of the new range
@@ -511,10 +516,10 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	newReplCount := store.ReplicaCount()
-	if replCount != newReplCount {
-		t.Fatalf("splitting at a range boundary should not create a new range; before second split "+
-			"found %d ranges, after second split found %d ranges", replCount, newReplCount)
+	postStartSplitReplCount := store.ReplicaCount()
+	if postEndSplitReplCount != postStartSplitReplCount {
+		t.Fatalf("splitting at the start boundary should not create a new range; before third split "+
+			"found %d ranges, after fourth split found %d ranges", postEndSplitReplCount, postEndSplitReplCount)
 	}
 }
 
