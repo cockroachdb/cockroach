@@ -854,6 +854,20 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	}
 }
 
+// TestReplicaRangeBoundsChecking tests two behaviors that should occur.
+// (1): Following a Range split, however prior to the RHS Range being
+//      rebalanced off the store where the LHS is present. The client
+//      may send a BatchRequest containing pre-split Range information.
+//      This causes a RangeKeyMismatchError to trigger, however since
+//      the store still has the desired range locally, it can avoid
+//      an additional KV rpc hop in bubbling the error - instead
+//      server side retrying the request with updated Range infomation
+//      in the BatchRequest. We expect no error to be returned hre,
+//      despite sending a BatchRequest with stale Range data. As the
+//      request is re-routed.
+// (2): The client BatchRequest containig stale Range data, is responded
+// 	    to with correct RangeInfos, with which the client can invalidate
+//      it's RangeCache.
 func TestReplicaRangeBoundsChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -871,22 +885,28 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	}
 
 	gArgs := getArgs(roachpb.Key("b"))
-	_, pErr := kv.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{
 		RangeID: 1,
-	}, &gArgs)
+	}
+	ba.Add(&gArgs)
 
-	if mismatchErr, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
-		t.Errorf("expected range key mismatch error: %s", pErr)
-	} else {
-		require.Len(t, mismatchErr.Ranges, 2)
-		mismatchedDesc := mismatchErr.Ranges[0].Desc
-		suggestedDesc := mismatchErr.Ranges[1].Desc
-		if mismatchedDesc.RangeID != firstRepl.RangeID {
-			t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, mismatchedDesc)
-		}
-		if suggestedDesc.RangeID != newRepl.RangeID {
-			t.Errorf("expected suggested range to be %d, found %v", newRepl.RangeID, suggestedDesc)
-		}
+	br, pErr := tc.store.Send(context.Background(), ba)
+
+	require.Nil(t, pErr)
+	rangeInfos := br.RangeInfos
+
+	// Here we expect 2 ranges, where [A1, A2] is returned
+	// where A represents the RangeInfos aggregated by send(),
+	// before redirecting the query to the correct range.
+	require.Len(t, rangeInfos, 2)
+	mismatchedDesc := rangeInfos[0].Desc
+	suggestedDesc := rangeInfos[1].Desc
+	if mismatchedDesc.RangeID != firstRepl.RangeID {
+		t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, mismatchedDesc)
+	}
+	if suggestedDesc.RangeID != newRepl.RangeID {
+		t.Errorf("expected suggested range to be %d, found %v", newRepl.RangeID, suggestedDesc)
 	}
 }
 
