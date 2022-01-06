@@ -47,6 +47,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -56,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -364,6 +366,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		},
 		func(ctx context.Context) {
 			defer sp.Finish()
+
 			// If requesting an epoch-based lease & current state is expired,
 			// potentially heartbeat our own liveness or increment epoch of
 			// prior owner. Note we only do this if the previous lease was
@@ -1256,6 +1259,13 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		// against this in checkRequestTimeRLocked). So instead of assuming
 		// anything, we iterate and check again.
 		pErr = func() (pErr *roachpb.Error) {
+			// NB: the slow request detection here is not particularly useful since
+			// it guards the actual lease proposal, for which there is already a
+			// similar check when waiting for the proposal to come back.
+			slowTimer := timeutil.NewTimer()
+			defer slowTimer.Stop()
+			slowTimer.Reset(base.SlowRequestThreshold)
+			tBegin := timeutil.Now()
 			for {
 				select {
 				case pErr = <-llHandle.C():
@@ -1303,6 +1313,15 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					}
 					log.VEventf(ctx, 2, "lease acquisition succeeded: %+v", status.Lease)
 					return nil
+				case <-slowTimer.C:
+					slowTimer.Read = true
+					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
+						base.SlowRequestThreshold)
+					r.store.metrics.SlowLeaseRequests.Inc(1)
+					defer func() {
+						r.store.metrics.SlowLeaseRequests.Dec(1)
+						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
+					}()
 				case <-ctx.Done():
 					llHandle.Cancel()
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())

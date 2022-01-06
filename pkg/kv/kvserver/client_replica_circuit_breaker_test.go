@@ -201,6 +201,9 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 		require.NoError(t, tc.Server(n1).HeartbeatNodeLiveness())
 		tc.SetSlowThreshold(10 * time.Millisecond)
 		{
+			// NB: this gives an opaque "result is ambiguous (context canceled)"
+			// because the command was inflight when the breaker tripped (the
+			// command remaining inflight for 10ms is what trips the breaker).
 			err := tc.Write(n1)
 			var ae *roachpb.AmbiguousResultError
 			require.True(t, errors.As(err, &ae), "%+v", err)
@@ -270,7 +273,7 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 		tc.RequireIsBreakerOpen(t, tc.Write(n1))
 
 		tc.SetSlowThreshold(0) // reset
-		tc.RestartServer(n2)
+		require.NoError(t, tc.RestartServer(n2))
 
 		tc.UntripsSoon(t, tc.Read, n1)
 		require.NoError(t, tc.Write(n1))

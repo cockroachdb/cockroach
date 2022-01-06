@@ -146,14 +146,16 @@ func (r *Replica) sendWithRangeID(
 			}
 		}
 	}()
-	r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {
+	if r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
 		case <-brSig.C():
 			cancel()
 		}
-	})
+	}) != nil {
+		cancel()
+	}
 
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
