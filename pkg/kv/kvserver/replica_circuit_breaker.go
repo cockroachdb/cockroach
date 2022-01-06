@@ -98,8 +98,8 @@ func newReplicaCircuitBreaker(
 					report(err)
 					if err != nil {
 						rec := finishAndGet()
-						// TODO
-						log.Infof(ctx, "TBG %s", rec.String())
+						// NB: can't use `ctx` any more; that's a use-after-finish.
+						log.Infof(bgCtx, "probe failed %s", rec.String())
 					}
 				}); err != nil {
 				done()
