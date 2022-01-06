@@ -209,6 +209,11 @@ var cockroachCmd = &cobra.Command{
 	// that reports this string.
 	Version: "details:\n" + fullVersionString() +
 		"\n(use '" + os.Args[0] + " version --build-tag' to display only the build tag)",
+	// Prevent cobra from auto-generating a completions command,
+	// since we provide our own.
+	CompletionOptions: cobra.CompletionOptions{
+		DisableDefaultCmd: true,
+	},
 }
 
 var workloadCmd = workloadcli.WorkloadCmd(true /* userFacing */)
