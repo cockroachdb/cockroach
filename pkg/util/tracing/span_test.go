@@ -567,6 +567,14 @@ func TestStructureRecording(t *testing.T) {
 					rec := sp.GetRecording(RecordingStructured)
 					require.Len(t, rec, 1)
 					require.Len(t, rec[0].StructuredRecords, 15)
+
+					sp.Finish()
+					if !finishCh1 {
+						ch1.Finish()
+					}
+					if !finishCh2 {
+						ch2.Finish()
+					}
 				})
 			}
 		})
