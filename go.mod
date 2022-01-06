@@ -11,6 +11,7 @@ require (
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
 	github.com/Azure/go-autorest/autorest/to v0.4.0
 	github.com/BurntSushi/toml v0.4.1
+	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/Shopify/sarama v1.29.0
@@ -19,6 +20,7 @@ require (
 	github.com/abourget/teamcity v0.0.0-00010101000000-000000000000
 	github.com/alessio/shellescape v1.4.1
 	github.com/andy-kimball/arenaskl v0.0.0-20200617143215-f701008588b9
+	github.com/andygrunwald/go-jira v1.14.0
 	github.com/apache/arrow/go/arrow v0.0.0-20200923215132-ac86123a3f01
 	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
 	github.com/aws/aws-sdk-go v1.40.37
@@ -88,6 +90,7 @@ require (
 	github.com/jackc/pgtype v1.8.1
 	github.com/jackc/pgx/v4 v4.13.0
 	github.com/jaegertracing/jaeger v1.18.1
+	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/jordanlewis/gcassert v0.0.0-20210709222130-81f5df3faab8
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.6.1-0.20210625163953-8ddee489636a
@@ -166,6 +169,12 @@ require (
 require github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 
 require (
+	github.com/fatih/structs v1.1.0 // indirect
+	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
+	github.com/trivago/tgo v1.0.7 // indirect
+)
+
+require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.1.0 // indirect
 	cloud.google.com/go/iam v0.1.1 // indirect
@@ -195,7 +204,7 @@ require (
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/DataDog/zstd v1.5.0 // indirect
 	github.com/Masterminds/goutils v1.1.0 // indirect
-	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/Masterminds/semver v1.5.0
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/Microsoft/go-winio v0.4.17 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
