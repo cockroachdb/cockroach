@@ -1928,6 +1928,21 @@ func (c clusterOptTracingOff) apply(args *base.TestServerArgs) {
 	args.TracingDefault = tracing.TracingModeOnDemand
 }
 
+// clusterOptIgnoreStrictGCForTenants corresponds to the
+// ignore-tenant-strict-gc-enforcement directive.
+type clusterOptIgnoreStrictGCForTenants struct{}
+
+var _ clusterOpt = clusterOptIgnoreStrictGCForTenants{}
+
+// apply implements the clusterOpt interface.
+func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
+	_, ok := args.Knobs.Store.(*kvserver.StoreTestingKnobs)
+	if !ok {
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{}
+	}
+	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
+}
+
 // readClusterOptions looks around the beginning of the file for a line looking like:
 // # cluster-opt: opt1 opt2 ...
 // and parses that line into a set of clusterOpts that need to be applied to the
@@ -1968,6 +1983,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 					res = append(res, clusterOptDisableSpanConfigs{})
 				case "tracing-off":
 					res = append(res, clusterOptTracingOff{})
+				case "ignore-tenant-strict-gc-enforcement":
+					res = append(res, clusterOptIgnoreStrictGCForTenants{})
 				default:
 					t.Fatalf("unrecognized cluster option: %s", opt)
 				}
