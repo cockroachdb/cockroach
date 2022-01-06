@@ -1042,8 +1042,12 @@ func (s *Server) maybeUpgradeToSecureConn(
 	}
 
 	if connType == hba.ConnLocal {
+		// No existing PostgreSQL driver ever tries to activate TLS over
+		// a unix socket. But in case someone, sometime, somewhere, makes
+		// that mistake, let them know that we don't want it.
 		clientErr = pgerror.New(pgcode.ProtocolViolation,
 			"cannot use SSL/TLS over local connections")
+		return
 	}
 
 	// Protocol sanity check.

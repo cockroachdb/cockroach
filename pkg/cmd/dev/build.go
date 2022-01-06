@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/alessio/shellescape"
@@ -133,7 +134,8 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(args, " ")))
 	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s --config=ci`\n", cross))
 	for _, target := range buildTargets {
-		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", bazelutil.OutputOfBinaryRule(target.fullName)))
+		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n",
+			bazelutil.OutputOfBinaryRule(target.fullName, strings.Contains(cross, "windows"))))
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
 	if err != nil {
@@ -164,7 +166,7 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget, skipGen
 			// Skip staging for these.
 			continue
 		}
-		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target.fullName))
+		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target.fullName, runtime.GOOS == "windows"))
 		base := targetToBinBasename(target.fullName)
 		var symlinkPath string
 		// Binaries beginning with the string "cockroach" go right at

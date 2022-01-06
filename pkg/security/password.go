@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
+	// Reserved import for PR #74301.
+	_ "github.com/xdg-go/stringprep"
 	"golang.org/x/crypto/bcrypt"
 )
 

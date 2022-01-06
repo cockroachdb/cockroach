@@ -12,6 +12,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlerrors",
+        "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
