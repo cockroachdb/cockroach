@@ -25,6 +25,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
     ],
