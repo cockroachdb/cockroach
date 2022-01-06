@@ -12,7 +12,7 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -87,7 +87,7 @@ func (a *sumInt16HashAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -137,7 +137,7 @@ func (a *sumInt16HashAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -200,7 +200,7 @@ func (a *sumInt32HashAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -250,7 +250,7 @@ func (a *sumInt32HashAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -313,7 +313,7 @@ func (a *sumInt64HashAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -363,7 +363,7 @@ func (a *sumInt64HashAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -422,7 +422,7 @@ var _ AggregateFunc = &sumDecimalHashAgg{}
 func (a *sumDecimalHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -470,7 +470,7 @@ func (a *sumDecimalHashAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
