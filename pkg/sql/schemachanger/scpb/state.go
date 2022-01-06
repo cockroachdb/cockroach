@@ -15,15 +15,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// State represents a current or potential future state of the
-// schema change system. Additionally, it tracks any metadata
-// for the schema change such as the Statements and Authorization
-// information. Nodes may refer to this information for different
-// purposes.
+// State represents the current state of the schema change system.
 type State struct {
-	Nodes         []*Node
-	Statements    []*Statement
-	Authorization Authorization
+	TargetState
+	Nodes []*Node
 }
 
 // Statuses returns a slice of statuses extracted from the Nodes.
@@ -54,7 +49,7 @@ type Element interface {
 	element()
 }
 
-//go:generate go run element_generator.go --in scpb.proto --out elements_generated.go
+//go:generate go run element_generator.go --in elements.proto --out elements_generated.go
 //go:generate go run element_uml_generator.go --out uml/table.puml
 
 // Element returns an Element from its wrapper for serialization.
@@ -75,4 +70,38 @@ func NewTarget(status Status, elem Element, metadata *TargetMetadata) *Target {
 		panic(errors.Errorf("unknown element type %T", elem))
 	}
 	return &t
+}
+
+// SourceElementID elements ID's for identifying parent elements.
+// This ID is dynamically allocated when any parent element is
+// created and has no relation to the descriptor ID.
+type SourceElementID uint32
+
+// ElementMetadata contains materialized metadata for an element,
+// where references inside the TargetMetadata are resolved to
+// their actual values. This structure is mainly used during opgen
+// where we need to know these values to emit event log entries for
+// example.
+type ElementMetadata struct {
+	TargetMetadata
+	Username  string
+	AppName   string
+	Statement string
+}
+
+// Clone clones a State and any associated  metadata (i.e. statement and
+//authorization
+// information) for that state.
+func (s *State) Clone() State {
+	ret := State{
+		TargetState: *protoutil.Clone(&s.TargetState).(*TargetState),
+		Nodes:       make([]*Node, len(s.Nodes)),
+	}
+	for i, n := range s.Nodes {
+		ret.Nodes[i] = &Node{
+			Target: &ret.Targets[i],
+			Status: n.Status,
+		}
+	}
+	return ret
 }

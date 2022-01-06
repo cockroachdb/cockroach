@@ -22,7 +22,7 @@ var _ scbuildstmt.NodeEnqueuerAndChecker = buildCtx{}
 func (b buildCtx) HasNode(
 	filter func(status, targetStatus scpb.Status, elem scpb.Element) bool,
 ) (found bool) {
-	b.ForEachNode(func(status, targetStatus scpb.Status, elem scpb.Element) {
+	b.ForEachElementStatus(func(status, targetStatus scpb.Status, elem scpb.Element) {
 		if filter(status, targetStatus, elem) {
 			found = true
 		}

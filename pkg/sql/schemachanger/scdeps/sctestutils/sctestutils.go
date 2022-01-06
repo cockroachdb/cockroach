@@ -169,7 +169,8 @@ func MakePlan(t *testing.T, state scpb.State, phase scop.Phase) scplan.Plan {
 	for _, s := range plan.Stages {
 		for _, o := range s.ExtraOps {
 			if op, ok := o.(*scop.CreateDeclarativeSchemaChangerJob); ok {
-				op.State.Nodes = nil
+				op.TargetState.Targets = nil
+				op.Statuses = nil
 			}
 			if op, ok := o.(*scop.UpdateSchemaChangerJob); ok {
 				op.Statuses = nil

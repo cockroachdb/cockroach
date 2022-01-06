@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/scplan/scstage",
         "//pkg/util/log/logcrash",
+        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

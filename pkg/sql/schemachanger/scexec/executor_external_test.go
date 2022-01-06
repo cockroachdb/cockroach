@@ -252,7 +252,6 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
 		var ts scpb.State
-		var targetSlice []*scpb.Target
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -267,96 +266,107 @@ func TestSchemaChanger(t *testing.T) {
 			metadata := &scpb.TargetMetadata{
 				StatementID:     0,
 				SubWorkID:       1,
-				SourceElementID: 1}
-			targetSlice = []*scpb.Target{
-				scpb.NewTarget(
-					scpb.Status_PUBLIC,
-					&scpb.PrimaryIndex{
-						TableID:             fooTable.GetID(),
-						IndexID:             2,
-						KeyColumnIDs:        []descpb.ColumnID{1},
-						KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
-						StoringColumnIDs:    []descpb.ColumnID{2},
-						Unique:              true,
-						Inverted:            false,
-					},
-					metadata),
-				scpb.NewTarget(
-					scpb.Status_PUBLIC,
-					&scpb.IndexName{
-						TableID: fooTable.GetID(),
-						IndexID: 2,
-						Name:    "new_primary_key",
-					},
-					metadata),
-				scpb.NewTarget(
-					scpb.Status_PUBLIC,
-					&scpb.ColumnName{
-						TableID:  fooTable.GetID(),
-						ColumnID: 2,
-						Name:     "j",
-					},
-					metadata),
-				scpb.NewTarget(
-					scpb.Status_PUBLIC,
-					&scpb.Column{
-						TableID:        fooTable.GetID(),
-						ColumnID:       2,
-						Type:           types.Int,
-						Nullable:       true,
-						PgAttributeNum: 2,
-					},
-					metadata),
-				scpb.NewTarget(
-					scpb.Status_ABSENT,
-					&scpb.PrimaryIndex{
-						TableID:             fooTable.GetID(),
-						IndexID:             1,
-						KeyColumnIDs:        []descpb.ColumnID{1},
-						KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
-						Unique:              true,
-						Inverted:            false,
-					},
-					metadata),
-				scpb.NewTarget(
-					scpb.Status_ABSENT,
-					&scpb.IndexName{
-						TableID: fooTable.GetID(),
-						IndexID: 1,
-						Name:    "primary",
-					},
-					metadata),
+				SourceElementID: 1,
 			}
-
-			nodes := scpb.State{
-				Nodes: []*scpb.Node{
-					{
-						Target: targetSlice[0],
-						Status: scpb.Status_ABSENT,
+			initial := scpb.State{
+				TargetState: scpb.TargetState{
+					Statements: []scpb.Statement{
+						{
+							Statement: "ALTER TABLE foo ADD COLUMN j INT",
+						},
 					},
-					{
-						Target: targetSlice[1],
-						Status: scpb.Status_ABSENT,
-					},
-					{
-						Target: targetSlice[2],
-						Status: scpb.Status_ABSENT,
-					},
-					{
-						Target: targetSlice[3],
-						Status: scpb.Status_ABSENT,
-					},
-					{
-						Target: targetSlice[4],
-						Status: scpb.Status_PUBLIC,
-					},
-					{
-						Target: targetSlice[5],
-						Status: scpb.Status_PUBLIC,
+					Targets: []scpb.Target{
+						*scpb.NewTarget(
+							scpb.Status_PUBLIC,
+							&scpb.PrimaryIndex{
+								TableID:             fooTable.GetID(),
+								IndexID:             2,
+								KeyColumnIDs:        []descpb.ColumnID{1},
+								KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+								StoringColumnIDs:    []descpb.ColumnID{2},
+								Unique:              true,
+								Inverted:            false,
+							},
+							metadata,
+						),
+						*scpb.NewTarget(
+							scpb.Status_PUBLIC,
+							&scpb.IndexName{
+								TableID: fooTable.GetID(),
+								IndexID: 2,
+								Name:    "new_primary_key",
+							},
+							metadata,
+						),
+						*scpb.NewTarget(
+							scpb.Status_PUBLIC,
+							&scpb.ColumnName{
+								TableID:  fooTable.GetID(),
+								ColumnID: 2,
+								Name:     "j",
+							},
+							metadata,
+						),
+						*scpb.NewTarget(
+							scpb.Status_PUBLIC,
+							&scpb.Column{
+								TableID:        fooTable.GetID(),
+								ColumnID:       2,
+								Type:           types.Int,
+								Nullable:       true,
+								PgAttributeNum: 2,
+							},
+							metadata,
+						),
+						*scpb.NewTarget(
+							scpb.Status_ABSENT,
+							&scpb.PrimaryIndex{
+								TableID:             fooTable.GetID(),
+								IndexID:             1,
+								KeyColumnIDs:        []descpb.ColumnID{1},
+								KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+								Unique:              true,
+								Inverted:            false,
+							},
+							metadata,
+						),
+						*scpb.NewTarget(
+							scpb.Status_ABSENT,
+							&scpb.IndexName{
+								TableID: fooTable.GetID(),
+								IndexID: 1,
+								Name:    "primary",
+							},
+							metadata,
+						),
 					},
 				},
-				Statements: []*scpb.Statement{
-					{},
+			}
+
+			initial.Nodes = []*scpb.Node{
+				{
+					Target: &initial.Targets[0],
+					Status: scpb.Status_ABSENT,
+				},
+				{
+					Target: &initial.Targets[1],
+					Status: scpb.Status_ABSENT,
+				},
+				{
+					Target: &initial.Targets[2],
+					Status: scpb.Status_ABSENT,
+				},
+				{
+					Target: &initial.Targets[3],
+					Status: scpb.Status_ABSENT,
+				},
+				{
+					Target: &initial.Targets[4],
+					Status: scpb.Status_PUBLIC,
+				},
+				{
+					Target: &initial.Targets[5],
+					Status: scpb.Status_PUBLIC,
 				},
 			}
 
@@ -364,7 +374,7 @@ func TestSchemaChanger(t *testing.T) {
 				scop.StatementPhase,
 				scop.PreCommitPhase,
 			} {
-				sc := sctestutils.MakePlan(t, nodes, phase)
+				sc := sctestutils.MakePlan(t, initial, phase)
 				stages := sc.StagesForCurrentPhase()
 				for _, s := range stages {
 					exDeps := ti.newExecDeps(txn, descriptors)
@@ -386,38 +396,14 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		require.Equal(t, scpb.State{
-			Nodes: []*scpb.Node{
-				{
-					Target: targetSlice[0],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: targetSlice[1],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: targetSlice[2],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: targetSlice[3],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: targetSlice[4],
-					Status: scpb.Status_ABSENT,
-				},
-				{
-					Target: targetSlice[5],
-					Status: scpb.Status_ABSENT,
-				},
-			},
-
-			Statements: []*scpb.Statement{
-				{},
-			},
-		}, after)
+		require.Equal(t, []scpb.Status{
+			scpb.Status_PUBLIC,
+			scpb.Status_PUBLIC,
+			scpb.Status_PUBLIC,
+			scpb.Status_PUBLIC,
+			scpb.Status_ABSENT,
+			scpb.Status_ABSENT,
+		}, after.Statuses())
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 	t.Run("with builder", func(t *testing.T) {

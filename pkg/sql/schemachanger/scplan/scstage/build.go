@@ -396,15 +396,16 @@ func (sb stageBuilder) after() scpb.State {
 
 func (sb stageBuilder) createSchemaChangeJobOp(state scpb.State) scop.Op {
 	return &scop.CreateDeclarativeSchemaChangerJob{
-		JobID: sb.bs.scJobIDSupplier(),
-		State: shallowCopy(state),
+		JobID:       sb.bs.scJobIDSupplier(),
+		TargetState: state.Clone().TargetState,
+		Statuses:    state.Statuses(),
 	}
 }
 
 func (sb stageBuilder) addJobReferenceOps(state scpb.State) []scop.Op {
 	jobID := sb.bs.scJobIDSupplier()
 	return generateOpsForJobIDs(
-		screl.GetDescIDs(state),
+		screl.GetDescIDs(state.TargetState),
 		jobID,
 		func(descID descpb.ID, id jobspb.JobID) scop.Op {
 			return &scop.AddJobReference{DescriptorID: descID, JobID: jobID}
@@ -423,7 +424,7 @@ func (sb stageBuilder) updateJobProgressOp(state scpb.State) scop.Op {
 func (sb stageBuilder) removeJobReferenceOps(state scpb.State) []scop.Op {
 	jobID := sb.bs.scJobIDSupplier()
 	return generateOpsForJobIDs(
-		screl.GetDescIDs(state),
+		screl.GetDescIDs(state.TargetState),
 		jobID,
 		func(descID descpb.ID, id jobspb.JobID) scop.Op {
 			return &scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
@@ -446,15 +447,11 @@ func generateOpsForJobIDs(
 // slices.
 func shallowCopy(cur scpb.State) scpb.State {
 	return scpb.State{
+		TargetState: cur.TargetState,
 		Nodes: append(
 			make([]*scpb.Node, 0, len(cur.Nodes)),
 			cur.Nodes...,
 		),
-		Statements: append(
-			make([]*scpb.Statement, 0, len(cur.Statements)),
-			cur.Statements...,
-		),
-		Authorization: cur.Authorization,
 	}
 }
 

@@ -87,7 +87,7 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(jobID jobspb.JobID, state scpb.State) error
+	AddNewSchemaChangerJob(jobID jobspb.JobID, targetState scpb.TargetState, nodeStatuses []scpb.Status) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.
@@ -169,7 +169,7 @@ func (m *visitor) swapSchemaChangeJobID(
 func (m *visitor) CreateDeclarativeSchemaChangerJob(
 	ctx context.Context, job scop.CreateDeclarativeSchemaChangerJob,
 ) error {
-	return m.s.AddNewSchemaChangerJob(job.JobID, job.State)
+	return m.s.AddNewSchemaChangerJob(job.JobID, job.TargetState, job.Statuses)
 }
 
 func (m *visitor) UpdateSchemaChangerJob(

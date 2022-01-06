@@ -610,7 +610,7 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
           Username: root
         Statements:

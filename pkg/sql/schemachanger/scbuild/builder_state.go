@@ -34,8 +34,10 @@ func (b *builderState) AddNode(
 	})
 }
 
-// ForEachNode implements the scbuildstmt.BuilderState interface.
-func (b *builderState) ForEachNode(fn func(status, targetStatus scpb.Status, elem scpb.Element)) {
+// ForEachElementStatus implements the scpb.ElementStatusIterator interface.
+func (b *builderState) ForEachElementStatus(
+	fn func(status, targetStatus scpb.Status, elem scpb.Element),
+) {
 	for _, node := range b.output {
 		fn(node.Status, node.TargetStatus, node.Element())
 	}

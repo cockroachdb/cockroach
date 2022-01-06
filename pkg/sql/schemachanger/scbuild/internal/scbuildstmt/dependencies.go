@@ -119,12 +119,10 @@ type AuthorizationAccessor interface {
 // its internal state to anything that ends up using it and only allowing
 // state changes via the provided methods.
 type BuilderState interface {
+	scpb.ElementStatusIterator
 
 	// AddNode adds a node into the NodeAccumulator.
 	AddNode(status, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata)
-
-	// ForEachNode iterates over the accumulated notes in the NodeAccumulator.
-	ForEachNode(fn func(status, targetStatus scpb.Status, elem scpb.Element))
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog

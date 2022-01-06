@@ -350,8 +350,9 @@ type AddJobReference struct {
 // declarative schema changer post-commit phases.
 type CreateDeclarativeSchemaChangerJob struct {
 	mutationOp
-	JobID jobspb.JobID
-	State scpb.State
+	JobID       jobspb.JobID
+	TargetState scpb.TargetState
+	Statuses    []scpb.Status
 }
 
 // UpdateSchemaChangerJob is used to update the progress and payload of the

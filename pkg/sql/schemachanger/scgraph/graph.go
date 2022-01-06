@@ -27,12 +27,6 @@ type Graph struct {
 	// Targets is an interned slice of targets.
 	targets []*scpb.Target
 
-	// Statement metadata for targets.
-	statements []*scpb.Statement
-
-	// Authorization information used by the targets.
-	authorization scpb.Authorization
-
 	// Interns the Node so that pointer equality can be used.
 	targetNodes []map[scpb.Status]*scpb.Node
 
@@ -80,13 +74,11 @@ func New(initial scpb.State) (*Graph, error) {
 		return nil, err
 	}
 	g := Graph{
-		targetIdxMap:  map[*scpb.Target]int{},
-		opEdgesFrom:   map[*scpb.Node]*OpEdge{},
-		noOpOpEdges:   map[*OpEdge]bool{},
-		opToOpEdge:    map[scop.Op]*OpEdge{},
-		entities:      db,
-		statements:    initial.Statements,
-		authorization: initial.Authorization,
+		targetIdxMap: map[*scpb.Target]int{},
+		opEdgesFrom:  map[*scpb.Node]*OpEdge{},
+		noOpOpEdges:  map[*OpEdge]bool{},
+		opToOpEdge:   map[scop.Op]*OpEdge{},
+		entities:     db,
 	}
 	g.depEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
 	g.depEdgesTo = newDepEdgeTree(toFrom, g.compareNodes)
@@ -112,18 +104,16 @@ func New(initial scpb.State) (*Graph, error) {
 func (g *Graph) ShallowClone() *Graph {
 	// Shallow copy the base structure.
 	clone := &Graph{
-		targets:       g.targets,
-		statements:    g.statements,
-		authorization: g.authorization,
-		targetNodes:   g.targetNodes,
-		targetIdxMap:  g.targetIdxMap,
-		opEdgesFrom:   g.opEdgesFrom,
-		depEdgesFrom:  g.depEdgesFrom,
-		depEdgesTo:    g.depEdgesTo,
-		opToOpEdge:    g.opToOpEdge,
-		edges:         g.edges,
-		entities:      g.entities,
-		noOpOpEdges:   make(map[*OpEdge]bool),
+		targets:      g.targets,
+		targetNodes:  g.targetNodes,
+		targetIdxMap: g.targetIdxMap,
+		opEdgesFrom:  g.opEdgesFrom,
+		depEdgesFrom: g.depEdgesFrom,
+		depEdgesTo:   g.depEdgesTo,
+		opToOpEdge:   g.opToOpEdge,
+		edges:        g.edges,
+		entities:     g.entities,
+		noOpOpEdges:  make(map[*OpEdge]bool),
 	}
 	// Any decorations for mutations will be copied.
 	for edge, noop := range g.noOpOpEdges {
@@ -257,20 +247,6 @@ func (g *Graph) MarkAsNoOp(edge *OpEdge) {
 // IsNoOp checks if an edge is marked as an edge that should emit no operations.
 func (g *Graph) IsNoOp(edge *OpEdge) bool {
 	return len(edge.op) == 0 || g.noOpOpEdges[edge]
-}
-
-// GetMetadataFromTarget returns the metadata for a given target node.
-func (g *Graph) GetMetadataFromTarget(target *scpb.Target) scpb.ElementMetadata {
-	return scpb.ElementMetadata{
-		TargetMetadata: scpb.TargetMetadata{
-			SourceElementID: target.Metadata.SourceElementID,
-			SubWorkID:       target.Metadata.SubWorkID,
-			StatementID:     target.Metadata.StatementID,
-		},
-		Statement: g.statements[target.Metadata.StatementID].Statement,
-		Username:  g.authorization.Username,
-		AppName:   g.authorization.AppName,
-	}
 }
 
 // Order returns the number of nodes in this graph.

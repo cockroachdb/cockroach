@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,11 +45,22 @@ func Build(
 		}
 	}()
 	scbuildstmt.Process(b, n)
-	return scpb.State{
-		Nodes:         bs.output,
-		Statements:    els.statements,
-		Authorization: els.authorization,
-	}, nil
+	ret := scpb.State{
+		TargetState: scpb.TargetState{
+			Targets:       make([]scpb.Target, len(bs.output)),
+			Statements:    els.statements,
+			Authorization: els.authorization,
+		},
+		Nodes: make([]*scpb.Node, len(bs.output)),
+	}
+	for i, node := range bs.output {
+		ret.Targets[i] = *protoutil.Clone(node.Target).(*scpb.Target)
+		ret.Nodes[i] = &scpb.Node{
+			Target: &ret.Targets[i],
+			Status: node.Status,
+		}
+	}
+	return ret, nil
 }
 
 // Export dependency interfaces.
@@ -81,7 +93,7 @@ func newBuilderState(initial scpb.State) *builderState {
 type eventLogState struct {
 
 	// statements contains the statements in the schema changer state.
-	statements []*scpb.Statement
+	statements []scpb.Statement
 
 	// authorization contains application and user names for the current session.
 	authorization scpb.Authorization
@@ -102,7 +114,7 @@ func newEventLogState(
 ) *eventLogState {
 	stmts := initial.Clone().Statements
 	els := eventLogState{
-		statements: append(stmts, &scpb.Statement{
+		statements: append(stmts, scpb.Statement{
 			Statement: n.String(),
 		}),
 		authorization: scpb.Authorization{

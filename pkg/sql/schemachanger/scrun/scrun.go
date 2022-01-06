@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -150,22 +151,32 @@ func makeState(
 			len(protos), len(states))
 	}
 	ts := scpb.State{
-		Statements:    statements,
-		Authorization: *authorization,
+		TargetState: scpb.TargetState{
+			Targets:       make([]scpb.Target, len(protos)),
+			Statements:    make([]scpb.Statement, len(statements)),
+			Authorization: *authorization,
+		},
+		Nodes: make([]*scpb.Node, len(states)),
 	}
-	ts.Nodes = make([]*scpb.Node, len(protos))
-	for i := range protos {
-		ts.Nodes[i] = &scpb.Node{
-			Target: protos[i],
-			Status: states[i],
-		}
+	for i, proto := range protos {
+		t := protoutil.Clone(proto).(*scpb.Target)
 		if rollback {
-			switch ts.Nodes[i].TargetStatus {
+			switch t.TargetStatus {
 			case scpb.Status_PUBLIC:
-				ts.Nodes[i].TargetStatus = scpb.Status_ABSENT
+				t.TargetStatus = scpb.Status_ABSENT
 			case scpb.Status_ABSENT:
-				ts.Nodes[i].TargetStatus = scpb.Status_PUBLIC
+				t.TargetStatus = scpb.Status_PUBLIC
 			}
+		}
+		ts.Targets[i] = *t
+	}
+	for j, stmt := range statements {
+		ts.Statements[j] = *protoutil.Clone(stmt).(*scpb.Statement)
+	}
+	for i, status := range states {
+		ts.Nodes[i] = &scpb.Node{
+			Target: &ts.Targets[i],
+			Status: status,
 		}
 	}
 	return ts

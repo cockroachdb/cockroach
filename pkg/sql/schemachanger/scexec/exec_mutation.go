@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -339,38 +340,38 @@ func (mvs *mutationVisitorState) AddNewGCJobForIndex(
 }
 
 func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
-	jobID jobspb.JobID, state scpb.State,
+	jobID jobspb.JobID, targetState scpb.TargetState, nodeStatuses []scpb.Status,
 ) error {
 	if mvs.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
-	targets := make([]*scpb.Target, len(state.Nodes))
-	nodeStatuses := make([]scpb.Status, len(state.Nodes))
+	targets := make([]*scpb.Target, len(targetState.Targets))
 	// TODO(ajwerner): It may be better in the future to have the builder be
 	// responsible for determining this set of descriptors. As of the time of
 	// writing, the descriptors to be "locked," descriptors that need schema
 	// change jobs, and descriptors with schema change mutations all coincide. But
 	// there are future schema changes to be implemented in the new schema changer
 	// (e.g., RENAME TABLE) for which this may no longer be true.
-	for i, n := range state.Nodes {
-		targets[i] = n.Target
-		nodeStatuses[i] = n.Status
+	for i := range targetState.Targets {
+		targets[i] = &targetState.Targets[i]
 	}
-	stmts := make([]string, len(state.Statements))
-	for i, stmt := range state.Statements {
-		stmts[i] = stmt.Statement
+	stmts := make([]*scpb.Statement, len(targetState.Statements))
+	stmtsStr := make([]string, len(targetState.Statements))
+	for i, stmt := range targetState.Statements {
+		stmtsStr[i] = stmt.Statement
+		stmts[i] = protoutil.Clone(&stmt).(*scpb.Statement)
 	}
 	mvs.schemaChangerJob = &jobs.Record{
 		JobID:         jobID,
 		Description:   "schema change job", // TODO(ajwerner): use const
-		Statements:    stmts,
-		Username:      security.MakeSQLUsernameFromPreNormalizedString(state.Authorization.Username),
-		DescriptorIDs: screl.GetDescIDs(state),
+		Statements:    stmtsStr,
+		Username:      security.MakeSQLUsernameFromPreNormalizedString(targetState.Authorization.Username),
+		DescriptorIDs: screl.GetDescIDs(targetState),
 		Details:       jobspb.NewSchemaChangeDetails{Targets: targets},
 		Progress: jobspb.NewSchemaChangeProgress{
 			States:        nodeStatuses,
-			Authorization: &state.Authorization,
-			Statements:    state.Statements,
+			Authorization: &targetState.Authorization,
+			Statements:    stmts,
 		},
 		RunningStatus: "",
 		NonCancelable: false,
