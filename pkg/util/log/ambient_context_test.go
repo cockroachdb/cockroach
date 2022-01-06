@@ -75,6 +75,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 
 	ac.Tracer = tracer
 	ctx, sp := ac.AnnotateCtxWithSpan(context.Background(), "s")
+	defer sp.Finish()
 	require.Equal(t, sp, tracing.SpanFromContext(ctx))
 	require.NotNil(t, sp)
 	require.False(t, sp.IsVerbose())
