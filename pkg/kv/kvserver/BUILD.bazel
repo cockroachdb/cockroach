@@ -194,7 +194,6 @@ go_library(
         "@com_github_gogo_protobuf//proto",
         "@com_github_google_btree//:btree",
         "@com_github_kr_pretty//:pretty",
-        "@com_github_petermattis_goid//:goid",
         "@io_etcd_go_etcd_raft_v3//:raft",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@io_etcd_go_etcd_raft_v3//tracker",
