@@ -126,8 +126,8 @@ func TestAuthenticationAndHBARules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderRace(t, "takes >1min under race")
 
-	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
-		hbaRunTest(t, insecure)
+	testutils.RunTrueAndFalse(t, "disable-sql-authn", func(t *testing.T, disableSQLAuthn bool) {
+		hbaRunTest(t, disableSQLAuthn)
 	})
 }
 
@@ -159,11 +159,8 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 		func() { _ = os.RemoveAll(tempDir) }
 }
 
-func hbaRunTest(t *testing.T, insecure bool) {
-	httpScheme := "http://"
-	if !insecure {
-		httpScheme = "https://"
-	}
+func hbaRunTest(t *testing.T, disableSQLAuthn bool) {
+	const httpScheme = "https://"
 
 	datadriven.Walk(t, "testdata/auth", func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
@@ -198,9 +195,22 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		}
 		defer cleanup()
 
-		s, conn, _ := serverutils.StartServer(t,
-			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
+		tcfg := base.TestServerArgs{SocketFile: maybeSocketFile}
+		s, conn, _ := serverutils.StartServer(t, tcfg)
 		defer s.Stopper().Stop(context.Background())
+
+		ts := s.(*server.TestServer)
+		if disableSQLAuthn {
+			// TODO(knz): We probably don't need the disableSQLAuthn bool
+			// any more, which is only necessary for the 'insecure' test
+			// file.
+			// Instead, we can create a new test DSL statement to
+			// change the override flags, and then change the checks
+			// in the 'insecure' test input to assert the effects of
+			// each override separately.
+			ts.Cfg.SecurityOverrides.SetFlag(base.DisableSQLAuthn, true)
+			ts.Cfg.SecurityOverrides.SetFlag(base.DisableSQLRequireTLS, true)
+		}
 
 		// Enable conn/auth logging.
 		// We can't use the cluster settings to do this, because
@@ -235,9 +245,9 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					for _, a := range td.CmdArgs {
 						switch a.Key {
 						case "secure":
-							allowed = allowed || !insecure
+							allowed = allowed || !disableSQLAuthn
 						case "insecure":
-							allowed = allowed || insecure
+							allowed = allowed || disableSQLAuthn
 						default:
 							t.Fatalf("unknown configuration: %s", a.Key)
 						}

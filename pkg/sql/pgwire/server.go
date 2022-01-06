@@ -712,7 +712,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		authOptions{
 			connType:        connType,
 			connDetails:     connDetails,
-			insecure:        s.cfg.Insecure,
+			disableAuthn:    s.cfg.SecurityOverrides.IsSet(base.DisableSQLAuthn),
 			ie:              s.execCfg.InternalExecutor,
 			auth:            hbaConf,
 			identMap:        identMap,

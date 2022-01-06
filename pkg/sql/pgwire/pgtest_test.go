@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package pgwire
+package pgwire_test
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,12 +37,12 @@ func TestPGTest(t *testing.T) {
 	if *flagAddr == "" {
 		newServer := func() (addr, user string, cleanup func()) {
 			ctx := context.Background()
-			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				Insecure: true,
-			})
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			cleanup = func() {
 				s.Stopper().Stop(ctx)
 			}
+			ts := s.(*server.TestServer)
+			ts.Cfg.SecurityOverrides.SetFlag(base.DisableSQLRequireTLS|base.DisableSQLAuthn, true)
 			addr = s.ServingSQLAddr()
 			user = security.RootUser
 			// None of the tests read that much data, so we hardcode the max message

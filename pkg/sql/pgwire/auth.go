@@ -40,10 +40,10 @@ const (
 )
 
 type authOptions struct {
-	// insecure indicates that all connections for existing users must
-	// be allowed to go through. A password, if presented, must be
-	// accepted.
-	insecure bool
+	// disableAuthn indicates that all connections for existing users must
+	// be allowed to go through. No password is requested; the connection
+	// proceeds always as if the 'trust' auth method was used.
+	disableAuthn bool
 	// connType is the actual type of client connection (e.g. local,
 	// hostssl, hostnossl).
 	connType hba.ConnType
@@ -63,12 +63,6 @@ type authOptions struct {
 
 	// The following fields are only used by tests.
 
-	// testingSkipAuth requires to skip authentication, not even
-	// allowing a password exchange.
-	// Note that this different from insecure auth: with no auth, no
-	// password is accepted (a protocol error is given if one is
-	// presented); with insecure auth; _any_ is accepted.
-	testingSkipAuth bool
 	// testingAuthHook, if provided, replaces the logic in
 	// handleAuthentication().
 	testingAuthHook func(ctx context.Context) error
@@ -83,9 +77,6 @@ type authOptions struct {
 func (c *conn) handleAuthentication(
 	ctx context.Context, ac AuthConn, authOpt authOptions, execCfg *sql.ExecutorConfig,
 ) (connClose func(), _ error) {
-	if authOpt.testingSkipAuth {
-		return nil, nil
-	}
 	if authOpt.testingAuthHook != nil {
 		return nil, authOpt.testingAuthHook(ctx)
 	}
@@ -241,9 +232,10 @@ func (c *conn) chooseDbRole(
 func (c *conn) findAuthenticationMethod(
 	authOpt authOptions,
 ) (tlsState tls.ConnectionState, hbaEntry *hba.Entry, methodFn AuthMethod, err error) {
-	if authOpt.insecure {
-		// Insecure connections always use "trust" no matter what, and the
-		// remaining of the configuration is ignored.
+	if authOpt.disableAuthn {
+		// When the security overrides contain "disable-sql-authn", we
+		// always use "trust" no matter what, and the remaining of the
+		// configuration is ignored.
 		methodFn = authTrust
 		hbaEntry = &insecureEntry
 		return

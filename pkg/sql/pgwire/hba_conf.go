@@ -228,7 +228,7 @@ var insecureEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
 	User:     []hba.String{{Value: "all", Quoted: false}},
 	Address:  hba.AnyAddr{},
-	Method:   hba.String{Value: "--insecure"},
+	Method:   hba.String{Value: "--security-overrides=disable-sql-authn"},
 }
 
 var rootEntry = hba.Entry{
