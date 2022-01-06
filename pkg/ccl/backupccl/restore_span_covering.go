@@ -91,18 +91,23 @@ func makeSimpleImportSpans(
 							if cover[i].Span.Overlaps(sp) {
 								cover[i].Files = append(cover[i].Files, fileSpec)
 							}
-							// Later files start later, so this cover ends before this file,
-							// it ends before them too and they can start searching after it.
+							// If partition i of the cover ends before this file starts, we
+							// know it also ends before any remaining files start too, as the
+							// files are sorted above by start key, so remaining files can
+							// start their search after this partition.
 							if cover[i].Span.EndKey.Compare(sp.Key) <= 0 {
 								covPos = i + 1
 							}
 						}
+						// If this file extends beyond the end of the last partition of the
+						// cover, append a new partition for the uncovered span.
 						if covEnd := cover[len(cover)-1].Span.EndKey; sp.EndKey.Compare(covEnd) > 0 {
 							cover = append(cover, makeEntry(covEnd, sp.EndKey, fileSpec))
 						}
 					}
 				} else if span.EndKey.Compare(f.Span.Key) <= 0 {
-					// This file is already after the end, so rest are too.
+					// If this file starts after the needed span ends, then all the files
+					// remaining do too so we're done checking files for this span.
 					break
 				}
 			}
