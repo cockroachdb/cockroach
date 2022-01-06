@@ -658,7 +658,10 @@ func (rc *RangeCache) tryLookup(
 			// Clear the context's cancelation. This request services potentially many
 			// callers waiting for its result, and using the flight's leader's
 			// cancelation doesn't make sense.
-			ctx = logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+			// We only cancel if server is shutting down.
+			ctx, cancel := rc.stopper.WithCancelOnQuiesce(context.Background())
+			defer cancel()
+			ctx = logtags.WithTags(ctx, logtags.FromContext(ctx))
 			ctx = tracing.ContextWithSpan(ctx, reqSpan)
 
 			// Since we don't inherit any other cancelation, let's put in a generous
