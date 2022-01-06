@@ -235,7 +235,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 		n.specifiedIndex = foundIndex
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		foundIndex, _ := n.desc.FindIndexWithID(descpb.IndexID(indexFlags.IndexID))
+		foundIndex, _ := n.desc.FindIndexWithID(indexFlags.IndexID)
 		if foundIndex == nil || !foundIndex.Public() {
 			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
 		}
@@ -254,7 +254,7 @@ func initColsForScan(
 
 	cols = make([]catalog.Column, 0, len(desc.DeletableColumns()))
 	for _, wc := range colCfg.wantedColumns {
-		id := descpb.ColumnID(wc)
+		id := wc
 		col, err := desc.FindColumnWithID(id)
 		if err != nil {
 			return cols, err
@@ -280,7 +280,7 @@ func initColsForScan(
 		for _, c := range desc.PublicColumns() {
 			found := false
 			for _, wc := range colCfg.wantedColumns {
-				if descpb.ColumnID(wc) == c.GetID() {
+				if wc == c.GetID() {
 					found = true
 					break
 				}

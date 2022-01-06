@@ -71,7 +71,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		for _, c := range s.columns {
 			if !tableColSet.Contains(c) {
 				tableColSet.Add(c)
-				colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(c))
+				colCfg.wantedColumns = append(colCfg.wantedColumns, c)
 			}
 		}
 	}

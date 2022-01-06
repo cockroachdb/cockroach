@@ -692,7 +692,7 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	desc := table.(*optTable).desc
 	colCfg := scanColumnsConfig{wantedColumns: make([]tree.ColumnID, 0, wantedCols.Len())}
 	for c, ok := wantedCols.Next(0); ok; c, ok = wantedCols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.PublicColumns()[c].GetID()))
+		colCfg.wantedColumns = append(colCfg.wantedColumns, desc.PublicColumns()[c].GetID())
 	}
 	ctx := e.planner.extendedEvalCtx.Ctx()
 	if err := e.planner.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
