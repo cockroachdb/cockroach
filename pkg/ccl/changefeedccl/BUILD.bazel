@@ -111,7 +111,7 @@ go_library(
         "@com_github_google_btree//:btree",
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_shopify_sarama//:sarama",
-        "@com_github_xdg_scram//:scram",
+        "@com_github_xdg_go_scram//:scram",
         "@com_google_cloud_go_pubsub//:pubsub",
         "@org_golang_google_api//option",
         "@org_golang_google_grpc//codes",
