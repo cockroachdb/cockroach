@@ -82,7 +82,7 @@ func (s *httpServer) setupRoutes(
 
 	// Define the http.Handler for UI assets.
 	assetHandler := ui.Handler(ui.Config{
-		ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
+		ExperimentalUseLogin: s.cfg.RequireWebSession(),
 		LoginEnabled:         s.cfg.RequireWebSession(),
 		NodeID:               s.cfg.IDContainer,
 		OIDC:                 oidc,

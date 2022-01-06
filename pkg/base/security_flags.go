@@ -13,6 +13,7 @@ package base
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -167,7 +168,14 @@ func (o *SecurityOverrides) Validate() {
 	if o.IsSet(DisableSQLTLS) {
 		o.addInternal(DisableSQLRequireTLS)
 	}
+	if disableWebLogin {
+		o.addInternal(DisableHTTPAuthn)
+	}
 	if o.IsSet(DisableRPCTLS) || o.IsSet(DisableRPCAuthn) || o.IsSet(DisableHTTPTLS) || o.IsSet(DisableHTTPAuthn) {
 		o.addInternal(DisableRemoteCertsRetrieval)
 	}
 }
+
+// disableWebLogin is an env var override for DisableHTTPAuthn, provided
+// for backward compatibility with previous versions of CockroachDB.
+var disableWebLogin = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
