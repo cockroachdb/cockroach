@@ -109,6 +109,14 @@ func getFilterAndParams(
 		args = append(args, *end)
 	}
 
+	//buffer.WriteString(`GROUP BY
+	//	aggregated_ts,
+	//	fingerprint_id,
+	//	transaction_fingerprint_id,
+	//	app_name,
+	//	aggregation_interval,
+	//	statistics`)
+
 	// Retrieve the top rows ordered by aggregation time and service latency.
 	buffer.WriteString(fmt.Sprintf(`
 ORDER BY aggregated_ts DESC,(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float DESC
@@ -199,6 +207,7 @@ func collectCombinedStatements(
 			return nil, err
 		}
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
+		// TODO marylia
 
 		aggInterval := tree.MustBeDInterval(row[7]).Duration
 

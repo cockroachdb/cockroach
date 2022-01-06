@@ -26,6 +26,7 @@ func (m *StatementStatisticsKey) FingerprintID() StmtFingerprintID {
 		m.Failed,
 		m.ImplicitTxn,
 		m.Database,
+		m.PlanHash,
 	)
 }
 
@@ -34,7 +35,7 @@ func (m *StatementStatisticsKey) FingerprintID() StmtFingerprintID {
 // these are the axis' we use to bucket queries for stats collection
 // (see stmtKey).
 func ConstructStatementFingerprintID(
-	anonymizedStmt string, failed bool, implicitTxn bool, database string,
+	anonymizedStmt string, failed bool, implicitTxn bool, database string, planHash uint64,
 ) StmtFingerprintID {
 	fnv := util.MakeFNV64()
 	for _, c := range anonymizedStmt {
@@ -53,6 +54,7 @@ func ConstructStatementFingerprintID(
 	} else {
 		fnv.Add('E')
 	}
+	fnv.Add(planHash)
 	return StmtFingerprintID(fnv.Sum())
 }
 
@@ -161,13 +163,13 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
 	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
 	s.Nodes = util.CombineUniqueInt64(s.Nodes, other.Nodes)
+	s.PlanGists = util.CombineUniqueString(s.PlanGists, other.PlanGists)
 
 	s.ExecStats.Add(other.ExecStats)
 
 	if other.SensitiveInfo.LastErr != "" {
 		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
 	}
-
 	if s.SensitiveInfo.MostRecentPlanTimestamp.Before(other.SensitiveInfo.MostRecentPlanTimestamp) {
 		s.SensitiveInfo = other.SensitiveInfo
 	}
