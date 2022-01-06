@@ -38,9 +38,11 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	sp := tr.StartSpan("foo", WithRemoteParent(nilMeta))
 	require.False(t, sp.IsVerbose()) // parent was not verbose, so neither is sp
 	require.False(t, sp.IsNoop())
+	sp.Finish()
 	sp = tr.StartSpan("foo", WithParent(tr.noopSpan))
 	require.False(t, sp.IsVerbose()) // parent was not verbose
 	require.False(t, sp.IsNoop())
+	sp.Finish()
 }
 
 func TestTracingOffRecording(t *testing.T) {
@@ -62,10 +64,10 @@ func TestTracerRecording(t *testing.T) {
 
 	s1 := tr.StartSpan("a", WithRecording(RecordingStructured))
 	if s1.IsNoop() {
-		t.Error("WithForceRealSpan (but not recording) Span should not be noop")
+		t.Error("recording Span should not be noop")
 	}
 	if s1.IsVerbose() {
-		t.Error("WithForceRealSpan Span should not be verbose")
+		t.Error("WithRecording(RecordingStructured) should not be verbose")
 	}
 
 	// Initial recording of this fresh (real) span.
@@ -158,13 +160,13 @@ func TestTracerRecording(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
+	s1.Finish()
 
 	s4 := tr.StartSpan("a", WithRecording(RecordingStructured))
 	s4.SetVerbose(false)
 	s4.Recordf("x=%d", 100)
 	require.Nil(t, s4.GetRecording(RecordingStructured))
-
-	s1.Finish()
+	s4.Finish()
 }
 
 func TestStartChildSpan(t *testing.T) {
@@ -218,6 +220,7 @@ func TestSterileSpan(t *testing.T) {
 	// Make the span verbose so that we can use its recording below to assert that
 	// there were no children.
 	sp1 := tr.StartSpan("parent", WithSterile(), WithRecording(RecordingVerbose))
+	defer sp1.Finish()
 	sp2 := tr.StartSpan("child", WithParent(sp1))
 	require.Zero(t, sp2.i.crdb.parentSpanID)
 
@@ -373,7 +376,8 @@ func TestOtelTracer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tr.StartSpan("child", WithRemoteParent(wireSpanMeta))
+	sp2 := tr.StartSpan("child", WithRemoteParent(wireSpanMeta))
+	defer sp2.Finish()
 
 	rs := sr.Started()
 	require.Len(t, rs, 2)
@@ -385,13 +389,18 @@ func TestOtelTracer(t *testing.T) {
 
 func TestTracer_RegistryMaxSize(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
+	spans := make([]*Span, 0, maxSpanRegistrySize+10)
 	for i := 0; i < maxSpanRegistrySize+10; i++ {
-		_ = tr.StartSpan("foo") // intentionally not closed
+		sp := tr.StartSpan("foo")
+		spans = append(spans, sp)
 		exp := i + 1
 		if exp > maxSpanRegistrySize {
 			exp = maxSpanRegistrySize
 		}
 		require.Len(t, tr.activeSpansRegistry.mu.m, exp)
+	}
+	for _, sp := range spans {
+		sp.Finish()
 	}
 }
 
@@ -564,6 +573,7 @@ func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
 	noop := tr.StartSpan("noop")
 	require.True(t, noop.IsNoop())
 	root := tr.StartSpan("foo", WithParent(noop), WithForceRealSpan())
+	defer root.Finish()
 	require.Len(t, tr.activeSpansRegistry.mu.m, 1)
 	visitor := func(sp RegistrySpan) error {
 		require.Equal(t, root.i.crdb, sp)
@@ -575,6 +585,7 @@ func TestSpanWithNoopParentIsInActiveSpans(t *testing.T) {
 func TestConcurrentChildAndRecording(t *testing.T) {
 	tr := NewTracer()
 	rootSp := tr.StartSpan("root", WithRecording(RecordingVerbose))
+	defer rootSp.Finish()
 	var wg sync.WaitGroup
 	const n = 1000
 	wg.Add(2 * n)
@@ -629,11 +640,12 @@ span: a
         span: c
             tags: _verbose=1
 `))
+	s1.Finish()
 
 	// Now the same thing, but finish s2 first.
 	s1 = tr.StartSpan("a", WithRecording(RecordingVerbose))
 	s2 = tr.StartSpan("b", WithParent(s1))
-	tr.StartSpan("c", WithParent(s2))
+	s3 = tr.StartSpan("c", WithParent(s2))
 
 	s2.Finish()
 	require.NoError(t, CheckRecordedSpans(s1.FinishAndGetRecording(RecordingVerbose), `
@@ -644,6 +656,7 @@ span: a
         span: c
             tags: _unfinished=1 _verbose=1
 `))
+	s3.Finish()
 }
 
 // Test that, when a parent span finishes, children that are still open become
@@ -683,6 +696,7 @@ func TestChildNeedsSameTracerAsParent(t *testing.T) {
 	tr1 := NewTracer()
 	tr2 := NewTracer()
 	parent := tr1.StartSpan("parent")
+	defer parent.Finish()
 	require.Panics(t, func() {
 		tr2.StartSpan("child", WithParent(parent))
 	})
@@ -690,7 +704,9 @@ func TestChildNeedsSameTracerAsParent(t *testing.T) {
 	// Sterile spans can have children created with a different Tracer (because
 	// they are not really children).
 	parent = tr1.StartSpan("parent", WithSterile())
+	defer parent.Finish()
 	require.NotPanics(t, func() {
-		tr2.StartSpan("child", WithParent(parent))
+		sp := tr2.StartSpan("child", WithParent(parent))
+		sp.Finish()
 	})
 }
