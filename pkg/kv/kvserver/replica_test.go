@@ -866,21 +866,46 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	}
 
 	gArgs := getArgs(roachpb.Key("b"))
-	_, pErr := kv.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{
 		RangeID: 1,
-	}, &gArgs)
+	}
+	ba.AdmissionHeader = roachpb.AdmissionHeader{}
+	ba.Add(&gArgs)
 
-	if mismatchErr, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
-		t.Errorf("expected range key mismatch error: %s", pErr)
+	br, pErr := tc.store.Send(context.Background(), ba)
+
+	// Expect server side retry on RangeKeyMismatch, which gets swallowed
+	// at store_send.go:send
+	if pErr != nil {
+		t.Errorf("Unexpected range key mismatch error: %s", pErr)
 	} else {
-		require.Len(t, mismatchErr.Ranges, 2)
-		mismatchedDesc := mismatchErr.Ranges[0].Desc
-		suggestedDesc := mismatchErr.Ranges[1].Desc
-		if mismatchedDesc.RangeID != firstRepl.RangeID {
-			t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, mismatchedDesc)
+		rangeInfos := br.RangeInfos
+
+		// we expect 4 ranges, where [A1, A2, B2, B1]  is returned
+		// in this case, A1 = B1, A2 = B2 where A represents the RangeInfos
+		// aggregated by send(), before redirecting the query to the correct range.
+		// B represents the RangeInfos returned by the Replica, on the redirect.
+		// These ranges may in some cases have overlapping ranges, yet different generations.
+		// this is resolved by the caller's range_cache (currently dist_sender).
+		require.Len(t, rangeInfos, 4)
+
+		aggregateMismatchedDesc := rangeInfos[0].Desc
+		aggregateSuggestedDesc := rangeInfos[1].Desc
+
+		replicaSuggestedDesc := rangeInfos[2].Desc
+		replicaMismatchedDesc := rangeInfos[3].Desc
+		if aggregateMismatchedDesc.RangeID != firstRepl.RangeID {
+			t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, aggregateMismatchedDesc.RangeID)
 		}
-		if suggestedDesc.RangeID != newRepl.RangeID {
-			t.Errorf("expected suggested range to be %d, found %v", newRepl.RangeID, suggestedDesc)
+		if aggregateSuggestedDesc.RangeID != newRepl.RangeID {
+			t.Errorf("expected suggested range to be %d, found %v", newRepl.RangeID, aggregateSuggestedDesc.RangeID)
+		}
+		if replicaMismatchedDesc.RangeID != aggregateMismatchedDesc.RangeID {
+			t.Errorf("expected mismatched range to be %d, found %v", aggregateMismatchedDesc.RangeID, replicaMismatchedDesc.RangeID)
+		}
+		if replicaSuggestedDesc.RangeID != aggregateSuggestedDesc.RangeID {
+			t.Errorf("expected suggested range to be %d, found %v", aggregateSuggestedDesc.RangeID, replicaSuggestedDesc.RangeID)
 		}
 	}
 }

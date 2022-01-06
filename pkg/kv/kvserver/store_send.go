@@ -192,12 +192,13 @@ func (s *Store) Send(
 		return br, nil
 	}
 
+	// candidateRanges keeps track of suggested ranges to return to the caller
+	var candidateRanges []roachpb.RangeInfo
+
 	// Force a retry loop on range key errors, if we are able to redirect the request
 	// to the correct range on this store on a RangeKeyMismatchError
-
 	// Always run the loop once to error check, run a second time in the case that
 	// a retry is attempted
-	var rangeInfos []roachpb.RangeInfo
 	for retries, isRetriableRangeKeyMismatch := 0, true; retries < 2 && isRetriableRangeKeyMismatch; retries++ {
 
 		isRetriableRangeKeyMismatch = false
@@ -212,7 +213,7 @@ func (s *Store) Send(
 				// possibly overlapping RangeInfos with distinct Generations.
 				// when passed back to the sender, these conflicts are resolved
 				// within the range_cache of the DistSender.
-				br.RangeInfos = append(br.RangeInfos, rangeInfos...)
+				br.RangeInfos = append(candidateRanges, br.RangeInfos...)
 				return br, nil
 			}
 			pErr = retriedErr
@@ -281,8 +282,11 @@ func (s *Store) Send(
 					repl = s.GetReplicaIfExists(ri.Desc.RangeID)
 				}
 			}
+			// Update the candidate ranges, that will be combined with the replica batch response RangeInfos
+			// if returned from the replica.
+			candidateRanges = t.Ranges
+
 			// We have to write `t` back to `pErr` so that it picks up the changes.
-			rangeInfos = t.Ranges
 			pErr = roachpb.NewError(t)
 		case *roachpb.RaftGroupDeletedError:
 			// This error needs to be converted appropriately so that clients
