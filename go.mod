@@ -162,6 +162,18 @@ require (
 )
 
 require (
+	github.com/Masterminds/semver/v3 v3.1.1
+	github.com/andygrunwald/go-jira v1.14.0
+	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
+)
+
+require (
+	github.com/fatih/structs v1.1.0 // indirect
+	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
+	github.com/trivago/tgo v1.0.7 // indirect
+)
+
+require (
 	cloud.google.com/go v0.99.0 // indirect
 	cloud.google.com/go/kms v1.1.0 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.3 // indirect
