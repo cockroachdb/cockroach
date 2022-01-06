@@ -866,16 +866,28 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	}
 
 	gArgs := getArgs(roachpb.Key("b"))
-	_, pErr := kv.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{
 		RangeID: 1,
-	}, &gArgs)
+	}
+	ba.AdmissionHeader = roachpb.AdmissionHeader{}
+	ba.Add(&gArgs)
 
-	if mismatchErr, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
-		t.Errorf("expected range key mismatch error: %s", pErr)
+	br, pErr := tc.store.Send(context.Background(), ba)
+
+	// Expect server side retry on RangeKeyMismatch, which gets swallowed
+	// at store_send.go:send
+	if pErr != nil {
+		t.Errorf("Unexpected range key mismatch error: %s", pErr)
 	} else {
-		require.Len(t, mismatchErr.Ranges, 2)
-		mismatchedDesc := mismatchErr.Ranges[0].Desc
-		suggestedDesc := mismatchErr.Ranges[1].Desc
+		rangeInfos := br.RangeInfos
+
+		// Here we expect 2 ranges, where [A1, A2] is returned
+		// where A represents the RangeInfos aggregated by send(),
+		// before redirecting the query to the correct range.
+		require.Len(t, rangeInfos, 2)
+		mismatchedDesc := rangeInfos[0].Desc
+		suggestedDesc := rangeInfos[1].Desc
 		if mismatchedDesc.RangeID != firstRepl.RangeID {
 			t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, mismatchedDesc)
 		}
