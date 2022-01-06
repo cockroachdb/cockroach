@@ -1800,7 +1800,7 @@ func performCastWithoutPrecisionTruncation(
 		case *DDate:
 			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
 			if !v.IsFinite() {
-				return nil, errDecOutOfRange
+				return nil, ErrDecOutOfRange
 			}
 			dd.SetInt64(v.UnixEpochDays())
 		case *DFloat:
@@ -2276,7 +2276,7 @@ func performCastWithoutPrecisionTruncation(
 			}
 			dv, ok := duration.FromBigInt(&d.Coeff)
 			if !ok {
-				return nil, errDecOutOfRange
+				return nil, ErrDecOutOfRange
 			}
 			return NewDInterval(dv, itm), nil
 		case *DInterval:

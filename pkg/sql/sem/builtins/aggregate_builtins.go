@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
@@ -1131,7 +1132,7 @@ var _ tree.AggregateFunc = &regressionAvgYAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
-const sizeOfRegressionAccumulatorBase = int64(unsafe.Sizeof(regressionAccumulatorBase{}))
+const sizeOfRegressionAccumulatorDecimalBase = int64(unsafe.Sizeof(regressionAccumulatorDecimalBase{}))
 const sizeOfCountAggregate = int64(unsafe.Sizeof(countAggregate{}))
 const sizeOfRegressionCountAggregate = int64(unsafe.Sizeof(regressionCountAggregate{}))
 const sizeOfCountRowsAggregate = int64(unsafe.Sizeof(countRowsAggregate{}))
@@ -1853,7 +1854,7 @@ func (a *boolOrAggregate) Size() int64 {
 	return sizeOfBoolOrAggregate
 }
 
-// regressionAccumulatorBase is a base struct for the aggregate functions
+// regressionAccumulatorDecimalBase is a base struct for the aggregate functions
 // for statistics. It represents a transition datatype for these functions.
 // Ported from Postgresql (see https://github.com/postgres/postgres/blob/bc1fbc960bf5efbb692f4d1bf91bf9bc6390425a/src/backend/utils/adt/float.c#L3277).
 //
@@ -1867,18 +1868,31 @@ func (a *boolOrAggregate) Size() int64 {
 // modern machines, a couple of extra floating-point multiplies will be
 // insignificant compared to the other per-tuple overhead, so I've chosen
 // to minimize code space instead.
-type regressionAccumulatorBase struct {
-	n   float64
-	sx  float64
-	sxx float64
-	sy  float64
-	syy float64
-	sxy float64
+type regressionAccumulatorDecimalBase struct {
+	singleDatumAggregateBase
+
+	// Variables used across iterations.
+	ed                       *apd.ErrDecimal
+	n, sx, sxx, sy, syy, sxy apd.Decimal
+
+	// Variables used as scratch space within iterations.
+	tmpX, tmpY, tmpSx, tmpSxx, tmpSy, tmpSyy, tmpSxy apd.Decimal
+	scale, tmp, tmpN                                 apd.Decimal
+}
+
+func makeRegressionAccumulatorDecimalBase(
+	evalCtx *tree.EvalContext,
+) regressionAccumulatorDecimalBase {
+	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
+	return regressionAccumulatorDecimalBase{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		ed:                       &ed,
+	}
 }
 
 // Add implements tree.AggregateFunc interface.
-func (a *regressionAccumulatorBase) Add(
-	_ context.Context, datumY tree.Datum, otherArgs ...tree.Datum,
+func (a *regressionAccumulatorDecimalBase) Add(
+	ctx context.Context, datumY tree.Datum, otherArgs ...tree.Datum,
 ) error {
 	if datumY == tree.DNull {
 		return nil
@@ -1888,78 +1902,84 @@ func (a *regressionAccumulatorBase) Add(
 	if datumX == tree.DNull {
 		return nil
 	}
-
-	x, err := a.float64Val(datumX)
+	x, err := a.decimalVal(datumX)
 	if err != nil {
 		return err
 	}
 
-	y, err := a.float64Val(datumY)
+	y, err := a.decimalVal(datumY)
 	if err != nil {
 		return err
 	}
-
-	return a.add(y, x)
+	return a.add(ctx, y, x)
 }
 
 // Reset implements tree.AggregateFunc interface.
-func (a *regressionAccumulatorBase) Reset(context.Context) {
-	*a = regressionAccumulatorBase{}
+func (a *regressionAccumulatorDecimalBase) Reset(ctx context.Context) {
+	*a = regressionAccumulatorDecimalBase{
+		singleDatumAggregateBase: a.singleDatumAggregateBase,
+		ed:                       a.ed,
+	}
+	a.reset(ctx)
 }
 
 // Close implements tree.AggregateFunc interface.
-func (a *regressionAccumulatorBase) Close(context.Context) {}
-
-// Size implements tree.AggregateFunc interface.
-func (a *regressionAccumulatorBase) Size() int64 {
-	return sizeOfRegressionAccumulatorBase
+func (a *regressionAccumulatorDecimalBase) Close(ctx context.Context) {
+	a.close(ctx)
 }
 
-func (a *regressionAccumulatorBase) add(y float64, x float64) error {
-	n := a.n
-	sx := a.sx
-	sxx := a.sxx
-	sy := a.sy
-	syy := a.syy
-	sxy := a.sxy
+// Size implements tree.AggregateFunc interface.
+func (a *regressionAccumulatorDecimalBase) Size() int64 {
+	return sizeOfRegressionAccumulatorDecimalBase
+}
+
+func (a *regressionAccumulatorDecimalBase) add(
+	ctx context.Context, y *apd.Decimal, x *apd.Decimal,
+) error {
+	a.tmpN.Set(&a.n)
+	a.tmpSx.Set(&a.sx)
+	a.tmpSxx.Set(&a.sxx)
+	a.tmpSy.Set(&a.sy)
+	a.tmpSyy.Set(&a.syy)
+	a.tmpSxy.Set(&a.sxy)
 
 	// Use the Youngs-Cramer algorithm to incorporate the new values into the
 	// transition values.
-	n++
-	sx += x
-	sy += y
+	a.ed.Add(&a.tmpN, &a.tmpN, decimalOne)
+	a.ed.Add(&a.tmpSx, &a.tmpSx, x)
+	a.ed.Add(&a.tmpSy, &a.tmpSy, y)
 
-	if a.n > 0 {
-		tmpX := x*n - sx
-		tmpY := y*n - sy
-		scale := 1.0 / (n * a.n)
-		sxx += tmpX * tmpX * scale
-		syy += tmpY * tmpY * scale
-		sxy += tmpX * tmpY * scale
+	if a.n.Cmp(decimalZero) > 0 {
+		a.ed.Sub(&a.tmpX, a.ed.Mul(&a.tmp, x, &a.tmpN), &a.tmpSx)
+		a.ed.Sub(&a.tmpY, a.ed.Mul(&a.tmp, y, &a.tmpN), &a.tmpSy)
+		a.ed.Quo(&a.scale, decimalOne, a.ed.Mul(&a.tmp, &a.tmpN, &a.n))
+		a.ed.Add(&a.tmpSxx, &a.tmpSxx, a.ed.Mul(&a.tmp, &a.tmpX, a.ed.Mul(&a.tmp, &a.tmpX, &a.scale)))
+		a.ed.Add(&a.tmpSyy, &a.tmpSyy, a.ed.Mul(&a.tmp, &a.tmpY, a.ed.Mul(&a.tmp, &a.tmpY, &a.scale)))
+		a.ed.Add(&a.tmpSxy, &a.tmpSxy, a.ed.Mul(&a.tmp, &a.tmpX, a.ed.Mul(&a.tmp, &a.tmpY, &a.scale)))
 
-		// Overflow check.  We only report an overflow error when finite
-		// inputs lead to infinite results.  Note also that sxx, syy and Sxy
+		// Overflow check. We only report an overflow error when finite
+		// inputs lead to infinite results. Note also that sxx, syy and Sxy
 		// should be NaN if any of the relevant inputs are infinite, so we
 		// intentionally prevent them from becoming infinite.
-		if math.IsInf(sx, 0) || math.IsInf(sxx, 0) || math.IsInf(sy, 0) || math.IsInf(syy, 0) || math.IsInf(sxy, 0) {
-			if ((math.IsInf(sx, 0) || math.IsInf(sxx, 0)) &&
-				!math.IsInf(a.sx, 0) && !math.IsInf(x, 0)) ||
-				((math.IsInf(sy, 0) || math.IsInf(syy, 0)) &&
-					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) ||
-				(math.IsInf(sxy, 0) &&
-					!math.IsInf(a.sx, 0) && !math.IsInf(x, 0) &&
-					!math.IsInf(a.sy, 0) && !math.IsInf(y, 0)) {
+		if isInf(&a.tmpSx) || isInf(&a.tmpSxx) || isInf(&a.tmpSy) || isInf(&a.tmpSyy) || isInf(&a.tmpSxy) {
+			if ((isInf(&a.tmpSx) || isInf(&a.tmpSxx)) &&
+				!isInf(&a.sx) && !isInf(x)) ||
+				((isInf(&a.tmpSy) || isInf(&a.tmpSyy)) &&
+					!isInf(&a.sy) && !isInf(y)) ||
+				(isInf(&a.tmpSxy) &&
+					!isInf(&a.sx) && !isInf(x) &&
+					!isInf(&a.sy) && !isInf(y)) {
 				return tree.ErrFloatOutOfRange
 			}
 
-			if math.IsInf(sxx, 0) {
-				sxx = math.NaN()
+			if isInf(&a.tmpSxx) {
+				a.tmpSxx = *decimalNaN
 			}
-			if math.IsInf(syy, 0) {
-				syy = math.NaN()
+			if isInf(&a.tmpSyy) {
+				a.tmpSyy = *decimalNaN
 			}
-			if math.IsInf(sxy, 0) {
-				sxy = math.NaN()
+			if isInf(&a.tmpSxy) {
+				a.tmpSxy = *decimalNaN
 			}
 		}
 	} else {
@@ -1967,256 +1987,360 @@ func (a *regressionAccumulatorBase) add(y float64, x float64) error {
 		// if the first input is Inf or NaN, we'd better force the dependent
 		// sums to NaN; otherwise we will falsely report variance zero when
 		// there are no more inputs.
-		if math.IsNaN(x) || math.IsInf(x, 0) {
-			sxx = math.NaN()
-			sxy = math.NaN()
+		if isNaN(x) || isInf(x) {
+			a.tmpSxx = *decimalNaN
+			a.tmpSxy = *decimalNaN
 		}
-		if math.IsNaN(y) || math.IsInf(y, 0) {
-			syy = math.NaN()
-			sxy = math.NaN()
+		if isNaN(y) || isInf(y) {
+			a.tmpSyy = *decimalNaN
+			a.tmpSxy = *decimalNaN
 		}
 	}
 
-	a.n = n
-	a.sx = sx
-	a.sy = sy
-	a.sxx = sxx
-	a.syy = syy
-	a.sxy = sxy
+	a.n.Set(&a.tmpN)
+	a.sx.Set(&a.tmpSx)
+	a.sy.Set(&a.tmpSy)
+	a.sxx.Set(&a.tmpSxx)
+	a.syy.Set(&a.tmpSyy)
+	a.sxy.Set(&a.tmpSxy)
 
-	return nil
+	size := int64(tree.SizeOfDecimal(&a.n) +
+		tree.SizeOfDecimal(&a.sx) +
+		tree.SizeOfDecimal(&a.sxx) +
+		tree.SizeOfDecimal(&a.sy) +
+		tree.SizeOfDecimal(&a.syy) +
+		tree.SizeOfDecimal(&a.sxy) +
+		tree.SizeOfDecimal(&a.tmpX) +
+		tree.SizeOfDecimal(&a.tmpY) +
+		tree.SizeOfDecimal(&a.scale) +
+		tree.SizeOfDecimal(&a.tmpN) +
+		tree.SizeOfDecimal(&a.tmpSx) +
+		tree.SizeOfDecimal(&a.tmpSxx) +
+		tree.SizeOfDecimal(&a.tmpSy) +
+		tree.SizeOfDecimal(&a.tmpSyy) +
+		tree.SizeOfDecimal(&a.tmpSxy))
+	if err := a.updateMemoryUsage(ctx, size); err != nil {
+		return err
+	}
+
+	return a.ed.Err()
 }
 
-func (a *regressionAccumulatorBase) float64Val(datum tree.Datum) (float64, error) {
+func (a *regressionAccumulatorDecimalBase) decimalVal(datum tree.Datum) (*apd.Decimal, error) {
+	res := apd.Decimal{}
 	switch val := datum.(type) {
 	case *tree.DFloat:
-		return float64(*val), nil
+		return res.SetFloat64(float64(*val))
 	case *tree.DInt:
-		return float64(*val), nil
+		return res.SetInt64(int64(*val)), nil
 	case *tree.DDecimal:
-		return val.Decimal.Float64()
+		return res.Set(&val.Decimal), nil
 	default:
-		return 0, fmt.Errorf("invalid type %T (%v)", val, val)
+		return decimalNaN, fmt.Errorf("invalid type %T (%v)", val, val)
 	}
+}
+
+func mapToDFloat(d *apd.Decimal, err error) (tree.Datum, error) {
+	if err != nil {
+		return tree.DNull, err
+	}
+
+	res, err := d.Float64()
+
+	if err != nil && errors.Is(err, strconv.ErrRange) {
+		return nil, tree.ErrFloatOutOfRange
+	}
+
+	if math.IsInf(res, 0) {
+		return nil, tree.ErrFloatOutOfRange
+	}
+
+	return tree.NewDFloat(tree.DFloat(res)), err
+}
+
+func isInf(d *apd.Decimal) bool {
+	return d.Form == apd.Infinite
+}
+
+func isNaN(d *apd.Decimal) bool {
+	return d.Form == apd.NaN
 }
 
 // corrAggregate represents SQL:2003 correlation coefficient.
 type corrAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newCorrAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &corrAggregate{}
+func newCorrAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &corrAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *corrAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
 
-	if a.sxx == 0 || a.syy == 0 {
+	if a.sxx.Cmp(decimalZero) == 0 || a.syy.Cmp(decimalZero) == 0 {
 		return tree.DNull, nil
 	}
-	return tree.NewDFloat(tree.DFloat(a.sxy / math.Sqrt(a.sxx*a.syy))), nil
+
+	// a.sxy / math.Sqrt(a.sxx*a.syy)
+	a.ed.Quo(&a.tmp, &a.sxy, a.ed.Sqrt(&a.tmp, a.ed.Mul(&a.tmp, &a.sxx, &a.syy)))
+	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
 // covarPopAggregate represents population covariance.
 type covarPopAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newCovarPopAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &covarPopAggregate{}
+func newCovarPopAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &covarPopAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *covarPopAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
 
-	return tree.NewDFloat(tree.DFloat(a.sxy / a.n)), nil
+	// a.sxy / a.n
+	a.ed.Quo(&a.tmp, &a.sxy, &a.n)
+	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
 // covarSampAggregate represents sample covariance.
 type covarSampAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newCovarSampAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &covarSampAggregate{}
+func newCovarSampAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &covarSampAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *covarSampAggregate) Result() (tree.Datum, error) {
-	if a.n < 2 {
+	if a.n.Cmp(decimalTwo) < 0 {
 		return tree.DNull, nil
 	}
 
-	return tree.NewDFloat(tree.DFloat(a.sxy / (a.n - 1))), nil
+	// a.sxy / (a.n - 1)
+	a.ed.Quo(&a.tmp, &a.sxy, a.ed.Sub(&a.tmp, &a.n, decimalOne))
+	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
 // regressionAvgXAggregate represents SQL:2003 average of the independent
 // variable (sum(X)/N).
 type regressionAvgXAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newRegressionAvgXAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &regressionAvgXAggregate{}
+func newRegressionAvgXAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionAvgXAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionAvgXAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
 
-	return tree.NewDFloat(tree.DFloat(a.sx / a.n)), nil
+	// a.sx / a.n
+	a.ed.Quo(&a.tmp, &a.sx, &a.n)
+	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
 // regressionAvgYAggregate represents SQL:2003 average of the dependent
 // variable (sum(Y)/N).
 type regressionAvgYAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newRegressionAvgYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &regressionAvgYAggregate{}
+func newRegressionAvgYAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionAvgYAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionAvgYAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
 
-	return tree.NewDFloat(tree.DFloat(a.sy / a.n)), nil
+	// a.sy / a.n
+	a.ed.Quo(&a.tmp, &a.sy, &a.n)
+	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
 // regressionInterceptAggregate represents y-intercept.
 type regressionInterceptAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
 func newRegressionInterceptAggregate(
-	[]*types.T, *tree.EvalContext, tree.Datums,
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	return &regressionInterceptAggregate{}
+	return &regressionInterceptAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionInterceptAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-	if a.sxx == 0 {
+	if a.sxx.Cmp(decimalZero) == 0 {
 		return tree.DNull, nil
 	}
 
-	return tree.NewDFloat(tree.DFloat((a.sy - a.sx*a.sxy/a.sxx) / a.n)), nil
+	// (a.sy - a.sx*a.sxy/a.sxx) / a.n
+	a.ed.Quo(
+		&a.tmp,
+		a.ed.Sub(&a.tmp, &a.sy, a.ed.Mul(&a.tmp, &a.sx, a.ed.Quo(&a.tmp, &a.sxy, &a.sxx))),
+		&a.n,
+	)
+	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
 // regressionR2Aggregate represents square of the correlation coefficient.
 type regressionR2Aggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newRegressionR2Aggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &regressionR2Aggregate{}
+func newRegressionR2Aggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionR2Aggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionR2Aggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-	if a.sxx == 0 {
+	if a.sxx.Cmp(decimalZero) == 0 {
 		return tree.DNull, nil
 	}
-	if a.syy == 0 {
+	if a.syy.Cmp(decimalZero) == 0 {
 		return tree.NewDFloat(tree.DFloat(1.0)), nil
 	}
 
-	return tree.NewDFloat(tree.DFloat((a.sxy * a.sxy) / (a.sxx * a.syy))), nil
+	// (a.sxy * a.sxy) / (a.sxx * a.syy)
+	a.ed.Quo(
+		&a.tmp,
+		a.ed.Mul(&a.tmp, &a.sxy, &a.sxy),
+		a.ed.Mul(&a.tmpN, &a.sxx, &a.syy),
+	)
+	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
 // regressionSlopeAggregate represents slope of the least-squares-fit linear
 // equation determined by the (X, Y) pairs.
 type regressionSlopeAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSlopeAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &regressionSlopeAggregate{}
+func newRegressionSlopeAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionSlopeAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionSlopeAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-	if a.sxx == 0 {
+	if a.sxx.Cmp(decimalZero) == 0 {
 		return tree.DNull, nil
 	}
 
-	return tree.NewDFloat(tree.DFloat(a.sxy / a.sxx)), nil
+	// a.sxy / a.sxx
+	a.ed.Quo(&a.tmp, &a.sxy, &a.sxx)
+	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
 // regressionSXXAggregate represents sum of squares of the independent variable.
 type regressionSXXAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSXXAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &regressionSXXAggregate{}
+func newRegressionSXXAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionSXXAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionSXXAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-
-	return tree.NewDFloat(tree.DFloat(a.sxx)), nil
+	return mapToDFloat(&a.sxx, a.ed.Err())
 }
 
 // regressionSXYAggregate represents sum of products of independent
 // times dependent variable.
 type regressionSXYAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSXYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &regressionSXYAggregate{}
+func newRegressionSXYAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionSXYAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionSXYAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-
-	return tree.NewDFloat(tree.DFloat(a.sxy)), nil
+	return mapToDFloat(&a.sxy, a.ed.Err())
 }
 
 // regressionSYYAggregate represents sum of squares of the dependent variable.
 type regressionSYYAggregate struct {
-	regressionAccumulatorBase
+	regressionAccumulatorDecimalBase
 }
 
-func newRegressionSYYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
-	return &regressionSYYAggregate{}
+func newRegressionSYYAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &regressionSYYAggregate{
+		makeRegressionAccumulatorDecimalBase(ctx),
+	}
 }
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionSYYAggregate) Result() (tree.Datum, error) {
-	if a.n < 1 {
+	if a.n.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-
-	return tree.NewDFloat(tree.DFloat(a.syy)), nil
+	return mapToDFloat(&a.syy, a.ed.Err())
 }
 
 // regressionCountAggregate calculates number of input rows in which both
@@ -2752,8 +2876,11 @@ func (a *intervalSumAggregate) Size() int64 {
 
 // Read-only constants used for square difference computations.
 var (
-	decimalOne = apd.New(1, 0)
-	decimalTwo = apd.New(2, 0)
+	decimalZero = apd.New(0, 0)
+	decimalOne  = apd.New(1, 0)
+	decimalTwo  = apd.New(2, 0)
+
+	decimalNaN = &apd.Decimal{Form: apd.NaN}
 )
 
 type intSqrDiffAggregate struct {
