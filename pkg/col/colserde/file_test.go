@@ -22,22 +22,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFileRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	typs, b := randomBatch(testAllocator)
+	rng, _ := randutil.NewTestPseudoRand()
 
 	t.Run(`mem`, func(t *testing.T) {
-		// Make a copy of the original batch because the converter modifies and
+		// Make copies of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
 		original := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
+		bCopy := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 
 		var buf bytes.Buffer
 		s, err := colserde.NewFileSerializer(&buf, typs)
 		require.NoError(t, err)
 		require.NoError(t, s.AppendBatch(b))
+		// Append the same batch again.
+		require.NoError(t, s.AppendBatch(bCopy))
 		require.NoError(t, s.Finish())
 
 		// Parts of the deserialization modify things (null bitmaps) in place, so
@@ -50,9 +55,28 @@ func TestFileRoundtrip(t *testing.T) {
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
 				require.Equal(t, typs, d.Typs())
-				require.Equal(t, 1, d.NumBatches())
-				require.NoError(t, d.GetBatch(0, roundtrip))
+				require.Equal(t, 2, d.NumBatches())
 
+				// Check the first batch.
+				require.NoError(t, d.GetBatch(0, roundtrip))
+				coldata.AssertEquivalentBatches(t, original, roundtrip)
+
+				// Modify the returned batch (by appending some other random
+				// batch) to make sure that the second serialized batch is
+				// unchanged.
+				length := rng.Intn(original.Length()) + 1
+				r := coldatatestutils.RandomBatch(testAllocator, rng, typs, length, length, rng.Float64())
+				for vecIdx, vec := range roundtrip.ColVecs() {
+					vec.Append(coldata.SliceArgs{
+						Src:       r.ColVec(vecIdx),
+						DestIdx:   original.Length(),
+						SrcEndIdx: length,
+					})
+				}
+				roundtrip.SetLength(original.Length() + length)
+
+				// Now check the second batch.
+				require.NoError(t, d.GetBatch(1, roundtrip))
 				coldata.AssertEquivalentBatches(t, original, roundtrip)
 			}()
 		}
