@@ -36,12 +36,13 @@ func GetRandomizedCollectedStatementStatisticsForTest(
 }
 
 type randomData struct {
-	Bool     bool
-	String   string
-	Int64    int64
-	Float    float64
-	IntArray []int64
-	Time     time.Time
+	Bool        bool
+	String      string
+	Int64       int64
+	Float       float64
+	IntArray    []int64
+	StringArray []string
+	Time        time.Time
 }
 
 var alphabet = []rune("abcdefghijklmkopqrstuvwxyz")
@@ -57,11 +58,22 @@ func genRandomData() randomData {
 	}
 	r.String = b.String()
 
+	// Generate a randomized array of length 5.
+	arrLen := 5
+	r.StringArray = make([]string, arrLen)
+	for i := 0; i < arrLen; i++ {
+		// Randomly generating 10-character string.
+		b := strings.Builder{}
+		for i := 0; i < 10; i++ {
+			b.WriteRune(alphabet[rand.Intn(26)])
+		}
+		r.StringArray[i] = b.String()
+	}
+
 	r.Int64 = rand.Int63()
 	r.Float = rand.Float64()
 
 	// Generate a randomized array of length 5.
-	arrLen := 5
 	r.IntArray = make([]int64, arrLen)
 	for i := 0; i < arrLen; i++ {
 		r.IntArray[i] = rand.Int63()

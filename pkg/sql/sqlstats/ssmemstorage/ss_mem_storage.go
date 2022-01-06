@@ -49,6 +49,7 @@ type planKey struct {
 	failed         bool
 	implicitTxn    bool
 	database       string
+	planHash       uint64
 }
 
 func (p planKey) size() int64 {
@@ -255,6 +256,7 @@ func NewTempContainerFromExistingStmtStats(
 				failed:         statistics[i].Key.KeyData.Failed,
 				implicitTxn:    statistics[i].Key.KeyData.ImplicitTxn,
 				database:       statistics[i].Key.KeyData.Database,
+				planHash:       statistics[i].Key.KeyData.PlanHash,
 			},
 			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
 		}
@@ -472,6 +474,7 @@ func (s *Container) getStatsForStmt(
 	implicitTxn bool,
 	database string,
 	failed bool,
+	planHash uint64,
 	transactionFingerprintID roachpb.TransactionFingerprintID,
 	createIfNonexistent bool,
 ) (
@@ -489,6 +492,7 @@ func (s *Container) getStatsForStmt(
 			failed:         failed,
 			implicitTxn:    implicitTxn,
 			database:       database,
+			planHash:       planHash,
 		},
 		transactionFingerprintID: transactionFingerprintID,
 	}
@@ -662,6 +666,7 @@ func (s *Container) MergeApplicationStatementStats(
 					failed:         statistics.Key.Failed,
 					implicitTxn:    statistics.Key.ImplicitTxn,
 					database:       statistics.Key.Database,
+					planHash:       statistics.Key.PlanHash,
 				},
 				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
 			}
@@ -916,6 +921,6 @@ type transactionCounts struct {
 
 func constructStatementFingerprintIDFromStmtKey(key stmtKey) roachpb.StmtFingerprintID {
 	return roachpb.ConstructStatementFingerprintID(
-		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
+		key.anonymizedStmt, key.failed, key.implicitTxn, key.database, key.planHash,
 	)
 }

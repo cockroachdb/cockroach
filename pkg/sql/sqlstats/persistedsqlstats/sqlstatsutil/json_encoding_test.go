@@ -49,7 +49,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "failed":  {{.Bool}},
   "implicitTxn": {{.Bool}},
   "vec":         {{.Bool}},
-  "fullScan":    {{.Bool}}
+  "fullScan":    {{.Bool}},
+  "planGists":   {{.StringArray}}
 }
 `
 

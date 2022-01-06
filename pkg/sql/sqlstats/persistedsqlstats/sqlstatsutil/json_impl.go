@@ -99,6 +99,7 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 		{"implicitTxn", (*jsonBool)(&s.Key.ImplicitTxn)},
 		{"vec", (*jsonBool)(&s.Key.Vec)},
 		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
+		{"planGists", (*stringArray)(&s.Stats.PlanGists)},
 	}
 }
 
@@ -126,6 +127,39 @@ func (a *int64Array) encodeJSON() (json.JSON, error) {
 
 	for _, value := range *a {
 		jsVal, err := (*jsonInt)(&value).encodeJSON()
+		if err != nil {
+			return nil, err
+		}
+		builder.Add(jsVal)
+	}
+
+	return builder.Build(), nil
+}
+
+type stringArray []string
+
+func (a *stringArray) decodeJSON(js json.JSON) error {
+	arrLen := js.Len()
+	for i := 0; i < arrLen; i++ {
+		var value jsonString
+		valJSON, err := js.FetchValIdx(i)
+		if err != nil {
+			return err
+		}
+		if err := value.decodeJSON(valJSON); err != nil {
+			return err
+		}
+		*a = append(*a, string(value))
+	}
+
+	return nil
+}
+
+func (a *stringArray) encodeJSON() (json.JSON, error) {
+	builder := json.NewArrayBuilder(len(*a))
+
+	for _, value := range *a {
+		jsVal, err := (*jsonString)(&value).encodeJSON()
 		if err != nil {
 			return nil, err
 		}

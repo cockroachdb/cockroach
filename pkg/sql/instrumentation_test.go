@@ -47,6 +47,7 @@ func TestSampledStatsCollection(t *testing.T) {
 			stmt string,
 			implicitTxn bool,
 			database string,
+			planHash uint64,
 		) *roachpb.CollectedStatementStatistics {
 			t.Helper()
 			key := roachpb.StatementStatisticsKey{
@@ -54,6 +55,7 @@ func TestSampledStatsCollection(t *testing.T) {
 				ImplicitTxn: implicitTxn,
 				Database:    database,
 				Failed:      false,
+				PlanHash:    planHash,
 			}
 			var stats *roachpb.CollectedStatementStatistics
 			require.NoError(t, server.SQLServer().(*Server).sqlStats.
@@ -65,7 +67,8 @@ func TestSampledStatsCollection(t *testing.T) {
 						if statistics.Key.Query == key.Query &&
 							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
 							statistics.Key.Database == key.Database &&
-							statistics.Key.Failed == key.Failed {
+							statistics.Key.Failed == key.Failed &&
+							statistics.Key.PlanHash == key.PlanHash {
 							stats = statistics
 						}
 
@@ -127,7 +130,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		queryDB(t, db, selectOrderBy)
 
-		stats := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */, "defaultdb")
+		stats := getStmtStats(t, s, selectOrderBy, true /* implicitTxn */, "defaultdb", uint64(0))
 
 		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), stats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
@@ -152,8 +155,8 @@ func TestSampledStatsCollection(t *testing.T) {
 		toggleSampling(true)
 		doTxn(t)
 
-		aggStats := getStmtStats(t, s, aggregation, false /* implicitTxn */, "defaultdb")
-		selectStats := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */, "defaultdb")
+		aggStats := getStmtStats(t, s, aggregation, false /* implicitTxn */, "defaultdb", uint64(0))
+		selectStats := getStmtStats(t, s, selectOrderBy, false /* implicitTxn */, "defaultdb", uint64(0))
 
 		require.Equal(t, int64(2), aggStats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), aggStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
@@ -190,7 +193,7 @@ func TestSampledStatsCollection(t *testing.T) {
 
 		// Make sure DEALLOCATE statements are grouped together rather than having
 		// one key per prepared statement name.
-		stats := getStmtStats(t, s, "DEALLOCATE _", true /* implicitTxn */, "defaultdb")
+		stats := getStmtStats(t, s, "DEALLOCATE _", true /* implicitTxn */, "defaultdb", uint64(0))
 
 		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(0), stats.Stats.ExecStats.Count, "expected to have collected zero execution stats")
