@@ -79,17 +79,40 @@ func (r *Buffer) GetLast() interface{} {
 	return r.buffer[(cap(r.buffer)+r.tail-1)%cap(r.buffer)]
 }
 
-func (r *Buffer) grow(n int) {
-	newBuffer := make([]interface{}, n)
-	if r.head < r.tail {
-		copy(newBuffer[:r.Len()], r.buffer[r.head:r.tail])
-	} else {
-		copy(newBuffer[:cap(r.buffer)-r.head], r.buffer[r.head:])
-		copy(newBuffer[cap(r.buffer)-r.head:r.Len()], r.buffer[:r.tail])
+func (r *Buffer) resize(n int) {
+	if n < r.Len() {
+		panic("resizing to fewer elements than current length")
 	}
+
+	if n == 0 {
+		r.Discard()
+		return
+	}
+
+	newBuffer := make([]interface{}, n)
+	r.copyTo(newBuffer)
+	r.tail = r.Len() % cap(newBuffer)
 	r.head = 0
-	r.tail = cap(r.buffer)
 	r.buffer = newBuffer
+}
+
+// copyTo copies elements from r to dst. If len(dst) < r.Len(), only the first
+// len(dst) elements are copied.
+func (r *Buffer) copyTo(dst []interface{}) {
+	if !r.nonEmpty {
+		return
+	}
+	// Copy over the contents to dst.
+	if r.head < r.tail {
+		copy(dst, r.buffer[r.head:r.tail])
+	} else {
+		tailElements := r.buffer[r.head:]
+		copy(dst, tailElements)
+		// If there's space remaining, continue.
+		if len(dst) > len(tailElements) {
+			copy(dst[cap(r.buffer)-r.head:], r.buffer[:r.tail])
+		}
+	}
 }
 
 func (r *Buffer) maybeGrow() {
@@ -100,7 +123,7 @@ func (r *Buffer) maybeGrow() {
 	if n == 0 {
 		n = 1
 	}
-	r.grow(n)
+	r.resize(n)
 }
 
 // AddFirst add element to the front of the Buffer and doubles it's underlying
@@ -146,21 +169,63 @@ func (r *Buffer) RemoveLast() {
 	}
 }
 
-// Reserve reserves the provided number of elements in the Buffer. It is an
-// error to reserve a size less than the Buffer's current length.
+// Reserve reserves the provided number of elements in the Buffer. It is illegal
+// to reserve a size less than the r.Len().
+//
+// If the Buffer already has a capacity of n or larger, this is a no-op.
 func (r *Buffer) Reserve(n int) {
 	if n < r.Len() {
 		panic("reserving fewer elements than current length")
-	} else if n > cap(r.buffer) {
-		r.grow(n)
+	}
+	if n > cap(r.buffer) {
+		r.resize(n)
+	}
+}
+
+// Resize changes the Buffer's storage to be of the specified size. It is
+// illegal to resize to a size less than r.Len().
+//
+// This is a more general version of Reserve: Reserve only ever grows the
+// storage, whereas Resize() can also shrink it.
+//
+// Note that, if n != r.Len(), Resize always allocates new storage, even when n
+// is less than the current capacity. This can be useful to make the storage for
+// a buffer that used to be large available for GC, but it can also be wasteful.
+func (r *Buffer) Resize(n int) {
+	if n < r.Len() {
+		panic("resizing to fewer elements than current length")
+	}
+
+	if n != cap(r.buffer) {
+		r.resize(n)
 	}
 }
 
 // Reset makes Buffer treat its underlying memory as if it were empty. This
 // allows for reusing the same memory again without explicitly removing old
-// elements.
+// elements. Note that this does not nil out the elements, so they're not made
+// available to GC.
+//
+// See also Discard.
 func (r *Buffer) Reset() {
 	r.head = 0
 	r.tail = 0
 	r.nonEmpty = false
+}
+
+// Discard is like Reset, except it also does Resize(0) to nil out the
+// underlying slice. This makes the backing storage for the slice available to
+// GC if nobody else is referencing it. This is useful if r is still referenced,
+// but *r will be reassigned.
+//
+// See also Reset and Resize.
+func (r *Buffer) Discard() {
+	*r = Buffer{}
+}
+
+// all a slice with returns all the elements in the buffer.
+func (r *Buffer) all() []interface{} {
+	buf := make([]interface{}, r.Len())
+	r.copyTo(buf)
+	return buf
 }
