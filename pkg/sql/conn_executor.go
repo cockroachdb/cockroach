@@ -2160,7 +2160,13 @@ func isCopyToExternalStorage(cmd CopyIn) bool {
 // and writing up to the CommandComplete message.
 func (ex *connExecutor) execCopyIn(
 	ctx context.Context, cmd CopyIn,
-) (fsm.Event, fsm.EventPayload, error) {
+) (_ fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	ex.incrementStartedStmtCounter(cmd.Stmt)
+	defer func() {
+		if retErr == nil && !payloadHasError(retPayload) {
+			ex.incrementExecutedStmtCounter(cmd.Stmt)
+		}
+	}()
 
 	// When we're done, unblock the network connection.
 	defer cmd.CopyDone.Done()
@@ -2991,6 +2997,9 @@ type StatementCounters struct {
 	ReleaseRestartSavepointCount    telemetry.CounterWithMetric
 	RollbackToRestartSavepointCount telemetry.CounterWithMetric
 
+	// CopyCount counts all COPY statements.
+	CopyCount telemetry.CounterWithMetric
+
 	// DdlCount counts all statements whose StatementReturnType is DDL.
 	DdlCount telemetry.CounterWithMetric
 
@@ -3028,6 +3037,8 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaDeleteStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlStarted, internal)),
+		CopyCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaCopyStarted, internal)),
 		MiscCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaMiscStarted, internal)),
 		QueryCount: telemetry.NewCounterWithMetric(
@@ -3065,6 +3076,8 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaDeleteExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlExecuted, internal)),
+		CopyCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaCopyExecuted, internal)),
 		MiscCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaMiscExecuted, internal)),
 		QueryCount: telemetry.NewCounterWithMetric(
@@ -3113,6 +3126,8 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 		} else {
 			sc.RollbackToSavepointCount.Inc()
 		}
+	case *tree.CopyFrom:
+		sc.CopyCount.Inc()
 	default:
 		if tree.CanModifySchema(stmt) {
 			sc.DdlCount.Inc()
