@@ -1026,18 +1026,18 @@ func (s *Server) maybeUpgradeToSecureConn(
 	if version != versionSSL {
 		// The client did not require a SSL connection.
 
-		// Insecure mode: nothing to say, nothing to do.
-		// TODO(knz): Remove this condition - see
-		// https://github.com/cockroachdb/cockroach/issues/53404
-		if s.cfg.Insecure {
-			return
-		}
-
-		// Secure mode: disallow if TCP and the user did not opt into
-		// non-TLS SQL conns.
-		if !s.cfg.SecurityOverrides.IsSet(base.DisableSQLRequireTLS) && connType != hba.ConnLocal {
+		// By default we require TLS. This can be disabled via a security override.
+		// If TLS is required, and the client is using a TCP conn, then reject
+		// a non-TLS connection attempt.
+		requireTLS := !s.cfg.SecurityOverrides.IsSet(base.DisableSQLRequireTLS)
+		if requireTLS && connType != hba.ConnLocal {
 			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
 		}
+		return
+	}
+
+	if s.cfg.SecurityOverrides.IsSet(base.DisableSQLTLS) {
+		clientErr = pgerror.New(pgcode.ProtocolViolation, "SSL/TLS disabled on server by configuration")
 		return
 	}
 
