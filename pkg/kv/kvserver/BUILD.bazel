@@ -34,6 +34,7 @@ go_library(
         "replica_application_state_machine.go",
         "replica_backpressure.go",
         "replica_batch_updates.go",
+        "replica_circuit_breaker.go",
         "replica_closedts.go",
         "replica_command.go",
         "replica_consistency.go",
