@@ -24,7 +24,7 @@ func TestRingBuffer(t *testing.T) {
 	var buffer Buffer
 	naiveBuffer := make([]interface{}, 0, operationCount)
 	for i := 0; i < operationCount; i++ {
-		switch rand.Intn(4) {
+		switch rand.Intn(5) {
 		case 0:
 			buffer.AddFirst(i)
 			naiveBuffer = append([]interface{}{i}, naiveBuffer...)
@@ -43,19 +43,18 @@ func TestRingBuffer(t *testing.T) {
 				buffer.RemoveLast()
 				naiveBuffer = naiveBuffer[:len(naiveBuffer)-1]
 			}
+		case 4:
+			// If there's extra capacity, resize to trim it.
+			require.LessOrEqual(t, len(naiveBuffer), buffer.Cap())
+			spareCap := buffer.Cap() - len(naiveBuffer)
+			if spareCap > 0 {
+				buffer.Resize(len(naiveBuffer) + rand.Intn(spareCap))
+			}
 		default:
 			t.Fatal("unexpected")
 		}
 
-		require.Equal(t, len(naiveBuffer), buffer.Len())
-		for pos, el := range naiveBuffer {
-			res := buffer.Get(pos)
-			require.Equal(t, el, res)
-		}
-		if len(naiveBuffer) > 0 {
-			require.Equal(t, naiveBuffer[0], buffer.GetFirst())
-			require.Equal(t, naiveBuffer[len(naiveBuffer)-1], buffer.GetLast())
-		}
+		require.Equal(t, naiveBuffer, buffer.all())
 	}
 }
 
@@ -109,4 +108,8 @@ func TestRingBufferCapacity(t *testing.T) {
 	b.Reserve(0)
 	require.Equal(t, 0, b.Len())
 	require.Equal(t, 9, b.Cap())
+
+	b.Resize(3)
+	require.Equal(t, 0, b.Len())
+	require.Equal(t, 3, b.Cap())
 }
