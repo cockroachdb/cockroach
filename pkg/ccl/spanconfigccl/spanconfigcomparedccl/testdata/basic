@@ -20,6 +20,10 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters = 5;
 #   range's contents whenever anything in it changes.
 # - The span configs infrastructure doesn't, at least for now, for
 #   inter-operability with the gossip-backed system.
+# That said, the span configs infrastructure is used to drive whether
+# rangefeeds are enabled on the system database tables. It also controls
+# whether strict GC is enforced. For that reason we expect to find different
+# span configs from each ("range system" vs. "database system").
 
 configs version=legacy offset=4 limit=3
 ----
@@ -33,8 +37,8 @@ configs version=current offset=4 limit=3
 ----
 ...
 /System/"tse"                              range system
-/Table/SystemConfigSpan/Start              range system
-/Table/11                                  range system
+/Table/SystemConfigSpan/Start              database system (host)
+/Table/11                                  database system (host)
 ...
 
 # Both subsystems observe splits for the tables created above.
@@ -42,8 +46,8 @@ configs version=current offset=4 limit=3
 configs version=current offset=41
 ----
 ...
-/Table/46                                  range system
-/Table/47                                  range system
+/Table/46                                  database system (host)
+/Table/47                                  database system (host)
 /Table/56                                  num_replicas=7 num_voters=5
 /Table/57                                  num_replicas=7
 
@@ -55,10 +59,88 @@ configs version=legacy offset=41
 /Table/56                                  num_replicas=7 num_voters=5
 /Table/57                                  num_replicas=7
 
-# Both subsystems are identical with respect to exposed configs (including for
-# pseudo table IDs).
+# Both subsystems differ slightly with respect to exposed configs ("range
+# system" vs. "database system" as described earlier). This only applies to
+# tables in the system database, excluding pseudo table IDs.
 
 diff
 ----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+@@ -4,42 +4,42 @@
+ /System/tsd                                range default
+ /System/"tse"                              range system
+-/Table/SystemConfigSpan/Start              range system
+-/Table/11                                  range system
+-/Table/12                                  range system
+-/Table/13                                  range system
+-/Table/14                                  range system
+-/Table/15                                  range system
++/Table/SystemConfigSpan/Start              database system (host)
++/Table/11                                  database system (host)
++/Table/12                                  database system (host)
++/Table/13                                  database system (host)
++/Table/14                                  database system (host)
++/Table/15                                  database system (host)
+ /Table/16                                  range system
+ /Table/17                                  range system
+ /Table/18                                  range system
+-/Table/19                                  range system
+-/Table/20                                  range system
+-/Table/21                                  range system
++/Table/19                                  database system (host)
++/Table/20                                  database system (host)
++/Table/21                                  database system (host)
+ /Table/22                                  range system
+-/Table/23                                  range system
+-/Table/24                                  range system
+-/Table/25                                  ttl_seconds=600 num_replicas=5
+-/Table/26                                  range system
+-/Table/27                                  ttl_seconds=600 num_replicas=5
+-/Table/28                                  range system
++/Table/23                                  database system (host)
++/Table/24                                  database system (host)
++/Table/25                                  ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
++/Table/26                                  database system (host)
++/Table/27                                  ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
++/Table/28                                  database system (host)
+ /Table/29                                  range system
+-/NamespaceTable/30                         range system
+-/NamespaceTable/Max                        range system
+-/Table/32                                  range system
+-/Table/33                                  range system
+-/Table/34                                  range system
+-/Table/35                                  range system
+-/Table/36                                  range system
+-/Table/37                                  range system
++/NamespaceTable/30                         database system (host)
++/NamespaceTable/Max                        database system (host)
++/Table/32                                  database system (host)
++/Table/33                                  database system (host)
++/Table/34                                  database system (host)
++/Table/35                                  database system (host)
++/Table/36                                  database system (host)
++/Table/37                                  database system (host)
+ /Table/38                                  range system
+-/Table/39                                  range system
+-/Table/40                                  range system
+-/Table/41                                  range system
+-/Table/42                                  range system
+-/Table/43                                  range system
+-/Table/44                                  range system
+-/Table/45                                  ttl_seconds=7200 num_replicas=5
+-/Table/46                                  range system
+-/Table/47                                  range system
++/Table/39                                  database system (host)
++/Table/40                                  database system (host)
++/Table/41                                  database system (host)
++/Table/42                                  database system (host)
++/Table/43                                  database system (host)
++/Table/44                                  database system (host)
++/Table/45                                  ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
++/Table/46                                  database system (host)
++/Table/47                                  database system (host)
+ /Table/56                                  num_replicas=7 num_voters=5
+ /Table/57                                  num_replicas=7
 
 # vim:ft=diff

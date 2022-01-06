@@ -415,8 +415,14 @@ type Replica struct {
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.ClockTimestamp
+
 		// The span config for this replica.
 		conf roachpb.SpanConfig
+		// spanConfigExplicitlySet tracks whether a span config was explicitly set
+		// on this replica (as opposed to it having initialized with the default
+		// span config).
+		spanConfigExplicitlySet bool
+
 		// proposalBuf buffers Raft commands as they are passed to the Raft
 		// replication subsystem. The buffer is populated by requests after
 		// evaluation and is consumed by the Raft processing thread. Once
@@ -593,11 +599,6 @@ type Replica struct {
 		// size drops below its current conf.MaxRangeBytes or if the
 		// conf.MaxRangeBytes increases to surpass the current value.
 		largestPreviousMaxRangeSizeBytes int64
-		// spanConfigExplicitlySet tracks whether a span config was explicitly set
-		// on this replica (as opposed to it having initialized with the default
-		// span config). It's used to reason about
-		// largestPreviousMaxRangeSizeBytes.
-		spanConfigExplicitlySet bool
 
 		// failureToGossipSystemConfig is set to true when the leaseholder of the
 		// range containing the system config span fails to gossip due to an
@@ -959,13 +960,14 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 // should be used to determine the validity of commands. The returned timestamp
 // may be newer than the replica's true GC threshold if strict enforcement
 // is enabled and the TTL has passed. If this is an admin command or this range
-// contains data outside of the user keyspace, we return the true GC threshold.
+// opts out of strict GC enforcement (typically data outside the user keyspace),
+// we return the true GC threshold.
 func (r *Replica) getImpliedGCThresholdRLocked(
 	st kvserverpb.LeaseStatus, isAdmin bool,
 ) hlc.Timestamp {
 	// The GC threshold is the oldest value we can return here.
 	if isAdmin || !StrictGCEnforcement.Get(&r.store.ClusterSettings().SV) ||
-		r.isSystemRangeRLocked() {
+		r.shouldIgnoreStrictGCEnforcementRLocked() {
 		return *r.mu.state.GCThreshold
 	}
 
@@ -993,17 +995,22 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	return threshold
 }
 
-// isSystemRange returns true if r's key range precedes the start of user
-// structured data (SQL keys) for the range's tenant keyspace.
-func (r *Replica) isSystemRange() bool {
+func (r *Replica) isRangefeedEnabled() (ret bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.isSystemRangeRLocked()
+
+	if !r.mu.spanConfigExplicitlySet {
+		return true
+	}
+	return r.mu.conf.RangefeedEnabled
 }
 
-func (r *Replica) isSystemRangeRLocked() bool {
-	rem, _, err := keys.DecodeTenantPrefix(r.mu.state.Desc.StartKey.AsRawKey())
-	return err == nil && roachpb.Key(rem).Compare(r.store.systemRangeStartUpperBound) < 0
+func (r *Replica) shouldIgnoreStrictGCEnforcementRLocked() (ret bool) {
+	if !r.mu.spanConfigExplicitlySet {
+		return true
+	}
+
+	return r.mu.conf.GCPolicy.IgnoreStrictEnforcement
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including

@@ -649,6 +649,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
 			storeCfg.SpanConfigSubscriber = spanConfigKnobs.StoreKVSubscriberOverride
 		} else {
+			// We use the span configs infra to control whether rangefeeds are
+			// enabled on a given range. At the moment this only applies to
+			// system tables (on both host and secondary tenants). We need to
+			// consider two things:
+			// - The sql-side reconciliation process runs asynchronously. When
+			//   the config for a given range is requested, we might not yet have
+			//   it, thus falling back to the static config below.
+			// - Various internal subsystems rely on rangefeeds to function.
+			//
+			// Consequently, we configure our static fallback config to actually
+			// allow rangefeeds. As the sql-side reconciliation process kicks
+			// off, it'll install the actual configs that we'll later consult.
+			// For system table ranges we install configs that allow for
+			// rangefeed. Until then, we simply allow rangefeeds when a more
+			// targeted config is not found.
+			fallbackConf := storeCfg.DefaultSpanConfig
+			fallbackConf.RangefeedEnabled = true
+
 			spanConfig.subscriber = spanconfigkvsubscriber.New(
 				stopper,
 				db,
@@ -656,7 +674,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				rangeFeedFactory,
 				keys.SpanConfigurationsTableID,
 				1<<20, /* 1 MB */
-				storeCfg.DefaultSpanConfig,
+				fallbackConf,
 				spanConfigKnobs,
 			)
 			storeCfg.SpanConfigSubscriber = spanConfig.subscriber

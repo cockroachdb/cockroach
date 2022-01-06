@@ -197,14 +197,22 @@ func PrintSpanConfigEntry(entry roachpb.SpanConfigEntry) string {
 }
 
 // PrintSpanConfigDiffedAgainstDefaults is a helper function that diffs the given
-// config against RANGE {DEFAULT, SYSTEM} and returns a string for the
-// mismatched fields. If there are none, "range {default,system}" is returned.
+// config against RANGE {DEFAULT, SYSTEM} and the config for the system database
+// (as expected on both kinds of tenants), and returns a string for the
+// mismatched fields. If it matches one of the standard templates, "range
+// {default,system}" or "database system ({host,tenant})" is returned.
 func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 	if conf.Equal(roachpb.TestingDefaultSpanConfig()) {
 		return "range default"
 	}
 	if conf.Equal(roachpb.TestingSystemSpanConfig()) {
 		return "range system"
+	}
+	if conf.Equal(roachpb.TestingDatabaseSystemSpanConfig(true /* host */)) {
+		return "database system (host)"
+	}
+	if conf.Equal(roachpb.TestingDatabaseSystemSpanConfig(false /* host */)) {
+		return "database system (tenant)"
 	}
 
 	defaultConf := roachpb.TestingDefaultSpanConfig()
@@ -218,6 +226,9 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 	if conf.GCPolicy.TTLSeconds != defaultConf.GCPolicy.TTLSeconds {
 		diffs = append(diffs, fmt.Sprintf("ttl_seconds=%d", conf.GCPolicy.TTLSeconds))
 	}
+	if conf.GCPolicy.IgnoreStrictEnforcement != defaultConf.GCPolicy.IgnoreStrictEnforcement {
+		diffs = append(diffs, fmt.Sprintf("ignore_strict_gc=%t", conf.GCPolicy.IgnoreStrictEnforcement))
+	}
 	if conf.GlobalReads != defaultConf.GlobalReads {
 		diffs = append(diffs, fmt.Sprintf("global_reads=%v", conf.GlobalReads))
 	}
@@ -226,6 +237,9 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 	}
 	if conf.NumVoters != defaultConf.NumVoters {
 		diffs = append(diffs, fmt.Sprintf("num_voters=%d", conf.NumVoters))
+	}
+	if conf.RangefeedEnabled != defaultConf.RangefeedEnabled {
+		diffs = append(diffs, fmt.Sprintf("rangefeed_enabled=%t", conf.RangefeedEnabled))
 	}
 	if !reflect.DeepEqual(conf.Constraints, defaultConf.Constraints) {
 		diffs = append(diffs, fmt.Sprintf("constraints=%v", conf.Constraints))
