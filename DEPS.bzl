@@ -4359,6 +4359,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_jordan_wright_email",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/jordan-wright/email",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:jdpOPRN1zP63Td1hDQbZW73xKmzDvZHzVdNYxhnTMDA=",
+        version = "v4.0.1-0.20210109023952-943e75fe5223+incompatible",
+    )
+    go_repository(
         name = "com_github_jordanlewis_gcassert",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jordanlewis/gcassert",

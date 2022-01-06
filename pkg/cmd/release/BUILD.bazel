@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "release_lib",
+    srcs = [
+        "git.go",
+        "jira.go",
+        "mail.go",
+        "main.go",
+        "metadata.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_jordan_wright_email//:email",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_google_cloud_go_storage//:storage",
+    ],
+)
+
+go_binary(
+    name = "release",
+    embed = [":release_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -161,6 +161,8 @@ require (
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
+require github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
+
 require (
 	cloud.google.com/go v0.99.0 // indirect
 	cloud.google.com/go/kms v1.1.0 // indirect
