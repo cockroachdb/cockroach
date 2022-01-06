@@ -12,13 +12,12 @@ package tree
 
 import (
 	"math"
-	"math/big"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -2314,14 +2313,14 @@ func performCastWithoutPrecisionTruncation(
 			val.SetInt64(v.Unix())
 			val.Mul(val, big10E6)
 			micros := v.Nanosecond() / int(time.Microsecond)
-			val.Add(val, big.NewInt(int64(micros)))
+			val.Add(val, apd.NewBigInt(int64(micros)))
 			dd.Exponent = -6
 		case *DTimestampTZ:
 			val := &dd.Coeff
 			val.SetInt64(v.Unix())
 			val.Mul(val, big10E6)
 			micros := v.Nanosecond() / int(time.Microsecond)
-			val.Add(val, big.NewInt(int64(micros)))
+			val.Add(val, apd.NewBigInt(int64(micros)))
 			dd.Exponent = -6
 		case *DInterval:
 			v.AsBigInt(&dd.Coeff)

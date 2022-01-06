@@ -15,7 +15,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -684,7 +684,7 @@ func (a *minDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *minDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -868,7 +868,7 @@ func (a *minDecimalOrderedAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -4001,7 +4001,7 @@ func (a *maxDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *maxDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -4185,7 +4185,7 @@ func (a *maxDecimalOrderedAgg) Compute(
 		}
 	},
 	)
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}

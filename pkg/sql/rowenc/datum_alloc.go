@@ -173,7 +173,7 @@ func (a *DatumAlloc) NewDDecimal(v tree.DDecimal) *tree.DDecimal {
 		*buf = make([]tree.DDecimal, a.AllocSize)
 	}
 	r := &(*buf)[0]
-	*r = v
+	r.Set(&v.Decimal)
 	*buf = (*buf)[1:]
 	return r
 }
