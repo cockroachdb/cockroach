@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -74,6 +75,11 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 		tc.RequireIsBreakerOpen(t, tc.Read(n1))
 		tc.RequireIsBreakerOpen(t, tc.Write(n1))
 
+		// When we go through the KV client stack, we still get the breaker error
+		// back.
+		tc.RequireIsBreakerOpen(t, tc.WriteDS(n1))
+		tc.RequireIsBreakerOpen(t, tc.WriteDS(n2))
+
 		// n2 does not have the lease so all it does is redirect to the leaseholder
 		// n1.
 		tc.RequireIsNotLeaseholderError(t, tc.Read(n2))
@@ -105,6 +111,11 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 		// We didn't trip the leaseholder n1, so it is unaffected.
 		require.NoError(t, tc.Read(n1))
 		require.NoError(t, tc.Write(n1))
+		// Even if we go through DistSender, we reliably reach the leaseholder.
+		// TODO(tbg): I think this relies on the leaseholder being cached. If
+		// DistSender tried to contact the follower and got the breaker error, at
+		// time of writing it would propagate it.
+		require.NoError(t, tc.WriteDS(n1))
 
 		tc.RequireIsBreakerOpen(t, tc.Read(n2))
 		tc.RequireIsBreakerOpen(t, tc.Write(n2))
@@ -418,7 +429,7 @@ func (cbt *circuitBreakerTest) PauseHeartbeatsAndExpireAllLeases(t *testing.T) (
 	}
 }
 
-func (*circuitBreakerTest) sendBatchRequest(repl *kvserver.Replica, req roachpb.Request) error {
+func (*circuitBreakerTest) sendViaRepl(repl *kvserver.Replica, req roachpb.Request) error {
 	var ba roachpb.BatchRequest
 	ba.RangeID = repl.Desc().RangeID
 	ba.Timestamp = repl.Clock().Now()
@@ -426,6 +437,21 @@ func (*circuitBreakerTest) sendBatchRequest(repl *kvserver.Replica, req roachpb.
 	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration)
 	defer cancel()
 	_, pErr := repl.Send(ctx, ba)
+	// If our context got canceled, return an opaque error regardless of presence or
+	// absence of actual error. This makes sure we don't accidentally pass tests as
+	// a result of our context cancellation.
+	if err := ctx.Err(); err != nil {
+		pErr = roachpb.NewErrorf("timed out waiting for batch response: %v", pErr)
+	}
+	return pErr.GoError()
+}
+
+func (*circuitBreakerTest) sendViaDistSender(ds *kvcoord.DistSender, req roachpb.Request) error {
+	var ba roachpb.BatchRequest
+	ba.Add(req)
+	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration)
+	defer cancel()
+	_, pErr := ds.Send(ctx, ba)
 	// If our context got canceled, return an opaque error regardless of presence or
 	// absence of actual error. This makes sure we don't accidentally pass tests as
 	// a result of our context cancellation.
@@ -449,6 +475,11 @@ func (cbt *circuitBreakerTest) Write(idx int) error {
 	return cbt.writeViaRepl(cbt.repls[idx].Replica)
 }
 
+func (cbt *circuitBreakerTest) WriteDS(idx int) error {
+	put := roachpb.NewPut(cbt.repls[idx].Desc().StartKey.AsRawKey(), roachpb.MakeValueFromString("hello"))
+	return cbt.sendViaDistSender(cbt.Servers[idx].DistSender(), put)
+}
+
 // SetSlowThreshold sets the SlowReplicationThreshold for requests sent through the
 // test harness (i.e. via Write) to the provided duration. The zero value restores
 // the default.
@@ -462,10 +493,10 @@ func (cbt *circuitBreakerTest) Read(idx int) error {
 
 func (cbt *circuitBreakerTest) writeViaRepl(repl *kvserver.Replica) error {
 	put := roachpb.NewPut(repl.Desc().StartKey.AsRawKey(), roachpb.MakeValueFromString("hello"))
-	return cbt.sendBatchRequest(repl, put)
+	return cbt.sendViaRepl(repl, put)
 }
 
 func (cbt *circuitBreakerTest) readViaRepl(repl *kvserver.Replica) error {
 	get := roachpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
-	return cbt.sendBatchRequest(repl, get)
+	return cbt.sendViaRepl(repl, get)
 }

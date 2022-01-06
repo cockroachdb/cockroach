@@ -177,6 +177,7 @@ message RangeInfo {
   // Closed timestamp info communicated through the side-transport. See also
   // state.raft_closed_timestamp.
   RangeSideTransportInfo closed_timestamp_sidetransport_info = 19 [(gogoproto.customname) = "ClosedTimestampSideTransportInfo", (gogoproto.nullable) = false ];
+  string circuit_breaker_error = 20;
 }
 
 // RangeSideTransportInfo describes a range's closed timestamp info communicated
