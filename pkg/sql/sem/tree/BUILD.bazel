@@ -138,6 +138,7 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlliveness",

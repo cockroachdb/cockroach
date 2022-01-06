@@ -69,6 +69,7 @@ go_test(
         "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",

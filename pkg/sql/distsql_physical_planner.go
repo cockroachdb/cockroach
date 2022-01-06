@@ -1151,7 +1151,7 @@ func getInvertedColumn(
 	}
 
 	for i := range cols {
-		if tree.ColumnID(cols[i].GetID()) == invertedColumn.colID {
+		if cols[i].GetID() == invertedColumn.colID {
 			return cols[i]
 		}
 	}
