@@ -83,7 +83,6 @@ func TestPGWireDrainClient(t *testing.T) {
 	// server fails to agree to set up TLS when receiving a new
 	// connection, no matter whether TLS is enabled.
 	ts := s.(*server.TestServer)
-	ts.Cfg.Insecure = true
 	ts.Cfg.SecurityOverrides.SetFlag(base.DisableSQLTLS|base.DisableSQLAuthn, true)
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
