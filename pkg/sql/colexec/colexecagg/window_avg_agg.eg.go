@@ -12,7 +12,7 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -88,7 +88,7 @@ func (a *avgInt16WindowAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	// Unnecessary memory accounting can have significant overhead for window
@@ -138,7 +138,7 @@ func (a *avgInt16WindowAgg) Compute(
 			}
 		}
 	}
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -192,7 +192,7 @@ func (a *avgInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	_, _ = col.Get(endIdx-1), col.Get(startIdx)
@@ -239,7 +239,7 @@ func (a *avgInt16WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 			}
 		}
 	}
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -265,7 +265,7 @@ func (a *avgInt32WindowAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	// Unnecessary memory accounting can have significant overhead for window
@@ -315,7 +315,7 @@ func (a *avgInt32WindowAgg) Compute(
 			}
 		}
 	}
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -369,7 +369,7 @@ func (a *avgInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	_, _ = col.Get(endIdx-1), col.Get(startIdx)
@@ -416,7 +416,7 @@ func (a *avgInt32WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 			}
 		}
 	}
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -442,7 +442,7 @@ func (a *avgInt64WindowAgg) Compute(
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	// Unnecessary memory accounting can have significant overhead for window
@@ -492,7 +492,7 @@ func (a *avgInt64WindowAgg) Compute(
 			}
 		}
 	}
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -546,7 +546,7 @@ func (a *avgInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper".
 	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	_, _ = col.Get(endIdx-1), col.Get(startIdx)
@@ -593,7 +593,7 @@ func (a *avgInt64WindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, start
 			}
 		}
 	}
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -615,7 +615,7 @@ var _ AggregateFunc = &avgDecimalWindowAgg{}
 func (a *avgDecimalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	// Unnecessary memory accounting can have significant overhead for window
@@ -663,7 +663,7 @@ func (a *avgDecimalWindowAgg) Compute(
 			}
 		}
 	}
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -714,7 +714,7 @@ func (a *avgDecimalWindowAggAlloc) newAggFunc() AggregateFunc {
 // Remove implements the slidingWindowAggregateFunc interface (see
 // window_aggregator_tmpl.go).
 func (a *avgDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	_, _ = col.Get(endIdx-1), col.Get(startIdx)
@@ -759,7 +759,7 @@ func (a *avgDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, sta
 			}
 		}
 	}
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}

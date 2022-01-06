@@ -14,7 +14,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
@@ -118,7 +118,10 @@ var (
 						if t.NaN {
 							v = &apd.Decimal{Form: apd.NaN}
 						} else {
-							v = apd.NewWithBigInt(t.Int, t.Exp)
+							dec := &apd.Decimal{}
+							dec.Coeff.SetMathBigInt(t.Int)
+							dec.Exponent = t.Exp
+							v = dec
 						}
 					}
 				case int64:

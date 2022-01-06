@@ -34,7 +34,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"

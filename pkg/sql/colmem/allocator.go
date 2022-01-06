@@ -384,7 +384,7 @@ func sizeOfDecimals(decimals coldata.Decimals, startIdx int) int64 {
 	// Account for the allocated memory beyond the length of the slice.
 	size := int64(cap(decimals)-len(decimals)) * memsize.Decimal
 	for i := startIdx; i < decimals.Len(); i++ {
-		size += int64(tree.SizeOfDecimal(&decimals[i]))
+		size += int64(decimals[i].Size())
 	}
 	return size
 }
@@ -659,7 +659,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 		var newVarLengthDatumSize int64
 		for _, decimalVec := range h.decimalVecs {
 			d := decimalVec.Get(rowIdx)
-			newVarLengthDatumSize += int64(tree.SizeOfDecimal(&d))
+			newVarLengthDatumSize += int64(d.Size())
 		}
 		for _, datumVec := range h.datumVecs {
 			datumSize := datumVec.Get(rowIdx).(tree.Datum).Size()

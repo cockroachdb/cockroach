@@ -10,7 +10,6 @@
 package colconv
 
 import (
-	"math/big"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -450,10 +449,6 @@ func ColVecToDatumAndDeselect(
 						_ = true
 						v := typedCol.Get(srcIdx)
 						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-						// Clear the Coeff so that the Set below allocates a new slice for the
-						// Coeff.abs field.
-						_converted.Coeff = big.Int{}
-						_converted.Coeff.Set(&v.Coeff)
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -834,10 +829,6 @@ func ColVecToDatumAndDeselect(
 						_ = true
 						v := typedCol.Get(srcIdx)
 						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-						// Clear the Coeff so that the Set below allocates a new slice for the
-						// Coeff.abs field.
-						_converted.Coeff = big.Int{}
-						_converted.Coeff.Set(&v.Coeff)
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -1225,10 +1216,6 @@ func ColVecToDatum(
 							_ = true
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							_converted.Coeff = big.Int{}
-							_converted.Coeff.Set(&v.Coeff)
 							converted[destIdx] = _converted
 						}
 					}
@@ -1643,10 +1630,6 @@ func ColVecToDatum(
 							//gcassert:bce
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							_converted.Coeff = big.Int{}
-							_converted.Coeff.Set(&v.Coeff)
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}
@@ -2029,10 +2012,6 @@ func ColVecToDatum(
 							_ = true
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							_converted.Coeff = big.Int{}
-							_converted.Coeff.Set(&v.Coeff)
 							converted[destIdx] = _converted
 						}
 					}
@@ -2375,10 +2354,6 @@ func ColVecToDatum(
 							//gcassert:bce
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							_converted.Coeff = big.Int{}
-							_converted.Coeff.Set(&v.Coeff)
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}
