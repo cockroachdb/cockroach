@@ -20,8 +20,12 @@ export type UIConfigState = {
     statementDetails: {
       showStatementDiagnosticsLink: boolean;
     };
+    sessions: {
+      showTerminateActions: boolean;
+    };
     sessionDetails: {
       showGatewayNodeLink: boolean;
+      showTerminateActions: boolean;
     };
   };
 };
@@ -32,8 +36,12 @@ const initialState: UIConfigState = {
     statementDetails: {
       showStatementDiagnosticsLink: true,
     },
+    sessions: {
+      showTerminateActions: false,
+    },
     sessionDetails: {
       showGatewayNodeLink: false,
+      showTerminateActions: false,
     },
   },
 };
