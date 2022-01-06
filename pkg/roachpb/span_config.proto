@@ -17,7 +17,6 @@ import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 
 // GCPolicy dictates the garbage collection policy to apply over a given span.
-// It parallels the definition found in zonepb/zone.proto.
 message GCPolicy {
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
@@ -33,6 +32,11 @@ message GCPolicy {
   // GC TTL. The data it applies over is guaranteed to not be GC-ed provided it
   // wasn't GC-ed before the config applied.
   repeated ProtectionPolicy protection_policies = 2 [(gogoproto.nullable) = false];
+
+  // IgnoreStrictEnforcement is used to selectively opt out of strict GC TTL
+  // enforcement (where requests served at timestamps below the TTL are made to
+  // fail, even if the data exists).
+  bool ignore_strict_enforcement = 3;
 }
 
 // ProtectionPolicy dictates a protection policy against garbage collection that
@@ -156,6 +160,10 @@ message SpanConfig {
   // preferred option to least. The first preference that an existing replica of
   // a range matches will take priority for the lease.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+
+  // RangefeedEnabled determines whether rangefeeds are enabled over the
+  // specific range.
+  bool rangefeed_enabled = 10;
 }
 
 // SpanConfigEntry ties a span to its corresponding config.

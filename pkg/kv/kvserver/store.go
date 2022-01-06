@@ -726,11 +726,6 @@ type Store struct {
 	protectedtsCache   protectedts.Cache
 	ctSender           *sidetransport.Sender
 
-	// systemRangeStartUpperBound is a precomputed value used by a replica to
-	// determine if its key range overlaps the system range.
-	// TODO(postamar): stop special-casing the system range
-	systemRangeStartUpperBound roachpb.Key
-
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
 	// descriptor will be re-gossiped earlier than the normal periodic
@@ -1133,13 +1128,12 @@ func NewStore(
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:                        cfg,
-		db:                         cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:                     eng,
-		nodeDesc:                   nodeDesc,
-		metrics:                    newStoreMetrics(cfg.HistogramWindowInterval),
-		ctSender:                   cfg.ClosedTimestampSender,
-		systemRangeStartUpperBound: keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1),
+		cfg:      cfg,
+		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:   eng,
+		nodeDesc: nodeDesc,
+		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
+		ctSender: cfg.ClosedTimestampSender,
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(
@@ -2326,7 +2320,13 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			}
 			conf = s.cfg.DefaultSpanConfig
 		}
-		repl.SetSpanConfig(conf)
+
+		if s.cfg.SpanConfigsDisabled ||
+			!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
+			!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) {
+			repl.SetSpanConfig(conf)
+		}
+
 		if shouldQueue {
 			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)

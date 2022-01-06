@@ -123,7 +123,7 @@ state limit=5
 state offset=46
 ----
 ...
-/Table/4{7-8}                              range system
+/Table/4{7-8}                              database system (host)
 /Table/5{6-7}                              ttl_seconds=50
 
 # Make sure future descendants observe the same.
@@ -138,7 +138,7 @@ upsert /Table/5{7-8}                       ttl_seconds=50
 state offset=46
 ----
 ...
-/Table/4{7-8}                              range system
+/Table/4{7-8}                              database system (host)
 /Table/5{6-7}                              ttl_seconds=50
 /Table/5{7-8}                              ttl_seconds=50
 
