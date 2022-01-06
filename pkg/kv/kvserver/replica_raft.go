@@ -323,10 +323,11 @@ func (r *Replica) propose(
 		// the replica remains in the descriptor, but as VOTER_{OUTGOING,DEMOTING}.
 		// We want to block it from getting into that state in the first place,
 		// since there's no stopping the actual removal/demotion once it's there.
-		// The Removed() field has contains these replicas when this first
-		// transition is initiated, so its use here is copacetic.
+		// IsVoterNewConfig checks that the leaseholder is a voter in the
+		// proposed configuration.
 		replID := r.ReplicaID()
-		for _, rDesc := range crt.Removed() {
+		rDesc, ok := p.command.ReplicatedEvalResult.State.Desc.GetReplicaDescriptorByID(replID)
+		for !ok || !rDesc.IsVoterNewConfig() {
 			if rDesc.ReplicaID == replID {
 				err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt),
 					errMarkInvalidReplicationChange)
