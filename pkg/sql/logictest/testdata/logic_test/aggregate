@@ -1450,8 +1450,10 @@ statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0, 1.797693134862315708145274237317043567981e+308, 0)
 
-query error float out of range
+query FF
 SELECT corr(y, x), corr(int_y, int_x) FROM statistics_agg_test
+----
+-0.443213217542505  0.917580124387801
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1652,8 +1654,10 @@ statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
-query error float out of range
+query FF
 SELECT regr_intercept(y, x), regr_intercept(int_y, int_x) FROM statistics_agg_test
+----
+2.79449911391682e+307  1.07386861313869
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1747,8 +1751,10 @@ statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
-query error float out of range
+query FF
 SELECT regr_r2(y, x), regr_r2(int_y, int_x) FROM statistics_agg_test
+----
+0.070994090464941  0.841953284671533
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1842,8 +1848,10 @@ statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
-query error float out of range
+query FF
 SELECT regr_slope(y, x), regr_slope(int_y, int_x) FROM statistics_agg_test
+----
+-1.19338306247506e+305  0.0313576642335766
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1935,7 +1943,7 @@ SELECT regr_sxx(y::string, x::string) FROM statistics_agg_test
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
-  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+  (0, 1.797693134862315708145274237317043567981e+308, 0, 0)
 
 query error float out of range
 SELECT regr_sxx(y, x), regr_sxx(int_y, int_x) FROM statistics_agg_test
@@ -2295,7 +2303,10 @@ SELECT regr_avgx(y::string, x::string) FROM statistics_agg_test
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
-  (1.797693134862315708145274237317043567981e+308, 0, 0, 0, 1.797693134862315708145274237317043567981e+308, 0)
+  (0, 1.797693134862315708145274237317043567981e+408, 0, 0, 0, 1.797693134862315708145274237317043567981e+408)
+
+query error float out of range
+SELECT regr_avgx(y, x), regr_avgx(int_y, int_x) FROM statistics_agg_test
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -2392,7 +2403,7 @@ SELECT regr_avgy(y::string, x::string) FROM statistics_agg_test
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
-  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+  (1.797693134862315708145274237317043567981e+408, 0, 0, 0)
 
 query error float out of range
 SELECT regr_avgy(y, x), regr_avgy(int_y, int_x) FROM statistics_agg_test
