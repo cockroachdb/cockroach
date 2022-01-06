@@ -66,7 +66,6 @@ export interface OwnProps {
   cancelQuery: (payload: ICancelQueryRequest) => void;
   uiConfig?: UIConfigState["pages"]["sessionDetails"];
   isTenant?: UIConfigState["isTenant"];
-  isCloud?: boolean;
   onBackButtonClick?: () => void;
   onTerminateSessionClick?: () => void;
   onTerminateStatementClick?: () => void;
@@ -96,7 +95,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
   static defaultProps = {
-    uiConfig: { showGatewayNodeLink: true },
+    uiConfig: { showGatewayNodeLink: true, showTerminateActions: true },
     isTenant: false,
   };
 
@@ -136,12 +135,13 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       sessionError,
       cancelSession,
       cancelQuery,
-      isCloud,
+      uiConfig,
       onTerminateSessionClick,
       onTerminateStatementClick,
     } = this.props;
     const session = this.props.session?.session;
-    const showActionButtons = !!session && !sessionError && !isCloud;
+    const showActionButtons =
+      !!session && !sessionError && uiConfig?.showTerminateActions;
     return (
       <div className={cx("sessions-details")}>
         <Helmet title={`Details | ${sessionID} | Sessions`} />
