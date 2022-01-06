@@ -1057,10 +1057,10 @@ func (d *DDecimal) CompareError(ctx *EvalContext, other Datum) (int, error) {
 		// NULL is less than any non-NULL value.
 		return 1, nil
 	}
-	v := ctx.getTmpDec()
+	var v apd.Decimal
 	switch t := UnwrapDatum(ctx, other).(type) {
 	case *DDecimal:
-		v = &t.Decimal
+		v.Set(&t.Decimal)
 	case *DInt:
 		v.SetInt64(int64(*t))
 	case *DFloat:
@@ -1070,7 +1070,7 @@ func (d *DDecimal) CompareError(ctx *EvalContext, other Datum) (int, error) {
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
-	res := CompareDecimals(&d.Decimal, v)
+	res := CompareDecimals(&d.Decimal, &v)
 	return res, nil
 }
 
