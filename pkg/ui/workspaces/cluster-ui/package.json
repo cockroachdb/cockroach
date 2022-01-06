@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/cluster-ui",
-  "version": "21.2.1",
+  "version": "21.2.2",
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
@@ -48,9 +48,9 @@
     "@storybook/addon-links": "^6.1.21",
     "@storybook/addons": "^6.1.21",
     "@storybook/react": "^6.1.21",
+    "@testing-library/dom": "^8.11.1",
     "@testing-library/react": "^12.1.0",
     "@testing-library/user-event": "^13.5.0",
-    "@testing-library/dom": "^8.11.1",
     "@types/chai": "^4.2.11",
     "@types/classnames": "^2.2.9",
     "@types/d3": "<4.0.0",
