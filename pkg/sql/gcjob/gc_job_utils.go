@@ -96,7 +96,7 @@ func initializeProgress(
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	var update bool
-	if details.Tenant != nil {
+	if details.Tenant != nil && progress.Tenant == nil {
 		progress.Tenant = &jobspb.SchemaChangeGCProgress_TenantProgress{
 			Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC,
 		}

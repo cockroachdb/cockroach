@@ -1906,6 +1906,10 @@ const MaxSQLBytes = 1000
 
 type jobsCollection []jobspb.JobID
 
+func (jc *jobsCollection) add(ids ...jobspb.JobID) {
+	*jc = append(*jc, ids...)
+}
+
 // truncateStatementStringForTelemetry truncates the string
 // representation of a statement to a maximum length, so as to not
 // create unduly large logging and error payloads.
