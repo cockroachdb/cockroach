@@ -12,11 +12,11 @@ package scplan
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/deprules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scopt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage"
 	"github.com/cockroachdb/errors"

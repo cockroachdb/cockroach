@@ -14,8 +14,8 @@ package deprules
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scgraph"
 )
 
 // Apply will add the dependency edges to the graph which ought to exist

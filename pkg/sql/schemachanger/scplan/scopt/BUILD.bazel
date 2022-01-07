@@ -10,8 +10,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/schemachanger/rel",
-        "//pkg/sql/schemachanger/scgraph",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan/scgraph",
         "//pkg/sql/schemachanger/screl",
     ],
 )

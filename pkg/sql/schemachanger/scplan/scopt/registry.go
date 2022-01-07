@@ -12,8 +12,8 @@ package scopt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scgraph"
 )
 
 type deleteNodeOpt struct {

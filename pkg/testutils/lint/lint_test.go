@@ -1049,7 +1049,7 @@ func TestLint(t *testing.T) {
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
 			":!sql/types/types_jsonpb.go",
-			":!sql/schemachanger/scgraphviz/graphviz.go",
+			":!sql/schemachanger/scplan/scgraphviz/graphviz.go",
 		)
 		if err != nil {
 			t.Fatal(err)
