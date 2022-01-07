@@ -87,7 +87,7 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(jobID jobspb.JobID, targetState scpb.TargetState, nodeStatuses []scpb.Status) error
+	AddNewSchemaChangerJob(jobID jobspb.JobID, targetState scpb.TargetState, current []scpb.Status) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.

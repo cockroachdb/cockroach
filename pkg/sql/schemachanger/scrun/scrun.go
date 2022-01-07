@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -85,18 +84,11 @@ func RunSchemaChangesInJob(
 	settings *cluster.Settings,
 	deps JobRunDependencies,
 	jobID jobspb.JobID,
-	jobDescriptorIDs []descpb.ID,
 	jobDetails jobspb.NewSchemaChangeDetails,
 	jobProgress jobspb.NewSchemaChangeProgress,
 	rollback bool,
 ) error {
-	state := makeState(ctx,
-		settings,
-		jobDetails.Targets,
-		jobProgress.States,
-		jobProgress.Statements,
-		jobProgress.Authorization,
-		rollback)
+	state := makeState(ctx, settings, jobDetails.TargetState, jobProgress.States, rollback)
 	sc, err := scplan.MakePlan(state, scplan.Params{
 		ExecutionPhase:             scop.PostCommitPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
@@ -140,26 +132,20 @@ func executeStage(
 func makeState(
 	ctx context.Context,
 	sv *cluster.Settings,
-	protos []*scpb.Target,
+	targetState scpb.TargetState,
 	states []scpb.Status,
-	statements []*scpb.Statement,
-	authorization *scpb.Authorization,
 	rollback bool,
 ) scpb.State {
-	if len(protos) != len(states) {
+	if len(targetState.Targets) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
-			len(protos), len(states))
+			len(targetState.Targets), len(states))
 	}
-	ts := scpb.State{
-		TargetState: scpb.TargetState{
-			Targets:       make([]scpb.Target, len(protos)),
-			Statements:    make([]scpb.Statement, len(statements)),
-			Authorization: *authorization,
-		},
-		Nodes: make([]*scpb.Node, len(states)),
+	s := scpb.State{
+		TargetState: *protoutil.Clone(&targetState).(*scpb.TargetState),
+		Nodes:       make([]*scpb.Node, len(states)),
 	}
-	for i, proto := range protos {
-		t := protoutil.Clone(proto).(*scpb.Target)
+	for i, status := range states {
+		t := &s.Targets[i]
 		if rollback {
 			switch t.TargetStatus {
 			case scpb.Status_PUBLIC:
@@ -168,16 +154,10 @@ func makeState(
 				t.TargetStatus = scpb.Status_PUBLIC
 			}
 		}
-		ts.Targets[i] = *t
-	}
-	for j, stmt := range statements {
-		ts.Statements[j] = *protoutil.Clone(stmt).(*scpb.Statement)
-	}
-	for i, status := range states {
-		ts.Nodes[i] = &scpb.Node{
-			Target: &ts.Targets[i],
+		s.Nodes[i] = &scpb.Node{
+			Target: t,
 			Status: status,
 		}
 	}
-	return ts
+	return s
 }
