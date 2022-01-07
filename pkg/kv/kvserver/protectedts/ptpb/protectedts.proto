@@ -88,28 +88,6 @@ message Metadata {
 
 // Record corresponds to a protected timestamp.
 message Record {
-  message SchemaObjectsTarget {
-    // IDs are the descriptor IDs of the schema objects being protected by this
-    // Record. This field will only contain database and table IDs.
-    repeated uint32 ids = 1 [(gogoproto.customname) = "IDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  }
-
-  message TenantsTarget {
-    // IDs correspond to the tenant keyspacs being protected by this Record.
-    repeated roachpb.TenantID ids = 1 [(gogoproto.customname) = "IDs"];
-  }
-
-  message ClusterTarget {
-    // ClusterTarget indicates that all SQL state in the cluster is being
-    // protected by this Record. This includes all user defined schema objects,
-    // as well as system tables used to configure the cluster. In a system
-    // tenant this target will also protect all secondary tenant keyspaces that
-    // exist in it.
-    //
-    // Today, this target is only used by cluster backups.
-  }
-
   // ID uniquely identifies this row.
   bytes id = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.Bytes", (gogoproto.customname) = "ID"];
 
@@ -146,11 +124,7 @@ message Record {
   // Target holds information about what this Record protects. The Record can
   // either protect the entire cluster, a subset of tenants, or individual
   // schema objects (database and table).
-  oneof target {
-    SchemaObjectsTarget schema_objects = 8;
-    TenantsTarget tenants = 9;
-    ClusterTarget cluster = 10;
-  }
+  Target target = 8;
 
   // next ID: 11
 }
@@ -159,4 +133,37 @@ message Record {
 message State {
   Metadata metadata = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated Record records = 2 [(gogoproto.nullable) = false];
+}
+
+// Target is the format of the message encoded in the target column of the
+// system.protectedts_records table.
+message Target {
+  message SchemaObjectsTarget {
+    // IDs are the descriptor IDs of the schema objects being protected by this
+    // Record. This field will only contain database and table IDs.
+    repeated uint32 ids = 1 [(gogoproto.customname) = "IDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  }
+
+  message TenantsTarget {
+    // IDs correspond to the tenant keyspaces being protected by this Record.
+    repeated roachpb.TenantID ids = 1 [(gogoproto.customname) = "IDs",
+      (gogoproto.nullable) = false];
+  }
+
+  message ClusterTarget {
+    // ClusterTarget indicates that all SQL state in the cluster is being
+    // protected by this Record. This includes all user defined schema objects,
+    // as well as system tables used to configure the cluster. In a system
+    // tenant this target will also protect all secondary tenant keyspaces that
+    // exist in it.
+    //
+    // Today, this target is only used by cluster backups.
+  }
+
+  oneof union {
+    SchemaObjectsTarget schema_objects = 1;
+    TenantsTarget tenants = 2;
+    ClusterTarget cluster = 3;
+  }
 }

@@ -33,7 +33,12 @@ go_proto_library(
 
 go_library(
     name = "ptpb",
+    srcs = ["protectedts.go"],
     embed = [":ptpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/descpb",
+    ],
 )
