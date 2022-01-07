@@ -32,6 +32,7 @@ build_tag=$(git describe --abbrev=0 --tags --match=v[0-9]*)
 export build_tag
 
 # Build the roachtest binary.
+make generate
 make bin/roachtest
 
 # Pull in the latest version of Pebble from upstream. The benchmarks run
