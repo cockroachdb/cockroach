@@ -1218,11 +1218,9 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sha256 = "01bbbd8a079753674a8a5698054506ea2db167e94be52a094c2ee0779a88d9c6",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220104184117-a71dc5a033cf",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220104184117-a71dc5a033cf.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:LnM9wPinzvGmAXZ/O8eOGXBaMESPVtMrOnmUcJpBgxI=",
+        version = "v0.0.0-20220107174839-c75a2e96a7e8",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
