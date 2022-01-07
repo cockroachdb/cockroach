@@ -332,6 +332,13 @@ message WriteIntentError {
 message WriteTooOldError {
   optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
+  // One of the keys at which this error was encountered. There's
+  // no need to return new WriteTooOldErrors for each colliding key; the key
+  // is just present for investigation / logging purposes, and is not expected
+  // to be used in any transaction logic. As a result, it's not even necessary
+  // for this key to be at actual_timestamp; it could be at any timestamp in
+  // between timestamp and actual_timestamp.
+  optional bytes key = 3 [(gogoproto.casttype) = "Key"];
 }
 
 // An OpRequiresTxnError indicates that a command required to be
