@@ -171,7 +171,7 @@ func MakeSpanFromEncDatums(
 	types []*types.T,
 	dirs []descpb.IndexDescriptor_Direction,
 	index catalog.Index,
-	alloc *DatumAlloc,
+	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
 	startKey, _, containsNull, err := MakeKeyFromEncDatums(values, types, dirs, index, alloc, keyPrefix)
@@ -361,7 +361,7 @@ func MakeKeyFromEncDatums(
 	types []*types.T,
 	dirs []descpb.IndexDescriptor_Direction,
 	index catalog.Index,
-	alloc *DatumAlloc,
+	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Key, complete bool, containsNull bool, _ error) {
 	// Values may be a prefix of the index columns.
@@ -408,7 +408,7 @@ func appendEncDatumsToKey(
 	types []*types.T,
 	values EncDatumRow,
 	dirs []descpb.IndexDescriptor_Direction,
-	alloc *DatumAlloc,
+	alloc *tree.DatumAlloc,
 ) (_ roachpb.Key, containsNull bool, _ error) {
 	for i, val := range values {
 		encoding := descpb.DatumEncoding_ASCENDING_KEY

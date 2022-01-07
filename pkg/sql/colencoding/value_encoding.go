@@ -27,7 +27,7 @@ import (
 // coldata.TypedVecs.
 // See the analog in rowenc/column_type_encoding.go.
 func DecodeTableValueToCol(
-	da *rowenc.DatumAlloc,
+	da *tree.DatumAlloc,
 	vecs *coldata.TypedVecs,
 	vecIdx int,
 	rowIdx int,

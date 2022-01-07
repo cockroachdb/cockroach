@@ -28,7 +28,7 @@ import (
 // spanConfigDecoder decodes rows from system.span_configurations. It's not
 // safe for concurrent use.
 type spanConfigDecoder struct {
-	alloc     rowenc.DatumAlloc
+	alloc     tree.DatumAlloc
 	colIdxMap catalog.TableColMap
 }
 

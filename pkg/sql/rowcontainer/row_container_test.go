@@ -58,7 +58,7 @@ func verifyRows(
 			return err
 		}
 		if cmp, err := compareRows(
-			types.OneIntCol, row, expectedRows[0], evalCtx, &rowenc.DatumAlloc{}, ordering,
+			types.OneIntCol, row, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
 		} else if cmp != 0 {
@@ -433,7 +433,7 @@ func verifyOrdering(
 	types []*types.T,
 	ordering colinfo.ColumnOrdering,
 ) error {
-	var datumAlloc rowenc.DatumAlloc
+	var datumAlloc tree.DatumAlloc
 	var rowAlloc rowenc.EncDatumRowAlloc
 	var prevRow rowenc.EncDatumRow
 	i := src.NewIterator(ctx)

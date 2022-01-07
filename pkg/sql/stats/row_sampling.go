@@ -48,7 +48,7 @@ type SampledRow struct {
 type SampleReservoir struct {
 	samples  []SampledRow
 	colTypes []*types.T
-	da       rowenc.DatumAlloc
+	da       tree.DatumAlloc
 	ra       rowenc.EncDatumRowAlloc
 	memAcc   *mon.BoundAccount
 

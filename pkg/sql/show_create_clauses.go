@@ -427,7 +427,7 @@ func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
 // ShowCreatePartitioning returns a PARTITION BY clause for the specified
 // index, if applicable.
 func ShowCreatePartitioning(
-	a *rowenc.DatumAlloc,
+	a *tree.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,

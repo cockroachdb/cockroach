@@ -102,7 +102,7 @@ func (t *PartitionTuple) String() string {
 // DEFAULT) is valid but (1, DEFAULT, 2) is not. Similarly for range
 // partitioning and MINVALUE/MAXVALUE.
 func DecodePartitionTuple(
-	a *DatumAlloc,
+	a *tree.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	index catalog.Index,

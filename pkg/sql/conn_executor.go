@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -804,7 +803,7 @@ func (s *Server) newConnExecutor(
 			execTestingKnobs: s.GetExecutorConfig().TestingKnobs,
 		},
 		memMetrics: memMetrics,
-		planner:    planner{execCfg: s.cfg, alloc: &rowenc.DatumAlloc{}},
+		planner:    planner{execCfg: s.cfg, alloc: &tree.DatumAlloc{}},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
