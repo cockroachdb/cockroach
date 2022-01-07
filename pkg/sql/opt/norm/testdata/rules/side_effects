@@ -287,7 +287,7 @@ select
                                │         ├── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
                                │         └── (5 / xy.y:9) > 1 [outer=(9), immutable]
                                └── projections
-                                    └── xy.y:9::DECIMAL [as=y:12, outer=(9), immutable]
+                                    └── xy.y:9::DECIMAL [as=y:12, outer=(9)]
 
 # Decorrelate IFERROR branch if there are no side effects
 norm

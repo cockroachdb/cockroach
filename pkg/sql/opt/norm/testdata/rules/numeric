@@ -34,22 +34,20 @@ SELECT i + 0::decimal FROM a
 ----
 project
  ├── columns: "?column?":8
- ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":8, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":8, outer=(2)]
 
 norm expect=FoldZeroPlus
 SELECT 0::decimal + i FROM a
 ----
 project
  ├── columns: "?column?":8
- ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":8, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":8, outer=(2)]
 
 # --------------------------------------------------
 # FoldMinusZero
@@ -79,11 +77,10 @@ SELECT i - 0::decimal FROM a
 ----
 project
  ├── columns: "?column?":8
- ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":8, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":8, outer=(2)]
 
 # Regression test for #35612.
 norm expect-not=FoldMinusZero
@@ -127,22 +124,20 @@ SELECT i * 1::decimal FROM a
 ----
 project
  ├── columns: "?column?":8
- ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":8, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":8, outer=(2)]
 
 norm expect=FoldOneMult
 SELECT 1::decimal * i FROM a
 ----
 project
  ├── columns: "?column?":8
- ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":8, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":8, outer=(2)]
 
 # --------------------------------------------------
 # FoldDivOne
@@ -157,11 +152,10 @@ FROM a
 ----
 project
  ├── columns: r:8 s:9 t:10
- ├── immutable
  ├── scan a
  │    └── columns: i:2 f:3 d:4
  └── projections
-      ├── i:2::DECIMAL [as=r:8, outer=(2), immutable]
+      ├── i:2::DECIMAL [as=r:8, outer=(2)]
       ├── f:3 [as=s:9, outer=(3)]
       └── d:4 [as=t:10, outer=(4)]
 
@@ -171,22 +165,20 @@ SELECT i / 1::decimal FROM a
 ----
 project
  ├── columns: "?column?":8
- ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":8, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":8, outer=(2)]
 
 norm expect=FoldDivOne
 SELECT i / 1::int8 FROM a
 ----
 project
  ├── columns: "?column?":8
- ├── immutable
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── i:2::DECIMAL [as="?column?":8, outer=(2), immutable]
+      └── i:2::DECIMAL [as="?column?":8, outer=(2)]
 
 # --------------------------------------------------
 # InvertMinus

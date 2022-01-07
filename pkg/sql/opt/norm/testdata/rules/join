@@ -2926,8 +2926,8 @@ inner-join (hash)
  │    └── projections
  │         └── y:9 + 1 [as=z:12, outer=(9), immutable]
  └── filters
-      ├── f:3 >= z:12::FLOAT8 [outer=(3,12), immutable, constraints=(/3: (/NULL - ])]
-      ├── f:3 >= z:12::FLOAT8 [outer=(3,12), immutable, constraints=(/3: (/NULL - ])]
+      ├── f:3 >= z:12::FLOAT8 [outer=(3,12), constraints=(/3: (/NULL - ])]
+      ├── f:3 >= z:12::FLOAT8 [outer=(3,12), constraints=(/3: (/NULL - ])]
       ├── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       └── i:2 = y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 

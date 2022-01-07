@@ -292,7 +292,6 @@ SELECT x / 1, x::float / 2.0, x::decimal / 3.0 FROM xy
 ----
 project
  ├── columns: "?column?":5(decimal!null) "?column?":6(float!null) "?column?":7(decimal!null)
- ├── immutable
  ├── prune: (5-7)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
@@ -304,11 +303,11 @@ project
       ├── div [as="?column?":5, type=decimal, outer=(1)]
       │    ├── variable: x:1 [type=int]
       │    └── const: 1 [type=int]
-      ├── div [as="?column?":6, type=float, outer=(1), immutable]
+      ├── div [as="?column?":6, type=float, outer=(1)]
       │    ├── cast: FLOAT8 [type=float]
       │    │    └── variable: x:1 [type=int]
       │    └── const: 2.0 [type=float]
-      └── div [as="?column?":7, type=decimal, outer=(1), immutable]
+      └── div [as="?column?":7, type=decimal, outer=(1)]
            ├── cast: DECIMAL [type=decimal]
            │    └── variable: x:1 [type=int]
            └── const: 3.0 [type=decimal]

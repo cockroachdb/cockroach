@@ -2661,31 +2661,25 @@ WHERE EXISTS
 group-by (hash)
  ├── columns: x:1!null y:2
  ├── grouping columns: x:1!null
- ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── select
  │    ├── columns: x:1!null y:2 k:5!null i:6!null max:19!null
- │    ├── immutable
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2), (5)-->(6), (1,5)-->(2,6,19), (6)==(19), (19)==(6)
  │    ├── group-by (hash)
  │    │    ├── columns: x:1!null y:2 k:5!null i:6 max:19!null
  │    │    ├── grouping columns: x:1!null k:5!null
- │    │    ├── immutable
  │    │    ├── key: (1,5)
  │    │    ├── fd: (1)-->(2), (5)-->(6), (1,5)-->(2,6,19)
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: x:1!null y:2 k:5!null i:6 i:13!null f:14!null column20:20!null
- │    │    │    ├── immutable
  │    │    │    ├── fd: (1)-->(2), (2)-->(20), (14)==(20), (20)==(14), (5)-->(6)
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: x:1!null y:2 i:13!null f:14!null column20:20!null
- │    │    │    │    ├── immutable
  │    │    │    │    ├── fd: (1)-->(2), (2)-->(20), (14)==(20), (20)==(14)
  │    │    │    │    ├── project
  │    │    │    │    │    ├── columns: column20:20 x:1!null y:2
- │    │    │    │    │    ├── immutable
  │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    ├── fd: (1)-->(2), (2)-->(20)
  │    │    │    │    │    ├── scan xy
@@ -2693,7 +2687,7 @@ group-by (hash)
  │    │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    │    └── fd: (1)-->(2)
  │    │    │    │    │    └── projections
- │    │    │    │    │         └── y:2::FLOAT8 [as=column20:20, outer=(2), immutable]
+ │    │    │    │    │         └── y:2::FLOAT8 [as=column20:20, outer=(2)]
  │    │    │    │    ├── select
  │    │    │    │    │    ├── columns: i:13!null f:14
  │    │    │    │    │    ├── scan a
@@ -2847,17 +2841,14 @@ WHERE EXISTS
 ----
 project
  ├── columns: x:1!null y:2
- ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── semi-join (hash)
       ├── columns: x:1!null y:2 column20:20
-      ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(20)
       ├── project
       │    ├── columns: column20:20 x:1!null y:2
-      │    ├── immutable
       │    ├── key: (1)
       │    ├── fd: (1)-->(2), (2)-->(20)
       │    ├── scan xy
@@ -2865,7 +2856,7 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── projections
-      │         └── y:2::FLOAT8 [as=column20:20, outer=(2), immutable]
+      │         └── y:2::FLOAT8 [as=column20:20, outer=(2)]
       ├── inner-join (cross)
       │    ├── columns: f:14
       │    ├── scan a

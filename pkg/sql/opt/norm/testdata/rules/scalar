@@ -216,8 +216,8 @@ project
  ├── scan a
  │    └── columns: a.i:2 a.s:4 a.arr:5
  └── projections
-      ├── a.i:2::FLOAT8 [as=i:8, outer=(2), immutable]
-      ├── a.arr:5::DECIMAL[] [as=arr:9, outer=(5), immutable]
+      ├── a.i:2::FLOAT8 [as=i:8, outer=(2)]
+      ├── a.arr:5::DECIMAL[] [as=arr:9, outer=(5)]
       ├── a.s:4::JSONB [as=s:10, outer=(4), immutable]
       ├── a.s:4::VARCHAR(2) [as=s:11, outer=(4), immutable]
       ├── a.i:2::INT2::INT8 [as=i:12, outer=(2), immutable]

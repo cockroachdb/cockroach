@@ -427,13 +427,11 @@ SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 project
  ├── columns: i:2
  ├── cardinality: [0 - 1]
- ├── immutable
  ├── key: ()
  ├── fd: ()-->(2)
  └── select
       ├── columns: i:2 f:7!null
       ├── cardinality: [0 - 1]
-      ├── immutable
       ├── key: ()
       ├── fd: ()-->(2,7)
       ├── project
@@ -455,7 +453,7 @@ project
       │    └── projections
       │         └── a.f:3 / 2.0 [as=f:7, outer=(3)]
       └── filters
-           └── f:7 = i:2::FLOAT8 [outer=(2,7), immutable, constraints=(/7: (/NULL - ]), fd=(2)-->(7)]
+           └── f:7 = i:2::FLOAT8 [outer=(2,7), constraints=(/7: (/NULL - ]), fd=(2)-->(7)]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
 norm
