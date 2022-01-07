@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -114,7 +114,7 @@ func ValidateTableLocalityConfig(
 	}
 	columnTypesTypeIDs := catalog.MakeDescriptorIDSet(typeIDsReferencedByColumns...)
 	switch lc := lc.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_:
+	case *catpb.LocalityConfig_Global_:
 		if regionEnumIDReferenced {
 			if !columnTypesTypeIDs.Contains(regionsEnumID) {
 				return errors.AssertionFailedf(
@@ -125,7 +125,7 @@ func ValidateTableLocalityConfig(
 				)
 			}
 		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *catpb.LocalityConfig_RegionalByRow_:
 		if !desc.IsPartitionAllBy() {
 			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
 		}
@@ -138,7 +138,7 @@ func ValidateTableLocalityConfig(
 		if err != nil {
 			return err
 		}
-		regionNames := make(map[descpb.RegionName]struct{}, len(regions))
+		regionNames := make(map[catpb.RegionName]struct{}, len(regions))
 		for _, region := range regions {
 			regionNames[region] = struct{}{}
 		}
@@ -146,14 +146,14 @@ func ValidateTableLocalityConfig(
 		if err != nil {
 			return err
 		}
-		transitioningRegionNames := make(map[descpb.RegionName]struct{}, len(regions))
+		transitioningRegionNames := make(map[catpb.RegionName]struct{}, len(regions))
 		for _, region := range transitioningRegions {
 			transitioningRegionNames[region] = struct{}{}
 		}
 
 		part := desc.GetPrimaryIndex().GetPartitioning()
 		err = part.ForEachList(func(name string, _ [][]byte, _ catalog.Partitioning) error {
-			regionName := descpb.RegionName(name)
+			regionName := catpb.RegionName(name)
 			// Any transitioning region names may exist.
 			if _, ok := transitioningRegionNames[regionName]; ok {
 				return nil
@@ -183,7 +183,7 @@ func ValidateTableLocalityConfig(
 			)
 		}
 
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+	case *catpb.LocalityConfig_RegionalByTable_:
 
 		// Table is homed in an explicit (non-primary) region.
 		if lc.RegionalByTable.Region != nil {
@@ -244,11 +244,11 @@ func ValidateTableLocalityConfig(
 }
 
 // FormatTableLocalityConfig formats the table locality.
-func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree.FmtCtx) error {
+func FormatTableLocalityConfig(c *catpb.LocalityConfig, f *tree.FmtCtx) error {
 	switch v := c.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_:
+	case *catpb.LocalityConfig_Global_:
 		f.WriteString("GLOBAL")
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+	case *catpb.LocalityConfig_RegionalByTable_:
 		f.WriteString("REGIONAL BY TABLE IN ")
 		if v.RegionalByTable.Region != nil {
 			region := tree.Name(*v.RegionalByTable.Region)
@@ -256,7 +256,7 @@ func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree
 		} else {
 			f.WriteString("PRIMARY REGION")
 		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *catpb.LocalityConfig_RegionalByRow_:
 		f.WriteString("REGIONAL BY ROW")
 		if v.RegionalByRow.As != nil {
 			f.WriteString(" AS ")

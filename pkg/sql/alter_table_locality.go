@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -385,7 +386,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 // SET LOCALITY where the before OR after state is REGIONAL BY ROW.
 func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	params runParams,
-	newLocalityConfig descpb.TableDescriptor_LocalityConfig,
+	newLocalityConfig catpb.LocalityConfig,
 	mutationIdxAllowedInSameTxn *int,
 	newColumnName *tree.Name,
 	newColumnID *descpb.ColumnID,
@@ -473,7 +474,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	// Look at the existing locality, and implement any changes required to move to
 	// the new locality.
 	switch existingLocality.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_:
+	case *catpb.LocalityConfig_Global_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
 			if err := n.alterTableLocalityToGlobal(params); err != nil {
@@ -493,7 +494,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+	case *catpb.LocalityConfig_RegionalByTable_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
 			if err := n.alterTableLocalityToGlobal(params); err != nil {
@@ -513,7 +514,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *catpb.LocalityConfig_RegionalByRow_:
 		explicitColStart := n.tableDesc.PrimaryIndex.Partitioning.NumImplicitColumns
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
@@ -646,7 +647,7 @@ func setNewLocalityConfig(
 	desc *tabledesc.Mutable,
 	txn *kv.Txn,
 	b *kv.Batch,
-	config descpb.TableDescriptor_LocalityConfig,
+	config catpb.LocalityConfig,
 	kvTrace bool,
 	descsCol *descs.Collection,
 ) error {

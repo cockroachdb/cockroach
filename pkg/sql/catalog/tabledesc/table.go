@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -114,9 +115,9 @@ func MakeColumnDefDescs(
 	if d.GeneratedIdentity.IsGeneratedAsIdentity {
 		switch d.GeneratedIdentity.GeneratedAsIdentityType {
 		case tree.GeneratedAlways:
-			col.GeneratedAsIdentityType = descpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+			col.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
 		case tree.GeneratedByDefault:
-			col.GeneratedAsIdentityType = descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+			col.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
 		default:
 			return nil, errors.AssertionFailedf(
 				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)", string(d.Name))

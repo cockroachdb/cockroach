@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -1214,10 +1215,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						return err
 					}
 					switch localityConfigToSwapTo.Locality.(type) {
-					case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_,
-						*descpb.TableDescriptor_LocalityConfig_Global_:
+					case *catpb.LocalityConfig_RegionalByTable_,
+						*catpb.LocalityConfig_Global_:
 						scTable.PartitionAllBy = false
-					case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+					case *catpb.LocalityConfig_RegionalByRow_:
 						scTable.PartitionAllBy = true
 					default:
 						return errors.AssertionFailedf(
@@ -2412,9 +2413,9 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 					)
 				}
 				switch lcSwap.NewLocalityConfig.Locality.(type) {
-				case *descpb.TableDescriptor_LocalityConfig_Global_,
-					*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-				case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+				case *catpb.LocalityConfig_Global_,
+					*catpb.LocalityConfig_RegionalByTable_:
+				case *catpb.LocalityConfig_RegionalByRow_:
 					// Apply new zone configurations for all newly partitioned indexes.
 					newIndexIDs := make([]descpb.IndexID, 0, pkSwap.NumNewIndexes())
 					_ = pkSwap.ForEachNewIndexIDs(func(id descpb.IndexID) error {

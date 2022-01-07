@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -473,8 +474,8 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 	}
 
 	_ = desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-		if fk.OnUpdate == descpb.ForeignKeyReference_NO_ACTION ||
-			fk.OnUpdate == descpb.ForeignKeyReference_RESTRICT {
+		if fk.OnUpdate == catpb.ForeignKeyAction_NO_ACTION ||
+			fk.OnUpdate == catpb.ForeignKeyAction_RESTRICT {
 			return nil
 		}
 		for _, fkCol := range fk.OriginColumnIDs {
