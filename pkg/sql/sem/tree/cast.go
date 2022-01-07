@@ -66,6 +66,20 @@ const (
 	CastContextImplicit
 )
 
+// String returns the representation of CastContext as a string.
+func (cc CastContext) String() string {
+	switch cc {
+	case CastContextExplicit:
+		return "explicit"
+	case CastContextAssignment:
+		return "assignment"
+	case CastContextImplicit:
+		return "implicit"
+	default:
+		return "invalid"
+	}
+}
+
 // contextOrigin indicates the source of information for a cast's maximum
 // context (see cast.maxContext below). It is only used to annotate entries in
 // castMap and to perform assertions on cast entries in the init function. It
