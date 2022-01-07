@@ -504,7 +504,7 @@ func (z *zigzagJoiner) setupInfo(
 		info.fetcher = &fetcher
 	}
 
-	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.GetID())
+	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table.GetID(), info.index.GetID())
 	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {

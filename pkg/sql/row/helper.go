@@ -173,8 +173,9 @@ func (rh *rowHelper) encodePrimaryIndex(
 	colIDtoRowIndex catalog.TableColMap, values []tree.Datum,
 ) (primaryIndexKey []byte, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = rowenc.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc,
-			rh.TableDesc.GetPrimaryIndexID())
+		rh.primaryIndexKeyPrefix = rowenc.MakeIndexKeyPrefix(
+			rh.Codec, rh.TableDesc.GetID(), rh.TableDesc.GetPrimaryIndexID(),
+		)
 	}
 	primaryIndexKey, _, err = rowenc.EncodeIndexKey(
 		rh.TableDesc, rh.TableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)

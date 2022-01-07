@@ -435,7 +435,7 @@ func (rf *cFetcher) Init(
 		}
 	}
 
-	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
+	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc.GetID(), table.index.GetID()))
 
 	var indexColumnIDs []descpb.ColumnID
 	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)

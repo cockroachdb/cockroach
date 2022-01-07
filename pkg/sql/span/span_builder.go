@@ -65,7 +65,7 @@ func MakeBuilder(
 		table:          table,
 		index:          index,
 		indexColTypes:  s.indexColTypes,
-		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.GetID()),
+		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID()),
 		neededFamilies: nil,
 	}
 
@@ -186,7 +186,7 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 func (s *Builder) SpanFromDatumRow(
 	values tree.Datums, prefixLen int, colMap catalog.TableColMap,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	return rowenc.EncodePartialIndexSpan(s.table, s.index, prefixLen, colMap, values, s.KeyPrefix)
+	return rowenc.EncodePartialIndexSpan(s.index, prefixLen, colMap, values, s.KeyPrefix)
 }
 
 // SpanToPointSpan converts a span into a span that represents a point lookup on a

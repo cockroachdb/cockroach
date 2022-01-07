@@ -54,7 +54,7 @@ func NewColSpanAssembler(
 ) ColSpanAssembler {
 	base := spanAssemblerPool.Get().(*spanAssemblerBase)
 	base.colFamStartKeys, base.colFamEndKeys = getColFamilyEncodings(neededColOrdsInWholeTable, table, index)
-	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, table, index.GetID())
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
 	base.scratchKey = append(base.scratchKey[:0], keyPrefix...)
 	base.prefixLength = len(keyPrefix)
 	base.allocator = allocator

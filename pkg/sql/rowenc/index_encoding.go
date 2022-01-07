@@ -42,10 +42,8 @@ import (
 // MakeIndexKeyPrefix returns the key prefix used for the index's data. If you
 // need the corresponding Span, prefer desc.IndexSpan(indexID) or
 // desc.PrimaryIndexSpan().
-func MakeIndexKeyPrefix(
-	codec keys.SQLCodec, desc catalog.TableDescriptor, indexID descpb.IndexID,
-) []byte {
-	return codec.IndexPrefix(uint32(desc.GetID()), uint32(indexID))
+func MakeIndexKeyPrefix(codec keys.SQLCodec, tableID descpb.ID, indexID descpb.IndexID) []byte {
+	return codec.IndexPrefix(uint32(tableID), uint32(indexID))
 }
 
 // EncodeIndexKey creates a key by concatenating keyPrefix with the
@@ -63,7 +61,6 @@ func EncodeIndexKey(
 ) (key []byte, containsNull bool, err error) {
 	var colIDWithNullVal descpb.ColumnID
 	key, colIDWithNullVal, err = EncodePartialIndexKey(
-		tableDesc,
 		index,
 		index.NumKeyColumns(), /* encode all columns */
 		colMap,
@@ -88,7 +85,6 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	tableDesc catalog.TableDescriptor,
 	index catalog.Index,
 	numCols int,
 	colMap catalog.TableColMap,
@@ -97,7 +93,7 @@ func EncodePartialIndexSpan(
 ) (span roachpb.Span, containsNull bool, err error) {
 	var key roachpb.Key
 	var colIDWithNullVal descpb.ColumnID
-	key, colIDWithNullVal, err = EncodePartialIndexKey(tableDesc, index, numCols, colMap, values, keyPrefix)
+	key, colIDWithNullVal, err = EncodePartialIndexKey(index, numCols, colMap, values, keyPrefix)
 	containsNull = colIDWithNullVal != 0
 	if err != nil {
 		return span, containsNull, err
@@ -110,7 +106,6 @@ func EncodePartialIndexSpan(
 //  - index.KeyColumnIDs for unique indexes, and
 //  - append(index.KeyColumnIDs, index.KeySuffixColumnIDs) for non-unique indexes.
 func EncodePartialIndexKey(
-	tableDesc catalog.TableDescriptor,
 	index catalog.Index,
 	numCols int,
 	colMap catalog.TableColMap,
@@ -444,7 +439,7 @@ func DecodePartialTableIDIndexID(key []byte) ([]byte, descpb.ID, descpb.IndexID,
 //
 // Don't use this function in the scan "hot path".
 func DecodeIndexKeyPrefix(
-	codec keys.SQLCodec, desc catalog.TableDescriptor, key []byte,
+	codec keys.SQLCodec, expectedTableID descpb.ID, key []byte,
 ) (indexID descpb.IndexID, remaining []byte, err error) {
 	key, err = codec.StripTenantPrefix(key)
 	if err != nil {
@@ -455,9 +450,9 @@ func DecodeIndexKeyPrefix(
 	if err != nil {
 		return 0, nil, err
 	}
-	if tableID != desc.GetID() {
+	if tableID != expectedTableID {
 		return 0, nil, errors.Errorf(
-			"unexpected table ID %d, expected %d instead", tableID, desc.GetID())
+			"unexpected table ID %d, expected %d instead", tableID, expectedTableID)
 	}
 	return indexID, key, err
 }
@@ -881,7 +876,7 @@ func EncodePrimaryIndex(
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
-	keyPrefix := MakeIndexKeyPrefix(codec, tableDesc, index.GetID())
+	keyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
 	indexKey, _, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
 	if err != nil {
 		return nil, err
@@ -971,7 +966,7 @@ func EncodeSecondaryIndex(
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
-	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, secondaryIndex.GetID())
+	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
 
 	// Use the primary key encoding for covering indexes.
 	if secondaryIndex.GetEncodingType() == descpb.PrimaryIndexEncoding {

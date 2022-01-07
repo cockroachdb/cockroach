@@ -101,7 +101,7 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	c.idx = idx.idx
 
 	codec := params.ExecCfg().Codec
-	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc, c.idx.GetID())
+	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
 	c.spanBuilder = span.MakeBuilder(params.EvalContext(), codec, c.tabDesc, c.idx)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
