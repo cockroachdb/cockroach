@@ -1887,7 +1887,7 @@ func (l *Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Empty returns true for the Lease zero-value.
 func (l *Lease) Empty() bool {
-	return *l == (Lease{})
+	return l == nil || *l == (Lease{})
 }
 
 // OwnedBy returns whether the given store is the lease owner.

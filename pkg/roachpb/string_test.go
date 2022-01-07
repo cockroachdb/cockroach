@@ -154,7 +154,7 @@ func TestLeaseString(t *testing.T) {
 		},
 		{
 			lease:    nil,
-			expected: "<nil>",
+			expected: "<empty>",
 		},
 		{
 			lease: &roachpb.Lease{
