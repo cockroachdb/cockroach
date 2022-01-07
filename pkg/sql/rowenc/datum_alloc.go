@@ -51,7 +51,6 @@ type DatumAlloc struct {
 	dtupleAlloc       []tree.DTuple
 	doidAlloc         []tree.DOid
 	dvoidAlloc        []tree.DVoid
-	scratch           []byte
 	env               tree.CollationEnvironment
 
 	// Allocations for geopb.SpatialObject.EWKB
