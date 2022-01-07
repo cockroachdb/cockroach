@@ -30,11 +30,39 @@ import (
 // TestCastsVolatilityMatchesPostgres checks that our defined casts match
 // Postgres' casts for Volatility.
 //
-// Dump command below:
-// COPY (
-//   SELECT c.castsource, c.casttarget, p.provolatile, p.proleakproof
-//   FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
-// ) TO STDOUT WITH CSV DELIMITER '|' HEADER;
+// The command for generating pg_cast_dump.csv from psql is below. We ignore
+// types that we do not support, and we ignore geospatial types because they are
+// an extension of Postgres and have no official OIDs.
+//
+//   \copy (
+//     WITH ignored_types AS (
+//       SELECT t::regtype::oid t
+//       FROM (VALUES
+//         ('geography'),
+//         ('geometry'),
+//         ('box2d'),
+//         ('box3d'),
+//         ('tstzmultirange'),
+//         ('int4multirange'),
+//         ('int8multirange'),
+//         ('tstzmultirange'),
+//         ('tsmultirange'),
+//         ('datemultirange'),
+//         ('nummultirange')
+//       ) AS types(t)
+//     )
+//     SELECT
+//       c.castsource,
+//       c.casttarget,
+//       p.provolatile,
+//       p.proleakproof,
+//       substring(version(), 'PostgreSQL (\d+\.\d+)') pg_version
+//     FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
+//     WHERE
+//       c.castsource NOT IN (SELECT t FROM ignored_types)
+//       AND c.casttarget NOT IN (SELECT t FROM ignored_types)
+//   ) TO pg_cast_dump.csv WITH CSV DELIMITER '|' HEADER;
+//
 func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -51,11 +79,11 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	_, err = reader.Read()
 	require.NoError(t, err)
 
-	type pgCast struct {
-		from, to   oid.Oid
-		volatility Volatility
+	type pgCastKey struct {
+		from, to oid.Oid
 	}
-	var pgCasts []pgCast
+
+	pgCastMap := make(map[pgCastKey]Volatility)
 
 	for {
 		line, err := reader.Read()
@@ -63,7 +91,7 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 			break
 		}
 		require.NoError(t, err)
-		require.Len(t, line, 4)
+		require.Len(t, line, 5)
 
 		fromOid, err := strconv.Atoi(line[0])
 		require.NoError(t, err)
@@ -79,35 +107,22 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 		v, err := VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 
-		pgCasts = append(pgCasts, pgCast{
-			from:       oid.Oid(fromOid),
-			to:         oid.Oid(toOid),
-			volatility: v,
-		})
+		pgCastMap[pgCastKey{oid.Oid(fromOid), oid.Oid(toOid)}] = v
 	}
 
 	for src := range castMap {
 		for tgt, c := range castMap[src] {
 			// Find the corresponding pg cast.
-			found := false
-			for _, pgCast := range pgCasts {
-				if src == pgCast.from && tgt == pgCast.to {
-					found = true
-					if c.volatility != pgCast.volatility {
-						t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
-							oidStr(src), oidStr(tgt), c.volatility, pgCast.volatility,
-						)
-
-					}
-				}
-			}
-			if !found && testing.Verbose() {
+			pgCastVolatility, ok := pgCastMap[pgCastKey{src, tgt}]
+			if !ok && testing.Verbose() {
 				t.Logf("cast %s::%s has no corresponding pg cast", oidStr(src), oidStr(tgt))
 			}
+			if ok && c.volatility != pgCastVolatility {
+				t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
+					oidStr(src), oidStr(tgt), c.volatility, pgCastVolatility,
+				)
+			}
 		}
-	}
-}
-
 	}
 }
 
