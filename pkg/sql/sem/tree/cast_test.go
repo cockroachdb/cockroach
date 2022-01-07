@@ -38,7 +38,7 @@ import (
 func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	csvPath := filepath.Join("testdata", "pg_cast_provolatile_dump.csv")
+	csvPath := filepath.Join("testdata", "pg_cast_dump.csv")
 	f, err := os.Open(csvPath)
 	require.NoError(t, err)
 
