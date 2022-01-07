@@ -294,7 +294,7 @@ func (ed *EncDatum) Encode(
 	case descpb.DatumEncoding_DESCENDING_KEY:
 		return EncodeTableKey(appendTo, ed.Datum, encoding.Descending)
 	case descpb.DatumEncoding_VALUE:
-		return EncodeTableValue(appendTo, descpb.NoColumnID, ed.Datum, a.scratch)
+		return EncodeTableValue(appendTo, descpb.NoColumnID, ed.Datum, nil /* scratch */)
 	default:
 		panic(errors.AssertionFailedf("unknown encoding requested %s", enc))
 	}
@@ -327,7 +327,7 @@ func (ed *EncDatum) Fingerprint(
 		}
 		// We must use value encodings without a column ID even if the EncDatum already
 		// is encoded with the value encoding so that the hashes are indeed unique.
-		fingerprint, err = EncodeTableValue(appendTo, descpb.NoColumnID, ed.Datum, a.scratch)
+		fingerprint, err = EncodeTableValue(appendTo, descpb.NoColumnID, ed.Datum, nil /* scratch */)
 	default:
 		// For values that are key encodable, using the ascending key.
 		// Note that using a value encoding will not easily work in case when
