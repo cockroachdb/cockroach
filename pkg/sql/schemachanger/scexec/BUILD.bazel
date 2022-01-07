@@ -28,7 +28,6 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
-        "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_x_sync//errgroup",

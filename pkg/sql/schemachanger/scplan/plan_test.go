@@ -94,7 +94,7 @@ func TestPlanDataDriven(t *testing.T) {
 				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
-					var state scpb.State
+					var state scpb.CurrentState
 					for i := range stmts {
 						state, err = scbuild.Build(ctx, deps, state, stmts[i].AST)
 						require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestPlanDataDriven(t *testing.T) {
 					stmt := stmts[0]
 					alter, ok := stmt.AST.(*tree.AlterTable)
 					require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-					_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
+					_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter)
 					require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				})
 				return ""

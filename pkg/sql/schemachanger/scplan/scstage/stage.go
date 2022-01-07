@@ -28,7 +28,7 @@ import (
 // transition from one state to another.
 type Stage struct {
 	// Before and After are the states before and after the stage gets executed.
-	Before, After scpb.State
+	Before, After scpb.CurrentState
 
 	// EdgeOps and ExtraOps are the collected ops in this stage:
 	// - EdgeOps contains the ops originating from op-edges, that is to say, state

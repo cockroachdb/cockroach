@@ -80,7 +80,7 @@ func TestGraphRanks(t *testing.T) {
 		t *testing.T, tc testCase,
 	) {
 		// Setup a state based on if it is a add or drop.
-		state := scpb.State{
+		state := scpb.CurrentState{
 			Nodes: make([]*scpb.Node, 0, len(tc.addNode)),
 		}
 		for idx := range tc.addNode {

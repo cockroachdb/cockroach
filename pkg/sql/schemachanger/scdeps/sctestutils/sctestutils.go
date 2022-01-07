@@ -159,7 +159,7 @@ func ProtoDiff(a, b protoutil.Message, args DiffArgs) string {
 }
 
 // MakePlan is a convenient alternative to calling scplan.MakePlan in tests.
-func MakePlan(t *testing.T, state scpb.State, phase scop.Phase) scplan.Plan {
+func MakePlan(t *testing.T, state scpb.CurrentState, phase scop.Phase) scplan.Plan {
 	plan, err := scplan.MakePlan(state, scplan.Params{
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },

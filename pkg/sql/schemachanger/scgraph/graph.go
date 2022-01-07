@@ -62,7 +62,7 @@ func (g *Graph) Database() *rel.Database {
 
 // New constructs a new Graph. All initial nodes ought to correspond to distinct
 // targets. If they do not, an error will be returned.
-func New(initial scpb.State) (*Graph, error) {
+func New(initial scpb.CurrentState) (*Graph, error) {
 	db, err := rel.NewDatabase(screl.Schema, [][]rel.Attr{
 		{rel.Type, screl.DescID},
 		{screl.DescID, rel.Type},

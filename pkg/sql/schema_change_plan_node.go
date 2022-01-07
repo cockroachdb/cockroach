@@ -71,7 +71,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		return nil, false, err
 	}
 	return &schemaChangePlanNode{
-		plannedState: outputNodes,
+		state: outputNodes,
 	}, true, nil
 }
 
@@ -125,10 +125,10 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 // schemaChangePlanNode is the planNode utilized by the new schema changer to
 // perform all schema changes, unified in the new schema changer.
 type schemaChangePlanNode struct {
-	// plannedState contains the set of states produced by the builder combining
+	// state contains the state produced by the builder combining
 	// the nodes that existed preceding the current statement with the output of
 	// the built current statement.
-	plannedState scpb.State
+	state scpb.CurrentState
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
@@ -138,7 +138,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
 	)
 	after, jobID, err := scrun.RunStatementPhase(
-		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
+		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.state,
 	)
 	if err != nil {
 		return err

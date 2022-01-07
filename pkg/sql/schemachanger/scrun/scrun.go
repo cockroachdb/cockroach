@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,8 +29,8 @@ import (
 // state. These are the immediate changes which take place at DDL statement
 // execution time (scop.StatementPhase).
 func RunStatementPhase(
-	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.State,
-) (scpb.State, jobspb.JobID, error) {
+	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.CurrentState,
+) (scpb.CurrentState, jobspb.JobID, error) {
 	return runTransactionPhase(ctx, knobs, deps, state, scop.StatementPhase)
 }
 
@@ -40,8 +39,8 @@ func RunStatementPhase(
 // than the asynchronous changes which are done by the schema changer job
 // after the transaction commits.
 func RunPreCommitPhase(
-	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.State,
-) (scpb.State, jobspb.JobID, error) {
+	ctx context.Context, knobs *TestingKnobs, deps scexec.Dependencies, state scpb.CurrentState,
+) (scpb.CurrentState, jobspb.JobID, error) {
 	return runTransactionPhase(ctx, knobs, deps, state, scop.PreCommitPhase)
 }
 
@@ -49,29 +48,29 @@ func runTransactionPhase(
 	ctx context.Context,
 	knobs *TestingKnobs,
 	deps scexec.Dependencies,
-	state scpb.State,
+	state scpb.CurrentState,
 	phase scop.Phase,
-) (scpb.State, jobspb.JobID, error) {
+) (scpb.CurrentState, jobspb.JobID, error) {
 	if len(state.Nodes) == 0 {
-		return scpb.State{}, jobspb.InvalidJobID, nil
+		return scpb.CurrentState{}, jobspb.InvalidJobID, nil
 	}
 	sc, err := scplan.MakePlan(state, scplan.Params{
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
 	})
 	if err != nil {
-		return scpb.State{}, jobspb.InvalidJobID, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
+		return scpb.CurrentState{}, jobspb.InvalidJobID, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
 	}
 	after := state
 	stages := sc.StagesForCurrentPhase()
 	for i := range stages {
 		if err := executeStage(ctx, knobs, deps, sc, i, stages[i]); err != nil {
-			return scpb.State{}, jobspb.InvalidJobID, err
+			return scpb.CurrentState{}, jobspb.InvalidJobID, err
 		}
 		after = stages[i].After
 	}
 	if len(after.Nodes) == 0 {
-		return scpb.State{}, jobspb.InvalidJobID, nil
+		return scpb.CurrentState{}, jobspb.InvalidJobID, nil
 	}
 	return after, sc.JobID, nil
 }
@@ -135,28 +134,21 @@ func makeState(
 	targetState scpb.TargetState,
 	states []scpb.Status,
 	rollback bool,
-) scpb.State {
+) scpb.CurrentState {
 	if len(targetState.Targets) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
 			len(targetState.Targets), len(states))
 	}
-	s := scpb.State{
-		TargetState: *protoutil.Clone(&targetState).(*scpb.TargetState),
-		Nodes:       make([]*scpb.Node, len(states)),
-	}
-	for i, status := range states {
-		t := &s.Targets[i]
-		if rollback {
+	s := scpb.MakeCurrentState(targetState, states)
+	if rollback {
+		for i := range s.Targets {
+			t := &s.Targets[i]
 			switch t.TargetStatus {
 			case scpb.Status_PUBLIC:
 				t.TargetStatus = scpb.Status_ABSENT
 			case scpb.Status_ABSENT:
 				t.TargetStatus = scpb.Status_PUBLIC
 			}
-		}
-		s.Nodes[i] = &scpb.Node{
-			Target: t,
-			Status: status,
 		}
 	}
 	return s

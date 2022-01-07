@@ -36,7 +36,7 @@ type Params struct {
 // are partitioned into stages.
 type Plan struct {
 	Params  Params
-	Initial scpb.State
+	Initial scpb.CurrentState
 	Graph   *scgraph.Graph
 	JobID   jobspb.JobID
 	Stages  []scstage.Stage
@@ -57,7 +57,7 @@ func (p Plan) StagesForCurrentPhase() []scstage.Stage {
 // the initial state for a set of targets.
 // Returns an error when planning fails. It is up to the caller to wrap this
 // error as an assertion failure and with useful debug information details.
-func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
+func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 	p = Plan{
 		Initial: initial,
 		Params:  params,
@@ -84,7 +84,7 @@ func MakePlan(initial scpb.State, params Params) (p Plan, err error) {
 	return p, nil
 }
 
-func buildGraph(initial scpb.State) *scgraph.Graph {
+func buildGraph(initial scpb.CurrentState) *scgraph.Graph {
 	g, err := opgen.BuildGraph(initial)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph op edges"))

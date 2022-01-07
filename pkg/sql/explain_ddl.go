@@ -66,7 +66,7 @@ func (n *explainDDLNode) startExec(params runParams) error {
 			return explainNotPossibleError
 		}
 	}
-	sc, err := scplan.MakePlan(scNodes.plannedState, scplan.Params{
+	sc, err := scplan.MakePlan(scNodes.state, scplan.Params{
 		ExecutionPhase:             scop.StatementPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
 	})

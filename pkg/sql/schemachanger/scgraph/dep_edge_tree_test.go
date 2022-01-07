@@ -138,7 +138,7 @@ func TestGraphCompareNodes(t *testing.T) {
 	}
 	t1ABSENT := mkNode(t1, scpb.Status_ABSENT)
 	t2PUBLIC := mkNode(t2, scpb.Status_PUBLIC)
-	g, err := New(scpb.State{
+	g, err := New(scpb.CurrentState{
 		Nodes: []*scpb.Node{t1ABSENT, t2PUBLIC},
 	})
 	targetStr := func(target *scpb.Target) string {

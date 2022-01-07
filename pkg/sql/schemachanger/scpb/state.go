@@ -15,14 +15,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// State represents the current state of the schema change system.
-type State struct {
+// CurrentState represents the current state of the schema change system.
+type CurrentState struct {
 	TargetState
 	Nodes []*Node
 }
 
 // Statuses returns a slice of statuses extracted from the Nodes.
-func (s *State) Statuses() []Status {
+func (s *CurrentState) Statuses() []Status {
 	statuses := make([]Status, len(s.Nodes))
 	for i := range s.Nodes {
 		statuses[i] = s.Nodes[i].Status
@@ -89,19 +89,32 @@ type ElementMetadata struct {
 	Statement string
 }
 
-// Clone clones a State and any associated  metadata (i.e. statement and
-//authorization
-// information) for that state.
-func (s *State) Clone() State {
-	ret := State{
-		TargetState: *protoutil.Clone(&s.TargetState).(*TargetState),
-		Nodes:       make([]*Node, len(s.Nodes)),
+// DeepCopy returns a deep copy of the state.
+func (s *CurrentState) DeepCopy() CurrentState {
+	return MakeCurrentState(s.TargetState, s.Statuses())
+}
+
+// ShallowCopy returns a shallow copy of the state, in which only the backing
+// slice of Nodes is newly allocated.
+func (s *CurrentState) ShallowCopy() CurrentState {
+	return CurrentState{
+		TargetState: s.TargetState,
+		Nodes:       append(make([]*Node, 0, len(s.Nodes)), s.Nodes...),
 	}
-	for i, n := range s.Nodes {
-		ret.Nodes[i] = &Node{
-			Target: &ret.Targets[i],
-			Status: n.Status,
-		}
+}
+
+// MakeCurrentState returns a CurrentState with a deep copy of the target state.
+// The current status slice may be nil, which defaults to ABSENT for all values.
+func MakeCurrentState(targetState TargetState, current []Status) CurrentState {
+	ret := CurrentState{
+		TargetState: *protoutil.Clone(&targetState).(*TargetState),
+		Nodes:       make([]*Node, len(targetState.Targets)),
+	}
+	for i := range targetState.Targets {
+		ret.Nodes[i] = &Node{Target: &ret.Targets[i]}
+	}
+	for i, status := range current {
+		ret.Nodes[i].Status = status
 	}
 	return ret
 }

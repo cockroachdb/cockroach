@@ -131,7 +131,7 @@ func run(
 
 		return ""
 	case "build":
-		var outputNodes scpb.State
+		var outputNodes scpb.CurrentState
 		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
@@ -152,7 +152,7 @@ func run(
 			alter, ok := stmt.AST.(*tree.AlterTable)
 			require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
 
-			_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
+			_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter)
 			require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
 		})
 		return ""
@@ -176,8 +176,8 @@ func indentText(input string, tab string) string {
 	return result.String()
 }
 
-// marshalNodes marshals a scpb.State to YAML.
-func marshalNodes(t *testing.T, nodes scpb.State) string {
+// marshalNodes marshals a scpb.CurrentState to YAML.
+func marshalNodes(t *testing.T, nodes scpb.CurrentState) string {
 	var sortedEntries []string
 	for _, node := range nodes.Nodes {
 		yaml, err := sctestutils.ProtoToYAML(node.Target.Element())

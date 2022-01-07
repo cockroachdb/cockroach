@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,8 +24,8 @@ import (
 // The function takes an AST for a DDL statement and constructs targets
 // which represent schema changes to be performed.
 func Build(
-	ctx context.Context, dependencies Dependencies, initial scpb.State, n tree.Statement,
-) (_ scpb.State, err error) {
+	ctx context.Context, dependencies Dependencies, initial scpb.CurrentState, n tree.Statement,
+) (_ scpb.CurrentState, err error) {
 	bs := newBuilderState(initial)
 	els := newEventLogState(dependencies, initial, n)
 	b := buildCtx{
@@ -45,22 +44,17 @@ func Build(
 		}
 	}()
 	scbuildstmt.Process(b, n)
-	ret := scpb.State{
-		TargetState: scpb.TargetState{
-			Targets:       make([]scpb.Target, len(bs.output)),
-			Statements:    els.statements,
-			Authorization: els.authorization,
-		},
-		Nodes: make([]*scpb.Node, len(bs.output)),
+	ts := scpb.TargetState{
+		Targets:       make([]scpb.Target, len(bs.output)),
+		Statements:    els.statements,
+		Authorization: els.authorization,
 	}
+	current := make([]scpb.Status, len(bs.output))
 	for i, node := range bs.output {
-		ret.Targets[i] = *protoutil.Clone(node.Target).(*scpb.Target)
-		ret.Nodes[i] = &scpb.Node{
-			Target: &ret.Targets[i],
-			Status: node.Status,
-		}
+		ts.Targets[i] = *node.Target
+		current[i] = node.Status
 	}
-	return ret, nil
+	return scpb.MakeCurrentState(ts, current), nil
 }
 
 // Export dependency interfaces.
@@ -85,8 +79,8 @@ type builderState struct {
 }
 
 // newBuilderState constructs a builderState.
-func newBuilderState(initial scpb.State) *builderState {
-	return &builderState{output: initial.Clone().Nodes}
+func newBuilderState(initial scpb.CurrentState) *builderState {
+	return &builderState{output: initial.DeepCopy().Nodes}
 }
 
 // eventLogState is the backing struct for scbuildstmt.EventLogState interface.
@@ -110,9 +104,9 @@ type eventLogState struct {
 
 // newEventLogState constructs an eventLogState.
 func newEventLogState(
-	d scbuildstmt.Dependencies, initial scpb.State, n tree.Statement,
+	d scbuildstmt.Dependencies, initial scpb.CurrentState, n tree.Statement,
 ) *eventLogState {
-	stmts := initial.Clone().Statements
+	stmts := initial.DeepCopy().Statements
 	els := eventLogState{
 		statements: append(stmts, scpb.Statement{
 			Statement: n.String(),

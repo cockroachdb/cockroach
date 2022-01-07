@@ -23,13 +23,13 @@ import (
 
 // BuildStages builds the plan's stages for this and all subsequent phases.
 func BuildStages(
-	init scpb.State, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
+	init scpb.CurrentState, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
 ) []Stage {
 	newBuildState := func(isRevertibilityIgnored bool) *buildState {
 		b := buildState{
 			g:                      g,
 			phase:                  phase,
-			state:                  shallowCopy(init),
+			state:                  init.ShallowCopy(),
 			fulfilled:              make(map[*scpb.Node]struct{}, g.Order()),
 			scJobIDSupplier:        scJobIDSupplier,
 			isRevertibilityIgnored: isRevertibilityIgnored,
@@ -96,14 +96,14 @@ type buildState struct {
 	scJobIDSupplier        func() jobspb.JobID
 	isRevertibilityIgnored bool
 
-	state     scpb.State
+	state     scpb.CurrentState
 	phase     scop.Phase
 	fulfilled map[*scpb.Node]struct{}
 }
 
 // isStateTerminal returns true iff the state is terminal, according to the
 // graph.
-func (b buildState) isStateTerminal(state scpb.State) bool {
+func (b buildState) isStateTerminal(state scpb.CurrentState) bool {
 	for _, n := range state.Nodes {
 		if _, found := b.g.GetOpEdgeFrom(n); found {
 			return false
@@ -386,23 +386,23 @@ func (sb stageBuilder) build() Stage {
 	return s
 }
 
-func (sb stageBuilder) after() scpb.State {
-	state := shallowCopy(sb.bs.state)
+func (sb stageBuilder) after() scpb.CurrentState {
+	state := sb.bs.state.ShallowCopy()
 	for i, t := range sb.current {
 		state.Nodes[i] = t.n
 	}
 	return state
 }
 
-func (sb stageBuilder) createSchemaChangeJobOp(state scpb.State) scop.Op {
+func (sb stageBuilder) createSchemaChangeJobOp(state scpb.CurrentState) scop.Op {
 	return &scop.CreateDeclarativeSchemaChangerJob{
 		JobID:       sb.bs.scJobIDSupplier(),
-		TargetState: state.Clone().TargetState,
+		TargetState: state.DeepCopy().TargetState,
 		Statuses:    state.Statuses(),
 	}
 }
 
-func (sb stageBuilder) addJobReferenceOps(state scpb.State) []scop.Op {
+func (sb stageBuilder) addJobReferenceOps(state scpb.CurrentState) []scop.Op {
 	jobID := sb.bs.scJobIDSupplier()
 	return generateOpsForJobIDs(
 		screl.GetDescIDs(state.TargetState),
@@ -413,7 +413,7 @@ func (sb stageBuilder) addJobReferenceOps(state scpb.State) []scop.Op {
 	)
 }
 
-func (sb stageBuilder) updateJobProgressOp(state scpb.State) scop.Op {
+func (sb stageBuilder) updateJobProgressOp(state scpb.CurrentState) scop.Op {
 	return &scop.UpdateSchemaChangerJob{
 		JobID:           sb.bs.scJobIDSupplier(),
 		Statuses:        state.Statuses(),
@@ -421,7 +421,7 @@ func (sb stageBuilder) updateJobProgressOp(state scpb.State) scop.Op {
 	}
 }
 
-func (sb stageBuilder) removeJobReferenceOps(state scpb.State) []scop.Op {
+func (sb stageBuilder) removeJobReferenceOps(state scpb.CurrentState) []scop.Op {
 	jobID := sb.bs.scJobIDSupplier()
 	return generateOpsForJobIDs(
 		screl.GetDescIDs(state.TargetState),
@@ -440,19 +440,6 @@ func generateOpsForJobIDs(
 		ops[i] = f(descID, jobID)
 	}
 	return ops
-}
-
-// shallowCopy creates a shallow copy of the passed state. Importantly, it
-// retains copies to the same underlying nodes while allocating new backing
-// slices.
-func shallowCopy(cur scpb.State) scpb.State {
-	return scpb.State{
-		TargetState: cur.TargetState,
-		Nodes: append(
-			make([]*scpb.Node, 0, len(cur.Nodes)),
-			cur.Nodes...,
-		),
-	}
 }
 
 // decorateStages decorates stages with position in plan.

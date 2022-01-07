@@ -251,7 +251,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var ts scpb.State
+		var ts scpb.CurrentState
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -259,116 +259,90 @@ func TestSchemaChanger(t *testing.T) {
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
 
-			// Corresponds to:
-			//
-			//  ALTER TABLE foo ADD COLUMN j INT;
-			//
+			stmts := []scpb.Statement{
+				{
+					Statement: "ALTER TABLE foo ADD COLUMN j INT",
+				},
+			}
 			metadata := &scpb.TargetMetadata{
 				StatementID:     0,
 				SubWorkID:       1,
 				SourceElementID: 1,
 			}
-			initial := scpb.State{
-				TargetState: scpb.TargetState{
-					Statements: []scpb.Statement{
-						{
-							Statement: "ALTER TABLE foo ADD COLUMN j INT",
-						},
+			targets := []scpb.Target{
+				*scpb.NewTarget(
+					scpb.Status_PUBLIC,
+					&scpb.PrimaryIndex{
+						TableID:             fooTable.GetID(),
+						IndexID:             2,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+						StoringColumnIDs:    []descpb.ColumnID{2},
+						Unique:              true,
+						Inverted:            false,
 					},
-					Targets: []scpb.Target{
-						*scpb.NewTarget(
-							scpb.Status_PUBLIC,
-							&scpb.PrimaryIndex{
-								TableID:             fooTable.GetID(),
-								IndexID:             2,
-								KeyColumnIDs:        []descpb.ColumnID{1},
-								KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
-								StoringColumnIDs:    []descpb.ColumnID{2},
-								Unique:              true,
-								Inverted:            false,
-							},
-							metadata,
-						),
-						*scpb.NewTarget(
-							scpb.Status_PUBLIC,
-							&scpb.IndexName{
-								TableID: fooTable.GetID(),
-								IndexID: 2,
-								Name:    "new_primary_key",
-							},
-							metadata,
-						),
-						*scpb.NewTarget(
-							scpb.Status_PUBLIC,
-							&scpb.ColumnName{
-								TableID:  fooTable.GetID(),
-								ColumnID: 2,
-								Name:     "j",
-							},
-							metadata,
-						),
-						*scpb.NewTarget(
-							scpb.Status_PUBLIC,
-							&scpb.Column{
-								TableID:        fooTable.GetID(),
-								ColumnID:       2,
-								Type:           types.Int,
-								Nullable:       true,
-								PgAttributeNum: 2,
-							},
-							metadata,
-						),
-						*scpb.NewTarget(
-							scpb.Status_ABSENT,
-							&scpb.PrimaryIndex{
-								TableID:             fooTable.GetID(),
-								IndexID:             1,
-								KeyColumnIDs:        []descpb.ColumnID{1},
-								KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
-								Unique:              true,
-								Inverted:            false,
-							},
-							metadata,
-						),
-						*scpb.NewTarget(
-							scpb.Status_ABSENT,
-							&scpb.IndexName{
-								TableID: fooTable.GetID(),
-								IndexID: 1,
-								Name:    "primary",
-							},
-							metadata,
-						),
+					metadata,
+				),
+				*scpb.NewTarget(
+					scpb.Status_PUBLIC,
+					&scpb.IndexName{
+						TableID: fooTable.GetID(),
+						IndexID: 2,
+						Name:    "new_primary_key",
 					},
-				},
+					metadata,
+				),
+				*scpb.NewTarget(
+					scpb.Status_PUBLIC,
+					&scpb.ColumnName{
+						TableID:  fooTable.GetID(),
+						ColumnID: 2,
+						Name:     "j",
+					},
+					metadata,
+				),
+				*scpb.NewTarget(
+					scpb.Status_PUBLIC,
+					&scpb.Column{
+						TableID:        fooTable.GetID(),
+						ColumnID:       2,
+						Type:           types.Int,
+						Nullable:       true,
+						PgAttributeNum: 2,
+					},
+					metadata,
+				),
+				*scpb.NewTarget(
+					scpb.Status_ABSENT,
+					&scpb.PrimaryIndex{
+						TableID:             fooTable.GetID(),
+						IndexID:             1,
+						KeyColumnIDs:        []descpb.ColumnID{1},
+						KeyColumnDirections: []scpb.PrimaryIndex_Direction{scpb.PrimaryIndex_ASC},
+						Unique:              true,
+						Inverted:            false,
+					},
+					metadata,
+				),
+				*scpb.NewTarget(
+					scpb.Status_ABSENT,
+					&scpb.IndexName{
+						TableID: fooTable.GetID(),
+						IndexID: 1,
+						Name:    "primary",
+					},
+					metadata,
+				),
 			}
-
-			initial.Nodes = []*scpb.Node{
-				{
-					Target: &initial.Targets[0],
-					Status: scpb.Status_ABSENT,
-				},
-				{
-					Target: &initial.Targets[1],
-					Status: scpb.Status_ABSENT,
-				},
-				{
-					Target: &initial.Targets[2],
-					Status: scpb.Status_ABSENT,
-				},
-				{
-					Target: &initial.Targets[3],
-					Status: scpb.Status_ABSENT,
-				},
-				{
-					Target: &initial.Targets[4],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: &initial.Targets[5],
-					Status: scpb.Status_PUBLIC,
-				},
+			current := []scpb.Status{
+				scpb.Status_ABSENT,
+				scpb.Status_ABSENT,
+				scpb.Status_ABSENT,
+				scpb.Status_ABSENT,
+				scpb.Status_PUBLIC,
+				scpb.Status_PUBLIC,
 			}
+			initial := scpb.MakeCurrentState(scpb.TargetState{Statements: stmts, Targets: targets}, current)
 
 			for _, phase := range []scop.Phase{
 				scop.StatementPhase,
@@ -384,7 +358,7 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		var after scpb.State
+		var after scpb.CurrentState
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
@@ -412,7 +386,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var ts scpb.State
+		var ts scpb.CurrentState
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -420,7 +394,7 @@ func TestSchemaChanger(t *testing.T) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
 				require.Len(t, parsed, 1)
-				outputNodes, err := scbuild.Build(ctx, buildDeps, scpb.State{}, parsed[0].AST.(*tree.AlterTable))
+				outputNodes, err := scbuild.Build(ctx, buildDeps, scpb.CurrentState{}, parsed[0].AST.(*tree.AlterTable))
 				require.NoError(t, err)
 
 				for _, phase := range []scop.Phase{

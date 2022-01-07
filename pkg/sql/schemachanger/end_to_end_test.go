@@ -133,7 +133,7 @@ func waitForSchemaChangesToComplete(t *testing.T, tdb *sqlutils.SQLRunner) {
 func execStatementWithTestDeps(
 	ctx context.Context, t *testing.T, deps *sctestdeps.TestState, stmt parser.Statement,
 ) {
-	state, err := scbuild.Build(ctx, deps, scpb.State{}, stmt.AST)
+	state, err := scbuild.Build(ctx, deps, scpb.CurrentState{}, stmt.AST)
 	require.NoError(t, err, "error in builder")
 
 	var jobID jobspb.JobID

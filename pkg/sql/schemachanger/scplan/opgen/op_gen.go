@@ -24,11 +24,11 @@ var opRegistry = &registry{}
 
 // BuildGraph constructs a graph with operation edges populated from an initial
 // state.
-func BuildGraph(initial scpb.State) (*scgraph.Graph, error) {
+func BuildGraph(initial scpb.CurrentState) (*scgraph.Graph, error) {
 	return opRegistry.buildGraph(initial)
 }
 
-func (r *registry) buildGraph(initial scpb.State) (*scgraph.Graph, error) {
+func (r *registry) buildGraph(initial scpb.CurrentState) (*scgraph.Graph, error) {
 	g, err := scgraph.New(initial)
 	if err != nil {
 		return nil, err
