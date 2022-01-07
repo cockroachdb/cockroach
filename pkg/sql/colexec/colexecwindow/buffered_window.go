@@ -239,6 +239,18 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			// Load the next batch into currentBatch. If currentBatch still has data,
 			// move it into the queue.
 			if b.currentBatch != nil && b.currentBatch.Length() > 0 {
+				// We might have already set some values on the output vector
+				// within the current batch. If that vector is bytes-like, we
+				// have to explicitly maintain the invariant of the vector by
+				// updating the offsets.
+				// TODO(yuzefovich): it is quite unfortunate that the output
+				// vector is being spilled to disk. Consider refactoring this.
+				switch b.outputColFam {
+				case types.BytesFamily:
+					b.currentBatch.ColVec(b.outputColIdx).Bytes().UpdateOffsetsToBeNonDecreasing(b.currentBatch.Length())
+				case types.JsonFamily:
+					b.currentBatch.ColVec(b.outputColIdx).JSON().UpdateOffsetsToBeNonDecreasing(b.currentBatch.Length())
+				}
 				b.bufferQueue.Enqueue(b.Ctx, b.currentBatch)
 			}
 			// We have to copy the input batch data because calling Next on the input
