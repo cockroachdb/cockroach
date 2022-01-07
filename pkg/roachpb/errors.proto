@@ -332,6 +332,7 @@ message WriteIntentError {
 message WriteTooOldError {
   optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
+  optional bytes key = 3 [(gogoproto.casttype) = "Key"];
 }
 
 // An OpRequiresTxnError indicates that a command required to be

@@ -338,7 +338,7 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 	}
 	// The txn can't write at the existing timestamp, so we provide the error
 	// with the timestamp immediately after it.
-	p.err = roachpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next())
+	p.err = roachpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next(), nil /* key */)
 	p.results.clear()
 	p.intents.Reset()
 }
