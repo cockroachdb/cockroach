@@ -502,7 +502,7 @@ func (noopPartitioner) AddPartitioning(
 type noopEventLogger struct{}
 
 func (noopEventLogger) LogEvent(
-	ctx context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
+	_ context.Context, _ descpb.ID, _ eventpb.CommonSQLEventDetails, _ eventpb.EventPayload,
 ) error {
 	return nil
 }

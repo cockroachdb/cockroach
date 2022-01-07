@@ -43,7 +43,7 @@ PreCommitPhase stage 1 of 1 with 6 MutationType ops
       JobID: 1
       TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP VIEW defaultdb.v1
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
@@ -51,16 +51,15 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
     [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 55
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 55
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW defaultdb.v1
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 55
@@ -263,7 +262,7 @@ PreCommitPhase stage 1 of 1 with 25 MutationType ops
       JobID: 1
       TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP VIEW defaultdb.v1 CASCADE
 PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
@@ -275,72 +274,67 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
     [[View:{DescID: 61}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 55
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 55
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW defaultdb.v1 CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 55
     *scop.LogEvent
-      DescID: 56
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 56
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW defaultdb.v1 CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 56
     *scop.LogEvent
-      DescID: 57
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 57
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW defaultdb.v1 CASCADE
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 57
     *scop.LogEvent
-      DescID: 58
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 58
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW defaultdb.v1 CASCADE
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 58
     *scop.LogEvent
-      DescID: 61
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 61
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 5
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW defaultdb.v1 CASCADE
+      TargetMetadata:
+        SourceElementID: 5
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 61

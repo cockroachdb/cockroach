@@ -818,10 +818,13 @@ func (s *TestState) IndexValidator() scexec.IndexValidator {
 
 // LogEvent implements scexec.EventLogger
 func (s *TestState) LogEvent(
-	_ context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
+	_ context.Context,
+	descID descpb.ID,
+	details eventpb.CommonSQLEventDetails,
+	event eventpb.EventPayload,
 ) error {
 	s.LogSideEffectf("write %T to event log for descriptor #%d: %s",
-		event, descID, metadata.Statement)
+		event, descID, details.Statement)
 	return nil
 }
 

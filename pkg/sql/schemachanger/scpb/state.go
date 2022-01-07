@@ -77,18 +77,6 @@ func NewTarget(status Status, elem Element, metadata *TargetMetadata) *Target {
 // created and has no relation to the descriptor ID.
 type SourceElementID uint32
 
-// ElementMetadata contains materialized metadata for an element,
-// where references inside the TargetMetadata are resolved to
-// their actual values. This structure is mainly used during opgen
-// where we need to know these values to emit event log entries for
-// example.
-type ElementMetadata struct {
-	TargetMetadata
-	Username  string
-	AppName   string
-	Statement string
-}
-
 // DeepCopy returns a deep copy of the state.
 func (s *CurrentState) DeepCopy() CurrentState {
 	return MakeCurrentState(s.TargetState, s.Statuses())

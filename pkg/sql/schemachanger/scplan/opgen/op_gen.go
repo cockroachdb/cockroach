@@ -59,15 +59,9 @@ func (r *registry) buildGraph(initial scpb.CurrentState) (*scgraph.Graph, error)
 			return nil, err
 		}
 		for _, op := range edgesToAdd {
-			metadata := scpb.ElementMetadata{
-				TargetMetadata: op.n.Metadata,
-				Statement:      initial.Statements[op.n.Metadata.StatementID].Statement,
-				Username:       initial.Authorization.Username,
-				AppName:        initial.Authorization.AppName,
-			}
 			var ops []scop.Op
 			if op.ops != nil {
-				ops = op.ops(op.n.Element(), &metadata)
+				ops = op.ops(op.n.Element(), initial.TargetState)
 			}
 			if err := g.AddOpEdges(
 				op.n.Target, op.from, op.to, op.revertible, op.minPhase, ops...,

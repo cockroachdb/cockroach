@@ -132,7 +132,7 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		entries := eventLogEntriesForStatement(mvs.eventsByStatement[statementID])
 		for _, e := range entries {
 			// TODO(postamar): batch these
-			if err := deps.EventLogger().LogEvent(ctx, e.id, *e.metadata, e.event); err != nil {
+			if err := deps.EventLogger().LogEvent(ctx, e.id, e.details, e.event); err != nil {
 				return err
 			}
 		}
@@ -172,14 +172,14 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 	// be the source and everything else before will be dependencies if they have
 	// the same subtask ID.
 	for _, event := range statementEvents {
-		dependentEvents[event.metadata.SubWorkID] = append(dependentEvents[event.metadata.SubWorkID], event)
+		dependentEvents[event.SubWorkID] = append(dependentEvents[event.SubWorkID], event)
 	}
 	// Split of the source events.
 	orderedSubWorkID := make([]uint32, 0, len(dependentEvents))
 	for subWorkID := range dependentEvents {
 		elems := dependentEvents[subWorkID]
 		sort.SliceStable(elems, func(i, j int) bool {
-			return elems[i].metadata.SourceElementID < elems[j].metadata.SourceElementID
+			return elems[i].SourceElementID < elems[j].SourceElementID
 		})
 		sourceEvents[subWorkID] = elems[0]
 		dependentEvents[subWorkID] = elems[1:]
@@ -250,9 +250,11 @@ type mutationVisitorState struct {
 }
 
 type eventPayload struct {
-	id       descpb.ID
-	metadata *scpb.ElementMetadata
-	event    eventpb.EventPayload
+	id descpb.ID
+	scpb.TargetMetadata
+
+	details eventpb.CommonSQLEventDetails
+	event   eventpb.EventPayload
 }
 
 type schemaChangerJobUpdate struct {
@@ -352,7 +354,7 @@ func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
 		JobID:       jobID,
 		Description: "schema change job", // TODO(ajwerner): use const
 		Statements:  stmts,
-		Username:    security.MakeSQLUsernameFromPreNormalizedString(targetState.Authorization.Username),
+		Username:    security.MakeSQLUsernameFromPreNormalizedString(targetState.Authorization.UserName),
 		// TODO(ajwerner): It may be better in the future to have the builder be
 		// responsible for determining this set of descriptors. As of the time of
 		// writing, the descriptors to be "locked," descriptors that need schema
@@ -397,14 +399,18 @@ func createGCJobRecord(
 // EnqueueEvent implements the scmutationexec.MutationVisitorStateUpdater
 // interface.
 func (mvs *mutationVisitorState) EnqueueEvent(
-	id descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload,
+	id descpb.ID,
+	metadata scpb.TargetMetadata,
+	details eventpb.CommonSQLEventDetails,
+	event eventpb.EventPayload,
 ) error {
 	mvs.eventsByStatement[metadata.StatementID] = append(
 		mvs.eventsByStatement[metadata.StatementID],
 		eventPayload{
-			id:       id,
-			event:    event,
-			metadata: metadata,
+			id:             id,
+			event:          event,
+			TargetMetadata: metadata,
+			details:        details,
 		},
 	)
 	return nil

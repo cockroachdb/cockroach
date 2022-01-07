@@ -47,13 +47,8 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.View, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{
-						Metadata:     *md,
-						DescID:       this.TableID,
-						Element:      &scpb.ElementProto{View: this},
-						TargetStatus: scpb.Status_ABSENT,
-					}
+				emit(func(this *scpb.View, ts scpb.TargetState) scop.Op {
+					return newLogEventOp(this, ts)
 				}),
 				emit(func(this *scpb.View) scop.Op {
 					return &scop.CreateGcJobForTable{

@@ -32,7 +32,7 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       JobID: 1
       TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
 PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
@@ -40,16 +40,15 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
     [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        sequence:
+        Sequence:
           sequenceId: 54
-      Metadata:
-        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 54
@@ -124,7 +123,7 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
       JobID: 1
       TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
 PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
@@ -132,16 +131,15 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
     [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        sequence:
+        Sequence:
           sequenceId: 54
-      Metadata:
-        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 54

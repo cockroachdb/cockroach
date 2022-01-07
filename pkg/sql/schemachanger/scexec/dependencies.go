@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -62,7 +61,12 @@ type Catalog interface {
 // EventLogger encapsulates the operations for emitting event log entries.
 type EventLogger interface {
 	// LogEvent writes to the eventlog.
-	LogEvent(ctx context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload) error
+	LogEvent(
+		ctx context.Context,
+		descID descpb.ID,
+		details eventpb.CommonSQLEventDetails,
+		event eventpb.EventPayload,
+	) error
 }
 
 // CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor

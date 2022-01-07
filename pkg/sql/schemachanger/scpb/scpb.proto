@@ -64,6 +64,6 @@ message Statement {
 }
 
 message Authorization {
-  string username  = 1;
-  string appName = 2 [(gogoproto.customname) = "AppName"];
+  string user_name = 1;
+  string app_name = 2;
 }

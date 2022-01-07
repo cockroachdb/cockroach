@@ -113,7 +113,7 @@ func newEventLogState(
 		}),
 		authorization: scpb.Authorization{
 			AppName:  d.SessionData().ApplicationName,
-			Username: d.SessionData().SessionUser().Normalized(),
+			UserName: d.SessionData().SessionUser().Normalized(),
 		},
 		sourceElementID: new(scpb.SourceElementID),
 		statementMetaData: scpb.TargetMetadata{
