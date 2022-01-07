@@ -38,7 +38,7 @@ func registerTLP(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "tlp",
 		Owner:   registry.OwnerSQLQueries,
-		Timeout: time.Minute * 5,
+		Timeout: time.Hour * 1,
 		Tags:    nil,
 		Cluster: r.MakeClusterSpec(1),
 		Run:     runTLP,
@@ -46,10 +46,40 @@ func registerTLP(r registry.Registry) {
 }
 
 func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
+	timeout := 5 * time.Minute
+	// Run 5 minute iterations of TLP in a loop for about the entire test, giving
+	// an unused iteration at the end to allow the test to shut down cleanly.
+	until := time.After(t.Spec().(registry.TestSpec).Timeout - timeout)
+	done := ctx.Done()
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	if err := c.PutLibraries(ctx, "./lib"); err != nil {
+		t.Fatalf("could not initialize libraries: %v", err)
+	}
+
+	for i := 0; ; i++ {
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+		select {
+		case <-until:
+			return
+		case <-done:
+			return
+		default:
+		}
+
+		runOneTLP(ctx, i, timeout, t, c)
+		c.Stop(ctx, t.L(), option.DefaultStopOpts())
+		c.Wipe(ctx)
+	}
+}
+
+func runOneTLP(
+	ctx context.Context, iter int, timeout time.Duration, t test.Test, c cluster.Cluster,
+) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a TLP error.
-	tlpLog, err := os.Create(filepath.Join(t.ArtifactsDir(), "tlp.log"))
+	tlpLog, err := os.Create(filepath.Join(t.ArtifactsDir(), fmt.Sprintf("tlp%03d.log", iter)))
 	if err != nil {
 		t.Fatalf("could not create tlp.log: %v", err)
 	}
@@ -70,12 +100,6 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	rnd, seed := randutil.NewTestRand()
 	t.L().Printf("seed: %d", seed)
-
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-	if err := c.PutLibraries(ctx, "./lib"); err != nil {
-		t.Fatalf("could not initialize libraries: %v", err)
-	}
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rnd)
 
@@ -106,7 +130,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	defer smither.Close()
 
 	t.Status("running TLP")
-	until := time.After(t.Spec().(*registry.TestSpec).Timeout / 2)
+	until := time.After(timeout)
 	done := ctx.Done()
 	for i := 1; ; i++ {
 		select {
