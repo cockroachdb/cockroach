@@ -1212,7 +1212,7 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 		}
 	}
 
-	b, err = rowenc.EncodeTableValue(b, descpb.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
+	b, err = rowenc.EncodeTableValue(b, descpb.NoColumnID, val, nil /* scratch */)
 	if err != nil {
 		panic(err)
 	}
