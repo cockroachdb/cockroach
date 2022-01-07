@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -2006,7 +2007,7 @@ var (
 				},
 				KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
 				Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
-				Sharded: descpb.ShardedDescriptor{
+				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 					ShardBuckets: 8,
@@ -2106,7 +2107,7 @@ var (
 				},
 				KeyColumnIDs: []descpb.ColumnID{8, 1, 2, 3, 4},
 				Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
-				Sharded: descpb.ShardedDescriptor{
+				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
 					ShardBuckets: 8,

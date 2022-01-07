@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -33,7 +33,7 @@ func initializeMultiRegionMetadata(
 	execCfg *sql.ExecutorConfig,
 	liveRegions sql.LiveClusterRegions,
 	goal tree.SurvivalGoal,
-	primaryRegion descpb.RegionName,
+	primaryRegion catpb.RegionName,
 	regions []tree.Name,
 	dataPlacement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
@@ -50,22 +50,22 @@ func initializeMultiRegionMetadata(
 		return nil, err
 	}
 
-	if primaryRegion != descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
+	if primaryRegion != catpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
 		if err := sql.CheckClusterRegionIsLive(liveRegions, primaryRegion); err != nil {
 			return nil, err
 		}
 	}
-	regionNames := make(descpb.RegionNames, 0, len(regions)+1)
-	seenRegions := make(map[descpb.RegionName]struct{}, len(regions)+1)
+	regionNames := make(catpb.RegionNames, 0, len(regions)+1)
+	seenRegions := make(map[catpb.RegionName]struct{}, len(regions)+1)
 	if len(regions) > 0 {
-		if primaryRegion == descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
+		if primaryRegion == catpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
 			return nil, pgerror.Newf(
 				pgcode.InvalidDatabaseDefinition,
 				"PRIMARY REGION must be specified if REGIONS are specified",
 			)
 		}
 		for _, r := range regions {
-			region := descpb.RegionName(r)
+			region := catpb.RegionName(r)
 			if err := sql.CheckClusterRegionIsLive(liveRegions, region); err != nil {
 				return nil, err
 			}

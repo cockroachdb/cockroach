@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -1665,8 +1666,8 @@ type optForeignKeyConstraint struct {
 
 	validity     descpb.ConstraintValidity
 	match        descpb.ForeignKeyReference_Match
-	deleteAction descpb.ForeignKeyReference_Action
-	updateAction descpb.ForeignKeyReference_Action
+	deleteAction catpb.ForeignKeyAction
+	updateAction catpb.ForeignKeyAction
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -2301,11 +2302,11 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 // mapGeneratedAsIdentityType maps a descpb.GeneratedAsIdentityType into corresponding
 // cat.GeneratedAsIdentityType. This is a helper function for the read access to
 // the GeneratedAsIdentityType attribute for descpb.ColumnDescriptor.
-func mapGeneratedAsIdentityType(inType descpb.GeneratedAsIdentityType) cat.GeneratedAsIdentityType {
-	mapGeneratedAsIdentityType := map[descpb.GeneratedAsIdentityType]cat.GeneratedAsIdentityType{
-		descpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN:  cat.NotGeneratedAsIdentity,
-		descpb.GeneratedAsIdentityType_GENERATED_ALWAYS:     cat.GeneratedAlwaysAsIdentity,
-		descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT: cat.GeneratedByDefaultAsIdentity,
+func mapGeneratedAsIdentityType(inType catpb.GeneratedAsIdentityType) cat.GeneratedAsIdentityType {
+	mapGeneratedAsIdentityType := map[catpb.GeneratedAsIdentityType]cat.GeneratedAsIdentityType{
+		catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN:  cat.NotGeneratedAsIdentity,
+		catpb.GeneratedAsIdentityType_GENERATED_ALWAYS:     cat.GeneratedAlwaysAsIdentity,
+		catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT: cat.GeneratedByDefaultAsIdentity,
 	}
 	return mapGeneratedAsIdentityType[inType]
 }

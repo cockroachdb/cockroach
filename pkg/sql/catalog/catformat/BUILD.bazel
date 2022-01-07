@@ -22,6 +22,7 @@ go_test(
     srcs = ["index_test.go"],
     embed = [":catformat"],
     deps = [
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/sem/tree",

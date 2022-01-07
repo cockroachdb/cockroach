@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -23,6 +24,7 @@ go_test(
     srcs = ["region_config_test.go"],
     deps = [
         ":multiregion",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",

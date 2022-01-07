@@ -13,6 +13,7 @@ package descpb
 import (
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -50,37 +51,21 @@ func (x ForeignKeyReference_Match) String() string {
 // ForeignKeyReferenceActionType allows the conversion between a
 // tree.ReferenceAction and a ForeignKeyReference_Action.
 var ForeignKeyReferenceActionType = [...]tree.ReferenceAction{
-	ForeignKeyReference_NO_ACTION:   tree.NoAction,
-	ForeignKeyReference_RESTRICT:    tree.Restrict,
-	ForeignKeyReference_SET_DEFAULT: tree.SetDefault,
-	ForeignKeyReference_SET_NULL:    tree.SetNull,
-	ForeignKeyReference_CASCADE:     tree.Cascade,
+	catpb.ForeignKeyAction_NO_ACTION:   tree.NoAction,
+	catpb.ForeignKeyAction_RESTRICT:    tree.Restrict,
+	catpb.ForeignKeyAction_SET_DEFAULT: tree.SetDefault,
+	catpb.ForeignKeyAction_SET_NULL:    tree.SetNull,
+	catpb.ForeignKeyAction_CASCADE:     tree.Cascade,
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a
-// ForeignKeyReference_Action and a tree.ReferenceAction.
-var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
-	tree.NoAction:   ForeignKeyReference_NO_ACTION,
-	tree.Restrict:   ForeignKeyReference_RESTRICT,
-	tree.SetDefault: ForeignKeyReference_SET_DEFAULT,
-	tree.SetNull:    ForeignKeyReference_SET_NULL,
-	tree.Cascade:    ForeignKeyReference_CASCADE,
-}
-
-// String implements the fmt.Stringer interface.
-func (x ForeignKeyReference_Action) String() string {
-	switch x {
-	case ForeignKeyReference_RESTRICT:
-		return "RESTRICT"
-	case ForeignKeyReference_SET_DEFAULT:
-		return "SET DEFAULT"
-	case ForeignKeyReference_SET_NULL:
-		return "SET NULL"
-	case ForeignKeyReference_CASCADE:
-		return "CASCADE"
-	default:
-		return strconv.Itoa(int(x))
-	}
+// catpb.ForeignKeyAction_Action and a tree.ReferenceAction.
+var ForeignKeyReferenceActionValue = [...]catpb.ForeignKeyAction{
+	tree.NoAction:   catpb.ForeignKeyAction_NO_ACTION,
+	tree.Restrict:   catpb.ForeignKeyAction_RESTRICT,
+	tree.SetDefault: catpb.ForeignKeyAction_SET_DEFAULT,
+	tree.SetNull:    catpb.ForeignKeyAction_SET_NULL,
+	tree.Cascade:    catpb.ForeignKeyAction_CASCADE,
 }
 
 // ConstraintType is used to identify the type of a constraint.

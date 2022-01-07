@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -215,7 +216,7 @@ type DatabaseDescriptor interface {
 	// configured. If so, GetRegionConfig can be used.
 	IsMultiRegion() bool
 	// PrimaryRegionName returns the primary region for a multi-region database.
-	PrimaryRegionName() (descpb.RegionName, error)
+	PrimaryRegionName() (catpb.RegionName, error)
 	// MultiRegionEnumID returns the ID of the multi-region enum if the database
 	// is a multi-region database, and an error otherwise.
 	MultiRegionEnumID() (descpb.ID, error)
@@ -609,7 +610,7 @@ type TableDescriptor interface {
 	// GetLocalityConfig returns the locality config for this table, which
 	// describes the table's multi-region locality policy if one is set (e.g.
 	// GLOBAL or REGIONAL BY ROW).
-	GetLocalityConfig() *descpb.TableDescriptor_LocalityConfig
+	GetLocalityConfig() *catpb.LocalityConfig
 	// IsLocalityRegionalByRow returns true if the table is REGIONAL BY ROW.
 	IsLocalityRegionalByRow() bool
 	// IsLocalityRegionalByTable returns true if the table is REGIONAL BY TABLE.
@@ -618,7 +619,7 @@ type TableDescriptor interface {
 	IsLocalityGlobal() bool
 	// GetRegionalByTableRegion returns the region a REGIONAL BY TABLE table is
 	// homed in.
-	GetRegionalByTableRegion() (descpb.RegionName, error)
+	GetRegionalByTableRegion() (catpb.RegionName, error)
 	// GetRegionalByRowTableRegionColumnName returns the region column name of a
 	// REGIONAL BY ROW table.
 	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
@@ -660,13 +661,13 @@ type TypeDescriptor interface {
 	// The following fields are only valid for multi-region enum types.
 
 	// PrimaryRegionName returns the primary region for a multi-region enum.
-	PrimaryRegionName() (descpb.RegionName, error)
+	PrimaryRegionName() (catpb.RegionName, error)
 	// RegionNames returns all `PUBLIC` regions on the multi-region enum. Regions
 	// that are in the process of being added/removed (`READ_ONLY`) are omitted.
-	RegionNames() (descpb.RegionNames, error)
+	RegionNames() (catpb.RegionNames, error)
 	// RegionNamesIncludingTransitioning returns all the regions on a multi-region
 	// enum, including `READ ONLY` regions which are in the process of transitioning.
-	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
+	RegionNamesIncludingTransitioning() (catpb.RegionNames, error)
 	// RegionNamesForValidation returns all regions on the multi-region
 	// enum to make validation with the public zone configs and partitons
 	// possible.
@@ -676,10 +677,10 @@ type TypeDescriptor interface {
 	// being dropped (since they will not be dropped from the zone configuration
 	// until they are fully removed from the type descriptor, again, at the end
 	// of the transaction).
-	RegionNamesForValidation() (descpb.RegionNames, error)
+	RegionNamesForValidation() (catpb.RegionNames, error)
 	// TransitioningRegionNames returns regions which are transitioning to PUBLIC
 	// or are being removed.
-	TransitioningRegionNames() (descpb.RegionNames, error)
+	TransitioningRegionNames() (catpb.RegionNames, error)
 
 	// The following fields are set if the type is an enum or a multi-region enum.
 

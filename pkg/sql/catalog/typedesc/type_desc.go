@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
@@ -188,7 +189,7 @@ func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
 }
 
 // PrimaryRegionName implements the TypeDescriptor interface.
-func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
+func (desc *immutable) PrimaryRegionName() (catpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return "", errors.AssertionFailedf(
 			"can not get primary region of a non multi-region enum")
@@ -197,66 +198,66 @@ func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
 }
 
 // RegionNames implements the TypeDescriptor interface.
-func (desc *immutable) RegionNames() (descpb.RegionNames, error) {
+func (desc *immutable) RegionNames() (catpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region enum %d", desc.ID,
 		)
 	}
-	var regions descpb.RegionNames
+	var regions catpb.RegionNames
 	for _, member := range desc.EnumMembers {
 		if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY {
 			continue
 		}
-		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+		regions = append(regions, catpb.RegionName(member.LogicalRepresentation))
 	}
 	return regions, nil
 }
 
 // TransitioningRegionNames implements the TypeDescriptor interface.
-func (desc *immutable) TransitioningRegionNames() (descpb.RegionNames, error) {
+func (desc *immutable) TransitioningRegionNames() (catpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region enum %d", desc.ID,
 		)
 	}
-	var regions descpb.RegionNames
+	var regions catpb.RegionNames
 	for _, member := range desc.EnumMembers {
 		if member.Direction != descpb.TypeDescriptor_EnumMember_NONE {
-			regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+			regions = append(regions, catpb.RegionName(member.LogicalRepresentation))
 		}
 	}
 	return regions, nil
 }
 
 // RegionNamesForValidation implements the TypeDescriptor interface.
-func (desc *immutable) RegionNamesForValidation() (descpb.RegionNames, error) {
+func (desc *immutable) RegionNamesForValidation() (catpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region enum %d", desc.ID,
 		)
 	}
-	var regions descpb.RegionNames
+	var regions catpb.RegionNames
 	for _, member := range desc.EnumMembers {
 		if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
 			member.Direction == descpb.TypeDescriptor_EnumMember_ADD {
 			continue
 		}
-		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+		regions = append(regions, catpb.RegionName(member.LogicalRepresentation))
 	}
 	return regions, nil
 }
 
 // RegionNamesIncludingTransitioning implements the TypeDescriptor interface.
-func (desc *immutable) RegionNamesIncludingTransitioning() (descpb.RegionNames, error) {
+func (desc *immutable) RegionNamesIncludingTransitioning() (catpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region enum %d", desc.ID,
 		)
 	}
-	var regions descpb.RegionNames
+	var regions catpb.RegionNames
 	for _, member := range desc.EnumMembers {
-		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+		regions = append(regions, catpb.RegionName(member.LogicalRepresentation))
 	}
 	return regions, nil
 }
@@ -665,7 +666,7 @@ func (desc *immutable) validateMultiRegion(
 	{
 		found := false
 		for _, member := range desc.EnumMembers {
-			if descpb.RegionName(member.LogicalRepresentation) == primaryRegion {
+			if catpb.RegionName(member.LogicalRepresentation) == primaryRegion {
 				found = true
 			}
 		}

@@ -11,6 +11,7 @@ go_library(
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",

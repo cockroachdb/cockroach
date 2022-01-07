@@ -13,7 +13,6 @@ go_library(
         "index.go",
         "join_type.go",
         "locking.go",
-        "multiregion.go",
         "privilege.go",
         "structured.go",
         ":gen-formatversion-stringer",  # keep
@@ -26,6 +25,7 @@ go_library(
         "//pkg/keys",
         "//pkg/security",
         "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -75,6 +75,7 @@ proto_library(
     deps = [
         "//pkg/geo/geoindex:geoindex_proto",
         "//pkg/roachpb:roachpb_proto",
+        "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/types:types_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -90,6 +91,7 @@ go_proto_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/roachpb:with-mocks",  # keep
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",

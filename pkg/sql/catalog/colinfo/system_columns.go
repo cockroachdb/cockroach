@@ -14,6 +14,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -62,7 +63,7 @@ var MVCCTimestampColumnDesc = descpb.ColumnDescriptor{
 	Type:             MVCCTimestampColumnType,
 	Hidden:           true,
 	Nullable:         true,
-	SystemColumnKind: descpb.SystemColumnKind_MVCCTIMESTAMP,
+	SystemColumnKind: catpb.SystemColumnKind_MVCCTIMESTAMP,
 	ID:               MVCCTimestampColumnID,
 }
 
@@ -78,7 +79,7 @@ var TableOIDColumnDesc = descpb.ColumnDescriptor{
 	Type:             types.Oid,
 	Hidden:           true,
 	Nullable:         true,
-	SystemColumnKind: descpb.SystemColumnKind_TABLEOID,
+	SystemColumnKind: catpb.SystemColumnKind_TABLEOID,
 	ID:               TableOIDColumnID,
 }
 
@@ -87,18 +88,18 @@ const TableOIDColumnName = "tableoid"
 
 // IsColIDSystemColumn returns whether a column ID refers to a system column.
 func IsColIDSystemColumn(colID descpb.ColumnID) bool {
-	return GetSystemColumnKindFromColumnID(colID) != descpb.SystemColumnKind_NONE
+	return GetSystemColumnKindFromColumnID(colID) != catpb.SystemColumnKind_NONE
 }
 
 // GetSystemColumnKindFromColumnID returns the kind of system column that colID
 // refers to.
-func GetSystemColumnKindFromColumnID(colID descpb.ColumnID) descpb.SystemColumnKind {
+func GetSystemColumnKindFromColumnID(colID descpb.ColumnID) catpb.SystemColumnKind {
 	for i := range AllSystemColumnDescs {
 		if AllSystemColumnDescs[i].ID == colID {
 			return AllSystemColumnDescs[i].SystemColumnKind
 		}
 	}
-	return descpb.SystemColumnKind_NONE
+	return catpb.SystemColumnKind_NONE
 }
 
 // IsSystemColumnName returns whether or not a name is a reserved system

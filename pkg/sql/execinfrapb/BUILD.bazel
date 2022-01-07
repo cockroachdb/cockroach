@@ -97,6 +97,7 @@ proto_library(
     deps = [
         "//pkg/jobs/jobspb:jobspb_proto",
         "//pkg/roachpb:roachpb_proto",
+        "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/inverted:inverted_proto",
         "//pkg/sql/pgwire/pgerror:pgerror_proto",
@@ -121,6 +122,7 @@ go_proto_library(
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",

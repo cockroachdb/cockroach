@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -536,7 +537,7 @@ func checkMultiRegionCompatible(
 
 	if table.IsLocalityRegionalByTable() {
 		regionName, _ := table.GetRegionalByTableRegion()
-		if regionName == descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
+		if regionName == catpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
 			// REGIONAL BY PRIMARY REGION tables are allowed since they do not
 			// reference a particular region.
 			return nil

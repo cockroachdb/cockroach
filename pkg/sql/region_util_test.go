@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,7 +33,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		{
 			desc: "one region, zone survival",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_a",
 				},
 				"region_a",
@@ -71,7 +72,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		{
 			desc: "two regions, zone survival",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_a",
 				},
@@ -117,7 +118,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		{
 			desc: "three regions, zone survival",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -170,7 +171,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		{
 			desc: "three regions, region survival",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -223,7 +224,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		{
 			desc: "four regions, zone survival",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -283,7 +284,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		{
 			desc: "four regions, region survival",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -344,7 +345,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		{
 			desc: "one region, restricted placement",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_a",
 				},
 				"region_a",
@@ -376,7 +377,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		{
 			desc: "four regions, restricted placement",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_a",
 					"region_b",
 					"region_c",
@@ -419,7 +420,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 	}
 }
 
-func protoRegionName(region descpb.RegionName) *descpb.RegionName {
+func protoRegionName(region catpb.RegionName) *catpb.RegionName {
 	return &region
 }
 
@@ -428,19 +429,19 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 
 	testCases := []struct {
 		desc           string
-		localityConfig descpb.TableDescriptor_LocalityConfig
+		localityConfig catpb.LocalityConfig
 		regionConfig   multiregion.RegionConfig
 		expected       zonepb.ZoneConfig
 	}{
 		{
 			desc: "4-region global table with zone survival",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_Global_{
-					Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_Global_{
+					Global: &catpb.LocalityConfig_Global{},
 				},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -459,13 +460,13 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 		},
 		{
 			desc: "4-region global table with region survival",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_Global_{
-					Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_Global_{
+					Global: &catpb.LocalityConfig_Global{},
 				},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -484,13 +485,13 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 		},
 		{
 			desc: "4-region regional by row table with zone survival",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
-					RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_RegionalByRow_{
+					RegionalByRow: &catpb.LocalityConfig_RegionalByRow{},
 				},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -505,13 +506,13 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 		},
 		{
 			desc: "4-region regional by row table with region survival",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
-					RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_RegionalByRow_{
+					RegionalByRow: &catpb.LocalityConfig_RegionalByRow{},
 				},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -526,15 +527,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 		},
 		{
 			desc: "4-region regional by table with zone survival on primary region",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_RegionalByTable_{
+					RegionalByTable: &catpb.LocalityConfig_RegionalByTable{
 						Region: nil,
 					},
 				},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -549,15 +550,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 		},
 		{
 			desc: "4-region regional by table with regional survival on primary region",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_RegionalByTable_{
+					RegionalByTable: &catpb.LocalityConfig_RegionalByTable{
 						Region: nil,
 					},
 				},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -572,15 +573,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 		},
 		{
 			desc: "4-region regional by table with zone survival on non primary region",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_RegionalByTable_{
+					RegionalByTable: &catpb.LocalityConfig_RegionalByTable{
 						Region: protoRegionName("region_c"),
 					},
 				},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -614,15 +615,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 		},
 		{
 			desc: "4-region regional by table with regional survival on non primary region",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_RegionalByTable_{
+					RegionalByTable: &catpb.LocalityConfig_RegionalByTable{
 						Region: protoRegionName("region_c"),
 					},
 				},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -657,11 +658,11 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 		},
 		{
 			desc: "4-region global table with restricted placement",
-			localityConfig: descpb.TableDescriptor_LocalityConfig{
-				Locality: &descpb.TableDescriptor_LocalityConfig_Global_{},
+			localityConfig: catpb.LocalityConfig{
+				Locality: &catpb.LocalityConfig_Global_{},
 			},
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -729,7 +730,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 
 	testCases := []struct {
 		desc         string
-		region       descpb.RegionName
+		region       catpb.RegionName
 		regionConfig multiregion.RegionConfig
 		expected     zonepb.ZoneConfig
 	}{
@@ -737,7 +738,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 			desc:   "4-region table with zone survivability",
 			region: "region_a",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",
@@ -773,7 +774,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 			desc:   "4-region table with region survivability",
 			region: "region_a",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{
+				catpb.RegionNames{
 					"region_b",
 					"region_c",
 					"region_a",

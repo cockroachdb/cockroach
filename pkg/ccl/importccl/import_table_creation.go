@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -224,17 +225,17 @@ var (
 
 // Implements the tree.RegionOperator interface.
 type importRegionOperator struct {
-	primaryRegion descpb.RegionName
+	primaryRegion catpb.RegionName
 }
 
-func makeImportRegionOperator(primaryRegion descpb.RegionName) *importRegionOperator {
+func makeImportRegionOperator(primaryRegion catpb.RegionName) *importRegionOperator {
 	return &importRegionOperator{primaryRegion: primaryRegion}
 }
 
 // importDatabaseRegionConfig is a stripped down version of
 // multiregion.RegionConfig that is used by import.
 type importDatabaseRegionConfig struct {
-	primaryRegion descpb.RegionName
+	primaryRegion catpb.RegionName
 }
 
 // IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.

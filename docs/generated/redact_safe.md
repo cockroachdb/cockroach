@@ -24,6 +24,7 @@ pkg/roachpb/metadata.go | `StoreID`
 pkg/roachpb/method.go | `Method`
 pkg/roachpb/tenant.go | `TenantID`
 pkg/rpc/connection_class.go | `ConnectionClass`
+pkg/sql/catalog/catpb/constraint.go | `ForeignKeyAction`
 pkg/sql/catalog/descpb/structured.go | `ConstraintType`
 pkg/sql/catalog/descpb/structured.go | `ConstraintValidity`
 pkg/sql/catalog/descpb/structured.go | `DescriptorMutation_Direction`

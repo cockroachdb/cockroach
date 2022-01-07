@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -269,31 +270,31 @@ func (v TableImplicitRecordType) IsCompatibleWith(_ catalog.TypeDescriptor) erro
 }
 
 // PrimaryRegionName implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) PrimaryRegionName() (descpb.RegionName, error) {
+func (v TableImplicitRecordType) PrimaryRegionName() (catpb.RegionName, error) {
 	return "", errors.AssertionFailedf(
 		"can not get primary region of a implicit table record type")
 }
 
 // RegionNames implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) RegionNames() (descpb.RegionNames, error) {
+func (v TableImplicitRecordType) RegionNames() (catpb.RegionNames, error) {
 	return nil, errors.AssertionFailedf(
 		"can not get region names of a implicit table record type")
 }
 
 // RegionNamesIncludingTransitioning implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) RegionNamesIncludingTransitioning() (descpb.RegionNames, error) {
+func (v TableImplicitRecordType) RegionNamesIncludingTransitioning() (catpb.RegionNames, error) {
 	return nil, errors.AssertionFailedf(
 		"can not get region names of a implicit table record type")
 }
 
 // RegionNamesForValidation implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) RegionNamesForValidation() (descpb.RegionNames, error) {
+func (v TableImplicitRecordType) RegionNamesForValidation() (catpb.RegionNames, error) {
 	return nil, errors.AssertionFailedf(
 		"can not get region names of a implicit table record type")
 }
 
 // TransitioningRegionNames implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) TransitioningRegionNames() (descpb.RegionNames, error) {
+func (v TableImplicitRecordType) TransitioningRegionNames() (catpb.RegionNames, error) {
 	return nil, errors.AssertionFailedf(
 		"can not get region names of a implicit table record type")
 }

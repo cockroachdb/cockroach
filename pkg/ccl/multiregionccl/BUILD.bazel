@@ -9,7 +9,7 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkv",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/pgwire/pgcode",
