@@ -507,6 +507,7 @@ func (d *DBool) Size() uintptr {
 // DBitArray is the BIT/VARBIT Datum.
 type DBitArray struct {
 	bitarray.BitArray
+	fixedWidth bool
 }
 
 // ParseDBitArray parses a string representation of binary digits.
@@ -517,6 +518,7 @@ func ParseDBitArray(s string) (*DBitArray, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.fixedWidth = true
 	return &a, nil
 }
 
@@ -583,7 +585,10 @@ func (d *DBitArray) AsDInt(n uint) *DInt {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DBitArray) ResolvedType() *types.T {
+func (d *DBitArray) ResolvedType() *types.T {
+	if d.fixedWidth {
+		return types.MakeBit(int32(d.BitLen()))
+	}
 	return types.VarBit
 }
 

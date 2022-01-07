@@ -1641,7 +1641,8 @@ func formatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
 	default:
 		a = a.ToWidth(uint(t.Width()))
 	}
-	return &DBitArray{a}
+	// TODO: Need to test if B'1001'::VARBIT is typed correctly.
+	return &DBitArray{BitArray: a, fixedWidth: d.fixedWidth}
 }
 
 // performCastWithoutPrecisionTruncation performs the cast, but does not perform
@@ -1685,13 +1686,13 @@ func performCastWithoutPrecisionTruncation(
 			if err != nil {
 				return nil, err
 			}
-			ba = &DBitArray{res}
+			ba = &DBitArray{BitArray: res}
 		case *DCollatedString:
 			res, err := bitarray.Parse(v.Contents)
 			if err != nil {
 				return nil, err
 			}
-			ba = &DBitArray{res}
+			ba = &DBitArray{BitArray: res}
 		}
 		if truncateWidth {
 			ba = formatBitArrayToType(ba, t)
