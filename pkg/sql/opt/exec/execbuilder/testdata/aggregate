@@ -727,7 +727,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /xyz/zyx/3.0/2/1 -> NULL
+fetched: /xyz/zyx/?/?/1 -> <undecoded>
 output row: [1]
 
 query T
@@ -1082,13 +1082,13 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /xyz/xyz_pkey/1 -> NULL
+fetched: /xyz/xyz_pkey/1 -> <undecoded>
 fetched: /xyz/xyz_pkey/1/y -> 2
 fetched: /xyz/xyz_pkey/1/z -> 3.0
-fetched: /xyz/xyz_pkey/4 -> NULL
+fetched: /xyz/xyz_pkey/4 -> <undecoded>
 fetched: /xyz/xyz_pkey/4/y -> 5
 fetched: /xyz/xyz_pkey/4/z -> 6.0
-fetched: /xyz/xyz_pkey/7 -> NULL
+fetched: /xyz/xyz_pkey/7 -> <undecoded>
 fetched: /xyz/xyz_pkey/7/z -> 8.0
 output row: [9 4.5 6.33333333333333]
 

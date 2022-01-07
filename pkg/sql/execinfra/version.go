@@ -39,7 +39,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 53
+const Version execinfrapb.DistSQLVersion = 54
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
@@ -50,6 +50,13 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 52
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 54 (MinAcceptedVersion: 52)
+  - Field NeededColumns has been removed from the TableReaderSpec. It was being
+    used for the setup of the vectorized ColBatchScans, but now the
+    PostProcessSpec is examined instead. This means that older gateways still
+    produce specs that newer remote nodes understand, thus there is no bump in
+    the MinAcceptedVersion.
 
 - Version: 53 (MinAcceptedVersion: 52)
   - FINAL_STDDEV_POP and FINAL_VAR_POP aggregate functions were introduced to
