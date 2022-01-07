@@ -23,14 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
-// TestCastsVolatilityMatchesPostgres checks that our defined casts match
-// Postgres' casts for Volatility.
+// TestCastsMatchPostgres checks that the Volatility and CastContext of our
+// defined casts match Postgres' casts.
 //
-func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 // The command for generating pg_cast_dump.csv from psql is below. We ignore
 // types that we do not support, and we ignore geospatial types because they are
 // an extension of Postgres and have no official OIDs.
@@ -52,13 +52,19 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 //         ('nummultirange')
 //       ) AS types(t)
 //     )
-//     SELECT c.castsource, c.casttarget, p.provolatile, p.proleakproof
+//     SELECT
+//       c.castsource,
+//       c.casttarget,
+//       p.provolatile,
+//       p.proleakproof,
+//       c.castcontext
 //     FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
 //     WHERE
 //       c.castsource NOT IN (SELECT t FROM ignored_types)
 //       AND c.casttarget NOT IN (SELECT t FROM ignored_types)
 //   ) TO pg_cast_dump.csv WITH CSV DELIMITER '|' HEADER;
 //
+func TestCastsMatchPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	csvPath := filepath.Join("testdata", "pg_cast_dump.csv")
@@ -78,7 +84,12 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 		from, to oid.Oid
 	}
 
-	pgCastMap := make(map[pgCastKey]Volatility)
+	type pgCastValue struct {
+		volatility Volatility
+		context    CastContext
+	}
+
+	pgCastMap := make(map[pgCastKey]pgCastValue)
 
 	for {
 		line, err := reader.Read()
@@ -86,7 +97,7 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 			break
 		}
 		require.NoError(t, err)
-		require.Len(t, line, 4)
+		require.Len(t, line, 5)
 
 		fromOid, err := strconv.Atoi(line[0])
 		require.NoError(t, err)
@@ -98,29 +109,51 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 		require.Len(t, provolatile, 1)
 		proleakproof := line[3]
 		require.Len(t, proleakproof, 1)
+		castcontext := line[4]
+		require.Len(t, castcontext, 1)
 
 		v, err := VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 
-		pgCastMap[pgCastKey{oid.Oid(fromOid), oid.Oid(toOid)}] = v
+		c, err := castContextFromPostgres(castcontext)
+		require.NoError(t, err)
+
+		pgCastMap[pgCastKey{oid.Oid(fromOid), oid.Oid(toOid)}] = pgCastValue{v, c}
 	}
 
 	for src := range castMap {
 		for tgt, c := range castMap[src] {
 			// Find the corresponding pg cast.
-			pgCastVolatility, ok := pgCastMap[pgCastKey{src, tgt}]
+			pgCast, ok := pgCastMap[pgCastKey{src, tgt}]
 			if !ok && testing.Verbose() {
 				t.Logf("cast %s::%s has no corresponding pg cast", oidStr(src), oidStr(tgt))
 			}
-			if ok && c.volatility != pgCastVolatility {
+			if ok && c.volatility != pgCast.volatility {
 				t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
-					oidStr(src), oidStr(tgt), c.volatility, pgCastVolatility,
+					oidStr(src), oidStr(tgt), c.volatility, pgCast.volatility,
+				)
+			}
+			if ok && c.maxContext != pgCast.context {
+				t.Errorf("cast %s::%s has maxContext %s; corresponding pg cast has context %s",
+					oidStr(src), oidStr(tgt), c.maxContext, pgCast.context,
 				)
 			}
 		}
 	}
 }
 
+// castContextFromPostgres returns a CastContext that matches the castcontext
+// setting in Postgres's pg_cast table.
+func castContextFromPostgres(castcontext string) (CastContext, error) {
+	switch castcontext {
+	case "e":
+		return CastContextExplicit, nil
+	case "a":
+		return CastContextAssignment, nil
+	case "i":
+		return CastContextImplicit, nil
+	default:
+		return 0, errors.AssertionFailedf("invalid castcontext %s", castcontext)
 	}
 }
 
