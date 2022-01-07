@@ -59,7 +59,7 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched: /t1/nonuniqueidx/%'
 ----
-fetched: /t1/nonuniqueidx/1/? -> NULL
+fetched: /t1/nonuniqueidx/1/? -> <undecoded>
 
 query I
 SET TRACING=on,kv,results;
@@ -85,7 +85,7 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched: /t1/nonuniqueidxstoring/%'
 ----
-fetched: /t1/nonuniqueidxstoring/1/1 -> NULL
+fetched: /t1/nonuniqueidxstoring/1/1 -> <undecoded>
 fetched: /t1/nonuniqueidxstoring/1/1/z -> /1
 fetched: /t1/nonuniqueidxstoring/1/1/a/b -> /1/1
 
@@ -319,11 +319,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
 message LIKE 'fetched%'
 ORDER BY message
 ----
-fetched: /t/i/2/1 -> NULL
+fetched: /t/i/2/1 -> <undecoded>
 fetched: /t/i/2/1/w -> /3
-fetched: /t/i/5/4 -> NULL
+fetched: /t/i/5/4 -> <undecoded>
 fetched: /t/i/5/4/z -> /6
-fetched: /t/i/9/8 -> NULL
+fetched: /t/i/9/8 -> <undecoded>
 
 statement ok
 DROP TABLE IF EXISTS t;
