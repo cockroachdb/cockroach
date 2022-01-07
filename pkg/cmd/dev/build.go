@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -173,6 +174,22 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget, skipGen
 		// the top of the workspace; others go in the `bin` directory.
 		if strings.HasPrefix(base, "cockroach") {
 			symlinkPath = filepath.Join(workspace, base)
+		} else if base == "dev" {
+			buf, err := d.os.ReadFile(filepath.Join(workspace, "dev"))
+			if err != nil {
+				return err
+			}
+			var devVersion string
+			for _, line := range strings.Split(buf, "\n") {
+				if strings.HasPrefix(line, "DEV_VERSION=") {
+					devVersion = strings.Trim(strings.TrimPrefix(line, "DEV_VERSION="), "\n ")
+				}
+			}
+			if devVersion == "" {
+				return errors.New("could not find DEV_VERSION in top-level `dev` script")
+			}
+
+			symlinkPath = filepath.Join(workspace, "bin", "dev-versions", fmt.Sprintf("dev.%s", devVersion))
 		} else {
 			symlinkPath = filepath.Join(workspace, "bin", base)
 		}

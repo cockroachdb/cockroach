@@ -260,7 +260,9 @@ nogo(
 
 go_path(
     name = "go_path",
-    mode = "link",
+    # TODO(ricky): change back to 'link' when https://github.com/bazelbuild/rules_go/issues/3041
+    # is resolved.
+    mode = "copy",
     deps = [
         "//pkg/cmd/cockroach-short",
         "//pkg/cmd/roachprod",
