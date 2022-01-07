@@ -201,8 +201,7 @@ func TestVerifyPassword(t *testing.T) {
 	if util.RaceEnabled {
 		// The default bcrypt cost makes this test approximately 30s slower when the
 		// race detector is on.
-		defer func(prev int) { security.BcryptCost = prev }(security.BcryptCost)
-		security.BcryptCost = bcrypt.MinCost
+		security.BcryptCost.Override(ctx, &ts.Cfg.Settings.SV, int64(bcrypt.MinCost))
 	}
 
 	//location is used for timezone testing.
