@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -660,8 +661,12 @@ func generateChangefeedSessionID() string {
 }
 
 func (b *changefeedResumer) setJobRunningStatus(
-	ctx context.Context, fmtOrMsg string, args ...interface{},
-) {
+	ctx context.Context, lastUpdate time.Time, fmtOrMsg string, args ...interface{},
+) time.Time {
+	if timeutil.Since(lastUpdate) < runStatusUpdateFrequency {
+		return lastUpdate
+	}
+
 	status := jobs.RunningStatus(fmt.Sprintf(fmtOrMsg, args...))
 	if err := b.job.RunningStatus(ctx, nil,
 		func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
@@ -670,6 +675,8 @@ func (b *changefeedResumer) setJobRunningStatus(
 	); err != nil {
 		log.Warningf(ctx, "failed to set running status: %v", err)
 	}
+
+	return timeutil.Now()
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -740,6 +747,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		MaxBackoff:     10 * time.Second,
 	}
 	var err error
+	var lastRunStatusUpdate time.Time
 
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		// startedCh is normally used to signal back to the creator of the job that
@@ -770,7 +778,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				// Instead, we want to make sure that the changefeed job is not marked failed
 				// due to a transient, retryable error.
 				err = jobs.MarkAsRetryJobError(err)
-				b.setJobRunningStatus(ctx, "retryable flow error: %s", err)
+				lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable flow error: %s", err)
 			}
 
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
@@ -778,7 +786,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 
 		log.Warningf(ctx, `WARNING: CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
-		b.setJobRunningStatus(ctx, "retryable error: %s", err)
+		lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable error: %s", err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			sli, err := metrics.getSLIMetrics(details.Opts[changefeedbase.OptMetricsScope])
 			if err != nil {
