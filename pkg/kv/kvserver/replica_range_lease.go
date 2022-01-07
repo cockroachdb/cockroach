@@ -1049,7 +1049,7 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 			// this is just a logged error instead of a fatal
 			// assertion.
 			log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
-				&st.Lease, st.Lease.Replica)
+				st.Lease, st.Lease.Replica)
 		}
 		// Otherwise, if the lease is currently held by another replica, redirect
 		// to the holder.
@@ -1159,7 +1159,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					if !stillMember {
 						// See corresponding comment in leaseGoodToGoRLocked.
 						log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
-							&status.Lease, status.Lease.Replica)
+							status.Lease, status.Lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
@@ -1323,7 +1323,7 @@ func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.Lease
 		return
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "extending lease %s at %s", &st.Lease, st.Now)
+		log.Infof(ctx, "extending lease %s at %s", st.Lease, st.Now)
 	}
 	// We explicitly ignore the returned handle as we won't block on it.
 	_ = r.requestLeaseLocked(ctx, st)

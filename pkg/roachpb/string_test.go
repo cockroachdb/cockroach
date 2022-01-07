@@ -142,39 +142,3 @@ func TestSpansString(t *testing.T) {
 		require.Equal(t, tc.expected, tc.spans.String())
 	}
 }
-
-func TestLeaseString(t *testing.T) {
-	for _, tc := range []struct {
-		lease    *roachpb.Lease
-		expected string
-	}{
-		{
-			lease:    &roachpb.Lease{},
-			expected: "<empty>",
-		},
-		{
-			lease:    nil,
-			expected: "<nil>",
-		},
-		{
-			lease: &roachpb.Lease{
-				Replica:    roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1},
-				Sequence:   1,
-				Start:      hlc.ClockTimestamp(hlc.Timestamp{WallTime: 12, Logical: 123}),
-				Expiration: &hlc.Timestamp{WallTime: 1234, Logical: 12345},
-			},
-			expected: "repl=(n1,s1):? seq=1 start=0.000000012,123 exp=0.000001234,12345",
-		},
-		{
-			lease: &roachpb.Lease{
-				Replica:  roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1},
-				Sequence: 1,
-				Start:    hlc.ClockTimestamp(hlc.Timestamp{WallTime: 12, Logical: 123}),
-				Epoch:    1,
-			},
-			expected: "repl=(n1,s1):? seq=1 start=0.000000012,123 epo=1",
-		},
-	} {
-		require.Equal(t, tc.expected, tc.lease.String())
-	}
-}
