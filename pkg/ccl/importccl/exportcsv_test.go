@@ -23,11 +23,18 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -277,35 +284,46 @@ func TestExportOrder(t *testing.T) {
 
 // parquetTest provides information to validate a test of EXPORT PARQUET. All
 // fields below the stmt validate some aspect of the exported parquet file.
-// If a validation field is empty, then that field will not be used in the test.
 type parquetTest struct {
-	// filePrefix provides the parquet file name in front of the parquetExportFilePattern
+	// filePrefix provides the parquet file name in front of the parquetExportFilePattern.
 	filePrefix string
 
-	// fileSuffix provides the compression type, if any, of the parquet file
+	// fileSuffix provides the compression type, if any, of the parquet file.
 	fileSuffix string
+
+	// dir is the temp directory the parquet file will be in.
+	dir string
+
+	// dbName is the name of the exported table's database.
+	dbName string
 
 	// prep contains sql commands that will execute before the stmt.
 	prep []string
 
-	// stmt contains the EXPORT PARQUET sql statement to test
+	// stmt contains the EXPORT PARQUET sql statement to test.
 	stmt string
 
-	// colNames provides the expected column names for the parquet file.
-	colNames []string
+	// cols provides the expected column name and type
+	cols colinfo.ResultColumns
 
-	// colFieldRepType provides the expected parquet column type of each column in
+	// colFieldRepType provides the expected parquet repetition type of each column in
 	// the parquet file.
 	colFieldRepType []parquet.FieldRepetitionType
 
-	// vals provides the expected values of the parquet file.
-	vals [][]interface{}
+	// datums provides the expected values of the parquet file.
+	datums []tree.Datums
 }
 
-// validateParquetFile reads the parquet file, conducts a test related to each
-// non nil field in the parquetTest struct
-func validateParquetFile(t *testing.T, file string, test parquetTest) error {
-	r, err := os.Open(file)
+// validateParquetFile reads the parquet file and validates various aspects of
+// the parquet file.
+func validateParquetFile(
+	t *testing.T, ctx context.Context, ie *sql.InternalExecutor, test parquetTest,
+) error {
+	paths, err := filepath.Glob(filepath.Join(test.dir, test.filePrefix, parquetExportFilePattern+test.fileSuffix))
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(paths))
+	r, err := os.Open(paths[0])
 	if err != nil {
 		return err
 	}
@@ -319,108 +337,168 @@ func validateParquetFile(t *testing.T, file string, test parquetTest) error {
 
 	cols := fr.SchemaReader.GetSchemaDefinition().RootColumn.Children
 
-	if test.colNames != nil {
-		for i, col := range cols {
-			require.Equal(t, col.SchemaElement.Name, test.colNames[i])
-		}
-	}
 	if test.colFieldRepType != nil {
 		for i, col := range cols {
 			require.Equal(t, *col.SchemaElement.RepetitionType, test.colFieldRepType[i])
 		}
 	}
-	if test.vals != nil {
-		require.Equal(t, len(cols), len(test.vals[0]))
-		require.Equal(t, int(fr.NumRows()), len(test.vals))
-		count := 0
-		for {
-			row, err := fr.NextRow()
-			if err == io.EOF {
-				break
+	// Get the datums returned by the SELECT statement called in the EXPORT
+	// PARQUET statement to validate the data in the parquet file.
+	validationStmt := strings.SplitN(test.stmt, "FROM ", 2)[1]
+	test.datums, test.cols, err = ie.QueryBufferedExWithCols(
+		ctx,
+		"",
+		nil,
+		sessiondata.InternalExecutorOverride{
+			User:     security.RootUserName(),
+			Database: test.dbName},
+		validationStmt)
+	require.NoError(t, err)
+
+	for j, col := range cols {
+		require.Equal(t, col.SchemaElement.Name, test.cols[j].Name)
+	}
+	i := 0
+	for {
+		row, err := fr.NextRow()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("reading record failed: %w", err)
+		}
+		for j := 0; j < len(cols); j++ {
+			if test.datums[i][j].ResolvedType() == types.Unknown {
+				// If we expect a null value, the row created by the parquet reader
+				// will not have the associated column.
+				_, ok := row[cols[j].SchemaElement.Name]
+				require.Equal(t, ok, false)
+				continue
 			}
+			parquetCol, err := importccl.NewParquetColumn(test.cols[j].Typ, "", false)
 			if err != nil {
-				return fmt.Errorf("reading record failed: %w", err)
+				return err
+			}
+			datum, err := parquetCol.DecodeFn(row[cols[j].SchemaElement.Name])
+			if err != nil {
+				return err
 			}
 
-			t.Logf("\n Record %v:", count)
-			for i := 0; i < len(cols); i++ {
-				if test.vals[count][i] == nil {
-					// If we expect a null value, the row created by the parquet reader
-					// will not have the associated column.
-					_, ok := row[cols[i].SchemaElement.Name]
-					require.Equal(t, ok, false)
+			tester := test.datums[i][j]
+			switch tester.ResolvedType().Family() {
+			case types.DateFamily:
+				// pgDate.orig property doesn't matter and can cause the test to fail
+				require.Equal(t, tester.(*tree.DDate).Date.UnixEpochDays(),
+					datum.(*tree.DDate).Date.UnixEpochDays())
+			case types.JsonFamily:
+				// Only the value of the json object matters, not that additional properties
+				require.Equal(t, tester.(*tree.DJSON).JSON.String(),
+					datum.(*tree.DJSON).JSON.String())
+			case types.FloatFamily:
+				if tester.(*tree.DFloat).String() == "NaN" {
+					// NaN != NaN, therefore stringify the comparison.
+					require.Equal(t, "NaN", datum.(*tree.DFloat).String())
 					continue
 				}
-				v := row[cols[i].SchemaElement.Name]
-				decodedV := decodeEl(t, v)
-				t.Logf("\t %v", decodedV)
-				require.Equal(t, test.vals[count][i], decodedV)
+				fallthrough
+			default:
+				require.Equal(t, tester, datum)
 			}
-			count++
 		}
+		i++
 	}
 	return nil
 }
 
-func decodeEl(t *testing.T, v interface{}) interface{} {
-	var decodedV interface{}
-	switch vv := v.(type) {
-	case []byte:
-		// The parquet exporter encodes native go strings as []byte, so an extra
-		// step is required here.
+func TestRandomParquetExports(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	dbName := "rand"
 
-		// TODO (MB): as we add more type support, this switch statement will be
-		// insufficient: many go native types are encoded as []byte, so in the
-		// future, each column will have to call it's own custom decoder ( this is
-		// how IMPORT Parquet will work).
-		decodedV = string(vv)
-	case int64, float64, bool:
-		decodedV = vv
-	case map[string]interface{}:
-		var arrDecodedV []interface{}
-		b := vv["list"].([]map[string]interface{})
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			UseDatabase:   dbName,
+			ExternalIODir: dir,
+		},
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-		// Array values are stored in an array of maps: []map[string]interface{},
-		// where the ith map contains a single key value pair. The key is always "element"
-		// and the value is the ith value in the array.
+	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
-		// If the array of maps only contains an empty map, the array is empty. This
-		// occurs IFF "element" is not in the map.
+	tableName := "table_1"
+	// TODO (butler): Randomly generate additional table(s) using tools from PR
+	// #75677. The function below only creates a deterministic table with a bunch
+	// of interesting corner case values.
+	err := randgen.GenerateRandInterestingTable(tc.Conns[0], dbName, tableName)
+	require.NoError(t, err)
 
-		// NB: there's a bug in the fraugster-parquet vendor library around reading
-		// an ARRAY[NULL]. See the "arrays" test case for more info. Ideally, once
-		// the bug gets fixed, ARRAY[NULL] will get read as the kvp {"element":interface{}} while
-		// ARRAY[] will continue to get read as an empty map.
-		if _, nonEmpty := b[0]["element"]; !nonEmpty {
-			arrDecodedV = []interface{}{}
-			if len(b) > 1 {
-				t.Fatalf("array is empty, it shouldn't have a length greater than 1")
-			}
-		} else {
-			// For non-empty arrays
-			for _, elMap := range b {
-				arrDecodedV = append(arrDecodedV, decodeEl(t, elMap["element"]))
+	s0 := tc.Server(0)
+	ie := s0.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	{
+		// Ensure table only contains columns supported by EXPORT Parquet
+		_, cols, err := ie.QueryRowExWithCols(
+			ctx,
+			"",
+			nil,
+			sessiondata.InternalExecutorOverride{
+				User:     security.RootUserName(),
+				Database: dbName},
+			fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
+		require.NoError(t, err)
+
+		for _, col := range cols {
+			_, err := importccl.NewParquetColumn(col.Typ, "", false)
+			if err != nil {
+				t.Logf("Column type %s not supported in parquet, dropping", col.Typ.String())
+				sqlDB.Exec(t, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
+				//sqlDB.Exec(t, `ALTER TABLE $1 DROP COLUMN $2`, tableName, col.Name)
 			}
 		}
-		decodedV = arrDecodedV
-	default:
-		t.Fatalf("unexepected type: %T", vv)
 	}
-	return decodedV
+
+	// TODO (butler): iterate over random select statements
+	test := parquetTest{
+		filePrefix: tableName,
+		dbName:     dbName,
+		dir:        dir,
+		stmt: fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://0/%s' FROM SELECT * FROM %s",
+			tableName, tableName),
+	}
+	sqlDB.Exec(t, test.stmt)
+	err = validateParquetFile(t, ctx, ie, test)
+	require.NoError(t, err)
 }
 
-// TestBasicParquetTypes exports a relation with bool, int, float and string
-// values to a parquet file, and then asserts that the parquet exporter properly
-// encoded the values of the crdb relation.
+// TestBasicParquetTypes exports a variety of relations into parquet files, and
+// then asserts that the parquet exporter properly encoded the values of the
+// crdb relations.
 func TestBasicParquetTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	dir, cleanupDir := testutils.TempDir(t)
-	defer cleanupDir()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	dbName := "baz"
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			UseDatabase:   dbName,
+			ExternalIODir: dir,
+		},
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, params)
+	defer tc.Stopper().Stop(ctx)
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
-	defer srv.Stopper().Stop(context.Background())
-	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
+
+	// instantiating an internal executor to easily get datums from the table
+	s0 := tc.Server(0)
+	ie := s0.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)
@@ -433,23 +511,16 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 			filePrefix: "basic",
 			stmt: `EXPORT INTO PARQUET 'nodelocal://0/basic' FROM SELECT *
 							FROM foo WHERE y IS NOT NULL ORDER BY y ASC LIMIT 2 `,
-			colNames: []string{"i", "x", "y", "z", "a"},
-			vals: [][]interface{}{{int64(3), "Carl", int64(1), 34.214, true},
-				{int64(2), "Bob", int64(2), 24.1, false}},
 		},
 		{
 			filePrefix: "null_vals",
 			stmt: `EXPORT INTO PARQUET 'nodelocal://0/null_vals' FROM SELECT *
 							FROM foo ORDER BY x ASC LIMIT 2`,
-			vals: [][]interface{}{
-				{int64(6), nil, nil, 4.5, nil},
-				{int64(4), "Alex", int64(3), 14.3, nil}},
 		},
 		{
 			filePrefix: "colname",
 			stmt: `EXPORT INTO PARQUET 'nodelocal://0/colname' FROM SELECT avg(z), min(y) AS baz
 							FROM foo`,
-			colNames: []string{"avg", "baz"},
 		},
 		{
 			filePrefix: "nullable",
@@ -464,22 +535,37 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 			// TODO (mb): switch one of the values in the array to NULL once the
 			// vendor's parquet file reader bug resolves.
 			// https://github.com/fraugster/parquet-go/issues/60
-			//
-			// I already verified that the vendor's parquet writer can write arrays
-			// with null values just fine, so EXPORT PARQUET is bug free; however this
-			// roundtrip test would fail.
+
 			filePrefix: "arrays",
-			prep: []string{"CREATE TABLE atable (i INT PRIMARY KEY, x INT[])",
+			prep: []string{
+				"CREATE TABLE atable (i INT PRIMARY KEY, x INT[])",
 				"INSERT INTO atable VALUES (1, ARRAY[1,2]), (2, ARRAY[2]), (3,ARRAY[1,13,5]),(4, NULL),(5, ARRAY[])"},
-			stmt:     `EXPORT INTO PARQUET 'nodelocal://0/arrays' FROM SELECT * FROM atable`,
-			colNames: []string{"i", "x"},
-			vals: [][]interface{}{
-				{int64(1), []interface{}{int64(1), int64(2)}},
-				{int64(2), []interface{}{int64(2)}},
-				{int64(3), []interface{}{int64(1), int64(13), int64(5)}},
-				{int64(4), nil},
-				{int64(5), []interface{}{}},
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/arrays' FROM SELECT * FROM atable`,
+		},
+		{
+			filePrefix: "user_types",
+			prep: []string{
+				"CREATE TYPE greeting AS ENUM ('hello', 'hi')",
+				"CREATE TABLE greeting_table (x greeting, y greeting)",
+				"INSERT INTO greeting_table VALUES ('hello', 'hello'), ('hi', 'hi')",
 			},
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/user_types' FROM SELECT * FROM greeting_table`,
+		},
+		{
+			filePrefix: "collate",
+			prep: []string{
+				"CREATE TABLE de_names (name STRING COLLATE de PRIMARY KEY)",
+				"INSERT INTO de_names VALUES ('Backhaus' COLLATE de), ('Bär' COLLATE de), ('Baz' COLLATE de)",
+			},
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/collate' FROM SELECT * FROM de_names ORDER BY name`,
+		},
+		{
+			filePrefix: "ints_floats",
+			prep: []string{
+				"CREATE TABLE nums (int_2 INT2, int_4 INT4, int_8 INT8, real_0 REAL, double_0 DOUBLE PRECISION)",
+				"INSERT INTO nums VALUES (2, 2, 2, 3.2, 3.2)",
+			},
+			stmt: `EXPORT INTO PARQUET 'nodelocal://0/ints_floats' FROM SELECT * FROM nums`,
 		},
 		{
 			filePrefix: "compress_gzip",
@@ -507,14 +593,11 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 				sqlDB.Exec(t, cmd)
 			}
 		}
+
 		sqlDB.Exec(t, test.stmt)
-
-		paths, err := filepath.Glob(filepath.Join(dir, test.filePrefix, parquetExportFilePattern+test.fileSuffix))
-		require.NoError(t, err)
-
-		require.Equal(t, 1, len(paths))
-
-		err = validateParquetFile(t, paths[0], test)
+		test.dir = dir
+		test.dbName = dbName
+		err := validateParquetFile(t, ctx, ie, test)
 		require.NoError(t, err)
 	}
 }
