@@ -460,7 +460,8 @@ SELECT
 				),
 				true
 			)
-		)
+		),
+		true
 	)
 FROM
 	system.descriptor
@@ -484,7 +485,7 @@ UPDATE system.namespace SET id = 12345 WHERE id = %d;
 	require.Equal(t, tableTID, id)
 	require.Equal(t, "", dbName)
 	require.Equal(t, "", schemaName)
-	require.Equal(t, fmt.Sprintf(`relation "test" (%d): referenced database ID %d: descriptor not found`, tableTID, databaseID), errStr)
+	require.Equal(t, fmt.Sprintf(`relation "test" (%d): referenced database ID %d: referenced descriptor not found`, tableTID, databaseID), errStr)
 
 	require.True(t, rows.Next())
 	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
@@ -499,7 +500,7 @@ UPDATE system.namespace SET id = 12345 WHERE id = %d;
 	require.Equal(t, "defaultdb", dbName)
 	require.Equal(t, "public", schemaName)
 	require.Equal(t, fmt.Sprintf(
-		`relation "tbl" (%d): invalid foreign key: missing table=%d: referenced table ID %d: descriptor not found`,
+		`relation "tbl" (%d): invalid foreign key: missing table=%d: referenced table ID %d: referenced descriptor not found`,
 		tableTblID, tableFkTblID, tableFkTblID), errStr)
 
 	require.True(t, rows.Next())

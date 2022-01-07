@@ -492,10 +492,11 @@ func resolveCast(
 	default:
 		var v Volatility
 		var hint string
-		if cast, ok := lookupCast(castFrom.Oid(), castTo.Oid()); ok && cast.volatility != volatilityTODO {
+		c, ok := lookupCast(castFrom, castTo, intervalStyleEnabled, dateStyleEnabled)
+		if ok && c.volatility != volatilityTODO {
 			// If the volatility has been set in castMap, use it.
-			// TODO(mgartner): Add hints to castMap and use them here.
-			v = cast.volatility
+			v = c.volatility
+			hint = c.volatilityHint
 		} else if cast := lookupCastInfo(fromFamily, toFamily, intervalStyleEnabled, dateStyleEnabled); cast != nil {
 			// Otherwise, fallback to the volatility in castInfo.
 			v = cast.volatility
