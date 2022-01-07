@@ -10213,7 +10213,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				ba.Add(&get, &put)
 				return
 			},
-			expErr: "write at timestamp .* too old",
+			expErr: "write for key .* at timestamp .* too old",
 		},
 		{
 			name: "serializable push without retry",
@@ -10242,7 +10242,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &cput)
 				return
 			},
-			expErr: "write at timestamp .* too old",
+			expErr: "write for key .* at timestamp .* too old",
 		},
 		// Non-1PC serializable txn initput will fail with write too old error.
 		{
@@ -10257,7 +10257,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &iput)
 				return
 			},
-			expErr: "write at timestamp .* too old",
+			expErr: "write for key .* at timestamp .* too old",
 		},
 		// Non-1PC serializable txn locking scan will fail with write too old error.
 		{
