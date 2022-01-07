@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -779,12 +780,12 @@ var (
 	fkActionSetNull    = tree.NewDString("n")
 	fkActionSetDefault = tree.NewDString("d")
 
-	fkActionMap = map[descpb.ForeignKeyReference_Action]tree.Datum{
-		descpb.ForeignKeyReference_NO_ACTION:   fkActionNone,
-		descpb.ForeignKeyReference_RESTRICT:    fkActionRestrict,
-		descpb.ForeignKeyReference_CASCADE:     fkActionCascade,
-		descpb.ForeignKeyReference_SET_NULL:    fkActionSetNull,
-		descpb.ForeignKeyReference_SET_DEFAULT: fkActionSetDefault,
+	fkActionMap = map[catpb.ForeignKeyAction]tree.Datum{
+		catpb.ForeignKeyAction_NO_ACTION:   fkActionNone,
+		catpb.ForeignKeyAction_RESTRICT:    fkActionRestrict,
+		catpb.ForeignKeyAction_CASCADE:     fkActionCascade,
+		catpb.ForeignKeyAction_SET_NULL:    fkActionSetNull,
+		catpb.ForeignKeyAction_SET_DEFAULT: fkActionSetDefault,
 	}
 
 	fkMatchTypeFull    = tree.NewDString("f")

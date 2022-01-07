@@ -12,6 +12,7 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -204,7 +205,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if err != nil {
 			panic(err)
 		}
-		secondaryIndex.ShardedDescriptor = &descpb.ShardedDescriptor{
+		secondaryIndex.ShardedDescriptor = &catpb.ShardedDescriptor{
 			IsSharded:    true,
 			Name:         shardColName,
 			ShardBuckets: buckets,

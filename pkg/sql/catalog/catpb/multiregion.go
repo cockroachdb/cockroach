@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descpb
+package catpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -17,6 +17,11 @@ import (
 
 // RegionName is an alias for a region stored on the database.
 type RegionName string
+
+// String implements fmt.Stringer.
+func (r RegionName) String() string {
+	return string(r)
+}
 
 // RegionNames is an alias for a slice of regions.
 type RegionNames []RegionName
@@ -31,16 +36,16 @@ func (regions RegionNames) ToStrings() []string {
 }
 
 // TelemetryName returns the name to use for the given locality.
-func (cfg *TableDescriptor_LocalityConfig) TelemetryName() (string, error) {
+func (cfg *LocalityConfig) TelemetryName() (string, error) {
 	switch l := cfg.Locality.(type) {
-	case *TableDescriptor_LocalityConfig_Global_:
+	case *LocalityConfig_Global_:
 		return tree.TelemetryNameGlobal, nil
-	case *TableDescriptor_LocalityConfig_RegionalByTable_:
+	case *LocalityConfig_RegionalByTable_:
 		if l.RegionalByTable.Region != nil {
 			return tree.TelemetryNameRegionalByTableIn, nil
 		}
 		return tree.TelemetryNameRegionalByTable, nil
-	case *TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *LocalityConfig_RegionalByRow_:
 		if l.RegionalByRow.As != nil {
 			return tree.TelemetryNameRegionalByRowAs, nil
 		}

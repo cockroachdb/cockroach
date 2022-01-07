@@ -12,9 +12,9 @@ syntax = "proto3";
 package cockroach.sql.schemachanger.scpb;
 option go_package = "scpb";
 
-import "sql/catalog/descpb/structured.proto";
-import "sql/types/types.proto";
+import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/descpb/privilege.proto";
+import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 
 message ElementProto {
@@ -65,12 +65,12 @@ message Column {
   string on_update_expr = 9  [(gogoproto.customname) = "OnUpdateExpr"];
   bool hidden = 10;
   bool inaccessible = 11;
-  uint32 generated_as_identity_type = 12 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.GeneratedAsIdentityType"];
+  uint32 generated_as_identity_type = 12 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
   string generated_as_identity_sequence_option = 13;
   repeated uint32 uses_sequence_ids = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string computerExpr = 15;
   uint32 pg_attribute_num = 16  [(gogoproto.customname) = "PgAttributeNum"];
-  uint32 system_column_kind = 17 [(gogoproto.customname) = "SystemColumnKind", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.SystemColumnKind"];
+  uint32 system_column_kind = 17 [(gogoproto.customname) = "SystemColumnKind", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.SystemColumnKind"];
   bool virtual = 18;
 }
 
@@ -87,7 +87,7 @@ message PrimaryIndex {
   repeated uint32 key_column_ids = 4 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated Direction key_column_direction = 5 [(gogoproto.customname) = "KeyColumnDirections"];
   repeated uint32 key_suffix_column_ids = 6 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  cockroach.sql.sqlbase.ShardedDescriptor sharded_descriptor = 7 [(gogoproto.customname) = "ShardedDescriptor"];
+  cockroach.sql.catalog.catpb.ShardedDescriptor sharded_descriptor = 7 [(gogoproto.customname) = "ShardedDescriptor"];
   repeated uint32 storing_column_ids = 8 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated uint32 composite_column_ids = 9 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   bool inverted = 10  [(gogoproto.customname) = "Inverted"];
@@ -111,7 +111,7 @@ message SecondaryIndex {
   repeated uint32 key_column_ids = 4 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated Direction key_column_direction = 5 [(gogoproto.customname) = "KeyColumnDirections"];
   repeated uint32 key_suffix_column_ids = 6 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  cockroach.sql.sqlbase.ShardedDescriptor sharded_descriptor = 7 [(gogoproto.customname) = "ShardedDescriptor"];
+  cockroach.sql.catalog.catpb.ShardedDescriptor sharded_descriptor = 7 [(gogoproto.customname) = "ShardedDescriptor"];
   repeated uint32 storing_column_ids = 8 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated uint32 composite_column_ids = 9 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   bool inverted = 10  [(gogoproto.customname) = "Inverted"];
@@ -227,8 +227,8 @@ message ForeignKey {
   repeated uint32 origin_columns = 3 [(gogoproto.customname) = "OriginColumns", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   uint32 reference_id = 4 [(gogoproto.customname) = "ReferenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 reference_columns = 5 [(gogoproto.customname) = "ReferenceColumns", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  uint32 on_update = 6 [(gogoproto.customname) = "OnUpdate", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ForeignKeyReference_Action"];
-  uint32 on_delete = 7 [(gogoproto.customname) = "OnDelete", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ForeignKeyReference_Action"];
+  uint32 on_update = 6 [(gogoproto.customname) = "OnUpdate", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
+  uint32 on_delete = 7 [(gogoproto.customname) = "OnDelete", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
   string name = 8;
 }
 
@@ -238,8 +238,8 @@ message ForeignKeyBackReference {
   repeated uint32 origin_columns = 3 [(gogoproto.customname) = "OriginColumns", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   uint32 reference_id = 4 [(gogoproto.customname) = "ReferenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 reference_columns = 5 [(gogoproto.customname) = "ReferenceColumns", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  uint32 on_update = 6 [(gogoproto.customname) = "OnUpdate", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ForeignKeyReference_Action"];
-  uint32 on_delete = 7 [(gogoproto.customname) = "OnDelete", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ForeignKeyReference_Action"];
+  uint32 on_update = 6 [(gogoproto.customname) = "OnUpdate", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
+  uint32 on_delete = 7 [(gogoproto.customname) = "OnDelete", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
   string name = 8;
 }
 
@@ -311,7 +311,7 @@ message UserPrivileges {
 
 message Locality {
   uint32 descriptor_id = 1[(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  cockroach.sql.sqlbase.TableDescriptor.LocalityConfig Locality = 2 [(gogoproto.customname) = "Locality", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.TableDescriptor_LocalityConfig"];
+  cockroach.sql.catalog.catpb.LocalityConfig Locality = 2 [(gogoproto.customname) = "Locality", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.LocalityConfig"];
 }
 
 message ColumnName {

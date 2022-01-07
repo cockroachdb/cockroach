@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -869,7 +870,7 @@ func importPlanHook(
 		// Store the primary region of the database being imported into. This is
 		// used during job execution to evaluate certain default expressions and
 		// computed columns such as `gateway_region`.
-		var databasePrimaryRegion descpb.RegionName
+		var databasePrimaryRegion catpb.RegionName
 		if db.IsMultiRegion() {
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn,
 				descsCol *descs.Collection) error {
