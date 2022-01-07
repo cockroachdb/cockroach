@@ -12,6 +12,7 @@ package scop
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -49,7 +50,7 @@ type MakeAddedIndexDeleteOnly struct {
 	KeySuffixColumnIDs  []descpb.ColumnID
 	StoreColumnIDs      []descpb.ColumnID
 	CompositeColumnIDs  []descpb.ColumnID
-	ShardedDescriptor   *descpb.ShardedDescriptor
+	ShardedDescriptor   *catpb.ShardedDescriptor
 	Inverted            bool
 	Concurrently        bool
 	SecondaryIndex      bool
@@ -204,12 +205,12 @@ type MakeAddedColumnDeleteOnly struct {
 	OnUpdateExpr                      string
 	Hidden                            bool
 	Inaccessible                      bool
-	GeneratedAsIdentityType           descpb.GeneratedAsIdentityType
+	GeneratedAsIdentityType           catpb.GeneratedAsIdentityType
 	GeneratedAsIdentitySequenceOption string
 	UsesSequenceIds                   []descpb.ID
 	ComputerExpr                      string
 	PgAttributeNum                    uint32
-	SystemColumnKind                  descpb.SystemColumnKind
+	SystemColumnKind                  catpb.SystemColumnKind
 	Virtual                           bool
 }
 

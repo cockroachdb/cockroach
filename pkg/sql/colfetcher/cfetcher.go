@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -416,11 +417,11 @@ func (rf *cFetcher) Init(
 			// handling of system columns is separate from the standard value
 			// decoding process.
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
-			case descpb.SystemColumnKind_MVCCTIMESTAMP:
+			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
 				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
 				table.neededValueColsByIdx.Remove(idx)
-			case descpb.SystemColumnKind_TABLEOID:
+			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
 				table.neededValueColsByIdx.Remove(idx)
 			}

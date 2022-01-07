@@ -13,6 +13,7 @@
 package multiregion
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -30,9 +31,9 @@ const minNumRegionsForSurviveRegionGoal = 3
 // RegionConfig must be synthesized to pick up those changes.
 type RegionConfig struct {
 	survivalGoal         descpb.SurvivalGoal
-	regions              descpb.RegionNames
-	transitioningRegions descpb.RegionNames
-	primaryRegion        descpb.RegionName
+	regions              catpb.RegionNames
+	transitioningRegions catpb.RegionNames
+	primaryRegion        catpb.RegionName
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
 }
@@ -43,12 +44,12 @@ func (r *RegionConfig) SurvivalGoal() descpb.SurvivalGoal {
 }
 
 // PrimaryRegion returns the primary region configured on the RegionConfig.
-func (r *RegionConfig) PrimaryRegion() descpb.RegionName {
+func (r *RegionConfig) PrimaryRegion() catpb.RegionName {
 	return r.primaryRegion
 }
 
 // Regions returns the list of regions added to the RegionConfig.
-func (r *RegionConfig) Regions() descpb.RegionNames {
+func (r *RegionConfig) Regions() catpb.RegionNames {
 	return r.regions
 }
 
@@ -69,7 +70,7 @@ func (r RegionConfig) PrimaryRegionString() string {
 
 // TransitioningRegions returns all the regions which are currently transitioning
 // from or to being PUBLIC.
-func (r RegionConfig) TransitioningRegions() descpb.RegionNames {
+func (r RegionConfig) TransitioningRegions() catpb.RegionNames {
 	return r.transitioningRegions
 }
 
@@ -94,7 +95,7 @@ type MakeRegionConfigOption func(r *RegionConfig)
 
 // WithTransitioningRegions is an option to include transitioning
 // regions into MakeRegionConfig.
-func WithTransitioningRegions(transitioningRegions descpb.RegionNames) MakeRegionConfigOption {
+func WithTransitioningRegions(transitioningRegions catpb.RegionNames) MakeRegionConfigOption {
 	return func(r *RegionConfig) {
 		r.transitioningRegions = transitioningRegions
 	}
@@ -102,8 +103,8 @@ func WithTransitioningRegions(transitioningRegions descpb.RegionNames) MakeRegio
 
 // MakeRegionConfig constructs a RegionConfig.
 func MakeRegionConfig(
-	regions descpb.RegionNames,
-	primaryRegion descpb.RegionName,
+	regions catpb.RegionNames,
+	primaryRegion catpb.RegionName,
 	survivalGoal descpb.SurvivalGoal,
 	regionEnumID descpb.ID,
 	placement descpb.DataPlacement,
