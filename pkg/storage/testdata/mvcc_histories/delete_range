@@ -128,7 +128,7 @@ data: "c/123"/47.000000000,0 -> /<empty>
 data: "c/123"/44.000000000,0 -> /BYTES/abc
 data: "d"/44.000000000,0 -> /BYTES/abc
 data: "d/123"/44.000000000,0 -> /BYTES/abc
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 46.000000000,0 too old; wrote at 47.000000000,1
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 46.000000000,0 too old; wrote at 47.000000000,1
 
 run ok
 txn_remove t=A

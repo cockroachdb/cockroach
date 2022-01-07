@@ -24,7 +24,7 @@ txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,1 min=0,0 seq=0} ts=44.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/44.000000000,1 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 33.000000000,0 too old; wrote at 44.000000000,1
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 33.000000000,0 too old; wrote at 44.000000000,1
 
 run ok
 resolve_intent t=A k=a status=ABORTED
@@ -47,7 +47,7 @@ txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,1 min=0,0 seq=0} ts=44.000000000,1 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/44.000000000,1 -> /BYTES/def
 data: "a"/44.000000000,0 -> /BYTES/abc
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 33.000000000,0 too old; wrote at 44.000000000,1
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 33.000000000,0 too old; wrote at 44.000000000,1
 
 run ok
 resolve_intent t=B k=a status=ABORTED
