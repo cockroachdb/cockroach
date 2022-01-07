@@ -1176,7 +1176,7 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 	}
 
 	if rf.traceKV && prettyValue == "" {
-		prettyValue = tree.DNull.String()
+		prettyValue = "<undecoded>"
 	}
 
 	return nil

@@ -869,7 +869,7 @@ func (rf *Fetcher) processKV(
 	if table.neededCols.Empty() {
 		// We don't need to decode any values.
 		if rf.traceKV {
-			prettyValue = tree.DNull.String()
+			prettyValue = "<undecoded>"
 		}
 		return prettyKey, prettyValue, nil
 	}
@@ -977,7 +977,7 @@ func (rf *Fetcher) processKV(
 	}
 
 	if rf.traceKV && prettyValue == "" {
-		prettyValue = tree.DNull.String()
+		prettyValue = "<undecoded>"
 	}
 
 	return prettyKey, prettyValue, nil

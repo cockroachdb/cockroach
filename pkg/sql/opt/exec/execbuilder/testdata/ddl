@@ -137,7 +137,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1 -> NULL
+fetched: /t/t_pkey/1 -> <undecoded>
 fetched: /t/t_pkey/1/b -> 1
 output row: [1 1]
 
@@ -163,7 +163,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/1/1 -> NULL
+fetched: /t/foo/1/1 -> <undecoded>
 output row: [1 1]
 
 statement ok
@@ -177,8 +177,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/1/1 -> NULL
-fetched: /t/foo/1/2 -> NULL
+fetched: /t/foo/1/1 -> <undecoded>
+fetched: /t/foo/1/2 -> <undecoded>
 output row: [1 1]
 output row: [2 1]
 
@@ -213,8 +213,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/b_desc/?/2 -> NULL
-fetched: /t/b_desc/?/1 -> NULL
+fetched: /t/b_desc/?/2 -> <undecoded>
+fetched: /t/b_desc/?/1 -> <undecoded>
 fetched: /t/t_pkey/1/b/c -> /1/1
 fetched: /t/t_pkey/2/b/c -> /2/2
 output row: [1 1 1]

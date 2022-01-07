@@ -3792,7 +3792,7 @@ CREATE TABLE d.t (
 	}
 	// Ensure that the decoder sees the old encoding.
 	for indexName, expExplainRow := range map[string]string{
-		"i": "fetched: /t/i/1/11/2 -> NULL",
+		"i": "fetched: /t/i/1/11/2 -> <undecoded>",
 		"u": "fetched: /t/u/1 -> /11/2",
 	} {
 		t.Run("index scan", func(t *testing.T) {
