@@ -442,6 +442,37 @@ func (buf *StmtBuf) CurCmd() (Command, CmdPos, error) {
 	}
 }
 
+// isNextCmdSync peeks at the next command, and returns true if it is a Sync
+// message. If there is not another command in the buffer already, then false
+// is returned. The position is reset before returning, so this does not
+// affect the curPos.
+//
+// If the buffer has previously been Close()d, or is closed while this is
+// blocked, io.EOF is returned.
+func (buf *StmtBuf) isNextCmdSync() (bool, error) {
+	buf.mu.Lock()
+	prev := buf.mu.curPos
+	buf.mu.curPos++
+	defer func() {
+		buf.mu.curPos = prev
+		buf.mu.Unlock()
+	}()
+	if buf.mu.closed {
+		return false, io.EOF
+	}
+	curPos := buf.mu.curPos
+	cmdIdx, err := buf.translatePosLocked(curPos)
+	if err != nil {
+		return false, err
+	}
+	len := buf.mu.data.Len()
+	if cmdIdx < len {
+		_, isSync := buf.mu.data.Get(cmdIdx).(Sync)
+		return isSync, nil
+	}
+	return false, nil
+}
+
 // translatePosLocked translates an absolute position of a command (counting
 // from the connection start) to the index of the respective command in the
 // buffer (so, it returns an index relative to the start of the buffer).
