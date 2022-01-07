@@ -351,7 +351,7 @@ INSERT INTO t.test VALUES (10, 2);
 	// Create the primary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(2)}
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -591,7 +591,7 @@ INSERT INTO t.test VALUES (217, 314);
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -674,7 +674,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -779,7 +779,7 @@ CREATE TABLE t.test (
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -884,7 +884,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
