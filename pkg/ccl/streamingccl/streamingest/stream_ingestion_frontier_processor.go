@@ -47,7 +47,7 @@ type streamIngestionFrontier struct {
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionFrontierSpec
-	alloc   rowenc.DatumAlloc
+	alloc   tree.DatumAlloc
 
 	// input returns rows from one or more streamIngestion processors.
 	input execinfra.RowSource

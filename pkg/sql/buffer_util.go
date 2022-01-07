@@ -136,7 +136,7 @@ type rowContainerIterator struct {
 
 	typs   []*types.T
 	datums tree.Datums
-	da     rowenc.DatumAlloc
+	da     tree.DatumAlloc
 }
 
 // newRowContainerIterator returns a new rowContainerIterator that must be

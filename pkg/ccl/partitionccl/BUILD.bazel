@@ -63,7 +63,6 @@ go_test(
         "//pkg/sql/gcjob",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
-        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/tests",
         "//pkg/sql/types",

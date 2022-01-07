@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -185,7 +184,7 @@ func TestRandomComparisons(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 
 	expected := make([]bool, numTuples)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	lDatums := make([]tree.Datum, numTuples)
 	rDatums := make([]tree.Datum, numTuples)
 	for _, typ := range types.Scalar {

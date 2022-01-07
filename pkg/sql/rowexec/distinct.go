@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -43,7 +44,7 @@ type distinct struct {
 		nonOrdered []uint32
 	}
 	memAcc           mon.BoundAccount
-	datumAlloc       rowenc.DatumAlloc
+	datumAlloc       tree.DatumAlloc
 	scratch          []byte
 	nullsAreDistinct bool
 	nullCount        uint32

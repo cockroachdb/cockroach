@@ -32,7 +32,7 @@ import (
 func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	v := rowenc.EncDatum{}
@@ -126,7 +126,7 @@ func TestEncDatumNull(t *testing.T) {
 		t.Error("DNull not null")
 	}
 
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 	rng, _ := randutil.NewTestRand()
 
 	// Generate random EncDatums (some of which are null), and verify that a datum
@@ -156,7 +156,7 @@ func TestEncDatumNull(t *testing.T) {
 // those encodings. It also checks if the Compare resulted in decoding or not.
 func checkEncDatumCmp(
 	t *testing.T,
-	a *rowenc.DatumAlloc,
+	a *tree.DatumAlloc,
 	typ *types.T,
 	v1, v2 *rowenc.EncDatum,
 	enc1, enc2 descpb.DatumEncoding,
@@ -205,7 +205,7 @@ func checkEncDatumCmp(
 func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewTestRand()
@@ -264,7 +264,7 @@ func TestEncDatumCompare(t *testing.T) {
 func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewTestRand()
@@ -445,7 +445,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 		},
 	}
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for _, c := range testCases {
@@ -537,7 +537,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 			var decodedTuple tree.Datum
 			testTyp := test.ResolvedType()
 
-			decodedTuple, buf, err = rowenc.DecodeTableValue(&rowenc.DatumAlloc{}, testTyp, buf)
+			decodedTuple, buf, err = rowenc.DecodeTableValue(&tree.DatumAlloc{}, testTyp, buf)
 			if err != nil {
 				t.Fatalf("seed %d: decoding tuple %v with type (%+v, %+v) failed with error: %v",
 					seed, test, colTypes[i], testTyp, err)
@@ -735,7 +735,7 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	memAcc := evalCtx.Mon.MakeBoundAccount()
 	defer memAcc.Close(ctx)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	for _, c := range testCases {
 		memAcc.Clear(ctx)
 		_, err := c.encDatum.Fingerprint(ctx, c.typ, &da, nil /* appendTo */, &memAcc)

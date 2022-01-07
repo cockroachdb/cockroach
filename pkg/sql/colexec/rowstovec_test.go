@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-var alloc = rowenc.DatumAlloc{}
+var alloc = tree.DatumAlloc{}
 
 func TestEncDatumRowsToColVecBool(t *testing.T) {
 	defer leaktest.AfterTest(t)()

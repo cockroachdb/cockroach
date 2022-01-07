@@ -47,7 +47,7 @@ var (
 // {{/*
 
 func _ROWS_TO_COL_VEC(
-	rows rowenc.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *rowenc.DatumAlloc,
+	rows rowenc.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *tree.DatumAlloc,
 ) { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec.TemplateType()
@@ -96,7 +96,7 @@ func EncDatumRowsToColVec(
 	vec coldata.Vec,
 	columnIdx int,
 	t *types.T,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 ) error {
 	var err error
 	allocator.PerformOperation(

@@ -368,7 +368,7 @@ func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (
 		panic(err)
 	}
 
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	for i := range keys {
 		// Each key much be a byte-encoded datum so that it can be
 		// decoded in JSONStatistic.SetHistogram.

@@ -20,7 +20,7 @@ import (
 // DecodeDatum decodes the given bytes slice into a datum of the given type. It
 // returns an error if the decoding is not valid, or if there are any remaining
 // bytes.
-func DecodeDatum(datumAlloc *rowenc.DatumAlloc, typ *types.T, data []byte) (tree.Datum, error) {
+func DecodeDatum(datumAlloc *tree.DatumAlloc, typ *types.T, data []byte) (tree.Datum, error) {
 	datum, rem, err := rowenc.DecodeTableValue(datumAlloc, typ, data)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,

@@ -43,7 +43,7 @@ type vecToDatumWidthTmplInfo struct {
 
 // AssignConverted returns a string that performs a conversion of the element
 // sourceElem and assigns the result to the newly declared targetElem.
-// datumAlloc is the name of *rowenc.DatumAlloc struct that can be used to
+// datumAlloc is the name of *tree.DatumAlloc struct that can be used to
 // allocate new datums.
 func (i vecToDatumWidthTmplInfo) AssignConverted(targetElem, sourceElem, datumAlloc string) string {
 	return fmt.Sprintf(i.ConversionTmpl, targetElem, sourceElem, datumAlloc)

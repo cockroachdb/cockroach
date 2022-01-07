@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -59,7 +58,7 @@ type rangeOffsetHandler interface {
 
 func newRangeOffsetHandler(
 	evalCtx *tree.EvalContext,
-	datumAlloc *rowenc.DatumAlloc,
+	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
 	ordColType *types.T,
 	ordColAsc, isStart bool,
@@ -948,7 +947,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt16{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscInt16) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -1097,7 +1098,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt32{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscInt32) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -1246,7 +1249,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscInt64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -1395,7 +1400,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDecimal{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -1533,7 +1540,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscFloat64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscFloat64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -1687,7 +1696,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInterval{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscInterval) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -1818,7 +1829,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDate{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscDate) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -1979,7 +1992,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscTimestamp{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -2122,7 +2137,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDatum{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -2260,7 +2277,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt16{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescInt16) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -2382,7 +2401,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt32{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescInt32) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -2504,7 +2525,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescInt64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -2626,7 +2649,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDecimal{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -2737,7 +2762,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescFloat64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescFloat64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -2864,7 +2891,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInterval{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescInterval) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -2968,7 +2997,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDate{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescDate) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -3102,7 +3133,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescTimestamp{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -3218,7 +3251,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDatum{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -3329,7 +3364,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt16{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscInt16) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -3495,7 +3532,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt32{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscInt32) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -3661,7 +3700,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscInt64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -3827,7 +3868,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDecimal{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -3982,7 +4025,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscFloat64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscFloat64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -4153,7 +4198,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInterval{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscInterval) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -4301,7 +4348,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDate{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscDate) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -4479,7 +4528,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscTimestamp{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -4639,7 +4690,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDatum{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -4794,7 +4847,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt16{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescInt16) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -4933,7 +4988,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt32{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescInt32) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -5072,7 +5129,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescInt64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -5211,7 +5270,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDecimal{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -5339,7 +5400,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescFloat64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescFloat64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -5483,7 +5546,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInterval{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescInterval) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -5604,7 +5669,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDate{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescDate) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -5755,7 +5822,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescTimestamp{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -5888,7 +5957,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDatum{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -6016,7 +6087,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt16{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscInt16) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -6165,7 +6238,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt32{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscInt32) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -6314,7 +6389,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscInt64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -6463,7 +6540,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDecimal{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -6601,7 +6680,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscFloat64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscFloat64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -6755,7 +6836,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInterval{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscInterval) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -6886,7 +6969,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDate{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscDate) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -7047,7 +7132,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscTimestamp{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscTimestamp) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -7190,7 +7277,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDatum{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -7328,7 +7417,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt16{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescInt16) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -7450,7 +7541,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt32{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescInt32) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -7572,7 +7665,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescInt64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -7694,7 +7789,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDecimal{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -7805,7 +7902,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescFloat64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescFloat64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -7932,7 +8031,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInterval{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescInterval) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -8036,7 +8137,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDate{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescDate) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -8170,7 +8273,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescTimestamp{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescTimestamp) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -8286,7 +8391,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDatum{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -8397,7 +8504,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt16{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscInt16) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -8563,7 +8672,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt32{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscInt32) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -8729,7 +8840,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscInt64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -8895,7 +9008,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDecimal{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -9050,7 +9165,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscFloat64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscFloat64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -9221,7 +9338,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInterval{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscInterval) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -9369,7 +9488,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDate{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscDate) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -9547,7 +9668,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscTimestamp{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscTimestamp) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -9707,7 +9830,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDatum{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -9862,7 +9987,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt16{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescInt16) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -10001,7 +10128,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt32{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescInt32) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -10140,7 +10269,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescInt64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -10279,7 +10410,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDecimal{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -10407,7 +10540,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescFloat64{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescFloat64) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -10551,7 +10686,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInterval{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescInterval) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -10672,7 +10809,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDate{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescDate) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -10823,7 +10962,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescTimestamp{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescTimestamp) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -10956,7 +11097,9 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDatum{}
 // the first row for which the value is greater than 2 + 1 = 3, or the end of
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
-func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
+func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(
+	ctx context.Context, currRow, lastIdx int,
+) (idx int) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "overloadHelper". This is
 	// necessary when dealing with Datum columns.
@@ -11069,7 +11212,7 @@ func (b *rangeOffsetHandlerBase) startPartition(
 
 // decodeOffset decodes the given encoded offset into the given type.
 func decodeOffset(
-	datumAlloc *rowenc.DatumAlloc, orderColType *types.T, typedOffset []byte,
+	datumAlloc *tree.DatumAlloc, orderColType *types.T, typedOffset []byte,
 ) interface{} {
 	offsetType := getOffsetType(orderColType)
 	datum, err := execinfra.DecodeDatum(datumAlloc, offsetType, typedOffset)

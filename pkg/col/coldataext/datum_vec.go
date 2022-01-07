@@ -33,7 +33,7 @@ type datumVec struct {
 	evalCtx *tree.EvalContext
 
 	scratch []byte
-	da      rowenc.DatumAlloc
+	da      tree.DatumAlloc
 }
 
 var _ coldata.DatumVec = &datumVec{}
@@ -58,7 +58,7 @@ func CompareDatum(d, dVec, other interface{}) int {
 }
 
 // Hash returns the hash of the datum as a byte slice.
-func Hash(d tree.Datum, da *rowenc.DatumAlloc) []byte {
+func Hash(d tree.Datum, da *tree.DatumAlloc) []byte {
 	ed := rowenc.EncDatum{Datum: convertToDatum(d)}
 	// We know that we have tree.Datum, so there will definitely be no need to
 	// decode ed for fingerprinting, so we pass in nil memory account.

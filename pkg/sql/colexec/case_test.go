@@ -114,7 +114,7 @@ func TestCaseOpRandomized(t *testing.T) {
 		},
 	}
 
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	rng, _ := randutil.NewTestRand()
 
 	numWhenArms := 1 + rng.Intn(5)

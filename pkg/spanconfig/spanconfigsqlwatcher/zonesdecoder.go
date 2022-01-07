@@ -24,7 +24,7 @@ import (
 // zonesDecoder decodes the zone ID (primary key) of rows from system.zones.
 // It's not safe for concurrent use.
 type zonesDecoder struct {
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 	codec keys.SQLCodec
 }
 

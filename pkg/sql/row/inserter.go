@@ -48,7 +48,7 @@ func MakeInserter(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	insertCols []catalog.Column,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	sv *settings.Values,
 	internal bool,
 	metrics *Metrics,

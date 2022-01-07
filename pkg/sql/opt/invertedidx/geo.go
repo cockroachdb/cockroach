@@ -716,7 +716,7 @@ type geoDatumsToInvertedExpr struct {
 	filterer *PreFilterer
 
 	row   rowenc.EncDatumRow
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 }
 
 var _ invertedexpr.DatumsToInvertedExpr = &geoDatumsToInvertedExpr{}

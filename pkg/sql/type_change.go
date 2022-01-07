@@ -1073,7 +1073,7 @@ func findUsageOfEnumValueInEncodedPartitioningValue(
 	foundUsage bool,
 	member *descpb.TypeDescriptor_EnumMember,
 ) (bool, error) {
-	var d rowenc.DatumAlloc
+	var d tree.DatumAlloc
 	tuple, _, err := rowenc.DecodePartitionTuple(
 		&d, codec, table, index, partitioning, v, fakePrefixDatums,
 	)

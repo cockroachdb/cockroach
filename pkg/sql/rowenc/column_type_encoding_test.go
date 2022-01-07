@@ -87,7 +87,7 @@ func hasKeyEncoding(typ *types.T) bool {
 }
 
 func TestEncodeTableValue(t *testing.T) {
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 10000
@@ -117,7 +117,7 @@ func TestEncodeTableValue(t *testing.T) {
 }
 
 func TestEncodeTableKey(t *testing.T) {
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 10000
@@ -266,7 +266,7 @@ func TestSkipTableKey(t *testing.T) {
 }
 
 func TestMarshalColumnValueRoundtrip(t *testing.T) {
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 10000
@@ -310,7 +310,7 @@ func TestDecodeTableKeyOutOfRangeTimestamp(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/direction:%d", d.String(), dir), func(t *testing.T) {
 				encoded, err := rowenc.EncodeTableKey([]byte{}, d, dir)
 				require.NoError(t, err)
-				a := &rowenc.DatumAlloc{}
+				a := &tree.DatumAlloc{}
 				decoded, _, err := rowenc.DecodeTableKey(a, d.ResolvedType(), encoded, dir)
 				require.NoError(t, err)
 				require.Equal(t, d, decoded)
@@ -331,7 +331,7 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 			colID := descpb.ColumnID(1)
 			encoded, err := rowenc.EncodeTableValue(b, colID, d, []byte{})
 			require.NoError(t, err)
-			a := &rowenc.DatumAlloc{}
+			a := &tree.DatumAlloc{}
 			decoded, _, err := rowenc.DecodeTableValue(a, d.ResolvedType(), encoded)
 			require.NoError(t, err)
 			require.Equal(t, d, decoded)
@@ -348,7 +348,7 @@ func TestDecodeTupleValueWithType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	da := rowenc.DatumAlloc{}
+	da := tree.DatumAlloc{}
 	var decoded tree.Datum
 	decoded, _, err = rowenc.DecodeTableValue(&da, tupleType, buf)
 	if err != nil {

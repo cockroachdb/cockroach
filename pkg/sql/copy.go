@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -123,7 +122,7 @@ func newCopyMachine(
 		format:  n.Options.CopyFormat,
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
-		p:              planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}},
+		p:              planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}},
 		execInsertPlan: execInsertPlan,
 	}
 

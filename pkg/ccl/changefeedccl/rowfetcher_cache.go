@@ -41,7 +41,7 @@ type rowFetcherCache struct {
 	collection *descs.Collection
 	db         *kv.DB
 
-	a rowenc.DatumAlloc
+	a tree.DatumAlloc
 }
 
 var rfCacheConfig = cache.Config{

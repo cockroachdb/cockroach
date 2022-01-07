@@ -73,7 +73,7 @@ type TableStatisticsCache struct {
 	collectionFactory *descs.CollectionFactory
 
 	// Used when decoding KV from the range feed.
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 }
 
 // The cache stores *cacheEntry objects. The fields are protected by the
@@ -180,7 +180,7 @@ func NewTableStatisticsCache(
 // decodeTableStatisticsKV decodes the table ID from a range feed event on
 // system.table_statistics.
 func decodeTableStatisticsKV(
-	codec keys.SQLCodec, kv *roachpb.RangeFeedValue, da *rowenc.DatumAlloc,
+	codec keys.SQLCodec, kv *roachpb.RangeFeedValue, da *tree.DatumAlloc,
 ) (tableDesc descpb.ID, err error) {
 	// The primary key of table_statistics is (tableID INT, statisticID INT).
 	types := []*types.T{types.Int, types.Int}
@@ -580,7 +580,7 @@ func (sc *TableStatisticsCache) parseStats(
 		}
 
 		// Decode the histogram data so that it's usable by the opt catalog.
-		var a rowenc.DatumAlloc
+		var a tree.DatumAlloc
 		for i := offset; i < len(res.Histogram); i++ {
 			bucket := &res.HistogramData.Buckets[i-offset]
 			datum, _, err := rowenc.DecodeTableKey(&a, res.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)

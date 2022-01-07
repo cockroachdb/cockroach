@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -325,7 +324,7 @@ type castNativeToDatumOp struct {
 	castOpBase
 
 	scratch []tree.Datum
-	da      rowenc.DatumAlloc
+	da      tree.DatumAlloc
 }
 
 var _ colexecop.ClosableOperator = &castNativeToDatumOp{}

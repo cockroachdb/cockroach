@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -56,7 +57,7 @@ type Columnarizer struct {
 	mode      columnarizerMode
 	allocator *colmem.Allocator
 	input     execinfra.RowSource
-	da        rowenc.DatumAlloc
+	da        tree.DatumAlloc
 
 	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch

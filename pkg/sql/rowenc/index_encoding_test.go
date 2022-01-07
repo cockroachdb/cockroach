@@ -110,7 +110,7 @@ func decodeIndex(
 	}
 
 	decodedValues := make([]tree.Datum, len(values))
-	var da DatumAlloc
+	var da tree.DatumAlloc
 	for i, value := range values {
 		err := value.EnsureDecoded(types[i], &da)
 		if err != nil {
@@ -124,7 +124,7 @@ func decodeIndex(
 
 func TestIndexKey(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
-	var a DatumAlloc
+	var a tree.DatumAlloc
 
 	tests := []indexKeyTest{
 		{
@@ -757,7 +757,7 @@ func TestArrayEncoding(t *testing.T) {
 			enc := make([]byte, 0)
 			enc = append(enc, byte(len(test.encoding)))
 			enc = append(enc, test.encoding...)
-			d, _, err := DecodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
+			d, _, err := DecodeArray(&tree.DatumAlloc{}, test.datum.ParamTyp, enc)
 			hasNulls := d.(*tree.DArray).HasNulls
 			if test.datum.HasNulls != hasNulls {
 				t.Fatalf("expected %v to have HasNulls=%t, got %t", enc, test.datum.HasNulls, hasNulls)
@@ -929,7 +929,7 @@ func TestMarshalColumnValue(t *testing.T) {
 }
 
 func TestDecodeTableValue(t *testing.T) {
-	a := &DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	for _, tc := range []struct {
 		in  tree.Datum
 		typ *types.T
@@ -968,7 +968,7 @@ func TestDecodeTableValue(t *testing.T) {
 //
 // Don't use this function in the scan "hot path".
 func ExtractIndexKey(
-	a *DatumAlloc, codec keys.SQLCodec, tableDesc catalog.TableDescriptor, entry kv.KeyValue,
+	a *tree.DatumAlloc, codec keys.SQLCodec, tableDesc catalog.TableDescriptor, entry kv.KeyValue,
 ) (roachpb.Key, error) {
 	indexID, key, err := DecodeIndexKeyPrefix(codec, tableDesc.GetID(), entry.Key)
 	if err != nil {

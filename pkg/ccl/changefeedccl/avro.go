@@ -160,7 +160,7 @@ type avroDataRecord struct {
 	// Allocate Go native representation once, to avoid repeated map allocation
 	// when encoding.
 	native map[string]interface{}
-	alloc  rowenc.DatumAlloc
+	alloc  tree.DatumAlloc
 }
 
 // avroMetadata is the `avroEnvelopeRecord` metadata.

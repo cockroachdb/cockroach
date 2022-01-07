@@ -86,7 +86,7 @@ func (d *rowCodec) decodeRow(
 	_ error,
 ) {
 	tbl := systemschema.SQLInstancesTable
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 	// First, decode the id field from the index key.
 	{
 		types := []*types.T{tbl.PublicColumns()[0].GetType()}

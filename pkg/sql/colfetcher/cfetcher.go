@@ -123,7 +123,7 @@ type cTableInfo struct {
 	// only be used for unique secondary indexes.
 	extraValDirections []descpb.IndexDescriptor_Direction
 
-	da rowenc.DatumAlloc
+	da tree.DatumAlloc
 }
 
 var _ execinfra.Releasable = &cTableInfo{}

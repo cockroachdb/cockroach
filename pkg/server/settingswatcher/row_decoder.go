@@ -27,7 +27,7 @@ import (
 // RowDecoder decodes rows from the settings table.
 type RowDecoder struct {
 	codec     keys.SQLCodec
-	alloc     rowenc.DatumAlloc
+	alloc     tree.DatumAlloc
 	colIdxMap catalog.TableColMap
 }
 

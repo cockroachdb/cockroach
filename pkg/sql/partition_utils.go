@@ -95,7 +95,7 @@ func GenerateSubzoneSpans(
 		return nil, nil
 	}
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 
 	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
 	subzoneIndexByPartition := make(map[string]int32)
@@ -182,7 +182,7 @@ func GenerateSubzoneSpans(
 // highest precedence first and the interval.Range payloads are each a
 // `zonepb.Subzone` with the PartitionName set.
 func indexCoveringsForPartitioning(
-	a *rowenc.DatumAlloc,
+	a *tree.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,

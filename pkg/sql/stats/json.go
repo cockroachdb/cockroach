@@ -64,7 +64,7 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 	js.HistogramColumnType = typ.SQLString()
 	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
 	js.HistogramVersion = h.Version
-	var a rowenc.DatumAlloc
+	var a tree.DatumAlloc
 	for i := range h.Buckets {
 		b := &h.Buckets[i]
 		js.HistogramBuckets[i].NumEq = b.NumEq

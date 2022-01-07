@@ -256,7 +256,7 @@ type Fetcher struct {
 	IgnoreUnexpectedNulls bool
 
 	// Buffered allocation of decoded datums.
-	alloc *rowenc.DatumAlloc
+	alloc *tree.DatumAlloc
 
 	// Memory monitor and memory account for the bytes fetched by this fetcher.
 	mon             *mon.BytesMonitor
@@ -295,7 +295,7 @@ func (rf *Fetcher) Init(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
 	isCheck bool,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	memMonitor *mon.BytesMonitor,
 	tableArgs FetcherTableArgs,
 ) error {
