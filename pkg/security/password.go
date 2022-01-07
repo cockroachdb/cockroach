@@ -190,7 +190,7 @@ var MinPasswordLength = settings.RegisterIntSetting(
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
 	1,
 	settings.NonNegativeInt,
-)
+).WithPublic()
 
 // bcryptSemOnce wraps a semaphore that limits the number of concurrent calls
 // to the bcrypt hash functions. This is needed to avoid the risk of a
