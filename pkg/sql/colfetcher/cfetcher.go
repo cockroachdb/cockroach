@@ -64,10 +64,6 @@ type cTableInfo struct {
 	// One value per column that is part of the key; each value is a column
 	// ordinal among only needed columns; -1 if we don't need the value for
 	// that column.
-	//
-	// Note that if the tracing is enabled on the cFetcher (traceKV == true),
-	// then values for all columns are needed and, thus, there will be no -1 in
-	// indexColOrdinals.
 	indexColOrdinals []int
 
 	// The set of column ordinals which are both composite and part of the index
@@ -84,10 +80,6 @@ type cTableInfo struct {
 	// - for unique indexes, these columns are stored in the value (unless the
 	// key contains a NULL value: then the extra columns are appended to the key
 	// to unique-ify it).
-	//
-	// Note that if the tracing is enabled on the cFetcher (traceKV == true),
-	// then values for all columns are needed and, thus, there will be no -1 in
-	// extraValColOrdinals.
 	extraValColOrdinals []int
 
 	// invertedColOrdinal is a column ordinal among only needed columns,
@@ -251,7 +243,7 @@ type cFetcher struct {
 	maxKeysPerRow int
 
 	// True if the index key must be decoded. This is only false if there are no
-	// needed columns and the tracing is not enabled.
+	// needed columns.
 	mustDecodeIndexKey bool
 
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
@@ -1046,6 +1038,24 @@ func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
 	return res[0]
 }
 
+// writeDecodedCols writes the stringified representation of the decoded columns
+// specified by colOrdinals. -1 in colOrdinals indicates that a column wasn't
+// actually decoded (this is represented as "?" in the result). separator is
+// inserted between each two subsequent decoded column values (but not before
+// the first one).
+func (rf *cFetcher) writeDecodedCols(buf *strings.Builder, colOrdinals []int, separator byte) {
+	for i, idx := range colOrdinals {
+		if i > 0 {
+			buf.WriteByte(separator)
+		}
+		if idx != -1 {
+			buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
+		} else {
+			buf.WriteByte('?')
+		}
+	}
+}
+
 // processValue processes the state machine's current value component, setting
 // columns in the rowIdx'th tuple in the current batch depending on what data
 // is found in the current value component.
@@ -1065,19 +1075,13 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		buf.WriteString(rf.table.desc.GetName())
 		buf.WriteByte('/')
 		buf.WriteString(rf.table.index.GetName())
-		// Note that because rf.traceKV is true, rf.table.indexColOrdinals will
-		// not include any -1, so idx values will all be valid.
-		for _, idx := range rf.table.indexColOrdinals {
-			buf.WriteByte('/')
-			buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
-		}
+		buf.WriteByte('/')
+		rf.writeDecodedCols(&buf, rf.table.indexColOrdinals, '/')
 		prettyKey = buf.String()
 	}
 
 	if len(table.cols) == 0 {
-		// We don't need to decode any values. Note that this branch can only be
-		// executed if the tracing is disabled (if it was enabled, we would
-		// decode values from all columns).
+		// We don't need to decode any values.
 		return nil
 	}
 
@@ -1147,12 +1151,10 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 				if err != nil {
 					return scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 				}
-				if rf.traceKV {
+				if rf.traceKV && len(table.extraValColOrdinals) > 0 {
 					var buf strings.Builder
-					for _, idx := range table.extraValColOrdinals {
-						buf.WriteByte('/')
-						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
-					}
+					buf.WriteByte('/')
+					rf.writeDecodedCols(&buf, table.extraValColOrdinals, '/')
 					prettyValue = buf.String()
 				}
 			}
@@ -1174,15 +1176,15 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 	}
 
 	if rf.traceKV && prettyValue == "" {
-		prettyValue = tree.DNull.String()
+		prettyValue = "<undecoded>"
 	}
 
 	return nil
 }
 
 // processValueSingle processes the given value (of column
-// family.DefaultColumnID), setting values in table.row accordingly. The key is
-// only used for logging.
+// family.DefaultColumnID), setting values in rf.machine.colvecs accordingly.
+// The key is only used for logging.
 func (rf *cFetcher) processValueSingle(
 	ctx context.Context,
 	table *cTableInfo,
@@ -1203,7 +1205,7 @@ func (rf *cFetcher) processValueSingle(
 
 	if idx, ok := table.ColIdxMap.Get(colID); ok {
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].GetName())
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.cols[idx].GetName())
 		}
 		val := rf.machine.nextKV.Value
 		if len(val.RawBytes) == 0 {
@@ -1232,7 +1234,7 @@ func (rf *cFetcher) processValueSingle(
 	if row.DebugRowFetch {
 		log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
 	}
-	return "", "", nil
+	return prettyKey, prettyValue, nil
 }
 
 func (rf *cFetcher) processValueBytes(
@@ -1278,6 +1280,9 @@ func (rf *cFetcher) processValueBytes(
 			nextID := table.orderedColIdxMap.vals[lastColIDIndex]
 			if nextID == colID {
 				vecIdx = table.orderedColIdxMap.ords[lastColIDIndex]
+				// Since the next value part (if it exists) will belong to the
+				// column after the current one, we can advance the index.
+				lastColIDIndex++
 				break
 			} else if nextID > colID {
 				break
@@ -1297,7 +1302,7 @@ func (rf *cFetcher) processValueBytes(
 		}
 
 		if rf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[vecIdx].GetName())
+			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.cols[vecIdx].GetName())
 		}
 
 		valueBytes, err = colencoding.DecodeTableValueToCol(
@@ -1333,18 +1338,12 @@ func (rf *cFetcher) fillNulls() error {
 			continue
 		}
 		if !table.cols[i].IsNullable() {
-			var indexColValues []string
-			for _, idx := range table.indexColOrdinals {
-				if idx != -1 {
-					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx).String())
-				} else {
-					indexColValues = append(indexColValues, "?")
-				}
-			}
+			var indexColValues strings.Builder
+			rf.writeDecodedCols(&indexColValues, table.indexColOrdinals, ',')
 			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
 				"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 				table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
-				strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ",")))
+				strings.Join(table.index.IndexDesc().KeyColumnNames, ","), indexColValues.String()))
 		}
 		rf.machine.colvecs.Nulls[i].SetNull(rf.machine.rowIdx)
 	}

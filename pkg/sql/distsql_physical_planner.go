@@ -1111,7 +1111,6 @@ func initTableReaderSpec(
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
 		HasSystemColumns:  n.containsSystemColumns,
-		NeededColumns:     n.colCfg.wantedColumnsOrdinals,
 	}
 	if vc := getInvertedColumn(n.colCfg.invertedColumn, n.cols); vc != nil {
 		s.InvertedColumn = vc.ColumnDesc()

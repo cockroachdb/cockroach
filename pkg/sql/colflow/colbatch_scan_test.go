@@ -77,8 +77,7 @@ func TestColBatchScanMeta(t *testing.T) {
 				Spans: []roachpb.Span{
 					td.PrimaryIndexSpan(keys.SystemSQLCodec),
 				},
-				NeededColumns: []uint32{0},
-				Table:         *td.TableDesc(),
+				Table: *td.TableDesc(),
 			}},
 		ResultTypes: types.OneIntCol,
 	}
@@ -134,7 +133,6 @@ func BenchmarkColBatchScan(b *testing.B) {
 					TableReader: &execinfrapb.TableReaderSpec{
 						Table: *tableDesc.TableDesc(),
 						// Spans will be set below.
-						NeededColumns: []uint32{0, 1},
 					}},
 				ResultTypes: types.TwoIntCols,
 			}
