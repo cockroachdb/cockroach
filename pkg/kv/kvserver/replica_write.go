@@ -324,27 +324,9 @@ func (r *Replica) executeWriteBatch(
 
 		case <-slowTimer.C:
 			slowTimer.Read = true
+			// TODO(tbg): move this to the reproposal function as well.
 			r.store.metrics.SlowRaftRequests.Inc(1)
 
-			var s redact.StringBuilder
-			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
-				r.RaftStatus(), ba, timeutil.Since(startPropTime))
-			err := errors.Errorf("range unavailable: %v", s)
-			// TODO(tbg): develop a coherent story about how the breaker gets
-			// tripped in a world in which all clients have a context cancellation
-			// shorter than base.SlowRequestThreshold. Rather than trying to trip
-			// the breaker when the proportion of ctx canceled vs other results
-			// here is high, it might be better to trigger a probe (but not to
-			// trip the breaker) every couple seconds when we see lots of ctx
-			// canceled errors that took at least 1s, or something like that.
-			//
-			// We should also proactively trip breakers on node liveness events.
-			// When a node goes non-live, we should trigger probes for all of the
-			// replicas belonging to ranges that would now be expected to have
-			// lost quorum, if any, or, for even more proactivity, trip them
-			// outright.
-			r.breaker.Report(err)
-			log.Errorf(ctx, "%s", err)
 			// Continue waiting. If the breaker is now tripped, the breaker channel
 			// will fail-fast the request on the next loop around.
 		case <-ctxDone:
@@ -407,52 +389,52 @@ func (r *Replica) slowReplicationThreshold(ba *roachpb.BatchRequest) time.Durati
 	return r.store.cfg.SlowReplicationThreshold
 }
 
-func rangeUnavailableMessage(
-	s *redact.StringBuilder,
+func rangeUnavailableError(
 	desc *roachpb.RangeDescriptor,
+	replDesc roachpb.ReplicaDescriptor,
 	lm liveness.IsLiveMap,
 	rs *raft.Status,
-	ba *roachpb.BatchRequest,
-	dur time.Duration,
-) {
-	var liveReplicas, otherReplicas []roachpb.ReplicaDescriptor
+) error {
+	nonLiveRepls := roachpb.MakeReplicaSet(nil)
 	for _, rDesc := range desc.Replicas().Descriptors() {
 		if lm[rDesc.NodeID].IsLive {
-			liveReplicas = append(liveReplicas, rDesc)
-		} else {
-			otherReplicas = append(otherReplicas, rDesc)
+			continue
 		}
+		nonLiveRepls.AddReplica(rDesc)
 	}
 
-	// Ensure that these are going to redact nicely.
-	var _ redact.SafeFormatter = ba
-	var _ redact.SafeFormatter = desc
-	var _ redact.SafeFormatter = roachpb.ReplicaSet{}
-
-	s.Printf(`have been waiting %.2fs for proposing command %s.
-This range is likely unavailable.
-Please submit this message to Cockroach Labs support along with the following information:
-
-Descriptor:  %s
-Live:        %s
-Non-live:    %s
-Raft Status: %+v
-
-and a copy of https://yourhost:8080/#/reports/range/%d
-
-If you are using CockroachDB Enterprise, reach out through your
-support contract. Otherwise, please open an issue at:
-
-  https://github.com/cockroachdb/cockroach/issues/new/choose
-`,
-		dur.Seconds(),
-		ba,
-		desc,
-		roachpb.MakeReplicaSet(liveReplicas),
-		roachpb.MakeReplicaSet(otherReplicas),
-		redact.Safe(rs), // raft status contains no PII
-		desc.RangeID,
+	canMakeProgress := desc.Replicas().CanMakeProgress(
+		func(replDesc roachpb.ReplicaDescriptor) bool {
+			return lm[replDesc.NodeID].IsLive
+		},
 	)
+
+	// Ensure good redaction.
+	var _ redact.SafeFormatter = nonLiveRepls
+	var _ redact.SafeFormatter = desc
+	var _ redact.SafeFormatter = replDesc
+
+	err := roachpb.NewReplicaUnavailableError(desc, replDesc)
+	err = errors.Wrapf(
+		err,
+		"raft status: %+v", redact.Safe(rs), // raft status contains no PII
+	)
+	if len(nonLiveRepls.AsProto()) > 0 {
+		err = errors.Wrapf(err, "replicas on non-live nodes: %v (lost quorum: %t)", nonLiveRepls, !canMakeProgress)
+	}
+
+	return err
+}
+
+func (r *Replica) rangeUnavailableError() error {
+	desc := r.Desc()
+	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
+
+	var isLiveMap liveness.IsLiveMap
+	if nl := r.store.cfg.NodeLiveness; nl != nil { // exclude unit test
+		isLiveMap = nl.GetIsLiveMap()
+	}
+	return rangeUnavailableError(desc, replDesc, isLiveMap, r.RaftStatus())
 }
 
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be

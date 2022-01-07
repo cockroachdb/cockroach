@@ -366,6 +366,13 @@ message AmbiguousResultError {
   optional Error wrapped_err = 2;
 }
 
+message ReplicaUnavailableError {
+  option (gogoproto.goproto_stringer) = false;
+
+  optional roachpb.RangeDescriptor desc = 2 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor replica = 4 [(gogoproto.nullable) = false];
+}
+
 // A RaftGroupDeletedError indicates a raft group has been deleted for
 // the replica.
 message RaftGroupDeletedError {

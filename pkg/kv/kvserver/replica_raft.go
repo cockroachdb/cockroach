@@ -1091,21 +1091,23 @@ func (r *Replica) refreshProposalsLocked(
 		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
+	var tripBreakerWithBA *roachpb.BatchRequest
+	var tripBreakerWithDuration time.Duration
 	var reproposals pendingCmdSlice
 	for _, p := range r.mu.proposals {
-		if p.command.MaxLeaseIndex == 0 && !p.command.ReplicatedEvalResult.IsLeaseRequest {
+		if dur := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks); dur > r.slowReplicationThreshold(p.Request) {
+			if tripBreakerWithDuration < dur {
+				tripBreakerWithDuration = dur
+				tripBreakerWithBA = p.Request
+			}
+		}
+		if p.command.MaxLeaseIndex == 0 {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
-			// Leases are an exception - they have replay protection using the lease sequence
-			// numbers. Also, terminating them early here complicates the circuit breaking
-			// story, where we rely on executeWriteBatch reporting an error to the breaker
-			// after SlowReplicationThreshold has passed.
 			//
-			// TODO(tbg): perhaps this method is actually the better place to trip the breaker?
-			// It's where "slow" replication is truly being detected. Ultimately we also want to
-			// trip the breaker on other sources of unavailability, but right now de facto the
-			// only one we are reliably trying to catch is slow replication.
+			// TODO(tbg): leases are one example here, but don't they have replay
+			// protection via the sequence number? What other requests are here?
 			r.cleanupFailedProposalLocked(p)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
@@ -1147,6 +1149,28 @@ func (r *Replica) refreshProposalsLocked(
 			// repropose everything.
 			reproposals = append(reproposals, p)
 		}
+	}
+
+	// If the breaker isn't tripped yet but we've detected commands that have
+	// taken too long to replicate, trip the breaker now.
+	//
+	// NB: we still keep reproposing commands on this and subsequent ticks
+	// even though this seems strictly counter-productive, except perhaps
+	// for the probe's proposals. We could consider being more strict here
+	// which could avoid build-up of raft log entries during outages, see
+	// for example:
+	// https://github.com/cockroachdb/cockroach/issues/60612
+	if r.breaker.Signal().Err() == nil && tripBreakerWithDuration > 0 {
+		// We hold both raftMu and r.mu here and would like to give the
+		// breaker a simple way to produce nicely annotated errors in
+		// its own probe, so we report in a goroutine. As a result, the
+		// breaker can call a method on the Replica to get the annotations
+		// without having to worry about causing deadlocks.
+		log.Warningf(ctx,
+			"have been waiting %.2fs for slow proposal %s; tripping circuit breaker",
+			tripBreakerWithDuration.Seconds(), tripBreakerWithBA,
+		)
+		r.breaker.TripAsync()
 	}
 
 	if log.V(1) && len(reproposals) > 0 {

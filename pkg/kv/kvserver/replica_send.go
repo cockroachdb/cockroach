@@ -132,11 +132,6 @@ func (r *Replica) sendWithRangeID(
 	if isCircuitBreakerProbe(ctx) {
 		brSig = neverTripSignaller{}
 	}
-	if err := brSig.Err(); err != nil {
-		// TODO(tbg): we may want to exclude some requests from this check, or allow requests
-		// to exclude themselves from the check (via their header).
-		return nil, roachpb.NewError(err)
-	}
 	defer func() {
 		if rErr == nil {
 			return
@@ -145,7 +140,8 @@ func (r *Replica) sendWithRangeID(
 		if brErr == nil {
 			return
 		}
-		if ae := (&roachpb.AmbiguousResultError{}); errors.As(rErr.GoError(), &ae) {
+		err := rErr.GoError()
+		if ae := (&roachpb.AmbiguousResultError{}); errors.As(err, &ae) {
 			// TODO(tbg): this is pretty janky. Basically when the breaker first trips
 			// some proposals are bound to get an ambiguous result, which we must propagate.
 			// But we also want this case to be presentable as a nice error in SQL, so it
@@ -160,6 +156,15 @@ func (r *Replica) sendWithRangeID(
 			rErr = roachpb.NewError(ae)
 		}
 	}()
+	// NB: having this below the defer allows the defer to potentially annotate
+	// the error with additional information (such as how long the request was
+	// in Replica.Send) if the breaker is tripped (not done right now).
+	if err := brSig.Err(); err != nil {
+		// TODO(tbg): we may want to exclude some requests from this check, or allow requests
+		// to exclude themselves from the check (via their header).
+		return nil, roachpb.NewError(err)
+	}
+
 	if r.store.Stopper().RunAsyncTask(ctx, "watch", func(ctx context.Context) {
 		select {
 		case <-ctx.Done():

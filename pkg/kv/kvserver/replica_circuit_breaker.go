@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -30,6 +31,7 @@ type replicaInCircuitBreaker interface {
 	Clock() *hlc.Clock
 	Desc() *roachpb.RangeDescriptor
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+	rangeUnavailableError() error
 }
 
 var replicaCircuitBreakersEnabled = settings.RegisterBoolSetting(
@@ -40,19 +42,33 @@ var replicaCircuitBreakersEnabled = settings.RegisterBoolSetting(
 )
 
 type replicaCircuitBreaker struct {
+	ambCtx  log.AmbientContext
+	stopper *stop.Stopper
+	r       replicaInCircuitBreaker
 	st      *cluster.Settings
 	wrapped *circuit.Breaker
+	wrapErr func(err error) error
 }
 
 func (br *replicaCircuitBreaker) enabled() bool {
 	return replicaCircuitBreakersEnabled.Get(&br.st.SV)
 }
 
-func (br *replicaCircuitBreaker) Report(err error) {
+func (br *replicaCircuitBreaker) newError() error {
+	return br.r.rangeUnavailableError()
+}
+
+func (br *replicaCircuitBreaker) TripAsync() {
 	if !br.enabled() {
 		return
 	}
-	br.wrapped.Report(err)
+
+	_ = br.stopper.RunAsyncTask(
+		br.ambCtx.AnnotateCtx(context.Background()), "trip-breaker",
+		func(ctx context.Context) {
+			br.wrapped.Report(br.newError())
+		},
+	)
 }
 
 type neverTripSignaller struct{}
@@ -76,37 +92,16 @@ func newReplicaCircuitBreaker(
 	ambientCtx log.AmbientContext,
 	r replicaInCircuitBreaker,
 ) *replicaCircuitBreaker {
-	bgCtx := ambientCtx.AnnotateCtx(context.Background())
-	wrapped := circuit.NewBreaker(circuit.Options{
-		Name: redact.Sprintf("breaker"), // log bridge has ctx tags
-		AsyncProbe: func(report func(error), done func()) {
-			if err := stopper.RunAsyncTask(
-				withCircuitBreakerProbeMarker(bgCtx),
-				"replica-probe",
-				func(ctx context.Context) {
-					// TODO(tbg): timeout for the probe.
-					defer done()
+	br := &replicaCircuitBreaker{
+		stopper: stopper,
+		ambCtx:  ambientCtx,
+		r:       r,
+		st:      cs,
+	}
 
-					ctx, finishAndGet := tracing.ContextWithRecordingSpan(ctx, ambientCtx.Tracer, "probe")
-					defer finishAndGet()
-
-					// TODO(tbg): plumb r.slowReplicationThreshold here.
-					// TODO(tbg): generate a nicer error on timeout (the common case). Right now it will
-					// just say "timed out after 10s: context canceled".
-					const probeTimeout = 10 * time.Second
-					err := contextutil.RunWithTimeout(ctx, "probe", probeTimeout, func(ctx context.Context) error {
-						return checkShouldUntripBreaker(ctx, r)
-					})
-					report(err)
-					if err != nil {
-						rec := finishAndGet()
-						// NB: can't use `ctx` any more; that's a use-after-finish.
-						log.Infof(bgCtx, "probe failed %s", rec.String())
-					}
-				}); err != nil {
-				done()
-			}
-		},
+	br.wrapped = circuit.NewBreaker(circuit.Options{
+		Name:       redact.Sprintf("breaker"), // log bridge has ctx tags
+		AsyncProbe: br.asyncProbe,
 		EventHandler: &circuit.EventLogger{
 			Log: func(buf redact.StringBuilder) {
 				log.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
@@ -114,9 +109,44 @@ func newReplicaCircuitBreaker(
 		},
 	})
 
-	return &replicaCircuitBreaker{
-		st:      cs,
-		wrapped: wrapped,
+	return br
+}
+
+func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
+	bgCtx := br.ambCtx.AnnotateCtx(context.Background())
+	if err := br.stopper.RunAsyncTask(
+		withCircuitBreakerProbeMarker(bgCtx),
+		"replica-probe",
+		func(ctx context.Context) {
+			// TODO(tbg): timeout for the probe.
+			defer done()
+
+			if !br.enabled() {
+				report(nil)
+				return
+			}
+
+			ctx, finishAndGet := tracing.ContextWithRecordingSpan(ctx, br.ambCtx.Tracer, "probe")
+			defer finishAndGet()
+
+			// TODO(tbg): plumb r.slowReplicationThreshold here.
+			// TODO(tbg): generate a nicer error on timeout (the common case). Right now it will
+			// just say "timed out after 10s: context canceled".
+			const probeTimeout = 10 * time.Second
+			err := contextutil.RunWithTimeout(ctx, "probe", probeTimeout, func(ctx context.Context) error {
+				if err := checkShouldUntripBreaker(ctx, br.r); err != nil {
+					return errors.Wrapf(br.r.rangeUnavailableError(), "%s", err)
+				}
+				return nil
+			})
+			report(err)
+			if err != nil {
+				rec := finishAndGet()
+				// NB: can't use `ctx` any more; that's a use-after-finish.
+				log.Infof(bgCtx, "probe failed %s", rec.String())
+			}
+		}); err != nil {
+		done()
 	}
 }
 

@@ -459,10 +459,8 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 					// Handling liveness outages satisfyingly isn't as straightforward and
 					// should be out of scope initially. This limitation is documented and
 					// discussed in TestReplicaCircuitBreaker.
-					if false {
-						if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
-							p.repl.breaker.Report(err)
-						}
+					if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+						var _ int // do something
 					}
 					// TODO(bdarnell): is status.Lease really what we want to put in the NotLeaseHolderError here?
 					pErr = roachpb.NewError(newNotLeaseHolderError(
