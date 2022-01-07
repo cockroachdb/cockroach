@@ -24,6 +24,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/server/telemetry",
