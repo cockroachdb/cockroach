@@ -1167,43 +1167,65 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						ResultTypes: append(inputTypes, outputType),
 					}
 					args := verifyColOperatorArgs{
+						rng:        rng,
 						anyOrder:   true,
 						inputTypes: [][]*types.T{inputTypes},
 						inputs:     []rowenc.EncDatumRows{rows},
 						pspec:      pspec,
+						// Some window functions don't buffer anything, so they
+						// won't ever spill to disk. Rather than examining each
+						// function and checking whether it buffers or not,
+						// we're being lazy and don't require the spilling to
+						// occur.
+						forcedDiskSpillMightNotOccur: true,
 					}
-					if err := verifyColOperator(t, args); err != nil {
-						if strings.Contains(err.Error(), "different errors returned") {
-							// Columnar and row-based windowers are likely to hit
-							// different errors, and we will swallow those and move
-							// on.
+					for _, spillForced := range []bool{false, true} {
+						if spillForced && nRows == manyRows {
+							// Don't force disk spilling with many rows since it
+							// might take a while.
 							continue
 						}
-						if strings.Contains(err.Error(), "integer out of range") &&
-							fun.AggregateFunc != nil && *fun.AggregateFunc == execinfrapb.SumInt {
-							// The columnar implementation of this window function uses the
-							// sliding window optimization, but the row engine version
-							// doesn't. As a result, in some cases the row engine will
-							// overflow while the vectorized engine doesn't.
-							continue
+						args.forceDiskSpill = spillForced
+						if err := verifyColOperator(t, args); err != nil {
+							if strings.Contains(err.Error(), "different errors returned") {
+								// Columnar and row-based windowers are likely to hit
+								// different errors, and we will swallow those and move
+								// on.
+								continue
+							}
+							if strings.Contains(err.Error(), "Err:windower-limited: memory budget exceeded") {
+								// The row-based windower can hit a memory error
+								// because some of its state cannot be spilled
+								// to disk. Ignore such cases.
+								continue
+							}
+							if strings.Contains(err.Error(), "integer out of range") &&
+								fun.AggregateFunc != nil && *fun.AggregateFunc == execinfrapb.SumInt {
+								// The columnar implementation of this window function uses the
+								// sliding window optimization, but the row engine version
+								// doesn't. As a result, in some cases the row engine will
+								// overflow while the vectorized engine doesn't.
+								continue
+							}
+							fmt.Printf("force disk spill: %t\n", spillForced)
+							fmt.Printf("window function: %s\n", funcName)
+							fmt.Printf("partitionCols: %v\n", partitionBy)
+							fmt.Print("ordering: ")
+							for i := range ordering.Columns {
+								fmt.Printf("%v %v, ", ordering.Columns[i].ColIdx, ordering.Columns[i].Direction)
+							}
+							fmt.Println()
+							fmt.Printf("argIdxs: %v\n", argsIdxs)
+							frame := windowerSpec.WindowFns[0].Frame
+							fmt.Printf("frame mode: %v\n", frame.Mode)
+							fmt.Printf("start bound: %v\n", frame.Bounds.Start)
+							fmt.Printf("end bound: %v\n", *frame.Bounds.End)
+							fmt.Printf("frame exclusion: %v\n", frame.Exclusion)
+							fmt.Printf("seed = %d\n", seed)
+							prettyPrintTypes(inputTypes, "t" /* tableName */)
+							prettyPrintInput(rows, inputTypes, "t" /* tableName */)
+							t.Fatal(err)
 						}
-						fmt.Printf("window function: %s\n", funcName)
-						fmt.Printf("partitionCols: %v\n", partitionBy)
-						fmt.Print("ordering: ")
-						for i := range ordering.Columns {
-							fmt.Printf("%v %v, ", ordering.Columns[i].ColIdx, ordering.Columns[i].Direction)
-						}
-						fmt.Println()
-						fmt.Printf("argIdxs: %v\n", argsIdxs)
-						frame := windowerSpec.WindowFns[0].Frame
-						fmt.Printf("frame mode: %v\n", frame.Mode)
-						fmt.Printf("start bound: %v\n", frame.Bounds.Start)
-						fmt.Printf("end bound: %v\n", *frame.Bounds.End)
-						fmt.Printf("frame exclusion: %v\n", frame.Exclusion)
-						fmt.Printf("seed = %d\n", seed)
-						prettyPrintTypes(inputTypes, "t" /* tableName */)
-						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
-						t.Fatal(err)
 					}
 				}
 			}
