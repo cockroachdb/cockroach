@@ -25,7 +25,7 @@ import (
 func makeDoctorCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	return &cobra.Command{
 		Use:     "doctor",
-		Short:   "Check whether your machine is ready to build.",
+		Short:   "Check whether your machine is ready to build",
 		Long:    "Check whether your machine is ready to build.",
 		Example: "dev doctor",
 		Args:    cobra.ExactArgs(0),
