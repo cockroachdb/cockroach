@@ -47,6 +47,9 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 	const (
 		n1 = 0
 		n2 = 1
+
+		pauseHeartbeats = true
+		keepHeartbeats  = true
 	)
 
 	// This is a sanity check in which the breaker plays no role.
@@ -157,7 +160,7 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 		require.NoError(t, tc.Write(n1))
 		tc.SetProbeEnabled(n1, false)
 		tc.Report(n1, errors.New("boom"))
-		resumeHeartbeats := tc.PauseHeartbeatsAndExpireAllLeases(t)
+		resumeHeartbeats := tc.ExpireAllLeases(t, pauseHeartbeats)
 
 		// n2 (not n1) will return a NotLeaseholderError. This may be surprising -
 		// why isn't it trying and succeeding to acquire a lease - but it does
@@ -198,12 +201,7 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 	// snappy) has passed, the breaker on n1's Replica trips. When n2 comes back,
 	// the probe on n1 succeeds and requests to n1 can acquire a lease and
 	// succeed.
-	//
-	// Note that there is no leaseholder-quorum-loss flavor of this test because
-	// if we lose the leaseholder, all other replicas will return
-	// NotLeaseholderError until the lease has become invalid, which puts us into
-	// the scenario handled in the leaseless-quorum-loss test below.
-	runCircuitBreakerTest(t, "follower-quorum-loss", func(t *testing.T, ctx context.Context, tc *circuitBreakerTest) {
+	runCircuitBreakerTest(t, "leaseholder-quorum-loss", func(t *testing.T, ctx context.Context, tc *circuitBreakerTest) {
 		// Get lease on n1.
 		require.NoError(t, tc.Write(n1))
 		tc.StopServer(n2) // lose quorum
@@ -217,6 +215,32 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 			require.True(t, errors.As(err, &ae), "%+v", err)
 			t.Log(err)
 		}
+		tc.RequireIsBreakerOpen(t, tc.Read(n1))
+
+		// Bring n2 back and service should be restored.
+		tc.SetSlowThreshold(0) // reset
+		require.NoError(t, tc.RestartServer(n2))
+		tc.UntripsSoon(t, tc.Read, n1)
+		require.NoError(t, tc.Write(n1))
+	})
+
+	// In this test, the range is on n1 and n2 and we place the lease on n2 and
+	// shut down n2 and expire the lease. n1 will be a non-leaseholder without
+	// quorum, and requests to it should trip the circuit breaker. This is an
+	// interesting test case internally because here, the request that trips the
+	// breaker is the slow lease request, and not the tests's actual write. Since
+	// leases have lots of special casing internally, this is easy to get wrong.
+	runCircuitBreakerTest(t, "follower-quorum-loss", func(t *testing.T, ctx context.Context, tc *circuitBreakerTest) {
+		// Get lease to n2 so that we can lose it without taking down the system ranges.
+		tc.TransferRangeLeaseOrFatal(t, tc.LookupRangeOrFatal(t, tc.ScratchRange(t)), tc.Target(n2))
+		resumeHeartbeats := tc.ExpireAllLeases(t, keepHeartbeats)
+		tc.StopServer(n2) // lose quorum and leaseholder
+		resumeHeartbeats()
+
+		// We didn't lose the liveness range (which is only on n1).
+		require.NoError(t, tc.Server(n1).HeartbeatNodeLiveness())
+		tc.SetSlowThreshold(10 * time.Millisecond)
+		tc.RequireIsBreakerOpen(t, tc.Write(n1))
 		tc.RequireIsBreakerOpen(t, tc.Read(n1))
 
 		// Bring n2 back and service should be restored.
@@ -268,7 +292,7 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 
 		// Expire all leases. We also pause all heartbeats but that doesn't really
 		// matter since the liveness range is unavailable anyway.
-		resume := tc.PauseHeartbeatsAndExpireAllLeases(t)
+		resume := tc.ExpireAllLeases(t, pauseHeartbeats)
 		defer resume()
 
 		// Since there isn't a lease, and the liveness range is down, the circuit
@@ -345,7 +369,9 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 			if rid := roachpb.RangeID(atomic.LoadInt64(&rangeID)); rid == 0 || ba == nil || ba.RangeID != rid {
 				return 0
 			}
-			return slowThresh.Load().(time.Duration)
+			dur := slowThresh.Load().(time.Duration)
+			t.Logf("%s: using slow replication threshold %s", ba.Summary(), dur)
+			return dur
 		},
 	}
 	reg := server.NewStickyInMemEnginesRegistry()
@@ -405,13 +431,15 @@ func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) er
 	})
 }
 
-func (cbt *circuitBreakerTest) PauseHeartbeatsAndExpireAllLeases(t *testing.T) (undo func()) {
+func (cbt *circuitBreakerTest) ExpireAllLeases(t *testing.T, pauseHeartbeats bool) (undo func()) {
 	var maxWT int64
 	var fs []func()
 	for _, srv := range cbt.Servers {
 		lv := srv.NodeLiveness().(*liveness.NodeLiveness)
-		undo := lv.PauseAllHeartbeatsForTest()
-		fs = append(fs, undo)
+		if pauseHeartbeats {
+			undo := lv.PauseAllHeartbeatsForTest()
+			fs = append(fs, undo)
+		}
 		self, ok := lv.Self()
 		require.True(t, ok)
 		if maxWT < self.Expiration.WallTime {

@@ -145,7 +145,8 @@ func (r *Replica) sendWithRangeID(
 			// TODO(tbg): this is pretty janky. Basically when the breaker first trips
 			// some proposals are bound to get an ambiguous result, which we must propagate.
 			// But we also want this case to be presentable as a nice error in SQL, so it
-			// needs to contain the information coming from the breaker.
+			// needs to contain the information coming from the breaker. We could consider
+			// wrapping the AmbiguousResultError instead.
 			wrappedErr := brErr
 			// TODO(tbg): this is the only write to WrappedErr in the codebase, so should
 			// simplify and avoid nesting `roachpb.Error` here.
@@ -154,6 +155,10 @@ func (r *Replica) sendWithRangeID(
 			}
 			ae.WrappedErr = roachpb.NewError(wrappedErr)
 			rErr = roachpb.NewError(ae)
+		} else if le := (&roachpb.NotLeaseHolderError{}); errors.As(err, &le) {
+			// When a lease acquisition is short-circuited by the breaker, it will return an opaque
+			// NotLeaseholderError, which we replace with the breaker's error.
+			rErr = roachpb.NewError(brErr)
 		}
 	}()
 	// NB: having this below the defer allows the defer to potentially annotate
