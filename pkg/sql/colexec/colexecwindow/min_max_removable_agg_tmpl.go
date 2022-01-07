@@ -269,17 +269,23 @@ func (a *_AGG_TYPEAggregator) aggregateOverIntervals(intervals []windowInterval)
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.TemplateType().Get(cmpIdx)
-					_ASSIGN_CMP(cmp, cmpVal, val, _, col, _)
-					if cmp {
-						break
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy _GOTYPE
+					execgen.COPYVAL(valCopy, val)
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.TemplateType().Get(cmpIdx)
+						_ASSIGN_CMP(cmp, cmpVal, valCopy, _, col, _)
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
