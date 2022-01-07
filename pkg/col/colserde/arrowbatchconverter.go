@@ -444,6 +444,13 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 
 		default:
+			// For integers and floats we can just directly cast the slice
+			// without performing the copy.
+			//
+			// However, we have to be careful to set the capacity on each slice
+			// explicitly to protect memory regions that come after the slice
+			// from corruption in case the slice will be appended to in the
+			// future. See an example in deserializeArrowIntoBytes.
 			var col coldata.Column
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 			case types.IntFamily:
@@ -451,22 +458,26 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				case 16:
 					intArr := array.NewInt16Data(d)
 					vec.Nulls().SetNullBitmap(intArr.NullBitmapBytes(), batchLength)
-					col = coldata.Int16s(intArr.Int16Values())
+					int16s := coldata.Int16s(intArr.Int16Values())
+					col = int16s[:len(int16s):len(int16s)]
 				case 32:
 					intArr := array.NewInt32Data(d)
 					vec.Nulls().SetNullBitmap(intArr.NullBitmapBytes(), batchLength)
-					col = coldata.Int32s(intArr.Int32Values())
+					int32s := coldata.Int32s(intArr.Int32Values())
+					col = int32s[:len(int32s):len(int32s)]
 				case 0, 64:
 					intArr := array.NewInt64Data(d)
 					vec.Nulls().SetNullBitmap(intArr.NullBitmapBytes(), batchLength)
-					col = coldata.Int64s(intArr.Int64Values())
+					int64s := coldata.Int64s(intArr.Int64Values())
+					col = int64s[:len(int64s):len(int64s)]
 				default:
 					panic(fmt.Sprintf("unexpected int width: %d", typ.Width()))
 				}
 			case types.FloatFamily:
 				floatArr := array.NewFloat64Data(d)
 				vec.Nulls().SetNullBitmap(floatArr.NullBitmapBytes(), batchLength)
-				col = coldata.Float64s(floatArr.Float64Values())
+				float64s := coldata.Float64s(floatArr.Float64Values())
+				col = float64s[:len(float64s):len(float64s)]
 			default:
 				panic(
 					fmt.Sprintf("unsupported type for conversion to column batch %s", d.DataType().Name()),
@@ -494,5 +505,26 @@ func deserializeArrowIntoBytes(
 		// corresponds.
 		b = make([]byte, 0)
 	}
-	coldata.BytesFromArrowSerializationFormat(bytes, b, bytesArr.ValueOffsets())
+	// Cap the data and offsets slices explicitly to protect against possible
+	// corruption of the memory region that is after the arrow data for this
+	// Bytes vector.
+	//
+	// Consider the following scenario: a batch with two Bytes vectors is
+	// serialized. Say
+	// - the first vector is {data:[foo], offsets:[0, 3]}
+	// - the second vector is {data:[bar], offsets:[0, 3]}.
+	// After serializing both of them we will have a flat buffer with something
+	// like:
+	//   buf = {1foo031bar03} (ones represent the lengths of each vector).
+	// Now, when the first vector is being deserialized, it's data slice will be
+	// something like:
+	//   data = [foo031bar03], len(data) = 3, cap(data) > 3.
+	// If we don't explicitly cap the slice and deserialize it into a Bytes
+	// vector, then later when we append to that vector, we will overwrite the
+	// data that is actually a part of the second serialized vector, thus,
+	// corrupting it (or the next batch).
+	offsets := bytesArr.ValueOffsets()
+	b = b[:len(b):len(b)]
+	offsets = offsets[:len(offsets):len(offsets)]
+	coldata.BytesFromArrowSerializationFormat(bytes, b, offsets)
 }
