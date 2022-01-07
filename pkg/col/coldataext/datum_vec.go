@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -135,7 +134,7 @@ func (dv *datumVec) Cap() int {
 func (dv *datumVec) MarshalAt(appendTo []byte, i int) ([]byte, error) {
 	dv.maybeSetDNull(i)
 	return rowenc.EncodeTableValue(
-		appendTo, descpb.ColumnID(encoding.NoColumnID), dv.data[i], dv.scratch,
+		appendTo, descpb.NoColumnID, dv.data[i], dv.scratch,
 	)
 }
 

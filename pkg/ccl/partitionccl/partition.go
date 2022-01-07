@@ -115,7 +115,7 @@ func valueEncodePartitionTuple(
 			return nil, err
 		}
 		value, err = rowenc.EncodeTableValue(
-			value, descpb.ColumnID(encoding.NoColumnID), datum, scratch,
+			value, descpb.NoColumnID, datum, scratch,
 		)
 		if err != nil {
 			return nil, err

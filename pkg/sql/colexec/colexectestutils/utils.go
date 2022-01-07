@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1763,7 +1762,7 @@ func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) 
 func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
 	var encoded, scratch []byte
 	encoded, err := rowenc.EncodeTableValue(
-		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
+		encoded, descpb.NoColumnID, offset, scratch)
 	require.NoError(t, err)
 	return encoded
 }

@@ -344,7 +344,7 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 func TestDecodeTupleValueWithType(t *testing.T) {
 	tupleType := types.MakeLabeledTuple([]*types.T{types.Int, types.String}, []string{"a", "b"})
 	datum := tree.NewDTuple(tupleType, tree.NewDInt(tree.DInt(1)), tree.NewDString("foo"))
-	buf, err := rowenc.EncodeTableValue(nil, descpb.ColumnID(encoding.NoColumnID), datum, nil)
+	buf, err := rowenc.EncodeTableValue(nil, descpb.NoColumnID, datum, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

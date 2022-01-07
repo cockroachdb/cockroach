@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -2165,7 +2164,7 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				var totalSize int
 				for _, arg := range args {
-					encodeTableValue, err := rowenc.EncodeTableValue(nil, descpb.ColumnID(encoding.NoColumnID), arg, nil)
+					encodeTableValue, err := rowenc.EncodeTableValue(nil, descpb.NoColumnID, arg, nil)
 					if err != nil {
 						return tree.DNull, err
 					}

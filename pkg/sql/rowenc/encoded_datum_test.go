@@ -529,7 +529,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		switch typedTest := test.(type) {
 		case *tree.DTuple:
 
-			buf, err := rowenc.EncodeTableValue(nil, descpb.ColumnID(encoding.NoColumnID), typedTest, nil)
+			buf, err := rowenc.EncodeTableValue(nil, descpb.NoColumnID, typedTest, nil)
 			if err != nil {
 				t.Fatalf("seed %d: encoding tuple %v with types %v failed with error: %v",
 					seed, test, colTypes[i], err)
