@@ -1101,7 +1101,12 @@ func (r *Replica) refreshProposalsLocked(
 				tripBreakerWithBA = p.Request
 			}
 		}
-		if p.command.MaxLeaseIndex == 0 {
+		// TODO(tbg): this effectively disables this branch since leases are the only
+		// request without an MLI. Need to figure out if this is allowed. We definitely
+		// need to prevent the call to finishApplication, as it removes the proposal
+		// and thus the `createdAtTicks` that we ultimately are waiting to let grow large
+		// enough to trip the breaker.
+		if p.command.MaxLeaseIndex == 0 && !p.Request.IsLeaseRequest() {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
