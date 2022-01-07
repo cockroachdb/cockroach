@@ -47,9 +47,9 @@ func registerTLP(r registry.Registry) {
 
 func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	timeout := 10 * time.Minute
-	// Run 5 minute iterations of TLP in a loop for about the entire test, giving
-	// an unused iteration at the end to allow the test to shut down cleanly.
-	until := time.After(t.Spec().(registry.TestSpec).Timeout - timeout)
+	// Run 10 minute iterations of TLP in a loop for about the entire test,
+	// giving 5 minutes at the end to allow the test to shut down cleanly.
+	until := time.After(t.Spec().(registry.TestSpec).Timeout - 5*time.Minute)
 	done := ctx.Done()
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
