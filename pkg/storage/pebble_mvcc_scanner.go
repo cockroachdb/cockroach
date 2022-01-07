@@ -174,8 +174,10 @@ type pebbleMVCCScanner struct {
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
-	// the scan.
-	mostRecentTS hlc.Timestamp
+	// the scan. mostRecentKey is one of the keys (not necessarily at
+	// mostRecentTS) that was more recent than the scan.
+	mostRecentTS  hlc.Timestamp
+	mostRecentKey roachpb.Key
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Number of iterations to try before we do a Seek/SeekReverse. Stays within
@@ -338,7 +340,7 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 	}
 	// The txn can't write at the existing timestamp, so we provide the error
 	// with the timestamp immediately after it.
-	p.err = roachpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next())
+	p.err = roachpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next(), p.mostRecentKey)
 	p.results.clear()
 	p.intents.Reset()
 }
@@ -373,6 +375,9 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 				// seen so we know to return an error, but then keep scanning so
 				// that we can return the largest possible time.
 				p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp)
+				if len(p.mostRecentKey) == 0 {
+					p.mostRecentKey = append(p.mostRecentKey, p.curUnsafeKey.Key...)
+				}
 				return p.advanceKey()
 			}
 
@@ -390,6 +395,9 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// seen so we know to return an error, but then keep scanning so
 			// that we can return the largest possible time.
 			p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp)
+			if len(p.mostRecentKey) == 0 {
+				p.mostRecentKey = append(p.mostRecentKey, p.curUnsafeKey.Key...)
+			}
 			return p.advanceKey()
 		}
 
