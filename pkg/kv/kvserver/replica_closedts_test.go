@@ -628,7 +628,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 		}
 		lease = li.Current()
 		if !lease.OwnedBy(n2.GetFirstStoreID()) {
-			return errors.Errorf("n2 still unaware of its lease: %s", &lease)
+			return errors.Errorf("n2 still unaware of its lease: %s", li.Current())
 		}
 		return nil
 	})
