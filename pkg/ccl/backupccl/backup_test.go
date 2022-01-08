@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -8926,4 +8927,77 @@ func TestBackupMemMonitorSSTSinkQueueSize(t *testing.T) {
 
 	// Now the backup should succeed because it is below the `byteLimit`.
 	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://0/bar'`)
+}
+
+// TestBackupRestoreMRDefaultDB is a regression test for
+// https://github.com/cockroachdb/cockroach/issues/74586.
+//
+// A cluster restore does not restore the backed up `defaultdb` descriptor. As a
+// result of this, it did not set the `LocalityConfig` on the `defaultdb`
+// descriptor of the restoring cluster. If any table in the backed up
+// `defaultdb` is an MR table, we will fail to restore it since the restoring
+// cluster's `defaultdb` is incorrectly a non-MR database.
+func TestBackupRestoreMRDefaultDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterSize := 3
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, clusterSize, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(dir),
+	)
+	defer cleanup()
+
+	_, err := sqlDB.Exec(`
+USE defaultdb;
+alter database defaultdb primary region "us-east3";
+alter database defaultdb add region "us-east2";
+alter database defaultdb add region "us-east1";`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`
+CREATE TABLE A (
+  a STRING PRIMARY KEY
+);
+
+alter table A set locality regional by row;
+insert into A (a) VALUES ('foo');
+`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`BACKUP INTO 'nodelocal://0/foo'`)
+	require.NoError(t, err)
+
+	_, sqlDBRestore, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, clusterSize, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(dir),
+	)
+	defer cleanup()
+
+	_, err = sqlDBRestore.Exec(`RESTORE FROM LATEST IN 'nodelocal://0/foo'`)
+	require.NoError(t, err)
+
+	checkRows := func() {
+		row, err := sqlDBRestore.Query(`SELECT * FROM defaultdb.a`)
+		require.NoError(t, err)
+		defer row.Close()
+		var a string
+		for row.Next() {
+			err := row.Scan(&a)
+			require.NoError(t, err)
+		}
+		require.Equal(t, "foo", a)
+	}
+	checkRows()
+
+	// Sanity check that database level `defaultdb` restore still works.
+	t.Run("restore-mr-defaultdb", func(t *testing.T) {
+		_, err = sqlDBRestore.Exec(`DROP DATABASE defaultdb CASCADE;`)
+		require.NoError(t, err)
+
+		_, err = sqlDBRestore.Exec(`RESTORE DATABASE defaultdb FROM LATEST IN 'nodelocal://0/foo';`)
+		require.NoError(t, err)
+
+		checkRows()
+	})
 }

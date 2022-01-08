@@ -563,11 +563,11 @@ func loadBackupSQLDescs(
 	p sql.JobExecContext,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, BackupManifest, []catalog.Descriptor, error) {
+) ([]BackupManifest, BackupManifest, []catalog.Descriptor, catalog.DatabaseDescriptor, error) {
 	backupManifests, err := loadBackupManifests(ctx, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
 	if err != nil {
-		return nil, BackupManifest{}, nil, err
+		return nil, BackupManifest{}, nil, nil, err
 	}
 
 	allDescs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
@@ -578,6 +578,7 @@ func loadBackupSQLDescs(
 		}
 	}
 
+	var backedUpDefaultDBDesc catalog.DatabaseDescriptor
 	var sqlDescs []catalog.Descriptor
 	for _, desc := range allDescs {
 		id := desc.GetID()
@@ -586,6 +587,10 @@ func loadBackupSQLDescs(
 			if m, ok := details.DatabaseModifiers[id]; ok {
 				desc.SetRegionConfig(m.RegionConfig)
 			}
+
+			if desc.GetName() == catalogkeys.DefaultDatabaseName {
+				backedUpDefaultDBDesc = desc
+			}
 		}
 		if _, ok := details.DescriptorRewrites[id]; ok {
 			sqlDescs = append(sqlDescs, desc)
@@ -593,9 +598,10 @@ func loadBackupSQLDescs(
 	}
 
 	if err := maybeUpgradeDescriptors(ctx, sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
-		return nil, BackupManifest{}, nil, err
+		return nil, BackupManifest{}, nil, nil, err
 	}
-	return backupManifests, latestBackupManifest, sqlDescs, nil
+
+	return backupManifests, latestBackupManifest, sqlDescs, backedUpDefaultDBDesc, nil
 }
 
 // restoreResumer should only store a reference to the job it's running. State
@@ -832,6 +838,7 @@ func createImportingDescriptors(
 	p sql.JobExecContext,
 	backupCodec keys.SQLCodec,
 	sqlDescs []catalog.Descriptor,
+	backedUpDefaultDBDesc catalog.DatabaseDescriptor,
 	r *restoreResumer,
 ) (*restorationDataBase, *mainRestorationData, error) {
 	details := r.job.Details().(jobspb.RestoreDetails)
@@ -1060,6 +1067,49 @@ func createImportingDescriptors(
 								return err
 							}
 						}
+					}
+				}
+			}
+
+			// In a cluster restore, we do not restore the database `defaultdb` from
+			// the BACKUP, but instead re-parent all backed up schema objects that
+			// were in `defaultdb` to point to the restoring cluster's `defaultdb`.
+			// This special handling is to account for the fact that every new cluster
+			// has a `defaultdb` at a static ID created on startup.
+			// As a result of this, we must set the RegionConfig of `defaultdb` on
+			// the restoring cluster, to match the config set on the backed up
+			// `defaultdb` descriptor.
+			if details.DescriptorCoverage == tree.AllDescriptors {
+				if backedUpDefaultDBDesc != nil && backedUpDefaultDBDesc.IsMultiRegion() {
+					// Lookup the `defaultdb` in the restoring cluster.
+					defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec,
+						catalogkeys.DefaultDatabaseName)
+					if err != nil {
+						return err
+					}
+					backedUpDefaultDBRegionConfig := backedUpDefaultDBDesc.GetRegionConfig()
+					for _, typ := range typesByID {
+						// Find the multi-region enum that is referenced by the backed up
+						// `defaultdb` and remap it to point to the restored multi-region
+						// enum. Since this is a cluster restore, we can expect the
+						// `defaultdb` zone config to be restored as part of the
+						// system.zones table.
+						if typ.GetParentID() == defaultDBID && typ.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
+							backedUpDefaultDBRegionConfig.RegionEnumID = typ.GetID()
+							break
+						}
+					}
+
+					desc, err := descsCol.GetMutableDescriptorByID(ctx, defaultDBID, txn)
+					if err != nil {
+						return err
+					}
+					db := desc.(*dbdesc.Mutable)
+					db.SetRegionConfig(backedUpDefaultDBRegionConfig)
+					if err := descsCol.WriteDesc(
+						ctx, false /* kvTrace */, db, txn,
+					); err != nil {
+						return err
 					}
 				}
 			}
@@ -1312,7 +1362,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
-	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
+	backupManifests, latestBackupManifest, sqlDescs, backedUpDefaultDBDesc, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
 	)
 	if err != nil {
@@ -1360,7 +1410,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
-	preData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r)
+	preData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, backedUpDefaultDBDesc, r)
 	if err != nil {
 		return err
 	}
@@ -1898,6 +1948,17 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 		}
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
+			// In a cluster restore we do not restore the backed up `defaultdb`
+			// descriptor and so it will not be dropped in the cleanup above. Thus, we
+			// have to manually cleanup `defaultdb`'s LocalityConfig that the restore
+			// might have set. We can do this unconditionally because `defaultdb`
+			// could not have been an MR database prior to cluster restore. This is
+			// because we check for any schema objects in the cluster before we allow
+			// the restore to process, this includes the `crdb_region` enum.
+			if err := r.clearLocalityConfigFromDefaultDB(ctx, p, txn, descsCol); err != nil {
+				return err
+			}
+
 			// The temporary system table descriptors should already have been dropped
 			// in `dropDescriptors` but we still need to drop the temporary system db.
 			return r.cleanupTempSystemTables(ctx, txn)
@@ -2364,6 +2425,24 @@ func (r *restoreResumer) restoreSystemTables(
 		}
 	}
 
+	return nil
+}
+
+func (r *restoreResumer) clearLocalityConfigFromDefaultDB(
+	ctx context.Context, p sql.JobExecContext, txn *kv.Txn, descsCol *descs.Collection,
+) error {
+	// Lookup the `defaultdb` in the restoring cluster.
+	defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec,
+		catalogkeys.DefaultDatabaseName)
+	if err != nil {
+		return err
+	}
+	desc, err := descsCol.GetMutableDescriptorByID(ctx, defaultDBID, txn)
+	if err != nil {
+		return err
+	}
+	db := desc.(*dbdesc.Mutable)
+	db.SetRegionConfig(nil)
 	return nil
 }
 
