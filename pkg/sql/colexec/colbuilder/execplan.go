@@ -1842,6 +1842,15 @@ func planSelectionOperators(
 			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
 		)
 		return op, resultIdx, typs, err
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op = colexec.NewNotExprSelOp(op, resultIdx)
+		return op, resultIdx, typs, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
 		leftOp, leftIdx, ct, err := planProjectionOperators(
@@ -1978,6 +1987,17 @@ func planProjectionOperators(
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory, releasables)
 	case *tree.IsNotNullExpr:
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory, releasables)
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		outputIdx := len(typs)
+		op = colexec.NewNotExprProjOp(colmem.NewAllocator(ctx, acc, factory), op, resultIdx, outputIdx)
+		typs = appendOneType(typs, t.ResolvedType())
+		return op, outputIdx, typs, nil
 	case *tree.CastExpr:
 		expr := t.Expr.(tree.TypedExpr)
 		op, resultIdx, typs, err = planProjectionOperators(
