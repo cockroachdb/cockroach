@@ -953,13 +953,13 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   exec_node_ids       INT[] NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
-		if !hasViewActivity {
+		if !hasViewActivityOrViewActivityRedacted {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
+				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
 		}
 
 		sqlStats, err := getSQLStats(p, "crdb_internal.node_statement_statistics")
@@ -1089,14 +1089,15 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		hasViewActivityOrhasViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
-		if !hasViewActivity {
+		if !hasViewActivityOrhasViewActivityRedacted {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
+				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
 		}
+
 		sqlStats, err := getSQLStats(p, "crdb_internal.node_transaction_statistics")
 		if err != nil {
 			return err
@@ -1411,11 +1412,13 @@ CREATE TABLE crdb_internal.cluster_settings (
 						"crdb_internal.cluster_settings", roleoption.MODIFYCLUSTERSETTING)
 			}
 		}
-		for _, k := range settings.Keys() {
+		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
 			if !hasAdmin && settings.AdminOnly(k) {
 				continue
 			}
-			setting, _ := settings.Lookup(k, settings.LookupForLocalAccess)
+			setting, _ := settings.Lookup(
+				k, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
+			)
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
@@ -1584,11 +1587,11 @@ func (p *planner) makeSessionsRequest(ctx context.Context) (serverpb.ListSession
 	if hasAdmin {
 		req.Username = ""
 	} else {
-		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		hasViewActivityOrhasViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return serverpb.ListSessionsRequest{}, err
 		}
-		if hasViewActivity {
+		if hasViewActivityOrhasViewActivityRedacted {
 			req.Username = ""
 		}
 	}
@@ -3848,7 +3851,7 @@ func addPartitioningRows(
 	}
 	colNames := tree.NewDString(buf.String())
 
-	var datumAlloc rowenc.DatumAlloc
+	var datumAlloc tree.DatumAlloc
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we
 	// only use the tree.Datums part of the output.
@@ -4311,7 +4314,7 @@ CREATE TABLE crdb_internal.predefined_comments (
 	populate: func(
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
-		tableCommentKey := tree.NewDInt(keys.TableCommentType)
+		tableCommentKey := tree.NewDInt(tree.DInt(keys.TableCommentType))
 		vt := p.getVirtualTabler()
 		vEntries := vt.getSchemas()
 		vSchemaNames := vt.getSchemaNames()

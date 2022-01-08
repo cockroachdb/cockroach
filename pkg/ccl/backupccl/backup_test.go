@@ -99,6 +99,11 @@ func init() {
 	cloud.RegisterKMSFromURIFactory(MakeTestKMS, "testkms")
 }
 
+func makeTableSpan(tableID uint32) roachpb.Span {
+	k := keys.SystemSQLCodec.TablePrefix(tableID)
+	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
+}
+
 type sqlDBKey struct {
 	server string
 	user   string
@@ -1840,7 +1845,7 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		if isGZipped(backupManifestBytes) {
-			backupManifestBytes, err = decompressData(backupManifestBytes)
+			backupManifestBytes, err = decompressData(ctx, nil, backupManifestBytes)
 			require.NoError(t, err)
 		}
 		var backupManifest BackupManifest
@@ -4399,7 +4404,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 		if isGZipped(backupManifestBytes) {
-			backupManifestBytes, err = decompressData(backupManifestBytes)
+			backupManifestBytes, err = decompressData(context.Background(), nil, backupManifestBytes)
 			require.NoError(t, err)
 		}
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
@@ -8095,7 +8100,7 @@ func TestManifestTooNew(t *testing.T) {
 	manifestPath := filepath.Join(rawDir, "too_new", backupManifestName)
 	manifestData, err := ioutil.ReadFile(manifestPath)
 	require.NoError(t, err)
-	manifestData, err = decompressData(manifestData)
+	manifestData, err = decompressData(context.Background(), nil, manifestData)
 	require.NoError(t, err)
 	var backupManifest BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
@@ -8461,7 +8466,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	fullBackup := LocalFoo + "/full"
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, fullBackup)
 
-	fullBackupSpans := getSpansFromManifest(t, locationToDir(fullBackup))
+	fullBackupSpans := getSpansFromManifest(ctx, t, locationToDir(fullBackup))
 	require.Equal(t, 1, len(fullBackupSpans))
 	require.Equal(t, "/Table/56/{1-2}", fullBackupSpans[0].String())
 
@@ -8505,10 +8510,10 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	// Wait for the backfill and incremental backup to complete.
 	require.NoError(t, g.Wait())
 
-	inc1Spans := getSpansFromManifest(t, locationToDir(inc1Loc))
+	inc1Spans := getSpansFromManifest(ctx, t, locationToDir(inc1Loc))
 	require.Equalf(t, 0, len(inc1Spans), "expected inc1 to not have any data, found %v", inc1Spans)
 
-	inc2Spans := getSpansFromManifest(t, locationToDir(inc2Loc))
+	inc2Spans := getSpansFromManifest(ctx, t, locationToDir(inc2Loc))
 	require.Equalf(t, 0, len(inc2Spans), "expected inc2 to not have any data, found %v", inc2Spans)
 
 	// Take another incremental backup that should only contain the newly added
@@ -8516,7 +8521,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	inc3Loc := LocalFoo + "/inc3"
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3, $4 WITH revision_history`,
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
-	inc3Spans := getSpansFromManifest(t, locationToDir(inc3Loc))
+	inc3Spans := getSpansFromManifest(ctx, t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
 	require.Equal(t, "/Table/56/{2-3}", inc3Spans[0].String())
 

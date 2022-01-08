@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -224,7 +226,7 @@ func (m *randomStreamClient) getNextTableID() int {
 }
 
 // Plan implements the Client interface.
-func (m *randomStreamClient) Plan(ctx context.Context, id StreamID) (Topology, error) {
+func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (Topology, error) {
 	topology := make(Topology, 0, m.config.numPartitions)
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
@@ -247,14 +249,16 @@ func (m *randomStreamClient) Plan(ctx context.Context, id StreamID) (Topology, e
 // Create implements the Client interface.
 func (m *randomStreamClient) Create(
 	ctx context.Context, target roachpb.TenantID,
-) (StreamID, error) {
+) (streaming.StreamID, error) {
 	log.Infof(ctx, "creating random stream for tenant %d", target.ToUint64())
 	m.config.tenantID = target
-	return StreamID(target.ToUint64()), nil
+	return streaming.StreamID(target.ToUint64()), nil
 }
 
 // Heartbeat implements the Client interface.
-func (m *randomStreamClient) Heartbeat(ctx context.Context, ID StreamID, _ hlc.Timestamp) error {
+func (m *randomStreamClient) Heartbeat(
+	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
+) error {
 	return nil
 }
 
@@ -304,17 +308,22 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 	return testTable, []roachpb.KeyValue{namespaceKV, descKV}, nil
 }
 
-// ConsumePartition implements the Client interface.
+// Close implements the Client interface.
+func (m *randomStreamClient) Close() error {
+	return nil
+}
+
+// Subscribe implements the Client interface.
 func (m *randomStreamClient) Subscribe(
-	ctx context.Context, stream StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
-) (chan streamingccl.Event, chan error, error) {
+	ctx context.Context, stream streaming.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
+) (Subscription, error) {
 	partitionURL, err := url.Parse(string(spec))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	config, err := parseRandomStreamConfig(partitionURL)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	eventCh := make(chan streamingccl.Event)
@@ -327,14 +336,14 @@ func (m *randomStreamClient) Subscribe(
 	var partitionTableID int
 	partitionTableID, err = strconv.Atoi(partitionURL.Host)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	log.Infof(ctx, "producing kvs for metadata for table %d for tenant %d based on %q", partitionTableID, config.tenantID, spec)
 	tableDesc, systemKVs, err := m.getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	go func() {
+	receiveFn := func(ctx context.Context) error {
 		defer close(eventCh)
 
 		// rand is not thread safe, so create a random source for each partition.
@@ -379,7 +388,7 @@ func (m *randomStreamClient) Subscribe(
 			select {
 			case eventCh <- event:
 			case <-ctx.Done():
-				return
+				return ctx.Err()
 			}
 
 			func() {
@@ -397,9 +406,32 @@ func (m *randomStreamClient) Subscribe(
 
 			time.Sleep(kvInterval)
 		}
-	}()
+	}
 
-	return eventCh, nil, nil
+	return &randomStreamSubscription{
+		receiveFn: receiveFn,
+		eventCh:   eventCh,
+	}, nil
+}
+
+type randomStreamSubscription struct {
+	receiveFn func(ctx context.Context) error
+	eventCh   chan streamingccl.Event
+}
+
+// Subscribe implements the Subscription interface.
+func (r *randomStreamSubscription) Subscribe(ctx context.Context) error {
+	return r.receiveFn(ctx)
+}
+
+// Events implements the Subscription interface.
+func (r *randomStreamSubscription) Events() <-chan streamingccl.Event {
+	return r.eventCh
+}
+
+// Err implements the Subscription interface.
+func (r *randomStreamSubscription) Err() error {
+	return nil
 }
 
 func rekey(tenantID roachpb.TenantID, k roachpb.Key) roachpb.Key {
@@ -427,7 +459,7 @@ func makeRandomKey(
 	var colIDToRowIndex catalog.TableColMap
 	colIDToRowIndex.Set(index.GetKeyColumnID(0), 0)
 
-	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, index.GetID())
+	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.GetID())
 	k, _, err := rowenc.EncodeIndexKey(tableDesc, index, colIDToRowIndex, tree.Datums{keyDatum}, keyPrefix)
 	if err != nil {
 		panic(err)
@@ -438,8 +470,8 @@ func makeRandomKey(
 
 	// Create a value holding a random integer.
 	valueDatum := tree.NewDInt(tree.DInt(r.Intn(config.valueRange)))
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.Columns[1].ID, valueDatum, []byte(nil))
+	valueBuf, err := valueside.Encode(
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.Columns[1].ID), valueDatum, []byte(nil))
 	if err != nil {
 		panic(err)
 	}

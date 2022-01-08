@@ -16,10 +16,10 @@ ap-southeast-2  {ap-az1,ap-az2,ap-az3}
 ca-central-1    {ca-az1,ca-az2,ca-az3}
 us-east-1       {us-az1,us-az2,us-az3}
 
-statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled\nHINT: database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>
 CREATE TABLE regional_by_table_table (pk int) LOCALITY REGIONAL BY TABLE
 
-statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled\nHINT: database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>
 CREATE TABLE global_table (pk int) LOCALITY GLOBAL
 
 statement ok

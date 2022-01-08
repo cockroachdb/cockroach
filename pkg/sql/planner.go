@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -192,10 +191,6 @@ type planner struct {
 	// 2. Disable the use of the table cache in tests.
 	avoidLeasedDescriptors bool
 
-	// If set, the planner should skip checking for the SELECT privilege when
-	// initializing plans to read from a table. This should be used with care.
-	skipSelectPrivilegeChecks bool
-
 	// autoCommit indicates whether we're planning for an implicit transaction.
 	// If autoCommit is true, the plan is allowed (but not required) to commit the
 	// transaction along with other KV operations. Committing the txn might be
@@ -225,7 +220,7 @@ type planner struct {
 	// Use a common datum allocator across all the plan nodes. This separates the
 	// plan lifetime from the lifetime of returned results allowing plan nodes to
 	// be pool allocated.
-	alloc *rowenc.DatumAlloc
+	alloc *tree.DatumAlloc
 
 	// optPlanningCtx stores the optimizer planning context, which contains
 	// data structures that can be reused between queries (for efficiency).
@@ -343,7 +338,7 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}}
+	p := &planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}}
 
 	p.txn = txn
 	p.stmt = Statement{}
@@ -562,9 +557,9 @@ func (p *planner) MigrationJobDeps() migration.JobDeps {
 	return p.execCfg.MigrationJobDeps
 }
 
-// SpanConfigReconciliationJobDeps returns the spanconfig.ReconciliationJobDeps.
-func (p *planner) SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies {
-	return p.execCfg.SpanConfigReconciliationJobDeps
+// SpanConfigReconciler returns the spanconfig.Reconciler.
+func (p *planner) SpanConfigReconciler() spanconfig.Reconciler {
+	return p.execCfg.SpanConfigReconciler
 }
 
 // GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.

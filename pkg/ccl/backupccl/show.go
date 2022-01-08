@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -67,6 +68,7 @@ func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri 
 type backupInfoReader interface {
 	showBackup(
 		context.Context,
+		*mon.BoundAccount,
 		cloud.ExternalStorage,
 		cloud.ExternalStorage,
 		*jobspb.BackupEncryptionOptions,
@@ -91,15 +93,21 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 // and pipes the information to the user's sql console via the results channel.
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	store cloud.ExternalStorage,
 	incStore cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
 	incPaths []string,
 	resultsCh chan<- tree.Datums,
 ) error {
+	var memSize int64
+	defer func() {
+		mem.Shrink(ctx, memSize)
+	}()
+
 	var err error
 	manifests := make([]BackupManifest, len(incPaths)+1)
-	manifests[0], err = ReadBackupManifestFromStore(ctx, store, enc)
+	manifests[0], memSize, err = ReadBackupManifestFromStore(ctx, mem, store, enc)
 
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
@@ -117,10 +125,11 @@ func (m manifestInfoReader) showBackup(
 	}
 
 	for i := range incPaths {
-		m, err := readBackupManifest(ctx, incStore, incPaths[i], enc)
+		m, sz, err := readBackupManifest(ctx, mem, incStore, incPaths[i], enc)
 		if err != nil {
 			return err
 		}
+		memSize += sz
 		// Blank the stats to prevent memory blowup.
 		m.DeprecatedStatistics = nil
 		manifests[i+1] = m
@@ -315,7 +324,10 @@ func showBackupPlanHook(
 			}
 		}
 
-		return infoReader.showBackup(ctx, store, incStore, encryption, incPaths, resultsCh)
+		mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+		defer mem.Close(ctx)
+
+		return infoReader.showBackup(ctx, &mem, store, incStore, encryption, incPaths, resultsCh)
 	}
 
 	return fn, infoReader.header(), nil, false, nil

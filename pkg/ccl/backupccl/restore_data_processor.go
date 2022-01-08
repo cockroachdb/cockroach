@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -102,6 +103,13 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var restoreAtNow = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.restore_at_current_time.enabled",
+	"write restored data at the current timestamp",
+	false,
+)
+
 func newRestoreDataProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -164,7 +172,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.sstCh)
 		for entry := range entries {
-			if err := rd.openSSTs(entry, rd.sstCh); err != nil {
+			if err := rd.openSSTs(ctx, entry, rd.sstCh); err != nil {
 				return err
 			}
 		}
@@ -174,7 +182,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.progCh)
-		return rd.runRestoreWorkers(rd.sstCh)
+		return rd.runRestoreWorkers(ctx, rd.sstCh)
 	})
 }
 
@@ -191,7 +199,7 @@ func inputReader(
 	entries chan execinfrapb.RestoreSpanEntry,
 	metaCh chan *execinfrapb.ProducerMetadata,
 ) error {
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 
 	for {
 		// We read rows from the SplitAndScatter processor. We expect each row to
@@ -248,9 +256,8 @@ type mergedSST struct {
 }
 
 func (rd *restoreDataProcessor) openSSTs(
-	entry execinfrapb.RestoreSpanEntry, sstCh chan mergedSST,
+	ctx context.Context, entry execinfrapb.RestoreSpanEntry, sstCh chan mergedSST,
 ) error {
-	ctx := rd.Ctx
 	ctxDone := ctx.Done()
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
@@ -307,7 +314,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		return nil
 	}
 
-	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
+	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
 
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
@@ -330,8 +337,8 @@ func (rd *restoreDataProcessor) openSSTs(
 	return sendIters(iters, dirs)
 }
 
-func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
-	return ctxgroup.GroupWorkers(rd.Ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
+func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan mergedSST) error {
+	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
 		for {
 			done, err := func() (done bool, _ error) {
 				sstIter, ok := <-ssts
@@ -340,7 +347,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
 					return done, nil
 				}
 
-				summary, err := rd.processRestoreSpanEntry(sstIter)
+				summary, err := rd.processRestoreSpanEntry(ctx, sstIter)
 				if err != nil {
 					return done, err
 				}
@@ -366,16 +373,22 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
 }
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
-	sst mergedSST,
+	ctx context.Context, sst mergedSST,
 ) (roachpb.BulkOpSummary, error) {
 	db := rd.flowCtx.Cfg.DB
-	ctx := rd.Ctx
 	evalCtx := rd.EvalCtx
 	var summary roachpb.BulkOpSummary
 
 	entry := sst.entry
 	iter := sst.iter
 	defer sst.cleanup()
+
+	writeAtBatchTS := restoreAtNow.Get(&evalCtx.Settings.SV)
+	if writeAtBatchTS && !evalCtx.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
+		return roachpb.BulkOpSummary{}, errors.Newf(
+			"cannot use %s until version %s", restoreAtNow.Key(), clusterversion.MVCCAddSSTable.String(),
+		)
+	}
 
 	// "disallowing" shadowing of anything older than logical=1 is i.e. allow all
 	// shadowing. We must allow shadowing in case the RESTORE has to retry any
@@ -385,8 +398,13 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// this comes at the cost of said overlap check, but in the common case of
 	// non-overlapping ingestion into empty spans, that is just one seek.
 	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return rd.flushBytes }, disallowShadowingBelow)
+	batcher, err := bulk.MakeSSTBatcher(ctx,
+		db,
+		evalCtx.Settings,
+		func() int64 { return rd.flushBytes },
+		disallowShadowingBelow,
+		writeAtBatchTS,
+	)
 	if err != nil {
 		return summary, err
 	}

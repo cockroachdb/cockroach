@@ -15,12 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -182,9 +181,8 @@ type HashTable struct {
 	// each other.
 	allowNullEquality bool
 
-	overloadHelper execgen.OverloadHelper
-	datumAlloc     rowenc.DatumAlloc
-	cancelChecker  colexecutils.CancelChecker
+	datumAlloc    tree.DatumAlloc
+	cancelChecker colexecutils.CancelChecker
 
 	BuildMode HashTableBuildMode
 	probeMode HashTableProbeMode
@@ -520,6 +518,7 @@ func (ht *HashTable) checkCols(probeVecs []coldata.Vec, nToCheck uint64, probeSe
 
 // checkColsForDistinctTuples performs a column by column check to find distinct
 // tuples in the probe table that are not present in the build table.
+// NOTE: It assumes that probeSel has already been populated and it is not nil.
 func (ht *HashTable) checkColsForDistinctTuples(
 	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
 ) {
@@ -552,7 +551,7 @@ func (ht *HashTable) ComputeBuckets(buckets []uint64, keys []coldata.Vec, nKeys 
 	}
 
 	for i := range ht.keyCols {
-		rehash(buckets, keys[i], nKeys, sel, ht.cancelChecker, &ht.overloadHelper, &ht.datumAlloc)
+		rehash(buckets, keys[i], nKeys, sel, ht.cancelChecker, &ht.datumAlloc)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
@@ -83,7 +84,7 @@ func MakeUpdater(
 	updateCols []catalog.Column,
 	requestedCols []catalog.Column,
 	updateType rowUpdaterType,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	sv *settings.Values,
 	internal bool,
 	metrics *Metrics,
@@ -243,8 +244,11 @@ func (ru *Updater) UpdateRow(
 	// Check that the new value types match the column types. This needs to
 	// happen before index encoding because certain datum types (i.e. tuple)
 	// cannot be used as index values.
+	//
+	// TODO(radu): the legacy marshaling is used only in rare cases; this is
+	// wasteful.
 	for i, val := range updateValues {
-		if ru.marshaled[i], err = rowenc.MarshalColumnValue(ru.UpdateCols[i], val); err != nil {
+		if ru.marshaled[i], err = valueside.MarshalLegacy(ru.UpdateCols[i].GetType(), val); err != nil {
 			return nil, err
 		}
 	}

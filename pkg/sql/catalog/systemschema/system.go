@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -518,11 +519,6 @@ CREATE TABLE system.statement_statistics (
 			metadata,
 			statistics,
 			plan
-		),
-		CONSTRAINT check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 CHECK (
-			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (
-				0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8
-			)
 		)
 )
 `
@@ -554,11 +550,6 @@ CREATE TABLE system.transaction_statistics (
 			agg_interval,
 			metadata,
 			statistics
-		),
-		CONSTRAINT check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 CHECK (
-			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (
-				0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8
-			)
 		)
 );
 `
@@ -2006,7 +1997,7 @@ var (
 				},
 				KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
 				Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
-				Sharded: descpb.ShardedDescriptor{
+				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 					ShardBuckets: 8,
@@ -2106,7 +2097,7 @@ var (
 				},
 				KeyColumnIDs: []descpb.ColumnID{8, 1, 2, 3, 4},
 				Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
-				Sharded: descpb.ShardedDescriptor{
+				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
 					ShardBuckets: 8,

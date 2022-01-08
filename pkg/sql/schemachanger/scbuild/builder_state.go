@@ -19,24 +19,28 @@ import (
 
 var _ scbuildstmt.BuilderState = (*builderState)(nil)
 
-// AddNode implements the scbuildstmt.BuilderState interface.
-func (b *builderState) AddNode(
-	status, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata,
+// AddElementStatus implements the scbuildstmt.BuilderState interface.
+func (b *builderState) AddElementStatus(
+	currentStatus, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata,
 ) {
-	for _, node := range b.output {
-		if screl.EqualElements(node.Element(), elem) {
+	for _, e := range b.output {
+		if screl.EqualElements(e.element, elem) {
 			panic(errors.AssertionFailedf("element already present in builder state: %s", elem))
 		}
 	}
-	b.output = append(b.output, &scpb.Node{
-		Target: scpb.NewTarget(targetStatus, elem, &meta),
-		Status: status,
+	b.output = append(b.output, elementState{
+		element:       elem,
+		targetStatus:  targetStatus,
+		currentStatus: currentStatus,
+		metadata:      meta,
 	})
 }
 
-// ForEachNode implements the scbuildstmt.BuilderState interface.
-func (b *builderState) ForEachNode(fn func(status, targetStatus scpb.Status, elem scpb.Element)) {
-	for _, node := range b.output {
-		fn(node.Status, node.TargetStatus, node.Element())
+// ForEachElementStatus implements the scpb.ElementStatusIterator interface.
+func (b *builderState) ForEachElementStatus(
+	fn func(status, targetStatus scpb.Status, elem scpb.Element),
+) {
+	for _, es := range b.output {
+		fn(es.currentStatus, es.targetStatus, es.element)
 	}
 }

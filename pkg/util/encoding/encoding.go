@@ -24,7 +24,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -1906,7 +1906,7 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		build.WriteString("ARRAY[")
 		first := true
 		// Use the array key decoding logic, but instead of calling out
-		// to DecodeTableKey, just make a recursive call.
+		// to keyside.Decode, just make a recursive call.
 		for {
 			if len(buf) == 0 {
 				return nil, "", errors.AssertionFailedf("invalid array (unterminated)")

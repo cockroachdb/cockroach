@@ -391,7 +391,7 @@ CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
 statement ok
 explain (DDL, DEPS) DROP VIEW v1Dep CASCADE;
 
-statement error pq: cannot drop view "v1dep" because view "v2dep" depends on it
+statement error pq: cannot drop relation "v1dep" because view "v2dep" depends on it
 DROP VIEW v1Dep RESTRICT;
 
 statement error pq: "v1dep" is not a materialized view
@@ -453,6 +453,15 @@ statement ok
 CREATE SEQUENCE defaultdb.sq1 OWNED BY defaultdb.shipments.carrier;
 
 statement ok
+CREATE TABLE defaultdb.sq1dep (
+	rand_col INT8 DEFAULT nextval('defaultdb.sq1')
+);
+
+statement error cannot drop table a because other objects depend on it
+DROP TABLE defaultdb.shipments;
+
+statement ok
+DROP TABLE defaultdb.sq1dep;
 DROP TABLE defaultdb.shipments;
 
 statement ok
@@ -466,11 +475,10 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
  );
 
-
 statement ok
 CREATE VIEW defaultdb.v1 as (select customer_id, carrier from defaultdb.shipments);
 
-statement error pq: cannot drop table "defaultdb.public.shipments" because view "defaultdb.public.v1" depends on it
+statement error pq: cannot drop relation "shipments" because view "v1" depends on it
 DROP TABLE defaultdb.shipments;
 
 statement ok
@@ -634,15 +642,37 @@ statement ok
 CREATE VIEW db1.sc1.v4 AS (SELECT n2, n1 FROM db1.sc1.v2);
 
 statement ok
+CREATE INDEX tmp_idx ON db1.sc1.t1(name)
+
+statement ok
+use db1;
+COMMENT ON DATABASE db1 IS 'BLAH';
+COMMENT ON SCHEMA sc1 IS 'BLAH2';
+COMMENT ON TABLE db1.sc1.t1 IS 'BLAH3';
+COMMENT ON COLUMN db1.sc1.t1.id IS 'BLAH4';
+COMMENT ON INDEX db1.sc1.tmp_idx IS 'BLAH5';
+use test;
+
+statement ok
 CREATE TYPE db1.sc1.typ AS ENUM('a')
 
 statement ok
 CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
 
+# Confirm comments exist.
+query T
+SELECT comment FROM system.comments ORDER BY comment ASC
+----
+BLAH
+BLAH2
+BLAH3
+BLAH4
+BLAH5
+
 statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
 
-statement error database "db1" has a non-empty schema "public" and CASCADE was not specified
+statement error database "db1" is not empty and RESTRICT was specified
 DROP DATABASE db1 RESTRICT
 
 statement ok
@@ -683,6 +713,11 @@ select count(*) from system.descriptor
 # Actually drop the database now.
 statement ok
 DROP DATABASE db1 CASCADE
+
+# No comments should be left after.
+query T
+SELECT comment FROM system.comments ORDER BY comment ASC
+----
 
 let $desc_count_post_drop
 select count(*) from system.descriptor
@@ -982,7 +1017,7 @@ query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog;
 ----
-1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW v1ev CASCADE", "User": "root", "ViewName": "test.public.v1ev"}
+1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW test.public.v1ev CASCADE", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.v1ev"}
 
 statement ok
 CREATE VIEW v1ev AS (SELECT name FROM T1EV);
@@ -1001,8 +1036,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE t1ev, t2ev CASCADE", "TableName": "test.public.t2ev", "User": "root"}
-1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE t1ev, t2ev CASCADE", "TableName": "test.public.t1ev", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t2ev", "Tag": "DROP TABLE", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t1ev", "Tag": "DROP TABLE", "User": "root"}
 
 statement ok
 CREATE TABLE fooev (i INT PRIMARY KEY);
@@ -1018,7 +1053,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE fooev ADD COLUMN j INT8", "TableName": "test.public.fooev", "User": "root"}
+1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.fooev ADD COLUMN j INT8", "TableName": "test.public.fooev", "Tag": "ALTER TABLE", "User": "root"}
 
 subtest names-with-escaped-chars
 
@@ -1065,8 +1100,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["'db1-a'.public", "'db1-a'.sc1", "'db1-a'.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "User": "root"}
-1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.public", "db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "User": "root"}
+1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["'db1-a'.public", "'db1-a'.sc1", "'db1-a'.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.public", "db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "Tag": "DROP DATABASE", "User": "root"}
 
 # Sanity: Dropping multiple objects in the builder or resolving any dependencies
 # should function fine.
@@ -1241,3 +1276,31 @@ DROP TABLE ttc3;
 
 statement ok
 DROP TYPE d_tc;
+
+subtest empty-database
+
+statement error empty database name
+DROP DATABASE ""
+
+subtest schema-permission-error
+
+user root
+
+statement ok
+CREATE SCHEMA sc1;
+
+statement ok
+CREATE DATABASE db1;
+
+user testuser
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement error must be owner of schema \"sc1\"
+DROP SCHEMA sc1;
+
+statement error user testuser does not have DROP privilege on database db1
+DROP DATABASE db1;
+
+user root

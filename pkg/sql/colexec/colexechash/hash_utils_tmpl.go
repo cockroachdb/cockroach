@@ -22,13 +22,12 @@
 package colexechash
 
 import (
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -42,6 +41,7 @@ var (
 	_ = coldataext.Hash
 	_ json.JSON
 	_ tree.Datum
+	_ apd.Context
 )
 
 // {{/*
@@ -78,7 +78,7 @@ func _REHASH_BODY(
 	_ = buckets[nKeys-1]
 	// {{if .HasSel}}
 	_ = sel[nKeys-1]
-	// {{else if .Sliceable}}
+	// {{else if .Global.Sliceable}}
 	_ = keys.Get(nKeys - 1)
 	// {{end}}
 	var selIdx int
@@ -94,17 +94,22 @@ func _REHASH_BODY(
 			continue
 		}
 		// {{end}}
-		// {{if .Sliceable}}
+		// {{if not (eq .Global.VecMethod "JSON")}}
+		// {{/*
+		//     No need to decode the JSON value (which is done in Get) since
+		//     we'll be operating directly on the underlying []byte.
+		// */}}
+		// {{if and (not .HasSel) .Global.Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		v := keys.Get(selIdx)
+		// {{end}}
 		//gcassert:bce
 		p := uintptr(buckets[i])
-		_ASSIGN_HASH(p, v, _, keys)
+		_ASSIGN_HASH(p, v, keys, selIdx)
 		//gcassert:bce
 		buckets[i] = uint64(p)
 	}
-	cancelChecker.CheckEveryCall()
 	// {{end}}
 
 	// {{/*
@@ -121,12 +126,8 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
-	overloadHelper *execgen.OverloadHelper,
-	datumAlloc *rowenc.DatumAlloc,
+	datumAlloc *tree.DatumAlloc,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
-	_overloadHelper := overloadHelper
 	switch col.CanonicalTypeFamily() {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -153,4 +154,5 @@ func rehash(
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", col.Type()))
 	}
+	cancelChecker.CheckEveryCall()
 }

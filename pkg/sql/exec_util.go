@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	apd "github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -185,12 +185,15 @@ var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.experimental_allow_for_secondary_tenant.enabled"
+const secondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.allow_for_secondary_tenant.enabled"
 
 // secondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
 // to set zone configurations. It has no effect for the system tenant.
 //
 // This setting has no effect on zone configurations that have already been set.
+//
+// TODO(irfansharif): This should be a tenant-readonly setting, possible after
+// the work for #73349 is completed.
 var secondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	secondaryTenantsZoneConfigsEnabledSettingName,
@@ -1202,6 +1205,9 @@ type ExecutorConfig struct {
 	// IndexValidator is used to validate indexes.
 	IndexValidator scexec.IndexValidator
 
+	// CommentUpdaterFactory is used to issue queries for updating comments.
+	CommentUpdaterFactory scexec.CommentUpdaterFactory
+
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.
 	ContentionRegistry *contention.Registry
@@ -1226,9 +1232,9 @@ type ExecutorConfig struct {
 	// CollectionFactory is used to construct a descs.Collection.
 	CollectionFactory *descs.CollectionFactory
 
-	// SpanConfigReconciliationJobDeps are used to drive the span config
-	// reconciliation job.
-	SpanConfigReconciliationJobDeps spanconfig.ReconciliationDependencies
+	// SpanConfigReconciler is used to drive the span config reconciliation job
+	// and related migrations.
+	SpanConfigReconciler spanconfig.Reconciler
 
 	// SpanConfigKVAccessor is used when creating and deleting tenant
 	// records.
@@ -3095,6 +3101,8 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	return f.CloseAndGetString(), true
 }
 
+// formatStmtKeyAsRedactableString given an AST node this function will fully
+// qualify names using annotations to format it out into a redactable string.
 func formatStmtKeyAsRedactableString(
 	vt VirtualTabler, rootAST tree.Statement, ann *tree.Annotations,
 ) redact.RedactableString {

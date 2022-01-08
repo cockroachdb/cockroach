@@ -19,8 +19,8 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -513,11 +513,11 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, toLocality), nil
 }
 
-func getClusterRegionNames(ctx context.Context, tx pgx.Tx) (descpb.RegionNames, error) {
+func getClusterRegionNames(ctx context.Context, tx pgx.Tx) (catpb.RegionNames, error) {
 	return scanRegionNames(ctx, tx, "SELECT region FROM [SHOW REGIONS FROM CLUSTER]")
 }
 
-func getDatabaseRegionNames(ctx context.Context, tx pgx.Tx) (descpb.RegionNames, error) {
+func getDatabaseRegionNames(ctx context.Context, tx pgx.Tx) (catpb.RegionNames, error) {
 	return scanRegionNames(ctx, tx, "SELECT region FROM [SHOW REGIONS FROM DATABASE]")
 }
 
@@ -528,10 +528,10 @@ func getDatabase(ctx context.Context, tx pgx.Tx) (string, error) {
 }
 
 type getRegionsResult struct {
-	regionNamesInDatabase descpb.RegionNames
-	regionNamesInCluster  descpb.RegionNames
+	regionNamesInDatabase catpb.RegionNames
+	regionNamesInCluster  catpb.RegionNames
 
-	regionNamesNotInDatabase descpb.RegionNames
+	regionNamesNotInDatabase catpb.RegionNames
 }
 
 func getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
@@ -539,7 +539,7 @@ func getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
 	if err != nil {
 		return getRegionsResult{}, err
 	}
-	regionNamesNotInDatabaseSet := make(map[descpb.RegionName]struct{}, len(regionNamesInCluster))
+	regionNamesNotInDatabaseSet := make(map[catpb.RegionName]struct{}, len(regionNamesInCluster))
 	for _, clusterRegionName := range regionNamesInCluster {
 		regionNamesNotInDatabaseSet[clusterRegionName] = struct{}{}
 	}
@@ -551,7 +551,7 @@ func getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
 		delete(regionNamesNotInDatabaseSet, databaseRegionName)
 	}
 
-	regionNamesNotInDatabase := make(descpb.RegionNames, 0, len(regionNamesNotInDatabaseSet))
+	regionNamesNotInDatabase := make(catpb.RegionNames, 0, len(regionNamesNotInDatabaseSet))
 	for regionName := range regionNamesNotInDatabaseSet {
 		regionNamesNotInDatabase = append(regionNamesNotInDatabase, regionName)
 	}
@@ -562,8 +562,8 @@ func getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
 	}, nil
 }
 
-func scanRegionNames(ctx context.Context, tx pgx.Tx, query string) (descpb.RegionNames, error) {
-	var regionNames descpb.RegionNames
+func scanRegionNames(ctx context.Context, tx pgx.Tx, query string) (catpb.RegionNames, error) {
+	var regionNames catpb.RegionNames
 	rows, err := tx.Query(ctx, query)
 	if err != nil {
 		return nil, err
@@ -571,7 +571,7 @@ func scanRegionNames(ctx context.Context, tx pgx.Tx, query string) (descpb.Regio
 	defer rows.Close()
 
 	for rows.Next() {
-		var regionName descpb.RegionName
+		var regionName catpb.RegionName
 		if err := rows.Scan(&regionName); err != nil {
 			return nil, err
 		}

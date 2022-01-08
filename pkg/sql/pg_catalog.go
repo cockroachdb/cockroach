@@ -27,11 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/commenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -779,12 +781,12 @@ var (
 	fkActionSetNull    = tree.NewDString("n")
 	fkActionSetDefault = tree.NewDString("d")
 
-	fkActionMap = map[descpb.ForeignKeyReference_Action]tree.Datum{
-		descpb.ForeignKeyReference_NO_ACTION:   fkActionNone,
-		descpb.ForeignKeyReference_RESTRICT:    fkActionRestrict,
-		descpb.ForeignKeyReference_CASCADE:     fkActionCascade,
-		descpb.ForeignKeyReference_SET_NULL:    fkActionSetNull,
-		descpb.ForeignKeyReference_SET_DEFAULT: fkActionSetDefault,
+	fkActionMap = map[catpb.ForeignKeyAction]tree.Datum{
+		catpb.ForeignKeyAction_NO_ACTION:   fkActionNone,
+		catpb.ForeignKeyAction_RESTRICT:    fkActionRestrict,
+		catpb.ForeignKeyAction_CASCADE:     fkActionCascade,
+		catpb.ForeignKeyAction_SET_NULL:    fkActionSetNull,
+		catpb.ForeignKeyAction_SET_DEFAULT: fkActionSetDefault,
 	}
 
 	fkMatchTypeFull    = tree.NewDString("f")
@@ -1518,7 +1520,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 			objID := comment[0]
 			objSubID := comment[1]
 			description := comment[2]
-			commentType := tree.MustBeDInt(comment[3])
+			commentType := keys.CommentType(tree.MustBeDInt(comment[3]))
 
 			classOid := oidZero
 
@@ -1566,7 +1568,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
 			return err
 		}
 		for _, comment := range comments {
-			commentType := tree.MustBeDInt(comment[3])
+			commentType := keys.CommentType(tree.MustBeDInt(comment[3]))
 			if commentType != keys.DatabaseCommentType {
 				// Only database comments are exported in this table.
 				continue
@@ -4368,4 +4370,9 @@ func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
 	return h.getOid()
+}
+
+//MakeConstraintOidBuilder constructs an OID builder.
+func MakeConstraintOidBuilder() commenter.ConstraintOidBuilder {
+	return makeOidHasher()
 }

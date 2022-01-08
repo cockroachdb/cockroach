@@ -304,7 +304,7 @@ func (p *planner) HasPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,
 	user security.SQLUsername,
-	kind privilege.Kind,
+	priv privilege.Privilege,
 ) (bool, error) {
 	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(
 		ctx,
@@ -315,32 +315,42 @@ func (p *planner) HasPrivilege(
 	}
 
 	// hasPrivilegeFunc checks whether any role has the given privilege.
-	hasPrivilegeFunc := func(priv privilege.Kind) (bool, error) {
-		err := p.CheckPrivilegeForUser(ctx, desc, priv, user)
+	hasPrivilegeFunc := func(priv privilege.Privilege) (bool, error) {
+		err := p.CheckPrivilegeForUser(ctx, desc, priv.Kind, user)
+		if err == nil {
+			if priv.GrantOption {
+				if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+					err = p.CheckPrivilegeForUser(ctx, desc, privilege.GRANT, user)
+				} else {
+					err = p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, true /* isGrant */)
+				}
+			}
+		}
 		if err != nil {
 			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
 				return false, nil
 			}
 			return false, err
 		}
+
 		return true, nil
 	}
 
-	if kind == privilege.RULE {
+	if priv.Kind == privilege.RULE {
 		// RULE was only added for compatibility with Postgres, and Postgres
 		// never allows RULE to be granted, even if the user has ALL privileges.
 		// See https://www.postgresql.org/docs/8.1/sql-grant.html
 		// and https://www.postgresql.org/docs/release/8.2.0/.
 		return false, nil
 	}
-	hasPrivilege, err := hasPrivilegeFunc(privilege.ALL)
+	hasPrivilege, err := hasPrivilegeFunc(privilege.Privilege{Kind: privilege.ALL})
 	if err != nil {
 		return false, err
 	}
 	if hasPrivilege {
 		return true, nil
 	}
-	return hasPrivilegeFunc(kind)
+	return hasPrivilegeFunc(priv)
 }
 
 // ResolveDescriptorForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
@@ -348,28 +358,51 @@ func (p *planner) HasPrivilege(
 func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 	ctx context.Context, specifier tree.HasPrivilegeSpecifier,
 ) (catalog.Descriptor, error) {
-	if specifier.TableName != nil {
-		tn, err := parser.ParseQualifiedTableName(*specifier.TableName)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.ResolveTableName(ctx, tn); err != nil {
-			return nil, err
-		}
-
-		if p.SessionData().Database != "" && p.SessionData().Database != string(tn.CatalogName) {
-			// Postgres does not allow cross-database references in these
-			// functions, so we don't either.
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"cross-database references are not implemented: %s", tn)
-		}
-		_, table, err := p.Descriptors().GetImmutableTableByName(
-			ctx, p.txn, tn, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required: true,
-				},
-			},
+	if specifier.DatabaseName != nil {
+		return p.Descriptors().GetImmutableDatabaseByName(
+			ctx, p.txn, *specifier.DatabaseName, tree.DatabaseLookupFlags{Required: true},
 		)
+	} else if specifier.DatabaseOID != nil {
+		_, database, err := p.Descriptors().GetImmutableDatabaseByID(
+			ctx, p.txn, descpb.ID(*specifier.DatabaseOID), tree.DatabaseLookupFlags{Required: true},
+		)
+		return database, err
+	} else if specifier.TableName != nil || specifier.TableOID != nil {
+		var table catalog.TableDescriptor
+		var err error
+		if specifier.TableName != nil {
+			var tn *tree.TableName
+			tn, err = parser.ParseQualifiedTableName(*specifier.TableName)
+			if err != nil {
+				return nil, err
+			}
+			if _, err = p.ResolveTableName(ctx, tn); err != nil {
+				return nil, err
+			}
+
+			if p.SessionData().Database != "" && p.SessionData().Database != string(tn.CatalogName) {
+				// Postgres does not allow cross-database references in these
+				// functions, so we don't either.
+				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+					"cross-database references are not implemented: %s", tn)
+			}
+			_, table, err = p.Descriptors().GetImmutableTableByName(
+				ctx, p.txn, tn, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					},
+				},
+			)
+		} else {
+			table, err = p.Descriptors().GetImmutableTableByID(
+				ctx, p.txn, descpb.ID(*specifier.TableOID),
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					},
+				},
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -381,27 +414,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 		}
 		return table, nil
 	}
-	if specifier.TableOID == nil {
-		return nil, errors.AssertionFailedf("no table name or oid found")
-	}
-	table, err := p.Descriptors().GetImmutableTableByID(
-		ctx, p.txn, descpb.ID(*specifier.TableOID),
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required: true,
-			},
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateColumnForHasPrivilegeSpecifier(
-		table,
-		specifier,
-	); err != nil {
-		return nil, err
-	}
-	return table, nil
+	return nil, errors.AssertionFailedf("invalid HasPrivilegeSpecifier")
 }
 
 func validateColumnForHasPrivilegeSpecifier(

@@ -85,7 +85,6 @@ func populateTableArgs(
 	table catalog.TableDescriptor,
 	index catalog.Index,
 	invertedCol catalog.Column,
-	visibility execinfrapb.ScanVisibility,
 	hasSystemColumns bool,
 	post *execinfrapb.PostProcessSpec,
 	helper *colexecargs.ExprHelper,
@@ -94,11 +93,7 @@ func populateTableArgs(
 	// First, find all columns present in the table and possibly include the
 	// system columns (when requested).
 	cols := args.cols[:0]
-	if visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = append(cols, table.ReadableColumns()...)
-	} else {
-		cols = append(cols, table.PublicColumns()...)
-	}
+	cols = append(cols, table.ReadableColumns()...)
 	if invertedCol != nil {
 		for i, col := range cols {
 			if col.GetID() == invertedCol.GetID() {
@@ -161,7 +156,7 @@ func populateTableArgs(
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
 	return args, neededColumns, resolver.HydrateTypeSlice(ctx, args.typs)
 }
 

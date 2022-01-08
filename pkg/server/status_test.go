@@ -90,6 +90,15 @@ func getStatusJSONProtoWithAdminOption(
 	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
 }
 
+func postStatusJSONProtoWithAdminOption(
+	ts serverutils.TestServerInterface,
+	path string,
+	request, response protoutil.Message,
+	isAdmin bool,
+) error {
+	return serverutils.PostJSONProtoWithAdminOption(ts, statusPrefix+path, request, response, isAdmin)
+}
+
 // TestStatusJson verifies that status endpoints return expected Json results.
 // The content type of the responses is always httputil.JSONContentType.
 func TestStatusJson(t *testing.T) {
@@ -1843,9 +1852,6 @@ func TestStatusAPIStatements(t *testing.T) {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
 
-	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
-
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
 		if err := getStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
@@ -1894,7 +1900,20 @@ func TestStatusAPIStatements(t *testing.T) {
 		expectedStatements = append(expectedStatements, expectedStmt)
 	}
 
-	// Test no params
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test no params.
+	testPath("statements", expectedStatements)
+	// Test combined=true forwards to CombinedStatements
+	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
+
+	// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	// Grant VIEWACTIVITYREDACTED.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test no params.
 	testPath("statements", expectedStatements)
 	// Test combined=true forwards to CombinedStatements
 	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
@@ -1922,17 +1941,33 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []struct {
-		stmt          string
-		fingerprinted string
+		stmt                 string
+		formattedStmt        string
+		fingerprint          string
+		formattedFingerprint string
 	}{
-		{stmt: `CREATE DATABASE roachblog`},
-		{stmt: `SET database = roachblog`},
-		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
-			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
-			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			stmt:          `CREATE DATABASE roachblog`,
+			formattedStmt: "CREATE DATABASE roachblog\n",
 		},
-		{stmt: `SELECT * FROM posts`},
+		{
+			stmt:          `SET database = roachblog`,
+			formattedStmt: "SET database = roachblog\n",
+		},
+		{
+			stmt:          `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`,
+			formattedStmt: "CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)\n",
+		},
+		{
+			stmt:                 `INSERT INTO posts VALUES (1, 'foo')`,
+			formattedStmt:        "INSERT INTO posts VALUES (1, 'foo')\n",
+			fingerprint:          `INSERT INTO posts VALUES (_, '_')`,
+			formattedFingerprint: "INSERT INTO posts VALUES (_, '_')\n",
+		},
+		{
+			stmt:          `SELECT * FROM posts`,
+			formattedStmt: "SELECT * FROM posts\n",
+		},
 	}
 
 	for _, stmt := range statements {
@@ -1945,9 +1980,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	if !testutils.IsError(err, "status: 403") {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
-
-	// Grant VIEWACTIVITY.
-	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
@@ -1992,17 +2024,34 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 
 	var expectedStatements []string
 	for _, stmt := range statements {
-		var expectedStmt = stmt.stmt
-		if stmt.fingerprinted != "" {
-			expectedStmt = stmt.fingerprinted
+		var expectedStmt = stmt.formattedStmt
+		if stmt.fingerprint != "" {
+			expectedStmt = stmt.formattedFingerprint
 		}
 		expectedStatements = append(expectedStatements, expectedStmt)
 	}
 
-	// Test with no query params
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test with no query params.
 	testPath("combinedstmts", expectedStatements)
 
 	oneMinAfterAggregatedTs := aggregatedTs + 60
+	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements)
+	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
+	testPath(fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs), expectedStatements)
+	// Test with start = 1 min after aggregatedTs; should give no results
+	testPath(fmt.Sprintf("combinedstmts?start=%d", oneMinAfterAggregatedTs), nil)
+
+	// Remove VIEWACTIVITY so we can test with just the VIEWACTIVITYREDACTED role.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	// Grant VIEWACTIVITYREDACTED.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test with no query params.
+	testPath("combinedstmts", expectedStatements)
 	// Test with end = 1 min after aggregatedTs; should give the same results as get all.
 	testPath(fmt.Sprintf("combinedstmts?end=%d", oneMinAfterAggregatedTs), expectedStatements)
 	// Test with start = 1 hour before aggregatedTs  end = 1 min after aggregatedTs; should give same results as get all.
@@ -2097,7 +2146,7 @@ func TestListActivitySecurity(t *testing.T) {
 	ts := s.(*TestServer)
 	defer ts.Stopper().Stop(ctx)
 
-	expectedErrNoPermission := "does not have permission to view the activity"
+	expectedErrNoPermission := "this operation requires the VIEWACTIVITY or VIEWACTIVITYREDACTED role options"
 	contentionMsg := &serverpb.ListContentionEventsResponse{}
 	flowsMsg := &serverpb.ListDistSQLFlowsResponse{}
 	getErrors := func(msg protoutil.Message) []serverpb.ListActivityError {
@@ -2401,6 +2450,52 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 
 	if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
 		t.Fatal("statement diagnostics request was not persisted")
+	}
+}
+
+func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &serverpb.CreateStatementDiagnosticsReportRequest{}, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+
+	// Grant VIEWACTIVITY and all test should work.
+	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	req := &serverpb.CreateStatementDiagnosticsReportRequest{
+		StatementFingerprint: "INSERT INTO test VALUES (_)",
+	}
+	var resp serverpb.CreateStatementDiagnosticsReportResponse
+	if err := postStatusJSONProtoWithAdminOption(s, "stmtdiagreports", req, &resp, false); err != nil {
+		t.Fatal(err)
+	}
+	var respGet serverpb.StatementDiagnosticsReportsResponse
+	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &respGet, false); err != nil {
+		t.Fatal(err)
+	}
+	if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
+		t.Fatal("statement diagnostics request was not persisted")
+	}
+
+	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
+	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	if err := postStatusJSONProtoWithAdminOption(s, "stmtdiagreports", req, &resp, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
+	}
+	if err := getStatusJSONProtoWithAdminOption(s, "stmtdiagreports", &respGet, false); err != nil {
+		if !testutils.IsError(err, "status: 403") {
+			t.Fatalf("expected privilege error, got %v", err)
+		}
 	}
 }
 

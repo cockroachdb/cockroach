@@ -32,17 +32,17 @@ require (
 	github.com/bufbuild/buf v0.56.0
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/client9/misspell v0.3.4
-	github.com/cockroachdb/apd/v2 v2.0.2
+	github.com/cockroachdb/apd/v3 v3.0.0
 	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.1.1
 	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
 	github.com/cockroachdb/datadriven v1.0.1-0.20211007161720-b558070c3be0
-	github.com/cockroachdb/errors v1.8.5
+	github.com/cockroachdb/errors v1.8.6
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f
-	github.com/cockroachdb/pebble v0.0.0-20220107174839-c75a2e96a7e8
+	github.com/cockroachdb/pebble v0.0.0-20220112164547-3d0ff924d13a
 	github.com/cockroachdb/redact v1.1.3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
@@ -61,7 +61,8 @@ require (
 	github.com/elastic/gosigar v0.14.1
 	github.com/emicklei/dot v0.15.0
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
-	github.com/fraugster/parquet-go v0.4.0
+	github.com/fraugster/parquet-go v0.6.1
+	github.com/fsnotify/fsnotify v1.5.1
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/go-swagger/go-swagger v0.26.1
@@ -77,7 +78,6 @@ require (
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
-	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.5.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
@@ -120,6 +120,7 @@ require (
 	github.com/prometheus/prometheus v1.8.2-0.20210914090109-37468d88dce8
 	github.com/pseudomuto/protoc-gen-doc v1.3.2
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/shirou/gopsutil/v3 v3.21.12
 	github.com/slack-go/slack v0.9.5
@@ -138,18 +139,18 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
 	go.opentelemetry.io/otel/sdk v1.0.0-RC3
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
-	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
-	golang.org/x/exp v0.0.0-20210514180818-737f94c0881e
+	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
-	golang.org/x/net v0.0.0-20210913180222-943fd674d43e
+	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20211210111614-af8b64212486
+	golang.org/x/sys v0.0.0-20220111092808-5a964db01320
 	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
-	golang.org/x/tools v0.1.7
+	golang.org/x/tools v0.1.8-0.20211029000441-d6a9af8af023
 	google.golang.org/api v0.63.0
 	google.golang.org/genproto v0.0.0-20211222154725-9823f7ba7562
 	google.golang.org/grpc v1.43.0
@@ -159,8 +160,6 @@ require (
 	honnef.co/go/tools v0.2.1
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
-
-require github.com/fsnotify/fsnotify v1.5.1
 
 require (
 	cloud.google.com/go v0.99.0 // indirect
@@ -174,7 +173,7 @@ require (
 	github.com/Azure/go-autorest/autorest/validation v0.3.1 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
-	github.com/DataDog/zstd v1.4.8 // indirect
+	github.com/DataDog/zstd v1.5.0 // indirect
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
@@ -183,7 +182,7 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20180613141037-e580b900e9f5 // indirect
 	github.com/andybalholm/cascadia v1.2.0 // indirect
-	github.com/apache/thrift v0.13.0 // indirect
+	github.com/apache/thrift v0.15.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.4.2 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.5.1 // indirect
@@ -264,7 +263,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.11 // indirect
-	github.com/klauspost/compress v1.13.5 // indirect
+	github.com/klauspost/compress v1.14.1 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
@@ -319,7 +318,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
-	golang.org/x/mod v0.5.1 // indirect
+	golang.org/x/mod v0.6.0-dev.0.20211013180041-c96bc1413d57 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect

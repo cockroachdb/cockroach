@@ -8,6 +8,7 @@ go_library(
         "compare.go",
         "doc.go",
         "format.go",
+        "node.go",
         "scalars.go",
         ":gen-attr-stringer",  # keep
     ],

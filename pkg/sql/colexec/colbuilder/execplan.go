@@ -170,13 +170,13 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.TableReader != nil:
-		if spec.Core.TableReader.IsCheck {
+		if spec.Core.TableReader.DeprecatedIsCheck {
 			return errors.Newf("scrub table reader is unsupported in vectorized")
 		}
 		return nil
 
 	case spec.Core.JoinReader != nil:
-		if spec.Core.JoinReader.LookupColumns != nil || !spec.Core.JoinReader.LookupExpr.Empty() {
+		if !spec.Core.JoinReader.IsIndexJoin() {
 			return errLookupJoinUnsupported
 		}
 		return nil
@@ -662,7 +662,7 @@ func NewColOperator(
 	factory := args.Factory
 	if args.ExprHelper == nil {
 		args.ExprHelper = colexecargs.NewExprHelper()
-		args.ExprHelper.SemaCtx = flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.Txn)
+		args.ExprHelper.SemaCtx = flowCtx.NewSemaContext(flowCtx.Txn)
 	}
 	if args.MonitorRegistry == nil {
 		args.MonitorRegistry = &colexecargs.MonitorRegistry{}
@@ -740,7 +740,7 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
 			}
-			if core.JoinReader.LookupColumns != nil || !core.JoinReader.LookupExpr.Empty() {
+			if !core.JoinReader.IsIndexJoin() {
 				return r, errors.AssertionFailedf("lookup join reader is unsupported in vectorized")
 			}
 			// We have to create a separate account in order for the cFetcher to
@@ -753,11 +753,23 @@ func NewColOperator(
 			kvFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
 				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
 			)
+			var streamerBudgetAcc *mon.BoundAccount
+			// We have an index join, and when the ordering doesn't have to be
+			// maintained, we might use the Streamer API which requires a
+			// separate memory account that is bound to an unlimited memory
+			// monitor.
+			if !core.JoinReader.MaintainOrdering {
+				streamerBudgetAcc = args.MonitorRegistry.CreateUnlimitedMemAccount(
+					ctx, flowCtx, "streamer" /* opName */, spec.ProcessorID,
+				)
+			}
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
 			indexJoinOp, err := colfetcher.NewColIndexJoin(
-				ctx, getStreamingAllocator(ctx, args), colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
-				flowCtx, args.ExprHelper, inputs[0].Root, core.JoinReader, post, inputTypes,
+				ctx, getStreamingAllocator(ctx, args),
+				colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
+				kvFetcherMemAcc, streamerBudgetAcc, flowCtx, args.ExprHelper,
+				inputs[0].Root, core.JoinReader, post, inputTypes,
 			)
 			if err != nil {
 				return r, err
@@ -1842,6 +1854,15 @@ func planSelectionOperators(
 			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
 		)
 		return op, resultIdx, typs, err
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op = colexec.NewNotExprSelOp(op, resultIdx)
+		return op, resultIdx, typs, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
 		leftOp, leftIdx, ct, err := planProjectionOperators(
@@ -1978,6 +1999,17 @@ func planProjectionOperators(
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory, releasables)
 	case *tree.IsNotNullExpr:
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory, releasables)
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		outputIdx := len(typs)
+		op = colexec.NewNotExprProjOp(colmem.NewAllocator(ctx, acc, factory), op, resultIdx, outputIdx)
+		typs = appendOneType(typs, t.ResolvedType())
+		return op, outputIdx, typs, nil
 	case *tree.CastExpr:
 		expr := t.Expr.(tree.TypedExpr)
 		op, resultIdx, typs, err = planProjectionOperators(

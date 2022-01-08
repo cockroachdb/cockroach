@@ -104,7 +104,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	mb.addTargetColsForUpdate(upd.Exprs)
 
 	// Build each of the SET expressions.
-	mb.addUpdateCols(upd.Exprs, false /* isUpsert */)
+	mb.addUpdateCols(upd.Exprs)
 
 	// Build the final update statement, including any returned expressions.
 	if resultsNeeded(upd.Returning) {
@@ -180,7 +180,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 // Multiple subqueries result in multiple left joins successively wrapping the
 // input. A final Project operator is built if any single-column or tuple SET
 // expressions are present.
-func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, isUpsert bool) {
+func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	// SET expressions should reject aggregates, generators, etc.
 	scalarProps := &mb.b.semaCtx.Properties
 	defer scalarProps.Restore(*scalarProps)
@@ -221,12 +221,6 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, isUpsert bool) 
 		scopeCol := projectionsScope.addColumn(colName, texpr)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
-		if isUpsert {
-			// Type check the input expression against the corresponding table
-			// column.
-			checkDatumTypeFitsColumnType(targetCol, scopeCol.typ)
-		}
-
 		// Add the column ID to the list of columns to update.
 		mb.updateColIDs[ord] = scopeCol.id
 	}
@@ -246,11 +240,6 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, isUpsert bool) 
 					ord := mb.tabID.ColumnOrdinal(mb.targetColList[n])
 					targetCol := mb.tab.Column(ord)
 					subqueryScope.cols[i].name = scopeColName(targetCol.ColName())
-					if isUpsert {
-						// Type check the input expression against the corresponding table
-						// column.
-						checkDatumTypeFitsColumnType(targetCol, subqueryScope.cols[i].typ)
-					}
 
 					// Add the column ID to the list of columns to update.
 					mb.updateColIDs[ord] = subqueryScope.cols[i].id
@@ -291,20 +280,18 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, isUpsert bool) 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
 
-	if !isUpsert {
-		// Add assignment casts for update columns.
-		mb.addAssignmentCasts(mb.updateColIDs)
-	}
+	// Add assignment casts for update columns.
+	mb.addAssignmentCasts(mb.updateColIDs)
 
 	// Add additional columns for computed expressions that may depend on the
 	// updated columns.
-	mb.addSynthesizedColsForUpdate(isUpsert)
+	mb.addSynthesizedColsForUpdate()
 }
 
 // addSynthesizedColsForUpdate wraps an Update input expression with a Project
 // operator containing any computed columns that need to be updated. This
 // includes write-only mutation columns that are computed.
-func (mb *mutationBuilder) addSynthesizedColsForUpdate(isUpsert bool) {
+func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// Allow mutation columns to be referenced by other computed mutation
 	// columns (otherwise the scope will raise an error if a mutation column
 	// is referenced). These do not need to be set back to true again because
@@ -323,15 +310,8 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate(isUpsert bool) {
 		true,  /* applyOnUpdate */
 	)
 
-	if isUpsert {
-		// Possibly round DECIMAL-related columns containing update values. Do
-		// this before evaluating computed expressions, since those may depend on
-		// the inserted columns.
-		mb.roundDecimalValues(mb.updateColIDs, false /* roundComputedCols */)
-	} else {
-		// Add assignment casts for default column values.
-		mb.addAssignmentCasts(mb.updateColIDs)
-	}
+	// Add assignment casts for default column values.
+	mb.addAssignmentCasts(mb.updateColIDs)
 
 	// Disambiguate names so that references in the computed expression refer to
 	// the correct columns.
@@ -340,13 +320,8 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate(isUpsert bool) {
 	// Add all computed columns in case their values have changed.
 	mb.addSynthesizedComputedCols(mb.updateColIDs, true /* restrict */)
 
-	if isUpsert {
-		// Possibly round DECIMAL-related computed columns.
-		mb.roundDecimalValues(mb.updateColIDs, true /* roundComputedCols */)
-	} else {
-		// Add assignment casts for computed column values.
-		mb.addAssignmentCasts(mb.updateColIDs)
-	}
+	// Add assignment casts for computed column values.
+	mb.addAssignmentCasts(mb.updateColIDs)
 }
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project

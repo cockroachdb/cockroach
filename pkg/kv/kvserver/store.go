@@ -516,7 +516,7 @@ Store.HandleRaftRequest (which is part of the RaftMessageHandler interface),
 ultimately resulting in a call to Replica.handleRaftReadyRaftMuLocked, which
 houses the integration with the etcd/raft library (raft.RawNode). This may
 generate Raft messages to be sent to other Stores; these are handed to
-Replica.sendRaftMessages which ultimately hands them to the Store's
+Replica.sendRaftMessagesRaftMuLocked which ultimately hands them to the Store's
 RaftTransport.SendAsync method. Raft uses message passing (not
 request-response), and outgoing messages will use a gRPC stream that differs
 from that used for incoming messages (which makes asymmetric partitions more
@@ -1059,10 +1059,6 @@ type StoreConfig struct {
 
 	// KVAdmissionController is an optional field used for admission control.
 	KVAdmissionController KVAdmissionController
-
-	// SlowReplicationThreshold is the duration after which an in-flight proposal
-	// is tracked in the requests.slow.raft metric.
-	SlowReplicationThreshold time.Duration
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -1108,9 +1104,6 @@ func (sc *StoreConfig) SetDefaults() {
 
 	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
 		sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
-	}
-	if sc.SlowReplicationThreshold == 0 {
-		sc.SlowReplicationThreshold = base.SlowRequestThreshold
 	}
 }
 
@@ -1508,10 +1501,10 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 						if transferStatus != transferOK {
 							if err != nil {
 								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
-									&drainingLeaseStatus.Lease, desc, err)
+									drainingLeaseStatus.Lease, desc, err)
 							} else {
 								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
-									&drainingLeaseStatus.Lease, desc, transferStatus)
+									drainingLeaseStatus.Lease, desc, transferStatus)
 							}
 						}
 					}
@@ -2104,7 +2097,7 @@ func (s *Store) startGossip() {
 var errSysCfgUnavailable = errors.New("system config not available in gossip")
 
 // GetConfReader exposes access to a configuration reader.
-func (s *Store) GetConfReader() (spanconfig.StoreReader, error) {
+func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, error) {
 	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
 		return nil, errSysCfgUnavailable
 	}
@@ -3260,7 +3253,7 @@ func (s *Store) ManuallyEnqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	confReader, err := s.GetConfReader()
+	confReader, err := s.GetConfReader(ctx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err,
 			"unable to retrieve conf reader, cannot run queue; make sure "+

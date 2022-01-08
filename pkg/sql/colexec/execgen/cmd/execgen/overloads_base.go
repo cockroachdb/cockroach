@@ -271,6 +271,7 @@ type lastArgWidthOverload struct {
 
 	AssignFunc  assignFunc
 	CompareFunc compareFunc
+	HashFunc    hashFunc
 }
 
 // newLastArgWidthOverload creates a new lastArgWidthOverload. Note that it
@@ -304,12 +305,18 @@ func (o *oneArgOverload) String() string {
 }
 
 // twoArgsResolvedOverload is a utility struct that represents an overload that
-// takes it two arguments and that has been "resolved" (meaning it supports
+// takes in two arguments and that has been "resolved" (meaning it supports
 // only a single type family and a single type width on both sides).
 type twoArgsResolvedOverload struct {
 	*overloadBase
 	Left  *argWidthOverload
 	Right *lastArgWidthOverload
+}
+
+// NeedsBinaryOverloadHelper returns true iff the overload is such that it needs
+// access to execgen.BinaryOverloadHelper.
+func (o *twoArgsResolvedOverload) NeedsBinaryOverloadHelper() bool {
+	return o.kind == binaryOverload && o.Right.RetVecMethod == "Datum"
 }
 
 // twoArgsResolvedOverloadsInfo contains all overloads that take in two
@@ -352,6 +359,7 @@ type twoArgsResolvedOverloadRightWidthInfo struct {
 type assignFunc func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string
 type compareFunc func(targetElem, leftElem, rightElem, leftCol, rightCol string) string
 type castFunc func(to, from, evalCtx, toType string) string
+type hashFunc func(targetElem, vElem, vVec, vIdx string) string
 
 // Assign produces a Go source string that assigns the "targetElem" variable to
 // the result of applying the overload to the two inputs, "leftElem" and
@@ -399,14 +407,8 @@ func (o *lastArgWidthOverload) Compare(
 		leftElem, rightElem, targetElem, leftElem, rightElem, targetElem, targetElem)
 }
 
-func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec string) string {
-	if o.AssignFunc != nil {
-		if ret := o.AssignFunc(o, targetElem, vElem, "", targetCol, vVec, ""); ret != "" {
-			return ret
-		}
-	}
-	// Default assign form assumes a function operator.
-	return fmt.Sprintf("%s = %s(%s)", targetElem, o.overloadBase.OpStr, vElem)
+func (o *lastArgWidthOverload) AssignHash(targetElem, vElem, vVec, vIdx string) string {
+	return o.HashFunc(targetElem, vElem, vVec, vIdx)
 }
 
 func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
@@ -575,7 +577,7 @@ if %[2]s != nil {
     %[1]s = %[2]s.Size()
 }`, target, value)
 	case types.DecimalFamily:
-		return fmt.Sprintf(`%s := tree.SizeOfDecimal(&%s)`, target, value)
+		return fmt.Sprintf(`%s := %s.Size()`, target, value)
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf(`
 		var %[1]s uintptr
@@ -597,8 +599,8 @@ func (b *argWidthOverloadBase) SetVariableSize(target, value string) string {
 var (
 	lawo = &lastArgWidthOverload{}
 	_    = lawo.Assign
+	_    = lawo.AssignHash
 	_    = lawo.Compare
-	_    = lawo.UnaryAssign
 
 	awob = &argWidthOverloadBase{}
 	_    = awob.GoTypeSliceName

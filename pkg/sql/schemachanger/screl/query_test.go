@@ -24,28 +24,31 @@ import (
 
 func TestQueryBasic(t *testing.T) {
 	mkType := func(id descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Status_PUBLIC, &scpb.Type{TypeID: id}, nil /* metadata */)
+		t := scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Type{TypeID: id}, nil /* metadata */)
+		return &t
 	}
 	mkTypeRef := func(typID, descID descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Status_PUBLIC, &scpb.ViewDependsOnType{
+		t := scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.ViewDependsOnType{
 			TypeID:  typID,
 			TableID: descID,
 		}, nil /* metadata */)
+		return &t
 	}
 	mkTable := func(id descpb.ID) *scpb.Target {
-		return scpb.NewTarget(scpb.Status_PUBLIC, &scpb.Table{TableID: id}, nil /* metadata */)
+		t := scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Table{TableID: id}, nil /* metadata */)
+		return &t
 	}
-	concatNodes := func(nodes ...[]*scpb.Node) []*scpb.Node {
-		var ret []*scpb.Node
+	concatNodes := func(nodes ...[]*screl.Node) []*screl.Node {
+		var ret []*screl.Node
 		for _, n := range nodes {
 			ret = append(ret, n...)
 		}
 		return ret
 	}
-	mkNodes := func(status scpb.Status, targets ...*scpb.Target) []*scpb.Node {
-		var ret []*scpb.Node
+	mkNodes := func(status scpb.Status, targets ...*scpb.Target) []*screl.Node {
+		var ret []*screl.Node
 		for _, t := range targets {
-			ret = append(ret, &scpb.Node{Status: status, Target: t})
+			ret = append(ret, &screl.Node{CurrentStatus: status, Target: t})
 		}
 		return ret
 	}
@@ -76,7 +79,7 @@ func TestQueryBasic(t *testing.T) {
 			screl.JoinTargetNode(typeEl, typeTarget, typeNode),
 
 			dir.Entities(screl.TargetStatus, tableTarget, refTarget, typeTarget),
-			status.Entities(screl.Status, tableNode, refNode, typeNode),
+			status.Entities(screl.CurrentStatus, tableNode, refNode, typeNode),
 		)
 	)
 	type queryExpectations struct {
@@ -85,7 +88,7 @@ func TestQueryBasic(t *testing.T) {
 		exp   []string
 	}
 	for _, c := range []struct {
-		nodes   []*scpb.Node
+		nodes   []*screl.Node
 		queries []queryExpectations
 	}{
 		{
@@ -156,7 +159,7 @@ func formatResults(r rel.Result, nodes []rel.Var) string {
 	var buf strings.Builder
 	for _, n := range nodes {
 		buf.WriteString("\n")
-		buf.WriteString(screl.NodeString(r.Var(n).(*scpb.Node)))
+		buf.WriteString(screl.NodeString(r.Var(n).(*screl.Node)))
 	}
 	return buf.String()
 }

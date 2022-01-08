@@ -24,6 +24,7 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
         "//pkg/server/telemetry",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -47,6 +48,7 @@ go_test(
         "table_col_set_test.go",
     ],
     embed = [":catalog"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",

@@ -22,15 +22,14 @@ query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t
 -----
 
-query TTTTTTTT
+statement error not implemented
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL
------
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
 ------
 
-query TTTTTTTT
+statement error not implemented
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL, INDEX (name_idx)
 -----
 
@@ -145,7 +144,7 @@ CREATE TABLE test.order (a INT, b INT, c INT, CONSTRAINT "primary" PRIMARY KEY (
 statement ok
 INSERT INTO test.order VALUES (0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 1, 1), (1, 0, 0);
 
-query TTTTTTTT
+statement error not implemented
 EXPERIMENTAL SCRUB TABLE test.order WITH OPTIONS PHYSICAL
 
 # Test that scrubbing timestamp works as expected.

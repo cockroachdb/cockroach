@@ -153,7 +153,7 @@ func (info spanEncoderTmplInfo) AssignSpanEncoding(appendTo, valToEncode string)
 		valToEncode += ".(tree.Datum)"
 		return fmt.Sprintf(`
 			var err error
-			%[1]s, err = rowenc.EncodeTableKey(%[1]s, %[2]s, %[3]s)
+			%[1]s, err = keyside.Encode(%[1]s, %[2]s, %[3]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

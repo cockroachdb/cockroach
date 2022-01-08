@@ -178,7 +178,7 @@ func DecodeRowInfo(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc, key)
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc.GetID(), key)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -242,9 +242,8 @@ func DecodeRowInfo(
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
-		&rowenc.DatumAlloc{},
+		0, /* lockTimeout */
+		&tree.DatumAlloc{},
 		nil, /* memMonitor */
 		tableArgs,
 	); err != nil {

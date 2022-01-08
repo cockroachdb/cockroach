@@ -138,6 +138,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":with-mocks"],  # keep
+    tags = ["no-remote"],
     deps = [
         "//build/bazelutil:noop",
         "//pkg/base",

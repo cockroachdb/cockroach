@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1361,13 +1361,6 @@ func RewriteTableDescs(
 	return nil
 }
 
-func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
-	return errors.Errorf(
-		"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
-		start, end, roachpb.Key(span.Start), roachpb.Key(span.End),
-	)
-}
-
 // resolveOptionsForRestoreJobDescription creates a copy of
 // the options specified during a restore, after processing
 // them to be suitable for displaying in the jobs' description.
@@ -1729,7 +1722,7 @@ func checkPrivilegesForRestore(
 func checkClusterRegions(
 	ctx context.Context, p sql.PlanHookState, typesByID map[descpb.ID]*typedesc.Mutable,
 ) error {
-	regionSet := make(map[descpb.RegionName]struct{})
+	regionSet := make(map[catpb.RegionName]struct{})
 	for _, typ := range typesByID {
 		typeDesc := typedesc.NewBuilder(typ.TypeDesc()).BuildImmutableType()
 		if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
@@ -1831,13 +1824,19 @@ func doRestorePlan(
 			KMSInfo: defaultKMSInfo}
 	}
 
-	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(
-		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
+	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+
+	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := resolveBackupManifests(
+		ctx, &mem, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
 		incFrom, endTime, encryption, p.User(),
 	)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		mem.Shrink(ctx, memReserved)
+	}()
 
 	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 	for i := range mainBackupManifests {
@@ -2222,7 +2221,7 @@ func planDatabaseModifiersForRestore(
 	restoreDBs []catalog.DatabaseDescriptor,
 ) (map[descpb.ID]*jobspb.RestoreDetails_DatabaseModifier, []catalog.Descriptor, error) {
 	databaseModifiers := make(map[descpb.ID]*jobspb.RestoreDetails_DatabaseModifier)
-	defaultPrimaryRegion := descpb.RegionName(
+	defaultPrimaryRegion := catpb.RegionName(
 		sql.DefaultPrimaryRegion.Get(&p.ExecCfg().Settings.SV),
 	)
 	if defaultPrimaryRegion == "" {
@@ -2314,7 +2313,7 @@ func planDatabaseModifiersForRestore(
 			return nil, nil, err
 		}
 		regionConfig := multiregion.MakeRegionConfig(
-			[]descpb.RegionName{defaultPrimaryRegion},
+			[]catpb.RegionName{defaultPrimaryRegion},
 			defaultPrimaryRegion,
 			sg,
 			regionEnumID,

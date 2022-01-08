@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -114,9 +115,9 @@ func MakeColumnDefDescs(
 	if d.GeneratedIdentity.IsGeneratedAsIdentity {
 		switch d.GeneratedIdentity.GeneratedAsIdentityType {
 		case tree.GeneratedAlways:
-			col.GeneratedAsIdentityType = descpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+			col.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
 		case tree.GeneratedByDefault:
-			col.GeneratedAsIdentityType = descpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+			col.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
 		default:
 			return nil, errors.AssertionFailedf(
 				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)", string(d.Name))
@@ -199,7 +200,7 @@ func MakeColumnDefDescs(
 				Unique:              true,
 				KeyColumnNames:      []string{shardColName, string(d.Name)},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-				Sharded: descpb.ShardedDescriptor{
+				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         shardColName,
 					ShardBuckets: buckets,
@@ -651,7 +652,7 @@ func RenameColumnInTable(
 	// Rename the column in hash-sharded idx descriptors. Potentially rename the
 	// shard column too if we haven't already done it.
 	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
-	maybeUpdateShardedDesc := func(shardedDesc *descpb.ShardedDescriptor) {
+	maybeUpdateShardedDesc := func(shardedDesc *catpb.ShardedDescriptor) {
 		if !shardedDesc.IsSharded {
 			return
 		}

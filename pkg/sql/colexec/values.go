@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -36,7 +37,7 @@ type valuesOp struct {
 	data [][]byte
 
 	allocator *colmem.Allocator
-	dalloc    rowenc.DatumAlloc
+	dalloc    tree.DatumAlloc
 	batch     coldata.Batch
 	rowsBuf   rowenc.EncDatumRows
 }

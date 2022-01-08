@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -329,7 +328,6 @@ func startTestFullServer(
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		SpanConfig:       &spanconfig.TestingKnobs{ManagerDisableJobCreation: true},
 	}
 	if options.knobsFn != nil {
 		options.knobsFn(&knobs)
@@ -412,7 +410,7 @@ func startTestTenant(
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
 	ctx := context.Background()
 
-	kvServer, _, cleanup := startTestFullServer(t, options)
+	kvServer, _, cleanupCluster := startTestFullServer(t, options)
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -439,7 +437,12 @@ func startTestTenant(
 	// Log so that it is clear if a failed test happened
 	// to run on a tenant.
 	t.Logf("Running test using tenant %s", tenantID)
-	return server, tenantDB, cleanup
+	return server, tenantDB, func() {
+		tenantServer.Stopper().Stop(context.Background())
+		log.Infof(context.Background(), "tenant server stopped")
+		cleanupCluster()
+		log.Infof(context.Background(), "cluster shut down")
+	}
 }
 
 type cdcTestFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)

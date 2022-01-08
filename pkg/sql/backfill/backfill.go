@@ -78,7 +78,7 @@ type ColumnBackfiller struct {
 	evalCtx     *tree.EvalContext
 
 	fetcher row.Fetcher
-	alloc   rowenc.DatumAlloc
+	alloc   tree.DatumAlloc
 
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
@@ -156,8 +156,7 @@ func (cb *ColumnBackfiller) init(
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&cb.alloc,
 		cb.mon,
 		tableArgs,
@@ -214,7 +213,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in the column expressions.
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
+		resolver := flowCtx.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
 		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), &resolver); err != nil {
 			return err
@@ -248,7 +247,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	// Release leases on any accessed types now that type metadata is installed.
 	// We do this so that leases on any accessed types are not held for the
 	// entire backfill process.
-	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
+	flowCtx.Descriptors.ReleaseAll(ctx)
 
 	rowMetrics := flowCtx.GetRowMetrics()
 	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
@@ -450,7 +449,7 @@ type IndexBackfiller struct {
 
 	valNeededForCol util.FastIntSet
 
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
 	mon            *mon.BytesMonitor
@@ -627,7 +626,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
+		resolver := flowCtx.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
 		if err = typedesc.HydrateTypesInTableDescriptor(
 			ctx, desc.TableDesc(), &resolver,
@@ -648,7 +647,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	// Release leases on any accessed types now that type metadata is installed.
 	// We do this so that leases on any accessed types are not held for the
 	// entire backfill process.
-	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
+	flowCtx.Descriptors.ReleaseAll(ctx)
 
 	// Add the columns referenced in the predicate to valNeededForCol so that
 	// columns necessary to evaluate the predicate expression are fetched.
@@ -839,8 +838,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&ib.alloc,
 		ib.mon,
 		tableArgs,

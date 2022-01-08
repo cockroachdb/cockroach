@@ -75,7 +75,7 @@ func TestClusterFlow(t *testing.T) {
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	makeIndexSpan := func(start, end int) roachpb.Span {
 		var span roachpb.Span
-		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PublicNonPrimaryIndexes()[0].GetID()))
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc.GetID(), desc.PublicNonPrimaryIndexes()[0].GetID()))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
@@ -796,7 +796,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						if len(rows) != numNodes*numRows {
 							b.Errorf("got %d rows, expected %d", len(rows), numNodes*numRows)
 						}
-						var a rowenc.DatumAlloc
+						var a tree.DatumAlloc
 						for i := range rows {
 							if err := rows[i][0].EnsureDecoded(types.Int, &a); err != nil {
 								b.Fatal(err)

@@ -151,7 +151,7 @@ type MemRowContainer struct {
 
 	evalCtx *tree.EvalContext
 
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 }
 
 var _ heap.Interface = &MemRowContainer{}
@@ -374,7 +374,7 @@ type DiskBackedRowContainer struct {
 	// encodings keeps around the DatumEncoding equivalents of the encoding
 	// directions in ordering to avoid conversions in hot paths.
 	encodings  []descpb.DatumEncoding
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 	scratchKey []byte
 
 	spilled bool
@@ -639,7 +639,7 @@ type DiskBackedIndexedRowContainer struct {
 
 	scratchEncRow rowenc.EncDatumRow
 	storedTypes   []*types.T
-	datumAlloc    rowenc.DatumAlloc
+	datumAlloc    tree.DatumAlloc
 	rowAlloc      rowenc.EncDatumRowAlloc
 	idx           uint64 // the index of the next row to be added into the container
 

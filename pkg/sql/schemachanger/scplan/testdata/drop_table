@@ -38,24 +38,72 @@ CREATE VIEW v1 AS (SELECT customer_id, carrier FROM defaultdb.shipments)
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 3 MutationType ops
+StatementPhase stage 1 of 1 with 15 MutationType ops
   transitions:
     [[Table:{DescID: 57}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 57, ColumnID: 1}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[ColumnComment:{DescID: 57, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 57, ColumnID: 2}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[ColumnComment:{DescID: 57, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 57, ColumnID: 3}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[ColumnComment:{DescID: 57, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 57, ColumnID: 4}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[ColumnComment:{DescID: 57, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 57, ColumnID: 5}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
+    [[ColumnComment:{DescID: 57, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 57, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
+    [[ConstraintComment:{DescID: 57, ConstraintType: PrimaryKey, Name: shipments_pkey}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexComment:{DescID: 57, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 57, ConstraintType: FK, Name: fk_customers}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 57, ConstraintType: FK, Name: fk_orders}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 59}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 59}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 58}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
+    *scop.RemoveTableComment
+      TableID: 57
+    *scop.RemoveColumnComment
+      ColumnID: 1
+      TableID: 57
+    *scop.RemoveColumnComment
+      ColumnID: 2
+      TableID: 57
+    *scop.RemoveColumnComment
+      ColumnID: 3
+      TableID: 57
+    *scop.RemoveColumnComment
+      ColumnID: 4
+      TableID: 57
+    *scop.RemoveColumnComment
+      ColumnID: 5
+      TableID: 57
+    *scop.RemoveConstraintComment
+      ConstraintName: shipments_pkey
+      ConstraintType: 4
+      TableID: 57
+    *scop.RemoveIndexComment
+      IndexID: 1
+      TableID: 57
+    *scop.RemoveConstraintComment
+      ConstraintName: fk_customers
+      ConstraintType: 3
+      TableID: 57
+    *scop.RemoveConstraintComment
+      ConstraintName: fk_orders
+      ConstraintType: 3
+      TableID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 59
+    *scop.RemoveTableComment
+      TableID: 59
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
+    *scop.RemoveTableComment
+      TableID: 58
 PreCommitPhase stage 1 of 1 with 22 MutationType ops
   transitions:
     [[Table:{DescID: 57}, ABSENT], TXN_DROPPED] -> DROPPED
@@ -151,11 +199,13 @@ PreCommitPhase stage 1 of 1 with 22 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP TABLE defaultdb.shipments CASCADE
+          redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+          statementtag: DROP TABLE
 PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Table:{DescID: 57}, ABSENT], DROPPED] -> ABSENT
@@ -169,44 +219,44 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
     [[Sequence:{DescID: 58}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 57
+      Authorization:
+        UserName: root
       Element:
-        table:
+        Table:
           tableId: 57
-      Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+      StatementTag: DROP TABLE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 57
     *scop.LogEvent
-      DescID: 59
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 59
-      Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-        Username: root
+      Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+      StatementTag: DROP TABLE
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 59
     *scop.LogEvent
-      DescID: 58
+      Authorization:
+        UserName: root
       Element:
-        sequence:
+        Sequence:
           sequenceId: 58
-      Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-        Username: root
+      Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+      StatementTag: DROP TABLE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 58

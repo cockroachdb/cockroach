@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -56,7 +57,7 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
-			commentType := int(tree.MustBeDInt(row[0]))
+			commentType := keys.CommentType(tree.MustBeDInt(row[0]))
 			switch commentType {
 			case keys.TableCommentType, keys.ColumnCommentType, keys.IndexCommentType:
 				subID := int(tree.MustBeDInt(row[2]))
@@ -349,11 +350,11 @@ func showForeignKeyConstraint(
 		buf.WriteByte(' ')
 		buf.WriteString(fk.Match.String())
 	}
-	if fk.OnDelete != descpb.ForeignKeyReference_NO_ACTION {
+	if fk.OnDelete != catpb.ForeignKeyAction_NO_ACTION {
 		buf.WriteString(" ON DELETE ")
 		buf.WriteString(fk.OnDelete.String())
 	}
-	if fk.OnUpdate != descpb.ForeignKeyReference_NO_ACTION {
+	if fk.OnUpdate != catpb.ForeignKeyAction_NO_ACTION {
 		buf.WriteString(" ON UPDATE ")
 		buf.WriteString(fk.OnUpdate.String())
 	}
@@ -427,7 +428,7 @@ func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
 // ShowCreatePartitioning returns a PARTITION BY clause for the specified
 // index, if applicable.
 func ShowCreatePartitioning(
-	a *rowenc.DatumAlloc,
+	a *tree.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
@@ -450,7 +451,7 @@ func ShowCreatePartitioning(
 	// Do not print PARTITION ALL BY if we are a REGIONAL BY ROW table.
 	if c := tableDesc.GetLocalityConfig(); c != nil {
 		switch c.Locality.(type) {
-		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		case *catpb.LocalityConfig_RegionalByRow_:
 			return nil
 		}
 	}
@@ -563,6 +564,9 @@ func showConstraintClause(
 	f *tree.FmtCtx,
 ) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
+		if e.Hidden {
+			continue
+		}
 		f.WriteString(",\n\t")
 		if len(e.Name) > 0 {
 			f.WriteString("CONSTRAINT ")

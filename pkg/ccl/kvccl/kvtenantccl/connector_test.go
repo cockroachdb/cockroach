@@ -100,6 +100,12 @@ func (m *mockServer) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
+func (m *mockServer) TenantSettings(
+	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
+) error {
+	panic("unimplemented")
+}
+
 func gossipEventForClusterID(clusterID uuid.UUID) *roachpb.GossipSubscriptionEvent {
 	return &roachpb.GossipSubscriptionEvent{
 		Key:            gossip.KeyClusterID,

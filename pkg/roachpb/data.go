@@ -26,7 +26,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1865,12 +1865,12 @@ func (s LeaseSequence) SafeValue() {}
 
 var _ fmt.Stringer = &Lease{}
 
-func (l *Lease) String() string {
+func (l Lease) String() string {
 	return redact.StringWithoutMarkers(l)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (l *Lease) SafeFormat(w redact.SafePrinter, _ rune) {
+func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 	if l.Empty() {
 		w.SafeString("<empty>")
 		return
@@ -2528,5 +2528,5 @@ func (ReplicaChangeType) SafeValue() {}
 
 func (ri RangeInfo) String() string {
 	return fmt.Sprintf("desc: %s, lease: %s, closed_timestamp_policy: %s",
-		ri.Desc, &ri.Lease, ri.ClosedTimestampPolicy)
+		ri.Desc, ri.Lease, ri.ClosedTimestampPolicy)
 }

@@ -23,10 +23,10 @@ go_library(
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
@@ -97,6 +97,7 @@ proto_library(
     deps = [
         "//pkg/jobs/jobspb:jobspb_proto",
         "//pkg/roachpb:roachpb_proto",
+        "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/inverted:inverted_proto",
         "//pkg/sql/pgwire/pgerror:pgerror_proto",
@@ -121,6 +122,7 @@ go_proto_library(
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",

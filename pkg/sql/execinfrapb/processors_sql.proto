@@ -45,23 +45,13 @@ message ValuesCoreSpec {
   repeated bytes raw_bytes = 2;
 }
 
-// ScanVisibility controls which columns are seen by scans - just normal
-// columns, or normal columns and also in-progress schema change columns.
-enum ScanVisibility {
-  PUBLIC = 0;
-  PUBLIC_AND_NOT_PUBLIC = 1;
-}
-
 // TableReaderSpec is the specification for a "table reader". A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) are all the
-// columns of the table. If is_check is set, the TableReader will run additional
-// data checking procedures and the "internal columns" are:
-//  - Error type (string).
-//  - Primary key as a string, if it was obtainable.
-//  - JSON of all decoded column values.
+// columns of the table. Internally, only the values for the columns specified
+// by needed_columns are to be populated.
 message TableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
@@ -80,14 +70,12 @@ message TableReaderSpec {
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
 
   // Indicates whether the TableReader is being run as an exhaustive
-  // check. This is only true during SCRUB commands.
-  optional bool is_check = 6 [(gogoproto.nullable) = false];
+  // check. This is only true during SCRUB commands. No longer supported.
+  optional bool deprecated_is_check = 6 [(gogoproto.nullable) = false];
 
-  // Indicates the visibility level of the columns that should be returned.
-  // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
-  // the consumer of this TableReader expects to be able to see in-progress
-  // schema changes.
-  optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
+  // This field used to be a visibility level of the columns that should be
+  // produced. We now always produce all columns (public and not public).
+  reserved 7;
 
   // This field used to be an upper bound for the number of rows we will read;
   // replaced by the parallelize field.
@@ -177,11 +165,9 @@ message IndexSkipTableReaderSpec {
   reserved 3;
   repeated roachpb.Span spans = 8 [(gogoproto.nullable) = false];
 
-  // Indicates the visibility level of the columns that should be returned.
-  // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
-  // the consumer of this TableReader expects to be able to see in-progress
-  // schema changes.
-  optional ScanVisibility visibility = 4 [(gogoproto.nullable) = false];
+  // This field used to be a visibility level of the columns that should be
+  // produced. We now always produce all columns (public and not public).
+  reserved 4;
 
   optional bool reverse = 5 [(gogoproto.nullable) = false];
 
@@ -363,12 +349,9 @@ message JoinReaderSpec {
   // supported.
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
 
-  // For index joins that are sources to mutation statements - what visibility
-  // of columns should we return? Mutations sometimes need to see in-progress
-  // schema change columns, in which case this field will be changed from its
-  // default PUBLIC state. Causes the index join to return these schema change
-  // columns.
-  optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
+  // This field used to be a visibility level of the columns that should be
+  // produced. We now always produce all columns (public and not public).
+  reserved 7;
 
   // Indicates the row-level locking strength to be used by the join. If set to
   // FOR_NONE, no row-level locking should be performed.

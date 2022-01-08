@@ -3332,6 +3332,16 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, webhook_sink_config='{"Retry":{"Max":"inf"}}'`,
 		`webhook-https://fake-host`,
 	)
+	sqlDB.ExpectErr(
+		t, `client_cert requires client_key to be set`,
+		`CREATE CHANGEFEED FOR foo INTO $1`,
+		`webhook-https://fake-host?client_cert=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `client_key requires client_cert to be set`,
+		`CREATE CHANGEFEED FOR foo INTO $1`,
+		`webhook-https://fake-host?client_key=Zm9v`,
+	)
 
 	// Sanity check on_error option
 	sqlDB.ExpectErr(
@@ -3578,8 +3588,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 		func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 			defer close(done)
 			sqlDB := sqlutils.MakeSQLRunner(db)
-			sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1`)
-			sqlDB.Exec(t, `ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
+			sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 100`)
+			sqlDB.Exec(t, `ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 100`)
 			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
 

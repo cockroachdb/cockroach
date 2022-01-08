@@ -408,8 +408,19 @@ func (ds *ServerImpl) setupFlow(
 	// that have no remote flows and also no concurrency, the txn comes from
 	// localState.Txn. Otherwise, we create a txn based on the request's
 	// LeafTxnInputState.
+	useLeaf := false
+	for _, proc := range req.Flow.Processors {
+		if jr := proc.Core.JoinReader; jr != nil {
+			if !jr.MaintainOrdering && jr.IsIndexJoin() {
+				// Index joins when ordering doesn't have to be maintained are
+				// executed via the Streamer API that has concurrency.
+				useLeaf = true
+				break
+			}
+		}
+	}
 	var txn *kv.Txn
-	if localState.IsLocal && !f.ConcurrentTxnUse() {
+	if localState.IsLocal && !f.ConcurrentTxnUse() && !useLeaf {
 		txn = localState.Txn
 	} else {
 		// If I haven't created the leaf already, do it now.
@@ -468,21 +479,13 @@ func (ds *ServerImpl) newFlowContext(
 		// If we were passed a descs.Collection to use, then take it. In this case,
 		// the caller will handle releasing the used descriptors, so we don't need
 		// to cleanup the descriptors when cleaning up the flow.
-		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
-			Descriptors: localState.Collection,
-			CleanupFunc: func(ctx context.Context) {},
-		}
+		flowCtx.Descriptors = localState.Collection
 	} else {
 		// If we weren't passed a descs.Collection, then make a new one. We are
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
-		collection := ds.CollectionFactory.NewCollection(descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
-		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
-			Descriptors: collection,
-			CleanupFunc: func(ctx context.Context) {
-				collection.ReleaseAll(ctx)
-			},
-		}
+		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
+		flowCtx.IsDescriptorsCleanupRequired = true
 	}
 	return flowCtx
 }

@@ -59,7 +59,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
-		tableDesc:      spec.BuildTableDescriptor(),
+		tableDesc:      flowCtx.TableDescriptor(&spec.Table),
 		spec:           spec,
 		input:          input,
 		output:         output,
@@ -184,7 +184,7 @@ func (sp *bulkRowWriter) convertLoop(
 	defer close(kvCh)
 
 	done := false
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	typs := sp.input.OutputTypes()
 
 	for {

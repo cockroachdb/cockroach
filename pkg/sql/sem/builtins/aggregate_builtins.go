@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
@@ -2004,21 +2004,21 @@ func (a *regressionAccumulatorDecimalBase) add(
 	a.syy.Set(&a.tmpSyy)
 	a.sxy.Set(&a.tmpSxy)
 
-	size := int64(tree.SizeOfDecimal(&a.n) +
-		tree.SizeOfDecimal(&a.sx) +
-		tree.SizeOfDecimal(&a.sxx) +
-		tree.SizeOfDecimal(&a.sy) +
-		tree.SizeOfDecimal(&a.syy) +
-		tree.SizeOfDecimal(&a.sxy) +
-		tree.SizeOfDecimal(&a.tmpX) +
-		tree.SizeOfDecimal(&a.tmpY) +
-		tree.SizeOfDecimal(&a.scale) +
-		tree.SizeOfDecimal(&a.tmpN) +
-		tree.SizeOfDecimal(&a.tmpSx) +
-		tree.SizeOfDecimal(&a.tmpSxx) +
-		tree.SizeOfDecimal(&a.tmpSy) +
-		tree.SizeOfDecimal(&a.tmpSyy) +
-		tree.SizeOfDecimal(&a.tmpSxy))
+	size := int64(a.n.Size() +
+		a.sx.Size() +
+		a.sxx.Size() +
+		a.sy.Size() +
+		a.syy.Size() +
+		a.sxy.Size() +
+		a.tmpX.Size() +
+		a.tmpY.Size() +
+		a.scale.Size() +
+		a.tmpN.Size() +
+		a.tmpSx.Size() +
+		a.tmpSxx.Size() +
+		a.tmpSy.Size() +
+		a.tmpSyy.Size() +
+		a.tmpSxy.Size())
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
@@ -2687,7 +2687,7 @@ func (a *intSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.D
 			if err != nil {
 				return err
 			}
-			if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(&a.decSum))); err != nil {
+			if err := a.updateMemoryUsage(ctx, int64(a.decSum.Size())); err != nil {
 				return err
 			}
 		}
@@ -2755,7 +2755,7 @@ func (a *decimalSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 		return err
 	}
 
-	if err := a.updateMemoryUsage(ctx, int64(tree.SizeOfDecimal(&a.sum))); err != nil {
+	if err := a.updateMemoryUsage(ctx, int64(a.sum.Size())); err != nil {
 		return err
 	}
 
@@ -3058,11 +3058,11 @@ func (a *decimalSqrDiffAggregate) Add(
 	a.ed.Sub(&a.tmp, d, &a.mean)
 	a.ed.Add(&a.sqrDiff, &a.sqrDiff, a.ed.Mul(&a.delta, &a.delta, &a.tmp))
 
-	size := int64(tree.SizeOfDecimal(&a.count) +
-		tree.SizeOfDecimal(&a.mean) +
-		tree.SizeOfDecimal(&a.sqrDiff) +
-		tree.SizeOfDecimal(&a.delta) +
-		tree.SizeOfDecimal(&a.tmp))
+	size := int64(a.count.Size() +
+		a.mean.Size() +
+		a.sqrDiff.Size() +
+		a.delta.Size() +
+		a.tmp.Size())
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}
@@ -3257,13 +3257,13 @@ func (a *decimalSumSqrDiffsAggregate) Add(
 	// Update running mean.
 	a.ed.Add(&a.mean, &a.mean, &a.tmp)
 
-	size := int64(tree.SizeOfDecimal(&a.count) +
-		tree.SizeOfDecimal(&a.mean) +
-		tree.SizeOfDecimal(&a.sqrDiff) +
-		tree.SizeOfDecimal(&a.tmpCount) +
-		tree.SizeOfDecimal(&a.tmpMean) +
-		tree.SizeOfDecimal(&a.delta) +
-		tree.SizeOfDecimal(&a.tmp))
+	size := int64(a.count.Size() +
+		a.mean.Size() +
+		a.sqrDiff.Size() +
+		a.tmpCount.Size() +
+		a.tmpMean.Size() +
+		a.delta.Size() +
+		a.tmp.Size())
 	if err := a.updateMemoryUsage(ctx, size); err != nil {
 		return err
 	}

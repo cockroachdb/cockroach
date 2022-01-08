@@ -66,9 +66,11 @@ func (s *Tenant) TimestampAfterLastExec() hlc.Timestamp {
 	return s.mu.tsAfterLastExec
 }
 
-// Checkpoint is used to record a checkpointed timestamp, retrievable via
-// LastCheckpoint.
-func (s *Tenant) Checkpoint(ts hlc.Timestamp) {
+// RecordCheckpoint is used to record the reconciliation checkpoint, retrievable
+// via LastCheckpoint.
+func (s *Tenant) RecordCheckpoint() {
+	ts := s.Reconciler().Checkpoint()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.lastCheckpoint = ts
@@ -140,6 +142,7 @@ func (s *Tenant) LookupTableByName(
 					CommonLookupFlags: tree.CommonLookupFlags{
 						Required:       true,
 						IncludeOffline: true,
+						AvoidLeased:    true,
 					},
 				},
 			)
@@ -164,6 +167,7 @@ func (s *Tenant) LookupDatabaseByName(
 				tree.DatabaseLookupFlags{
 					Required:       true,
 					IncludeOffline: true,
+					AvoidLeased:    true,
 				},
 			)
 			if err != nil {

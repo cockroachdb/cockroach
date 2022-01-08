@@ -39,17 +39,26 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 54
+const Version execinfrapb.DistSQLVersion = 55
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 52
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 55
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 56 (MinAcceptedVersion: 56)
+	- The Visibility fields from TableReaderSpec, IndexSkipTableReaderSpec,
+	  JoinReaderSpec have been removed.
+
+- Version: 55 (MinAcceptedVersion: 55)
+  - The computation of the hash of JSONs in the vectorized engine has changed.
+    As a result, the hash routing can be now done in a different manner, so we
+    have to bump both versions.
 
 - Version: 54 (MinAcceptedVersion: 52)
   - Field NeededColumns has been removed from the TableReaderSpec. It was being

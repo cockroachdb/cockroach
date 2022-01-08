@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -56,7 +56,6 @@ type rowFetcher interface {
 	PartialKey(int) (roachpb.Key, error)
 	Reset()
 	GetBytesRead() int64
-	NextRowWithErrors(context.Context) (rowenc.EncDatumRow, error)
 	// Close releases any resources held by this fetcher.
 	Close(ctx context.Context)
 }
@@ -70,10 +69,8 @@ func initRowFetcher(
 	colIdxMap catalog.TableColMap,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
-	isCheck bool,
 	mon *mon.BytesMonitor,
-	alloc *rowenc.DatumAlloc,
-	scanVisibility execinfrapb.ScanVisibility,
+	alloc *tree.DatumAlloc,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	withSystemColumns bool,
@@ -92,7 +89,7 @@ func initRowFetcher(
 		IsSecondaryIndex: isSecondaryIndex,
 		ValNeededForCol:  valNeededForCol,
 	}
-	tableArgs.InitCols(desc, scanVisibility, withSystemColumns, virtualColumn)
+	tableArgs.InitCols(desc, withSystemColumns, virtualColumn)
 
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
@@ -101,7 +98,6 @@ func initRowFetcher(
 		lockStrength,
 		lockWaitPolicy,
 		flowCtx.EvalCtx.SessionData().LockTimeout,
-		isCheck,
 		alloc,
 		mon,
 		tableArgs,

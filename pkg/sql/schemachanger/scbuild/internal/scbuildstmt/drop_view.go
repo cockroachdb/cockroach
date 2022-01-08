@@ -28,14 +28,19 @@ func DropView(b BuildCtx, n *tree.DropView) {
 		buildCtx BuildCtx
 	}
 	views := make([]viewDropCtx, 0, len(n.Names))
-	for _, name := range n.Names {
-		_, view := b.ResolveView(name.ToUnresolvedObjectName(), ResolveParams{
+	for idx := range n.Names {
+		name := &n.Names[idx]
+		prefix, view := b.ResolveView(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
 		if view == nil {
+			b.MarkNameAsNonExistent(name)
 			continue
 		}
+		// Mutate the AST to have the fully resolved name from above, which will be
+		// used for both event logging and errors.
+		name.ObjectNamePrefix = prefix.NamePrefix()
 		if view.MaterializedView() && !n.IsMaterialized {
 			panic(errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", view.GetName()),
 				"use the corresponding MATERIALIZED VIEW command"))
@@ -92,13 +97,12 @@ func dropViewDependents(b BuildCtx, view catalog.TableDescriptor, behavior tree.
 			depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(dep.DependedOnBy), tree.ResolveRequireViewDesc)
 			onErrPanic(err)
 			if dependentDesc.GetParentID() != view.GetParentID() {
-				panic(sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
-					name.FQString(), depViewName.FQString()))
-			} else {
-				panic(errors.WithHintf(
-					sqlerrors.NewDependentObjectErrorf("cannot drop view %q because view %q depends on it",
-						name.Object(), depViewName.Object()),
+				panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
+					name.Object(), depViewName.FQString()),
 					"you can drop %s instead.", depViewName.Object()))
+			} else {
+				panic(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
+					name.Object(), depViewName.Object()))
 			}
 		}
 		// Decompose and recursively attempt to drop.

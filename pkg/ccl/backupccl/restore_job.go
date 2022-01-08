@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -415,25 +416,16 @@ func restore(
 		return emptyRowCount, errors.Wrap(err, "resolving locality locations")
 	}
 
+	if err := checkCoverage(restoreCtx, dataToRestore.getSpans(), backupManifests); err != nil {
+		return emptyRowCount, err
+	}
+
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
-	const useSimpleImportSpans = true
-	var importSpans []execinfrapb.RestoreSpanEntry
-	if useSimpleImportSpans {
-		if err := checkCoverage(restoreCtx, dataToRestore.getSpans(), backupManifests); err != nil {
-			return emptyRowCount, err
-		}
-		importSpans = makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
-			highWaterMark)
-	} else {
-		importSpans, _, err = makeImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
-			highWaterMark, errOnMissingRange)
-		if err != nil {
-			return emptyRowCount, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
-		}
-	}
+	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
+		highWaterMark)
 
 	if len(importSpans) == 0 {
 		// There are no files to restore.
@@ -570,14 +562,15 @@ func restore(
 // be broken down into two methods.
 func loadBackupSQLDescs(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	p sql.JobExecContext,
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, BackupManifest, []catalog.Descriptor, error) {
-	backupManifests, err := loadBackupManifests(ctx, details.URIs,
+) ([]BackupManifest, BackupManifest, []catalog.Descriptor, int64, error) {
+	backupManifests, sz, err := loadBackupManifests(ctx, mem, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
 	if err != nil {
-		return nil, BackupManifest{}, nil, err
+		return nil, BackupManifest{}, nil, 0, err
 	}
 
 	allDescs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
@@ -603,9 +596,11 @@ func loadBackupSQLDescs(
 	}
 
 	if err := maybeUpgradeDescriptors(ctx, sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
-		return nil, BackupManifest{}, nil, err
+		mem.Shrink(ctx, sz)
+		return nil, BackupManifest{}, nil, 0, err
 	}
-	return backupManifests, latestBackupManifest, sqlDescs, nil
+
+	return backupManifests, latestBackupManifest, sqlDescs, sz, nil
 }
 
 // restoreResumer should only store a reference to the job it's running. State
@@ -1399,12 +1394,18 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
-	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
-		ctx, p, details, details.Encryption,
+	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+
+	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
+		ctx, &mem, p, details, details.Encryption,
 	)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		mem.Shrink(ctx, memSize)
+	}()
 	// backupCodec is the codec that was used to encode the keys in the backup. It
 	// is the tenant in which the backup was taken.
 	backupCodec := keys.SystemSQLCodec

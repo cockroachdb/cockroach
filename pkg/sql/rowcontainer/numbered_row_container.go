@@ -294,7 +294,7 @@ type numberedDiskRowIterator struct {
 	// EncDatumRow. The top element has the highest nextAccess and is the
 	// best candidate to evict.
 	cacheHeap  cacheMaxNextAccessHeap
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 	rowAlloc   rowenc.EncDatumRowAlloc
 
 	hitCount  int

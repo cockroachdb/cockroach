@@ -14,13 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -28,26 +26,26 @@ import (
 // spanConfigDecoder decodes rows from system.span_configurations. It's not
 // safe for concurrent use.
 type spanConfigDecoder struct {
-	alloc     rowenc.DatumAlloc
-	colIdxMap catalog.TableColMap
+	alloc   tree.DatumAlloc
+	columns []catalog.Column
+	decoder valueside.Decoder
 }
 
 // newSpanConfigDecoder instantiates a spanConfigDecoder.
 func newSpanConfigDecoder() *spanConfigDecoder {
+	columns := systemschema.SpanConfigurationsTable.PublicColumns()
 	return &spanConfigDecoder{
-		colIdxMap: row.ColIDtoRowIndexFromCols(
-			systemschema.SpanConfigurationsTable.PublicColumns(),
-		),
+		columns: columns,
+		decoder: valueside.MakeDecoder(columns),
 	}
 }
 
 // decode a span config entry given a KV from the
 // system.span_configurations table.
 func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (entry roachpb.SpanConfigEntry, _ error) {
-	tbl := systemschema.SpanConfigurationsTable
 	// First we need to decode the start_key field from the index key.
 	{
-		types := []*types.T{tbl.PublicColumns()[0].GetType()}
+		types := []*types.T{sd.columns[0].GetType()}
 		startKeyRow := make([]rowenc.EncDatum, 1)
 		_, matches, _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, types, startKeyRow, nil /* colDirs */, kv.Key)
 		if err != nil {
@@ -69,40 +67,22 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (entry roachpb.SpanConf
 			errors.AssertionFailedf("missing value for start key: %s", entry.Span.Key)
 	}
 
-	// The remaining columns are stored as a family, packed with diff-encoded
-	// column IDs followed by their values.
-	{
-		bytes, err := kv.Value.GetTuple()
-		if err != nil {
-			return roachpb.SpanConfigEntry{}, err
-		}
-		var colIDDiff uint32
-		var lastColID descpb.ColumnID
-		var res tree.Datum
-		for len(bytes) > 0 {
-			_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
-			if err != nil {
-				return roachpb.SpanConfigEntry{}, err
-			}
-			colID := lastColID + descpb.ColumnID(colIDDiff)
-			lastColID = colID
-			if idx, ok := sd.colIdxMap.Get(colID); ok {
-				res, bytes, err = rowenc.DecodeTableValue(&sd.alloc, tbl.PublicColumns()[idx].GetType(), bytes)
-				if err != nil {
-					return roachpb.SpanConfigEntry{}, err
-				}
+	// The remaining columns are stored as a family.
+	bytes, err := kv.Value.GetTuple()
+	if err != nil {
+		return roachpb.SpanConfigEntry{}, err
+	}
 
-				switch colID {
-				case tbl.PublicColumns()[1].GetID(): // end_key
-					entry.Span.EndKey = []byte(tree.MustBeDBytes(res))
-				case tbl.PublicColumns()[2].GetID(): // config
-					if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(res)), &entry.Config); err != nil {
-						return roachpb.SpanConfigEntry{}, err
-					}
-				default:
-					return roachpb.SpanConfigEntry{}, errors.AssertionFailedf("unknown column: %v", colID)
-				}
-			}
+	datums, err := sd.decoder.Decode(&sd.alloc, bytes)
+	if err != nil {
+		return roachpb.SpanConfigEntry{}, err
+	}
+	if endKey := datums[1]; endKey != tree.DNull {
+		entry.Span.EndKey = []byte(tree.MustBeDBytes(endKey))
+	}
+	if config := datums[2]; config != tree.DNull {
+		if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(config)), &entry.Config); err != nil {
+			return roachpb.SpanConfigEntry{}, err
 		}
 	}
 

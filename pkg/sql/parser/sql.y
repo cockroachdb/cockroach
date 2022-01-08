@@ -819,7 +819,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
 %token <str> NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTNULL
-%token <str> NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
@@ -854,7 +854,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIRTUAL VISIBLE VOTERS
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIRTUAL VISIBLE VOTERS
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -1199,7 +1199,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <[]tree.RangePartition> range_partitions
 %type <empty> opt_all_clause
 %type <empty> opt_privileges_clause
-%type <bool> distinct_clause
+%type <bool> distinct_clause opt_with_data
 %type <tree.DistinctOn> distinct_on_clause
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns query_stats_cols
 %type <tree.OrderBy> sort_clause single_sort_clause opt_sort_clause
@@ -7634,7 +7634,7 @@ create_view_stmt:
       Replace: false,
     }
   }
-| CREATE MATERIALIZED VIEW view_name opt_column_list AS select_stmt
+| CREATE MATERIALIZED VIEW view_name opt_column_list AS select_stmt opt_with_data
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
@@ -7644,7 +7644,7 @@ create_view_stmt:
       Materialized: true,
     }
   }
-| CREATE MATERIALIZED VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt
+| CREATE MATERIALIZED VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt opt_with_data
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
@@ -7656,6 +7656,20 @@ create_view_stmt:
     }
   }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
+
+opt_with_data:
+  WITH NO DATA error
+  {
+    return unimplementedWithIssue(sqllex, 74083)
+  }
+| WITH DATA
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = true
+  }
 
 role_option:
   CREATEROLE
@@ -7711,6 +7725,14 @@ role_option:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOVIEWACTIVITY
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| VIEWACTIVITYREDACTED
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| NOVIEWACTIVITYREDACTED
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
@@ -9054,7 +9076,21 @@ on_conflict:
       Where: tree.NewWhere(tree.AstWhere, $11.expr()),
     }
   }
-| ON CONFLICT ON CONSTRAINT constraint_name { return unimplementedWithIssue(sqllex, 28161) }
+| ON CONFLICT ON CONSTRAINT constraint_name DO NOTHING
+  {
+    $$.val = &tree.OnConflict{
+      Constraint: tree.Name($5),
+      DoNothing: true,
+    }
+  }
+| ON CONFLICT ON CONSTRAINT constraint_name DO UPDATE SET set_clause_list opt_where_clause
+  {
+    $$.val = &tree.OnConflict{
+      Constraint: tree.Name($5),
+      Exprs: $9.updateExprs(),
+      Where: tree.NewWhere(tree.AstWhere, $10.expr()),
+    }
+  }
 
 returning_clause:
   RETURNING target_list
@@ -13437,6 +13473,7 @@ unreserved_keyword:
 | NOMODIFYCLUSTERSETTING
 | NONVOTERS
 | NOVIEWACTIVITY
+| NOVIEWACTIVITYREDACTED
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
@@ -13595,6 +13632,7 @@ unreserved_keyword:
 | VARYING
 | VIEW
 | VIEWACTIVITY
+| VIEWACTIVITYREDACTED
 | VISIBLE
 | VOTERS
 | WITHIN

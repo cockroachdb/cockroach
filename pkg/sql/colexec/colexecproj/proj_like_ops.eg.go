@@ -23,12 +23,6 @@ type projPrefixBytesBytesConstOp struct {
 }
 
 func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -80,7 +74,7 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -115,12 +109,6 @@ type projSuffixBytesBytesConstOp struct {
 }
 
 func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -172,7 +160,7 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -207,12 +195,6 @@ type projContainsBytesBytesConstOp struct {
 }
 
 func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -264,7 +246,7 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -299,12 +281,6 @@ type projRegexpBytesBytesConstOp struct {
 }
 
 func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -356,7 +332,7 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -391,12 +367,6 @@ type projNotPrefixBytesBytesConstOp struct {
 }
 
 func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -448,7 +418,7 @@ func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -483,12 +453,6 @@ type projNotSuffixBytesBytesConstOp struct {
 }
 
 func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -540,7 +504,7 @@ func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -575,12 +539,6 @@ type projNotContainsBytesBytesConstOp struct {
 }
 
 func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -632,7 +590,7 @@ func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -667,12 +625,6 @@ type projNotRegexpBytesBytesConstOp struct {
 }
 
 func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -724,7 +676,7 @@ func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]

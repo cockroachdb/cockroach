@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -957,7 +958,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			if err != nil {
 				return err
 			}
-			if descpb.RegionName(member.LogicalRepresentation) == homedRegion {
+			if catpb.RegionName(member.LogicalRepresentation) == homedRegion {
 				return errors.Newf("could not remove enum value %q as it is the home region for table %q",
 					member.LogicalRepresentation, desc.GetName())
 			}
@@ -1073,7 +1074,7 @@ func findUsageOfEnumValueInEncodedPartitioningValue(
 	foundUsage bool,
 	member *descpb.TypeDescriptor_EnumMember,
 ) (bool, error) {
-	var d rowenc.DatumAlloc
+	var d tree.DatumAlloc
 	tuple, _, err := rowenc.DecodePartitionTuple(
 		&d, codec, table, index, partitioning, v, fakePrefixDatums,
 	)

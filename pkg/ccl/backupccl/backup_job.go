@@ -32,13 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -69,53 +69,13 @@ func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
 	return res
 }
 
-// coveringFromSpans creates an interval.Covering with a fixed payload from a
-// slice of roachpb.Spans.
-func coveringFromSpans(spans []roachpb.Span, payload interface{}) covering.Covering {
-	var c covering.Covering
-	for _, span := range spans {
-		c = append(c, covering.Range{
-			Start:   []byte(span.Key),
-			End:     []byte(span.EndKey),
-			Payload: payload,
-		})
-	}
-	return c
-}
-
 // filterSpans returns the spans that represent the set difference
 // (includes - excludes).
 func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Span {
-	type includeMarker struct{}
-	type excludeMarker struct{}
-
-	includeCovering := coveringFromSpans(includes, includeMarker{})
-	excludeCovering := coveringFromSpans(excludes, excludeMarker{})
-
-	splits := covering.OverlapCoveringMerge(
-		[]covering.Covering{includeCovering, excludeCovering},
-	)
-
-	var out []roachpb.Span
-	for _, split := range splits {
-		include := false
-		exclude := false
-		for _, payload := range split.Payload.([]interface{}) {
-			switch payload.(type) {
-			case includeMarker:
-				include = true
-			case excludeMarker:
-				exclude = true
-			}
-		}
-		if include && !exclude {
-			out = append(out, roachpb.Span{
-				Key:    roachpb.Key(split.Start),
-				EndKey: roachpb.Key(split.End),
-			})
-		}
-	}
-	return out
+	var cov roachpb.SpanGroup
+	cov.Add(includes...)
+	cov.Sub(excludes...)
+	return cov.Slice()
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
@@ -461,10 +421,18 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		storageByLocalityKV[kv] = &conf
 	}
 
-	backupManifest, err := b.readManifestOnResume(ctx, p.ExecCfg(), defaultStore, details)
+	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+
+	backupManifest, memSize, err := b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if memSize != 0 {
+			mem.Shrink(ctx, memSize)
+		}
+	}()
 
 	statsCache := p.ExecCfg().TableStatsCache
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
@@ -514,7 +482,9 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
 		var reloadBackupErr error
-		backupManifest, reloadBackupErr = b.readManifestOnResume(ctx, p.ExecCfg(), defaultStore, details)
+		mem.Shrink(ctx, memSize)
+		memSize = 0
+		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details)
 		if reloadBackupErr != nil {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
@@ -631,26 +601,27 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 
 func (b *backupResumer) readManifestOnResume(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	cfg *sql.ExecutorConfig,
 	defaultStore cloud.ExternalStorage,
 	details jobspb.BackupDetails,
-) (*BackupManifest, error) {
+) (*BackupManifest, int64, error) {
 	// We don't read the table descriptors from the backup descriptor, but
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	desc, err := readBackupManifest(ctx, defaultStore, backupManifestCheckpointName,
+	desc, memSize, err := readBackupManifest(ctx, mem, defaultStore, backupManifestCheckpointName,
 		details.EncryptionOptions)
 
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return nil, errors.Wrapf(err, "reading backup checkpoint")
+			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
 		}
 		// Try reading temp checkpoint.
 		tmpCheckpoint := tempCheckpointFileNameForJob(b.job.ID())
-		desc, err = readBackupManifest(ctx, defaultStore, tmpCheckpoint, details.EncryptionOptions)
+		desc, memSize, err = readBackupManifest(ctx, mem, defaultStore, tmpCheckpoint, details.EncryptionOptions)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		// "Rename" temp checkpoint.
@@ -658,7 +629,8 @@ func (b *backupResumer) readManifestOnResume(
 			ctx, cfg.Settings, defaultStore, backupManifestCheckpointName,
 			details.EncryptionOptions, &desc,
 		); err != nil {
-			return nil, errors.Wrapf(err, "renaming temp checkpoint file")
+			mem.Shrink(ctx, memSize)
+			return nil, 0, errors.Wrapf(err, "renaming temp checkpoint file")
 		}
 		// Best effort remove temp checkpoint.
 		if err := defaultStore.Delete(ctx, tmpCheckpoint); err != nil {
@@ -667,10 +639,11 @@ func (b *backupResumer) readManifestOnResume(
 	}
 
 	if !desc.ClusterID.Equal(cfg.ClusterID()) {
-		return nil, errors.Newf("cannot resume backup started on another cluster (%s != %s)",
+		mem.Shrink(ctx, memSize)
+		return nil, 0, errors.Newf("cannot resume backup started on another cluster (%s != %s)",
 			desc.ClusterID, cfg.ClusterID())
 	}
-	return &desc, nil
+	return &desc, memSize, nil
 }
 
 func (b *backupResumer) maybeNotifyScheduledJobCompletion(

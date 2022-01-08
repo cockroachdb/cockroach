@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -40,6 +41,7 @@ var (
 	_ = coldataext.CompareDatum
 	_ sqltelemetry.EnumTelemetryType
 	_ telemetry.Counter
+	_ apd.Context
 )
 
 // projConstOpBase contains all of the fields for projections with a constant,
@@ -49,20 +51,18 @@ var (
 // around the problem we specify it here.
 type projConstOpBase struct {
 	colexecop.OneInputHelper
-	allocator      *colmem.Allocator
-	colIdx         int
-	outputIdx      int
-	overloadHelper execgen.OverloadHelper
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
 }
 
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
 	colexecop.OneInputHelper
-	allocator      *colmem.Allocator
-	col1Idx        int
-	col2Idx        int
-	outputIdx      int
-	overloadHelper execgen.OverloadHelper
+	allocator *colmem.Allocator
+	col1Idx   int
+	col2Idx   int
+	outputIdx int
 }
 
 type projBitandInt16Int16Op struct {
@@ -70,12 +70,6 @@ type projBitandInt16Int16Op struct {
 }
 
 func (p projBitandInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -137,7 +131,7 @@ func (p projBitandInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -180,12 +174,6 @@ type projBitandInt16Int32Op struct {
 }
 
 func (p projBitandInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -247,7 +235,7 @@ func (p projBitandInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -290,12 +278,6 @@ type projBitandInt16Int64Op struct {
 }
 
 func (p projBitandInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -357,7 +339,7 @@ func (p projBitandInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -400,12 +382,6 @@ type projBitandInt32Int16Op struct {
 }
 
 func (p projBitandInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -467,7 +443,7 @@ func (p projBitandInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -510,12 +486,6 @@ type projBitandInt32Int32Op struct {
 }
 
 func (p projBitandInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -577,7 +547,7 @@ func (p projBitandInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -620,12 +590,6 @@ type projBitandInt32Int64Op struct {
 }
 
 func (p projBitandInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -687,7 +651,7 @@ func (p projBitandInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -730,12 +694,6 @@ type projBitandInt64Int16Op struct {
 }
 
 func (p projBitandInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -797,7 +755,7 @@ func (p projBitandInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -840,12 +798,6 @@ type projBitandInt64Int32Op struct {
 }
 
 func (p projBitandInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -907,7 +859,7 @@ func (p projBitandInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -950,12 +902,6 @@ type projBitandInt64Int64Op struct {
 }
 
 func (p projBitandInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1017,7 +963,7 @@ func (p projBitandInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1057,15 +1003,14 @@ func (p projBitandInt64Int64Op) Next() coldata.Batch {
 
 type projBitandDatumDatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projBitandDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1139,7 +1084,7 @@ func (p projBitandDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1194,12 +1139,6 @@ type projBitorInt16Int16Op struct {
 }
 
 func (p projBitorInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1261,7 +1200,7 @@ func (p projBitorInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1304,12 +1243,6 @@ type projBitorInt16Int32Op struct {
 }
 
 func (p projBitorInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1371,7 +1304,7 @@ func (p projBitorInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1414,12 +1347,6 @@ type projBitorInt16Int64Op struct {
 }
 
 func (p projBitorInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1481,7 +1408,7 @@ func (p projBitorInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1524,12 +1451,6 @@ type projBitorInt32Int16Op struct {
 }
 
 func (p projBitorInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1591,7 +1512,7 @@ func (p projBitorInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1634,12 +1555,6 @@ type projBitorInt32Int32Op struct {
 }
 
 func (p projBitorInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1701,7 +1616,7 @@ func (p projBitorInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1744,12 +1659,6 @@ type projBitorInt32Int64Op struct {
 }
 
 func (p projBitorInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1811,7 +1720,7 @@ func (p projBitorInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1854,12 +1763,6 @@ type projBitorInt64Int16Op struct {
 }
 
 func (p projBitorInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1921,7 +1824,7 @@ func (p projBitorInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1964,12 +1867,6 @@ type projBitorInt64Int32Op struct {
 }
 
 func (p projBitorInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2031,7 +1928,7 @@ func (p projBitorInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2074,12 +1971,6 @@ type projBitorInt64Int64Op struct {
 }
 
 func (p projBitorInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2141,7 +2032,7 @@ func (p projBitorInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2181,15 +2072,14 @@ func (p projBitorInt64Int64Op) Next() coldata.Batch {
 
 type projBitorDatumDatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projBitorDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2263,7 +2153,7 @@ func (p projBitorDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2318,12 +2208,6 @@ type projBitxorInt16Int16Op struct {
 }
 
 func (p projBitxorInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2385,7 +2269,7 @@ func (p projBitxorInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2428,12 +2312,6 @@ type projBitxorInt16Int32Op struct {
 }
 
 func (p projBitxorInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2495,7 +2373,7 @@ func (p projBitxorInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2538,12 +2416,6 @@ type projBitxorInt16Int64Op struct {
 }
 
 func (p projBitxorInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2605,7 +2477,7 @@ func (p projBitxorInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2648,12 +2520,6 @@ type projBitxorInt32Int16Op struct {
 }
 
 func (p projBitxorInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2715,7 +2581,7 @@ func (p projBitxorInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2758,12 +2624,6 @@ type projBitxorInt32Int32Op struct {
 }
 
 func (p projBitxorInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2825,7 +2685,7 @@ func (p projBitxorInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2868,12 +2728,6 @@ type projBitxorInt32Int64Op struct {
 }
 
 func (p projBitxorInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2935,7 +2789,7 @@ func (p projBitxorInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2978,12 +2832,6 @@ type projBitxorInt64Int16Op struct {
 }
 
 func (p projBitxorInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3045,7 +2893,7 @@ func (p projBitxorInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3088,12 +2936,6 @@ type projBitxorInt64Int32Op struct {
 }
 
 func (p projBitxorInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3155,7 +2997,7 @@ func (p projBitxorInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3198,12 +3040,6 @@ type projBitxorInt64Int64Op struct {
 }
 
 func (p projBitxorInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3265,7 +3101,7 @@ func (p projBitxorInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3305,15 +3141,14 @@ func (p projBitxorInt64Int64Op) Next() coldata.Batch {
 
 type projBitxorDatumDatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projBitxorDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3387,7 +3222,7 @@ func (p projBitxorDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3442,12 +3277,6 @@ type projPlusDecimalInt16Op struct {
 }
 
 func (p projPlusDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3484,9 +3313,9 @@ func (p projPlusDecimalInt16Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -3508,9 +3337,9 @@ func (p projPlusDecimalInt16Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -3523,7 +3352,7 @@ func (p projPlusDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3533,9 +3362,9 @@ func (p projPlusDecimalInt16Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -3553,9 +3382,9 @@ func (p projPlusDecimalInt16Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -3580,12 +3409,6 @@ type projPlusDecimalInt32Op struct {
 }
 
 func (p projPlusDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3622,9 +3445,9 @@ func (p projPlusDecimalInt32Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -3646,9 +3469,9 @@ func (p projPlusDecimalInt32Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -3661,7 +3484,7 @@ func (p projPlusDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3671,9 +3494,9 @@ func (p projPlusDecimalInt32Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -3691,9 +3514,9 @@ func (p projPlusDecimalInt32Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -3718,12 +3541,6 @@ type projPlusDecimalInt64Op struct {
 }
 
 func (p projPlusDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3760,9 +3577,9 @@ func (p projPlusDecimalInt64Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -3784,9 +3601,9 @@ func (p projPlusDecimalInt64Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -3799,7 +3616,7 @@ func (p projPlusDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3809,9 +3626,9 @@ func (p projPlusDecimalInt64Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -3829,9 +3646,9 @@ func (p projPlusDecimalInt64Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Add(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -3856,12 +3673,6 @@ type projPlusDecimalDecimalOp struct {
 }
 
 func (p projPlusDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3935,7 +3746,7 @@ func (p projPlusDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3990,12 +3801,6 @@ type projPlusInt16Int16Op struct {
 }
 
 func (p projPlusInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4069,7 +3874,7 @@ func (p projPlusInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4124,12 +3929,6 @@ type projPlusInt16Int32Op struct {
 }
 
 func (p projPlusInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4203,7 +4002,7 @@ func (p projPlusInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4258,12 +4057,6 @@ type projPlusInt16Int64Op struct {
 }
 
 func (p projPlusInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4337,7 +4130,7 @@ func (p projPlusInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4392,12 +4185,6 @@ type projPlusInt16DecimalOp struct {
 }
 
 func (p projPlusInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4434,9 +4221,9 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -4459,9 +4246,9 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -4475,7 +4262,7 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4485,9 +4272,9 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -4506,9 +4293,9 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -4531,15 +4318,14 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 
 type projPlusInt16DatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projPlusInt16DatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4622,7 +4408,7 @@ func (p projPlusInt16DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4686,12 +4472,6 @@ type projPlusInt32Int16Op struct {
 }
 
 func (p projPlusInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4765,7 +4545,7 @@ func (p projPlusInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4820,12 +4600,6 @@ type projPlusInt32Int32Op struct {
 }
 
 func (p projPlusInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4899,7 +4673,7 @@ func (p projPlusInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4954,12 +4728,6 @@ type projPlusInt32Int64Op struct {
 }
 
 func (p projPlusInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5033,7 +4801,7 @@ func (p projPlusInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5088,12 +4856,6 @@ type projPlusInt32DecimalOp struct {
 }
 
 func (p projPlusInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5130,9 +4892,9 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -5155,9 +4917,9 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -5171,7 +4933,7 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5181,9 +4943,9 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -5202,9 +4964,9 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -5227,15 +4989,14 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 
 type projPlusInt32DatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projPlusInt32DatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5318,7 +5079,7 @@ func (p projPlusInt32DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5382,12 +5143,6 @@ type projPlusInt64Int16Op struct {
 }
 
 func (p projPlusInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5461,7 +5216,7 @@ func (p projPlusInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5516,12 +5271,6 @@ type projPlusInt64Int32Op struct {
 }
 
 func (p projPlusInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5595,7 +5344,7 @@ func (p projPlusInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5650,12 +5399,6 @@ type projPlusInt64Int64Op struct {
 }
 
 func (p projPlusInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5729,7 +5472,7 @@ func (p projPlusInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5784,12 +5527,6 @@ type projPlusInt64DecimalOp struct {
 }
 
 func (p projPlusInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5826,9 +5563,9 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -5851,9 +5588,9 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -5867,7 +5604,7 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5877,9 +5614,9 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -5898,9 +5635,9 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Add(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Add(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -5923,15 +5660,14 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 
 type projPlusInt64DatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projPlusInt64DatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6014,7 +5750,7 @@ func (p projPlusInt64DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6078,12 +5814,6 @@ type projPlusFloat64Float64Op struct {
 }
 
 func (p projPlusFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6151,7 +5881,7 @@ func (p projPlusFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6200,12 +5930,6 @@ type projPlusTimestampIntervalOp struct {
 }
 
 func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6273,7 +5997,7 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6322,12 +6046,6 @@ type projPlusIntervalTimestampOp struct {
 }
 
 func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6395,7 +6113,7 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6444,12 +6162,6 @@ type projPlusIntervalIntervalOp struct {
 }
 
 func (p projPlusIntervalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6507,7 +6219,7 @@ func (p projPlusIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6543,15 +6255,14 @@ func (p projPlusIntervalIntervalOp) Next() coldata.Batch {
 
 type projPlusIntervalDatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projPlusIntervalDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6634,7 +6345,7 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6695,15 +6406,14 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 
 type projPlusDatumIntervalOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projPlusDatumIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6786,7 +6496,7 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6847,15 +6557,14 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 
 type projPlusDatumInt16Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projPlusDatumInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6938,7 +6647,7 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6999,15 +6708,14 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 
 type projPlusDatumInt32Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projPlusDatumInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7090,7 +6798,7 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7151,15 +6859,14 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 
 type projPlusDatumInt64Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projPlusDatumInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7242,7 +6949,7 @@ func (p projPlusDatumInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7306,12 +7013,6 @@ type projMinusDecimalInt16Op struct {
 }
 
 func (p projMinusDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7348,9 +7049,9 @@ func (p projMinusDecimalInt16Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -7372,9 +7073,9 @@ func (p projMinusDecimalInt16Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -7387,7 +7088,7 @@ func (p projMinusDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7397,9 +7098,9 @@ func (p projMinusDecimalInt16Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -7417,9 +7118,9 @@ func (p projMinusDecimalInt16Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -7444,12 +7145,6 @@ type projMinusDecimalInt32Op struct {
 }
 
 func (p projMinusDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7486,9 +7181,9 @@ func (p projMinusDecimalInt32Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -7510,9 +7205,9 @@ func (p projMinusDecimalInt32Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -7525,7 +7220,7 @@ func (p projMinusDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7535,9 +7230,9 @@ func (p projMinusDecimalInt32Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -7555,9 +7250,9 @@ func (p projMinusDecimalInt32Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -7582,12 +7277,6 @@ type projMinusDecimalInt64Op struct {
 }
 
 func (p projMinusDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7624,9 +7313,9 @@ func (p projMinusDecimalInt64Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -7648,9 +7337,9 @@ func (p projMinusDecimalInt64Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -7663,7 +7352,7 @@ func (p projMinusDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7673,9 +7362,9 @@ func (p projMinusDecimalInt64Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -7693,9 +7382,9 @@ func (p projMinusDecimalInt64Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Sub(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -7720,12 +7409,6 @@ type projMinusDecimalDecimalOp struct {
 }
 
 func (p projMinusDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7799,7 +7482,7 @@ func (p projMinusDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7854,12 +7537,6 @@ type projMinusInt16Int16Op struct {
 }
 
 func (p projMinusInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7933,7 +7610,7 @@ func (p projMinusInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7988,12 +7665,6 @@ type projMinusInt16Int32Op struct {
 }
 
 func (p projMinusInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8067,7 +7738,7 @@ func (p projMinusInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8122,12 +7793,6 @@ type projMinusInt16Int64Op struct {
 }
 
 func (p projMinusInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8201,7 +7866,7 @@ func (p projMinusInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8256,12 +7921,6 @@ type projMinusInt16DecimalOp struct {
 }
 
 func (p projMinusInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8298,9 +7957,9 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8323,9 +7982,9 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -8339,7 +7998,7 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8349,9 +8008,9 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -8370,9 +8029,9 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -8395,15 +8054,14 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 
 type projMinusInt16DatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusInt16DatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8486,7 +8144,7 @@ func (p projMinusInt16DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8550,12 +8208,6 @@ type projMinusInt32Int16Op struct {
 }
 
 func (p projMinusInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8629,7 +8281,7 @@ func (p projMinusInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8684,12 +8336,6 @@ type projMinusInt32Int32Op struct {
 }
 
 func (p projMinusInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8763,7 +8409,7 @@ func (p projMinusInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8818,12 +8464,6 @@ type projMinusInt32Int64Op struct {
 }
 
 func (p projMinusInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8897,7 +8537,7 @@ func (p projMinusInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8952,12 +8592,6 @@ type projMinusInt32DecimalOp struct {
 }
 
 func (p projMinusInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8994,9 +8628,9 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -9019,9 +8653,9 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -9035,7 +8669,7 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9045,9 +8679,9 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -9066,9 +8700,9 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -9091,15 +8725,14 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 
 type projMinusInt32DatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusInt32DatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9182,7 +8815,7 @@ func (p projMinusInt32DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9246,12 +8879,6 @@ type projMinusInt64Int16Op struct {
 }
 
 func (p projMinusInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9325,7 +8952,7 @@ func (p projMinusInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9380,12 +9007,6 @@ type projMinusInt64Int32Op struct {
 }
 
 func (p projMinusInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9459,7 +9080,7 @@ func (p projMinusInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9514,12 +9135,6 @@ type projMinusInt64Int64Op struct {
 }
 
 func (p projMinusInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9593,7 +9208,7 @@ func (p projMinusInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9648,12 +9263,6 @@ type projMinusInt64DecimalOp struct {
 }
 
 func (p projMinusInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9690,9 +9299,9 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -9715,9 +9324,9 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -9731,7 +9340,7 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9741,9 +9350,9 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -9762,9 +9371,9 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Sub(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Sub(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -9787,15 +9396,14 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 
 type projMinusInt64DatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusInt64DatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9878,7 +9486,7 @@ func (p projMinusInt64DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9942,12 +9550,6 @@ type projMinusFloat64Float64Op struct {
 }
 
 func (p projMinusFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10015,7 +9617,7 @@ func (p projMinusFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10064,12 +9666,6 @@ type projMinusTimestampTimestampOp struct {
 }
 
 func (p projMinusTimestampTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10133,7 +9729,7 @@ func (p projMinusTimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10178,12 +9774,6 @@ type projMinusTimestampIntervalOp struct {
 }
 
 func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10251,7 +9841,7 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10300,12 +9890,6 @@ type projMinusIntervalIntervalOp struct {
 }
 
 func (p projMinusIntervalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10363,7 +9947,7 @@ func (p projMinusIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10399,15 +9983,14 @@ func (p projMinusIntervalIntervalOp) Next() coldata.Batch {
 
 type projMinusIntervalDatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusIntervalDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10490,7 +10073,7 @@ func (p projMinusIntervalDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10554,12 +10137,6 @@ type projMinusJSONBytesOp struct {
 }
 
 func (p projMinusJSONBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10633,7 +10210,7 @@ func (p projMinusJSONBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10688,12 +10265,6 @@ type projMinusJSONInt16Op struct {
 }
 
 func (p projMinusJSONInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10760,7 +10331,7 @@ func (p projMinusJSONInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10808,12 +10379,6 @@ type projMinusJSONInt32Op struct {
 }
 
 func (p projMinusJSONInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10880,7 +10445,7 @@ func (p projMinusJSONInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10928,12 +10493,6 @@ type projMinusJSONInt64Op struct {
 }
 
 func (p projMinusJSONInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11000,7 +10559,7 @@ func (p projMinusJSONInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11045,15 +10604,14 @@ func (p projMinusJSONInt64Op) Next() coldata.Batch {
 
 type projMinusDatumDatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11127,7 +10685,7 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11179,15 +10737,14 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 
 type projMinusDatumIntervalOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusDatumIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11270,7 +10827,7 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11331,15 +10888,14 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 
 type projMinusDatumBytesOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusDatumBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11421,7 +10977,7 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11481,15 +11037,14 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 
 type projMinusDatumInt16Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusDatumInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11572,7 +11127,7 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11633,15 +11188,14 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 
 type projMinusDatumInt32Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusDatumInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11724,7 +11278,7 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11785,15 +11339,14 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 
 type projMinusDatumInt64Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projMinusDatumInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11876,7 +11429,7 @@ func (p projMinusDatumInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11940,12 +11493,6 @@ type projMultDecimalInt16Op struct {
 }
 
 func (p projMultDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11982,9 +11529,9 @@ func (p projMultDecimalInt16Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -12006,9 +11553,9 @@ func (p projMultDecimalInt16Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -12021,7 +11568,7 @@ func (p projMultDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12031,9 +11578,9 @@ func (p projMultDecimalInt16Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -12051,9 +11598,9 @@ func (p projMultDecimalInt16Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -12078,12 +11625,6 @@ type projMultDecimalInt32Op struct {
 }
 
 func (p projMultDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12120,9 +11661,9 @@ func (p projMultDecimalInt32Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -12144,9 +11685,9 @@ func (p projMultDecimalInt32Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -12159,7 +11700,7 @@ func (p projMultDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12169,9 +11710,9 @@ func (p projMultDecimalInt32Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -12189,9 +11730,9 @@ func (p projMultDecimalInt32Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -12216,12 +11757,6 @@ type projMultDecimalInt64Op struct {
 }
 
 func (p projMultDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12258,9 +11793,9 @@ func (p projMultDecimalInt64Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -12282,9 +11817,9 @@ func (p projMultDecimalInt64Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -12297,7 +11832,7 @@ func (p projMultDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12307,9 +11842,9 @@ func (p projMultDecimalInt64Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -12327,9 +11862,9 @@ func (p projMultDecimalInt64Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.ExactCtx.Mul(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -12354,12 +11889,6 @@ type projMultDecimalDecimalOp struct {
 }
 
 func (p projMultDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12433,7 +11962,7 @@ func (p projMultDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12488,12 +12017,6 @@ type projMultDecimalIntervalOp struct {
 }
 
 func (p projMultDecimalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12561,7 +12084,7 @@ func (p projMultDecimalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12610,12 +12133,6 @@ type projMultInt16Int16Op struct {
 }
 
 func (p projMultInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12705,7 +12222,7 @@ func (p projMultInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12776,12 +12293,6 @@ type projMultInt16Int32Op struct {
 }
 
 func (p projMultInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12871,7 +12382,7 @@ func (p projMultInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12942,12 +12453,6 @@ type projMultInt16Int64Op struct {
 }
 
 func (p projMultInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13037,7 +12542,7 @@ func (p projMultInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13108,12 +12613,6 @@ type projMultInt16DecimalOp struct {
 }
 
 func (p projMultInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13150,9 +12649,9 @@ func (p projMultInt16DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -13175,9 +12674,9 @@ func (p projMultInt16DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -13191,7 +12690,7 @@ func (p projMultInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13201,9 +12700,9 @@ func (p projMultInt16DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -13222,9 +12721,9 @@ func (p projMultInt16DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -13250,12 +12749,6 @@ type projMultInt16IntervalOp struct {
 }
 
 func (p projMultInt16IntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13313,7 +12806,7 @@ func (p projMultInt16IntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13352,12 +12845,6 @@ type projMultInt32Int16Op struct {
 }
 
 func (p projMultInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13447,7 +12934,7 @@ func (p projMultInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13518,12 +13005,6 @@ type projMultInt32Int32Op struct {
 }
 
 func (p projMultInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13613,7 +13094,7 @@ func (p projMultInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13684,12 +13165,6 @@ type projMultInt32Int64Op struct {
 }
 
 func (p projMultInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13779,7 +13254,7 @@ func (p projMultInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13850,12 +13325,6 @@ type projMultInt32DecimalOp struct {
 }
 
 func (p projMultInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13892,9 +13361,9 @@ func (p projMultInt32DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -13917,9 +13386,9 @@ func (p projMultInt32DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -13933,7 +13402,7 @@ func (p projMultInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13943,9 +13412,9 @@ func (p projMultInt32DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -13964,9 +13433,9 @@ func (p projMultInt32DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -13992,12 +13461,6 @@ type projMultInt32IntervalOp struct {
 }
 
 func (p projMultInt32IntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14055,7 +13518,7 @@ func (p projMultInt32IntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14094,12 +13557,6 @@ type projMultInt64Int16Op struct {
 }
 
 func (p projMultInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14189,7 +13646,7 @@ func (p projMultInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14260,12 +13717,6 @@ type projMultInt64Int32Op struct {
 }
 
 func (p projMultInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14355,7 +13806,7 @@ func (p projMultInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14426,12 +13877,6 @@ type projMultInt64Int64Op struct {
 }
 
 func (p projMultInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14521,7 +13966,7 @@ func (p projMultInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14592,12 +14037,6 @@ type projMultInt64DecimalOp struct {
 }
 
 func (p projMultInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14634,9 +14073,9 @@ func (p projMultInt64DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -14659,9 +14098,9 @@ func (p projMultInt64DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+							_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -14675,7 +14114,7 @@ func (p projMultInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14685,9 +14124,9 @@ func (p projMultInt64DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -14706,9 +14145,9 @@ func (p projMultInt64DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.ExactCtx.Mul(&projCol[i], tmpDec, &arg2)
+						_, err := tree.ExactCtx.Mul(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -14734,12 +14173,6 @@ type projMultInt64IntervalOp struct {
 }
 
 func (p projMultInt64IntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14797,7 +14230,7 @@ func (p projMultInt64IntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14836,12 +14269,6 @@ type projMultFloat64Float64Op struct {
 }
 
 func (p projMultFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14909,7 +14336,7 @@ func (p projMultFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14958,12 +14385,6 @@ type projMultFloat64IntervalOp struct {
 }
 
 func (p projMultFloat64IntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15021,7 +14442,7 @@ func (p projMultFloat64IntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15060,12 +14481,6 @@ type projMultIntervalInt16Op struct {
 }
 
 func (p projMultIntervalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15123,7 +14538,7 @@ func (p projMultIntervalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15162,12 +14577,6 @@ type projMultIntervalInt32Op struct {
 }
 
 func (p projMultIntervalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15225,7 +14634,7 @@ func (p projMultIntervalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15264,12 +14673,6 @@ type projMultIntervalInt64Op struct {
 }
 
 func (p projMultIntervalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15327,7 +14730,7 @@ func (p projMultIntervalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15366,12 +14769,6 @@ type projMultIntervalFloat64Op struct {
 }
 
 func (p projMultIntervalFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15429,7 +14826,7 @@ func (p projMultIntervalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15468,12 +14865,6 @@ type projMultIntervalDecimalOp struct {
 }
 
 func (p projMultIntervalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15541,7 +14932,7 @@ func (p projMultIntervalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15590,12 +14981,6 @@ type projDivDecimalInt16Op struct {
 }
 
 func (p projDivDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15636,9 +15021,9 @@ func (p projDivDecimalInt16Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -15664,9 +15049,9 @@ func (p projDivDecimalInt16Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -15679,7 +15064,7 @@ func (p projDivDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15693,9 +15078,9 @@ func (p projDivDecimalInt16Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -15717,9 +15102,9 @@ func (p projDivDecimalInt16Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -15744,12 +15129,6 @@ type projDivDecimalInt32Op struct {
 }
 
 func (p projDivDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15790,9 +15169,9 @@ func (p projDivDecimalInt32Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -15818,9 +15197,9 @@ func (p projDivDecimalInt32Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -15833,7 +15212,7 @@ func (p projDivDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15847,9 +15226,9 @@ func (p projDivDecimalInt32Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -15871,9 +15250,9 @@ func (p projDivDecimalInt32Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -15898,12 +15277,6 @@ type projDivDecimalInt64Op struct {
 }
 
 func (p projDivDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15944,9 +15317,9 @@ func (p projDivDecimalInt64Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -15972,9 +15345,9 @@ func (p projDivDecimalInt64Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -15987,7 +15360,7 @@ func (p projDivDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16001,9 +15374,9 @@ func (p projDivDecimalInt64Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16025,9 +15398,9 @@ func (p projDivDecimalInt64Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16052,12 +15425,6 @@ type projDivDecimalDecimalOp struct {
 }
 
 func (p projDivDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16139,7 +15506,7 @@ func (p projDivDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16202,12 +15569,6 @@ type projDivInt16Int16Op struct {
 }
 
 func (p projDivInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16246,10 +15607,10 @@ func (p projDivInt16Int16Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -16273,10 +15634,10 @@ func (p projDivInt16Int16Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -16289,7 +15650,7 @@ func (p projDivInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16301,10 +15662,10 @@ func (p projDivInt16Int16Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16324,10 +15685,10 @@ func (p projDivInt16Int16Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16352,12 +15713,6 @@ type projDivInt16Int32Op struct {
 }
 
 func (p projDivInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16396,10 +15751,10 @@ func (p projDivInt16Int32Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -16423,10 +15778,10 @@ func (p projDivInt16Int32Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -16439,7 +15794,7 @@ func (p projDivInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16451,10 +15806,10 @@ func (p projDivInt16Int32Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16474,10 +15829,10 @@ func (p projDivInt16Int32Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16502,12 +15857,6 @@ type projDivInt16Int64Op struct {
 }
 
 func (p projDivInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16546,10 +15895,10 @@ func (p projDivInt16Int64Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -16573,10 +15922,10 @@ func (p projDivInt16Int64Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -16589,7 +15938,7 @@ func (p projDivInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16601,10 +15950,10 @@ func (p projDivInt16Int64Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16624,10 +15973,10 @@ func (p projDivInt16Int64Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16652,12 +16001,6 @@ type projDivInt16DecimalOp struct {
 }
 
 func (p projDivInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16698,9 +16041,9 @@ func (p projDivInt16DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -16727,9 +16070,9 @@ func (p projDivInt16DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -16743,7 +16086,7 @@ func (p projDivInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16757,9 +16100,9 @@ func (p projDivInt16DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -16782,9 +16125,9 @@ func (p projDivInt16DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -16810,12 +16153,6 @@ type projDivInt32Int16Op struct {
 }
 
 func (p projDivInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16854,10 +16191,10 @@ func (p projDivInt32Int16Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -16881,10 +16218,10 @@ func (p projDivInt32Int16Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -16897,7 +16234,7 @@ func (p projDivInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16909,10 +16246,10 @@ func (p projDivInt32Int16Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16932,10 +16269,10 @@ func (p projDivInt32Int16Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -16960,12 +16297,6 @@ type projDivInt32Int32Op struct {
 }
 
 func (p projDivInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17004,10 +16335,10 @@ func (p projDivInt32Int32Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17031,10 +16362,10 @@ func (p projDivInt32Int32Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17047,7 +16378,7 @@ func (p projDivInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17059,10 +16390,10 @@ func (p projDivInt32Int32Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17082,10 +16413,10 @@ func (p projDivInt32Int32Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17110,12 +16441,6 @@ type projDivInt32Int64Op struct {
 }
 
 func (p projDivInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17154,10 +16479,10 @@ func (p projDivInt32Int64Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17181,10 +16506,10 @@ func (p projDivInt32Int64Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17197,7 +16522,7 @@ func (p projDivInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17209,10 +16534,10 @@ func (p projDivInt32Int64Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17232,10 +16557,10 @@ func (p projDivInt32Int64Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17260,12 +16585,6 @@ type projDivInt32DecimalOp struct {
 }
 
 func (p projDivInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17306,9 +16625,9 @@ func (p projDivInt32DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -17335,9 +16654,9 @@ func (p projDivInt32DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -17351,7 +16670,7 @@ func (p projDivInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17365,9 +16684,9 @@ func (p projDivInt32DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -17390,9 +16709,9 @@ func (p projDivInt32DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -17418,12 +16737,6 @@ type projDivInt64Int16Op struct {
 }
 
 func (p projDivInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17462,10 +16775,10 @@ func (p projDivInt64Int16Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17489,10 +16802,10 @@ func (p projDivInt64Int16Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17505,7 +16818,7 @@ func (p projDivInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17517,10 +16830,10 @@ func (p projDivInt64Int16Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17540,10 +16853,10 @@ func (p projDivInt64Int16Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17568,12 +16881,6 @@ type projDivInt64Int32Op struct {
 }
 
 func (p projDivInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17612,10 +16919,10 @@ func (p projDivInt64Int32Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17639,10 +16946,10 @@ func (p projDivInt64Int32Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17655,7 +16962,7 @@ func (p projDivInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17667,10 +16974,10 @@ func (p projDivInt64Int32Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17690,10 +16997,10 @@ func (p projDivInt64Int32Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17718,12 +17025,6 @@ type projDivInt64Int64Op struct {
 }
 
 func (p projDivInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17762,10 +17063,10 @@ func (p projDivInt64Int64Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17789,10 +17090,10 @@ func (p projDivInt64Int64Op) Next() coldata.Batch {
 							if int64(arg2) == 0 {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -17805,7 +17106,7 @@ func (p projDivInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17817,10 +17118,10 @@ func (p projDivInt64Int64Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17840,10 +17141,10 @@ func (p projDivInt64Int64Op) Next() coldata.Batch {
 						if int64(arg2) == 0 {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Quo(&projCol[i], leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Quo(&projCol[i], &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -17868,12 +17169,6 @@ type projDivInt64DecimalOp struct {
 }
 
 func (p projDivInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17914,9 +17209,9 @@ func (p projDivInt64DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -17943,9 +17238,9 @@ func (p projDivInt64DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -17959,7 +17254,7 @@ func (p projDivInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17973,9 +17268,9 @@ func (p projDivInt64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -17998,9 +17293,9 @@ func (p projDivInt64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Quo(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Quo(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -18026,12 +17321,6 @@ type projDivFloat64Float64Op struct {
 }
 
 func (p projDivFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18107,7 +17396,7 @@ func (p projDivFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18164,12 +17453,6 @@ type projDivIntervalInt64Op struct {
 }
 
 func (p projDivIntervalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18235,7 +17518,7 @@ func (p projDivIntervalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18282,12 +17565,6 @@ type projDivIntervalFloat64Op struct {
 }
 
 func (p projDivIntervalFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18353,7 +17630,7 @@ func (p projDivIntervalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18400,12 +17677,6 @@ type projFloorDivDecimalInt16Op struct {
 }
 
 func (p projFloorDivDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18446,9 +17717,9 @@ func (p projFloorDivDecimalInt16Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -18474,9 +17745,9 @@ func (p projFloorDivDecimalInt16Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -18489,7 +17760,7 @@ func (p projFloorDivDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18503,9 +17774,9 @@ func (p projFloorDivDecimalInt16Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -18527,9 +17798,9 @@ func (p projFloorDivDecimalInt16Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -18554,12 +17825,6 @@ type projFloorDivDecimalInt32Op struct {
 }
 
 func (p projFloorDivDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18600,9 +17865,9 @@ func (p projFloorDivDecimalInt32Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -18628,9 +17893,9 @@ func (p projFloorDivDecimalInt32Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -18643,7 +17908,7 @@ func (p projFloorDivDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18657,9 +17922,9 @@ func (p projFloorDivDecimalInt32Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -18681,9 +17946,9 @@ func (p projFloorDivDecimalInt32Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -18708,12 +17973,6 @@ type projFloorDivDecimalInt64Op struct {
 }
 
 func (p projFloorDivDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18754,9 +18013,9 @@ func (p projFloorDivDecimalInt64Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -18782,9 +18041,9 @@ func (p projFloorDivDecimalInt64Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -18797,7 +18056,7 @@ func (p projFloorDivDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18811,9 +18070,9 @@ func (p projFloorDivDecimalInt64Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -18835,9 +18094,9 @@ func (p projFloorDivDecimalInt64Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -18862,12 +18121,6 @@ type projFloorDivDecimalDecimalOp struct {
 }
 
 func (p projFloorDivDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18949,7 +18202,7 @@ func (p projFloorDivDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19012,12 +18265,6 @@ type projFloorDivInt16Int16Op struct {
 }
 
 func (p projFloorDivInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19089,7 +18336,7 @@ func (p projFloorDivInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19142,12 +18389,6 @@ type projFloorDivInt16Int32Op struct {
 }
 
 func (p projFloorDivInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19219,7 +18460,7 @@ func (p projFloorDivInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19272,12 +18513,6 @@ type projFloorDivInt16Int64Op struct {
 }
 
 func (p projFloorDivInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19349,7 +18584,7 @@ func (p projFloorDivInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19402,12 +18637,6 @@ type projFloorDivInt16DecimalOp struct {
 }
 
 func (p projFloorDivInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19448,9 +18677,9 @@ func (p projFloorDivInt16DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -19477,9 +18706,9 @@ func (p projFloorDivInt16DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -19493,7 +18722,7 @@ func (p projFloorDivInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19507,9 +18736,9 @@ func (p projFloorDivInt16DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -19532,9 +18761,9 @@ func (p projFloorDivInt16DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -19560,12 +18789,6 @@ type projFloorDivInt32Int16Op struct {
 }
 
 func (p projFloorDivInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19637,7 +18860,7 @@ func (p projFloorDivInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19690,12 +18913,6 @@ type projFloorDivInt32Int32Op struct {
 }
 
 func (p projFloorDivInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19767,7 +18984,7 @@ func (p projFloorDivInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19820,12 +19037,6 @@ type projFloorDivInt32Int64Op struct {
 }
 
 func (p projFloorDivInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19897,7 +19108,7 @@ func (p projFloorDivInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19950,12 +19161,6 @@ type projFloorDivInt32DecimalOp struct {
 }
 
 func (p projFloorDivInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19996,9 +19201,9 @@ func (p projFloorDivInt32DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20025,9 +19230,9 @@ func (p projFloorDivInt32DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20041,7 +19246,7 @@ func (p projFloorDivInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20055,9 +19260,9 @@ func (p projFloorDivInt32DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -20080,9 +19285,9 @@ func (p projFloorDivInt32DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -20108,12 +19313,6 @@ type projFloorDivInt64Int16Op struct {
 }
 
 func (p projFloorDivInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20185,7 +19384,7 @@ func (p projFloorDivInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20238,12 +19437,6 @@ type projFloorDivInt64Int32Op struct {
 }
 
 func (p projFloorDivInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20315,7 +19508,7 @@ func (p projFloorDivInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20368,12 +19561,6 @@ type projFloorDivInt64Int64Op struct {
 }
 
 func (p projFloorDivInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20445,7 +19632,7 @@ func (p projFloorDivInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20498,12 +19685,6 @@ type projFloorDivInt64DecimalOp struct {
 }
 
 func (p projFloorDivInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20544,9 +19725,9 @@ func (p projFloorDivInt64DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20573,9 +19754,9 @@ func (p projFloorDivInt64DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -20589,7 +19770,7 @@ func (p projFloorDivInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20603,9 +19784,9 @@ func (p projFloorDivInt64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -20628,9 +19809,9 @@ func (p projFloorDivInt64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.QuoInteger(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -20656,12 +19837,6 @@ type projFloorDivFloat64Float64Op struct {
 }
 
 func (p projFloorDivFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20737,7 +19912,7 @@ func (p projFloorDivFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20794,12 +19969,6 @@ type projModDecimalInt16Op struct {
 }
 
 func (p projModDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20840,9 +20009,9 @@ func (p projModDecimalInt16Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -20868,9 +20037,9 @@ func (p projModDecimalInt16Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -20883,7 +20052,7 @@ func (p projModDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20897,9 +20066,9 @@ func (p projModDecimalInt16Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -20921,9 +20090,9 @@ func (p projModDecimalInt16Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -20948,12 +20117,6 @@ type projModDecimalInt32Op struct {
 }
 
 func (p projModDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20994,9 +20157,9 @@ func (p projModDecimalInt32Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -21022,9 +20185,9 @@ func (p projModDecimalInt32Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -21037,7 +20200,7 @@ func (p projModDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21051,9 +20214,9 @@ func (p projModDecimalInt32Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -21075,9 +20238,9 @@ func (p projModDecimalInt32Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -21102,12 +20265,6 @@ type projModDecimalInt64Op struct {
 }
 
 func (p projModDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21148,9 +20305,9 @@ func (p projModDecimalInt64Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -21176,9 +20333,9 @@ func (p projModDecimalInt64Op) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -21191,7 +20348,7 @@ func (p projModDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21205,9 +20362,9 @@ func (p projModDecimalInt64Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -21229,9 +20386,9 @@ func (p projModDecimalInt64Op) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.HighPrecisionCtx.Rem(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -21256,12 +20413,6 @@ type projModDecimalDecimalOp struct {
 }
 
 func (p projModDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21343,7 +20494,7 @@ func (p projModDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21406,12 +20557,6 @@ type projModInt16Int16Op struct {
 }
 
 func (p projModInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21483,7 +20628,7 @@ func (p projModInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21536,12 +20681,6 @@ type projModInt16Int32Op struct {
 }
 
 func (p projModInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21613,7 +20752,7 @@ func (p projModInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21666,12 +20805,6 @@ type projModInt16Int64Op struct {
 }
 
 func (p projModInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21743,7 +20876,7 @@ func (p projModInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21796,12 +20929,6 @@ type projModInt16DecimalOp struct {
 }
 
 func (p projModInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21842,9 +20969,9 @@ func (p projModInt16DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -21871,9 +20998,9 @@ func (p projModInt16DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -21887,7 +21014,7 @@ func (p projModInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21901,9 +21028,9 @@ func (p projModInt16DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -21926,9 +21053,9 @@ func (p projModInt16DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -21954,12 +21081,6 @@ type projModInt32Int16Op struct {
 }
 
 func (p projModInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22031,7 +21152,7 @@ func (p projModInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22084,12 +21205,6 @@ type projModInt32Int32Op struct {
 }
 
 func (p projModInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22161,7 +21276,7 @@ func (p projModInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22214,12 +21329,6 @@ type projModInt32Int64Op struct {
 }
 
 func (p projModInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22291,7 +21400,7 @@ func (p projModInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22344,12 +21453,6 @@ type projModInt32DecimalOp struct {
 }
 
 func (p projModInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22390,9 +21493,9 @@ func (p projModInt32DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -22419,9 +21522,9 @@ func (p projModInt32DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -22435,7 +21538,7 @@ func (p projModInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22449,9 +21552,9 @@ func (p projModInt32DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -22474,9 +21577,9 @@ func (p projModInt32DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -22502,12 +21605,6 @@ type projModInt64Int16Op struct {
 }
 
 func (p projModInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22579,7 +21676,7 @@ func (p projModInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22632,12 +21729,6 @@ type projModInt64Int32Op struct {
 }
 
 func (p projModInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22709,7 +21800,7 @@ func (p projModInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22762,12 +21853,6 @@ type projModInt64Int64Op struct {
 }
 
 func (p projModInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22839,7 +21924,7 @@ func (p projModInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22892,12 +21977,6 @@ type projModInt64DecimalOp struct {
 }
 
 func (p projModInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22938,9 +22017,9 @@ func (p projModInt64DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -22967,9 +22046,9 @@ func (p projModInt64DecimalOp) Next() coldata.Batch {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+							_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -22983,7 +22062,7 @@ func (p projModInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22997,9 +22076,9 @@ func (p projModInt64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -23022,9 +22101,9 @@ func (p projModInt64DecimalOp) Next() coldata.Batch {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], tmpDec, &arg2)
+						_, err := tree.HighPrecisionCtx.Rem(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -23050,12 +22129,6 @@ type projModFloat64Float64Op struct {
 }
 
 func (p projModFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23131,7 +22204,7 @@ func (p projModFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23188,12 +22261,6 @@ type projPowDecimalInt16Op struct {
 }
 
 func (p projPowDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23230,9 +22297,9 @@ func (p projPowDecimalInt16Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -23254,9 +22321,9 @@ func (p projPowDecimalInt16Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -23269,7 +22336,7 @@ func (p projPowDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23279,9 +22346,9 @@ func (p projPowDecimalInt16Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -23299,9 +22366,9 @@ func (p projPowDecimalInt16Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -23326,12 +22393,6 @@ type projPowDecimalInt32Op struct {
 }
 
 func (p projPowDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23368,9 +22429,9 @@ func (p projPowDecimalInt32Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -23392,9 +22453,9 @@ func (p projPowDecimalInt32Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -23407,7 +22468,7 @@ func (p projPowDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23417,9 +22478,9 @@ func (p projPowDecimalInt32Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -23437,9 +22498,9 @@ func (p projPowDecimalInt32Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -23464,12 +22525,6 @@ type projPowDecimalInt64Op struct {
 }
 
 func (p projPowDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23506,9 +22561,9 @@ func (p projPowDecimalInt64Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -23530,9 +22585,9 @@ func (p projPowDecimalInt64Op) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -23545,7 +22600,7 @@ func (p projPowDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23555,9 +22610,9 @@ func (p projPowDecimalInt64Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -23575,9 +22630,9 @@ func (p projPowDecimalInt64Op) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg2))
-						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, tmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&projCol[i], &arg1, &tmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 					}
@@ -23602,12 +22657,6 @@ type projPowDecimalDecimalOp struct {
 }
 
 func (p projPowDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23681,7 +22730,7 @@ func (p projPowDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23736,12 +22785,6 @@ type projPowInt16Int16Op struct {
 }
 
 func (p projPowInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23777,10 +22820,10 @@ func (p projPowInt16Int16Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -23806,10 +22849,10 @@ func (p projPowInt16Int16Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -23827,7 +22870,7 @@ func (p projPowInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23836,10 +22879,10 @@ func (p projPowInt16Int16Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -23861,10 +22904,10 @@ func (p projPowInt16Int16Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -23894,12 +22937,6 @@ type projPowInt16Int32Op struct {
 }
 
 func (p projPowInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23935,10 +22972,10 @@ func (p projPowInt16Int32Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -23964,10 +23001,10 @@ func (p projPowInt16Int32Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -23985,7 +23022,7 @@ func (p projPowInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23994,10 +23031,10 @@ func (p projPowInt16Int32Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24019,10 +23056,10 @@ func (p projPowInt16Int32Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24052,12 +23089,6 @@ type projPowInt16Int64Op struct {
 }
 
 func (p projPowInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24093,10 +23124,10 @@ func (p projPowInt16Int64Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -24122,10 +23153,10 @@ func (p projPowInt16Int64Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -24143,7 +23174,7 @@ func (p projPowInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24152,10 +23183,10 @@ func (p projPowInt16Int64Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24177,10 +23208,10 @@ func (p projPowInt16Int64Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24210,12 +23241,6 @@ type projPowInt16DecimalOp struct {
 }
 
 func (p projPowInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24252,9 +23277,9 @@ func (p projPowInt16DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -24277,9 +23302,9 @@ func (p projPowInt16DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -24293,7 +23318,7 @@ func (p projPowInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24303,9 +23328,9 @@ func (p projPowInt16DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -24324,9 +23349,9 @@ func (p projPowInt16DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -24352,12 +23377,6 @@ type projPowInt32Int16Op struct {
 }
 
 func (p projPowInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24393,10 +23412,10 @@ func (p projPowInt32Int16Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -24422,10 +23441,10 @@ func (p projPowInt32Int16Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -24443,7 +23462,7 @@ func (p projPowInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24452,10 +23471,10 @@ func (p projPowInt32Int16Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24477,10 +23496,10 @@ func (p projPowInt32Int16Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24510,12 +23529,6 @@ type projPowInt32Int32Op struct {
 }
 
 func (p projPowInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24551,10 +23564,10 @@ func (p projPowInt32Int32Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -24580,10 +23593,10 @@ func (p projPowInt32Int32Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -24601,7 +23614,7 @@ func (p projPowInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24610,10 +23623,10 @@ func (p projPowInt32Int32Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24635,10 +23648,10 @@ func (p projPowInt32Int32Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24668,12 +23681,6 @@ type projPowInt32Int64Op struct {
 }
 
 func (p projPowInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24709,10 +23716,10 @@ func (p projPowInt32Int64Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -24738,10 +23745,10 @@ func (p projPowInt32Int64Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -24759,7 +23766,7 @@ func (p projPowInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24768,10 +23775,10 @@ func (p projPowInt32Int64Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24793,10 +23800,10 @@ func (p projPowInt32Int64Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -24826,12 +23833,6 @@ type projPowInt32DecimalOp struct {
 }
 
 func (p projPowInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24868,9 +23869,9 @@ func (p projPowInt32DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -24893,9 +23894,9 @@ func (p projPowInt32DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -24909,7 +23910,7 @@ func (p projPowInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24919,9 +23920,9 @@ func (p projPowInt32DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -24940,9 +23941,9 @@ func (p projPowInt32DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -24968,12 +23969,6 @@ type projPowInt64Int16Op struct {
 }
 
 func (p projPowInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25009,10 +24004,10 @@ func (p projPowInt64Int16Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -25038,10 +24033,10 @@ func (p projPowInt64Int16Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -25059,7 +24054,7 @@ func (p projPowInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25068,10 +24063,10 @@ func (p projPowInt64Int16Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -25093,10 +24088,10 @@ func (p projPowInt64Int16Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -25126,12 +24121,6 @@ type projPowInt64Int32Op struct {
 }
 
 func (p projPowInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25167,10 +24156,10 @@ func (p projPowInt64Int32Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -25196,10 +24185,10 @@ func (p projPowInt64Int32Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -25217,7 +24206,7 @@ func (p projPowInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25226,10 +24215,10 @@ func (p projPowInt64Int32Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -25251,10 +24240,10 @@ func (p projPowInt64Int32Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -25284,12 +24273,6 @@ type projPowInt64Int64Op struct {
 }
 
 func (p projPowInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25325,10 +24308,10 @@ func (p projPowInt64Int64Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -25354,10 +24337,10 @@ func (p projPowInt64Int64Op) Next() coldata.Batch {
 						arg2 := col2.Get(i)
 
 						{
-							leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+							var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 							leftTmpDec.SetInt64(int64(int64(arg1)))
 							rightTmpDec.SetInt64(int64(int64(arg2)))
-							if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+							if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 							resultInt, err := leftTmpDec.Int64()
@@ -25375,7 +24358,7 @@ func (p projPowInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25384,10 +24367,10 @@ func (p projPowInt64Int64Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -25409,10 +24392,10 @@ func (p projPowInt64Int64Op) Next() coldata.Batch {
 					arg2 := col2.Get(i)
 
 					{
-						leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
+						var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 						leftTmpDec.SetInt64(int64(int64(arg1)))
 						rightTmpDec.SetInt64(int64(int64(arg2)))
-						if _, err := tree.DecimalCtx.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+						if _, err := tree.DecimalCtx.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 							colexecerror.ExpectedError(err)
 						}
 						resultInt, err := leftTmpDec.Int64()
@@ -25442,12 +24425,6 @@ type projPowInt64DecimalOp struct {
 }
 
 func (p projPowInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25484,9 +24461,9 @@ func (p projPowInt64DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -25509,9 +24486,9 @@ func (p projPowInt64DecimalOp) Next() coldata.Batch {
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+							_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -25525,7 +24502,7 @@ func (p projPowInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25535,9 +24512,9 @@ func (p projPowInt64DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -25556,9 +24533,9 @@ func (p projPowInt64DecimalOp) Next() coldata.Batch {
 
 					{
 
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.SetInt64(int64(arg1))
-						_, err := tree.DecimalCtx.Pow(&projCol[i], tmpDec, &arg2)
+						_, err := tree.DecimalCtx.Pow(&projCol[i], &tmpDec, &arg2)
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
@@ -25584,12 +24561,6 @@ type projPowFloat64Float64Op struct {
 }
 
 func (p projPowFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25657,7 +24628,7 @@ func (p projPowFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25706,12 +24677,6 @@ type projConcatBytesBytesOp struct {
 }
 
 func (p projConcatBytesBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25781,7 +24746,7 @@ func (p projConcatBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25832,12 +24797,6 @@ type projConcatJSONJSONOp struct {
 }
 
 func (p projConcatJSONJSONOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25905,7 +24864,7 @@ func (p projConcatJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25951,15 +24910,14 @@ func (p projConcatJSONJSONOp) Next() coldata.Batch {
 
 type projConcatDatumDatumOp struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projConcatDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26033,7 +24991,7 @@ func (p projConcatDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26088,12 +25046,6 @@ type projLShiftInt16Int16Op struct {
 }
 
 func (p projLShiftInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26167,7 +25119,7 @@ func (p projLShiftInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26222,12 +25174,6 @@ type projLShiftInt16Int32Op struct {
 }
 
 func (p projLShiftInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26301,7 +25247,7 @@ func (p projLShiftInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26356,12 +25302,6 @@ type projLShiftInt16Int64Op struct {
 }
 
 func (p projLShiftInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26435,7 +25375,7 @@ func (p projLShiftInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26490,12 +25430,6 @@ type projLShiftInt32Int16Op struct {
 }
 
 func (p projLShiftInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26569,7 +25503,7 @@ func (p projLShiftInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26624,12 +25558,6 @@ type projLShiftInt32Int32Op struct {
 }
 
 func (p projLShiftInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26703,7 +25631,7 @@ func (p projLShiftInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26758,12 +25686,6 @@ type projLShiftInt32Int64Op struct {
 }
 
 func (p projLShiftInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26837,7 +25759,7 @@ func (p projLShiftInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26892,12 +25814,6 @@ type projLShiftInt64Int16Op struct {
 }
 
 func (p projLShiftInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26971,7 +25887,7 @@ func (p projLShiftInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27026,12 +25942,6 @@ type projLShiftInt64Int32Op struct {
 }
 
 func (p projLShiftInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27105,7 +26015,7 @@ func (p projLShiftInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27160,12 +26070,6 @@ type projLShiftInt64Int64Op struct {
 }
 
 func (p projLShiftInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27239,7 +26143,7 @@ func (p projLShiftInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27291,15 +26195,14 @@ func (p projLShiftInt64Int64Op) Next() coldata.Batch {
 
 type projLShiftDatumInt16Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projLShiftDatumInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27382,7 +26285,7 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27443,15 +26346,14 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 
 type projLShiftDatumInt32Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projLShiftDatumInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27534,7 +26436,7 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27595,15 +26497,14 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 
 type projLShiftDatumInt64Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projLShiftDatumInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27686,7 +26587,7 @@ func (p projLShiftDatumInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27750,12 +26651,6 @@ type projRShiftInt16Int16Op struct {
 }
 
 func (p projRShiftInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27829,7 +26724,7 @@ func (p projRShiftInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27884,12 +26779,6 @@ type projRShiftInt16Int32Op struct {
 }
 
 func (p projRShiftInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27963,7 +26852,7 @@ func (p projRShiftInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28018,12 +26907,6 @@ type projRShiftInt16Int64Op struct {
 }
 
 func (p projRShiftInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28097,7 +26980,7 @@ func (p projRShiftInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28152,12 +27035,6 @@ type projRShiftInt32Int16Op struct {
 }
 
 func (p projRShiftInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28231,7 +27108,7 @@ func (p projRShiftInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28286,12 +27163,6 @@ type projRShiftInt32Int32Op struct {
 }
 
 func (p projRShiftInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28365,7 +27236,7 @@ func (p projRShiftInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28420,12 +27291,6 @@ type projRShiftInt32Int64Op struct {
 }
 
 func (p projRShiftInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28499,7 +27364,7 @@ func (p projRShiftInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28554,12 +27419,6 @@ type projRShiftInt64Int16Op struct {
 }
 
 func (p projRShiftInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28633,7 +27492,7 @@ func (p projRShiftInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28688,12 +27547,6 @@ type projRShiftInt64Int32Op struct {
 }
 
 func (p projRShiftInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28767,7 +27620,7 @@ func (p projRShiftInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28822,12 +27675,6 @@ type projRShiftInt64Int64Op struct {
 }
 
 func (p projRShiftInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28901,7 +27748,7 @@ func (p projRShiftInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28953,15 +27800,14 @@ func (p projRShiftInt64Int64Op) Next() coldata.Batch {
 
 type projRShiftDatumInt16Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projRShiftDatumInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29044,7 +27890,7 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29105,15 +27951,14 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 
 type projRShiftDatumInt32Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projRShiftDatumInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29196,7 +28041,7 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29257,15 +28102,14 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 
 type projRShiftDatumInt64Op struct {
 	projOpBase
+	execgen.BinaryOverloadHelper
 }
 
 func (p projRShiftDatumInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29348,7 +28192,7 @@ func (p projRShiftDatumInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29412,12 +28256,6 @@ type projJSONFetchValJSONBytesOp struct {
 }
 
 func (p projJSONFetchValJSONBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29497,7 +28335,7 @@ func (p projJSONFetchValJSONBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29558,12 +28396,6 @@ type projJSONFetchValJSONInt16Op struct {
 }
 
 func (p projJSONFetchValJSONInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29638,7 +28470,7 @@ func (p projJSONFetchValJSONInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29694,12 +28526,6 @@ type projJSONFetchValJSONInt32Op struct {
 }
 
 func (p projJSONFetchValJSONInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29774,7 +28600,7 @@ func (p projJSONFetchValJSONInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29830,12 +28656,6 @@ type projJSONFetchValJSONInt64Op struct {
 }
 
 func (p projJSONFetchValJSONInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29910,7 +28730,7 @@ func (p projJSONFetchValJSONInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29966,12 +28786,6 @@ type projJSONFetchTextJSONBytesOp struct {
 }
 
 func (p projJSONFetchTextJSONBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -30069,7 +28883,7 @@ func (p projJSONFetchTextJSONBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30148,12 +28962,6 @@ type projJSONFetchTextJSONInt16Op struct {
 }
 
 func (p projJSONFetchTextJSONInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -30246,7 +29054,7 @@ func (p projJSONFetchTextJSONInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30320,12 +29128,6 @@ type projJSONFetchTextJSONInt32Op struct {
 }
 
 func (p projJSONFetchTextJSONInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -30418,7 +29220,7 @@ func (p projJSONFetchTextJSONInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30492,12 +29294,6 @@ type projJSONFetchTextJSONInt64Op struct {
 }
 
 func (p projJSONFetchTextJSONInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -30590,7 +29386,7 @@ func (p projJSONFetchTextJSONInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30664,12 +29460,6 @@ type projJSONFetchValPathJSONDatumOp struct {
 }
 
 func (p projJSONFetchValPathJSONDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -30743,7 +29533,7 @@ func (p projJSONFetchValPathJSONDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30798,12 +29588,6 @@ type projJSONFetchTextPathJSONDatumOp struct {
 }
 
 func (p projJSONFetchTextPathJSONDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -30897,7 +29681,7 @@ func (p projJSONFetchTextPathJSONDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30972,12 +29756,6 @@ type projEQBoolBoolOp struct {
 }
 
 func (p projEQBoolBoolOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -31063,7 +29841,7 @@ func (p projEQBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31130,12 +29908,6 @@ type projEQBytesBytesOp struct {
 }
 
 func (p projEQBytesBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -31203,7 +29975,7 @@ func (p projEQBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31252,12 +30024,6 @@ type projEQDecimalInt16Op struct {
 }
 
 func (p projEQDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -31296,9 +30062,9 @@ func (p projEQDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -31323,9 +30089,9 @@ func (p projEQDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -31339,7 +30105,7 @@ func (p projEQDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31351,9 +30117,9 @@ func (p projEQDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -31374,9 +30140,9 @@ func (p projEQDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -31402,12 +30168,6 @@ type projEQDecimalInt32Op struct {
 }
 
 func (p projEQDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -31446,9 +30206,9 @@ func (p projEQDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -31473,9 +30233,9 @@ func (p projEQDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -31489,7 +30249,7 @@ func (p projEQDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31501,9 +30261,9 @@ func (p projEQDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -31524,9 +30284,9 @@ func (p projEQDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -31552,12 +30312,6 @@ type projEQDecimalInt64Op struct {
 }
 
 func (p projEQDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -31596,9 +30350,9 @@ func (p projEQDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -31623,9 +30377,9 @@ func (p projEQDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -31639,7 +30393,7 @@ func (p projEQDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31651,9 +30405,9 @@ func (p projEQDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -31674,9 +30428,9 @@ func (p projEQDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -31702,12 +30456,6 @@ type projEQDecimalFloat64Op struct {
 }
 
 func (p projEQDecimalFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -31746,11 +30494,11 @@ func (p projEQDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -31775,11 +30523,11 @@ func (p projEQDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -31793,7 +30541,7 @@ func (p projEQDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31805,11 +30553,11 @@ func (p projEQDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -31830,11 +30578,11 @@ func (p projEQDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -31860,12 +30608,6 @@ type projEQDecimalDecimalOp struct {
 }
 
 func (p projEQDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -31935,7 +30677,7 @@ func (p projEQDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31986,12 +30728,6 @@ type projEQInt16Int16Op struct {
 }
 
 func (p projEQInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -32083,7 +30819,7 @@ func (p projEQInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32156,12 +30892,6 @@ type projEQInt16Int32Op struct {
 }
 
 func (p projEQInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -32253,7 +30983,7 @@ func (p projEQInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32326,12 +31056,6 @@ type projEQInt16Int64Op struct {
 }
 
 func (p projEQInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -32423,7 +31147,7 @@ func (p projEQInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32496,12 +31220,6 @@ type projEQInt16Float64Op struct {
 }
 
 func (p projEQInt16Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -32609,7 +31327,7 @@ func (p projEQInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32698,12 +31416,6 @@ type projEQInt16DecimalOp struct {
 }
 
 func (p projEQInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -32742,9 +31454,9 @@ func (p projEQInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -32769,9 +31481,9 @@ func (p projEQInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -32785,7 +31497,7 @@ func (p projEQInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32797,9 +31509,9 @@ func (p projEQInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -32820,9 +31532,9 @@ func (p projEQInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -32848,12 +31560,6 @@ type projEQInt32Int16Op struct {
 }
 
 func (p projEQInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -32945,7 +31651,7 @@ func (p projEQInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33018,12 +31724,6 @@ type projEQInt32Int32Op struct {
 }
 
 func (p projEQInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -33115,7 +31815,7 @@ func (p projEQInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33188,12 +31888,6 @@ type projEQInt32Int64Op struct {
 }
 
 func (p projEQInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -33285,7 +31979,7 @@ func (p projEQInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33358,12 +32052,6 @@ type projEQInt32Float64Op struct {
 }
 
 func (p projEQInt32Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -33471,7 +32159,7 @@ func (p projEQInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33560,12 +32248,6 @@ type projEQInt32DecimalOp struct {
 }
 
 func (p projEQInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -33604,9 +32286,9 @@ func (p projEQInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -33631,9 +32313,9 @@ func (p projEQInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -33647,7 +32329,7 @@ func (p projEQInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33659,9 +32341,9 @@ func (p projEQInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -33682,9 +32364,9 @@ func (p projEQInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -33710,12 +32392,6 @@ type projEQInt64Int16Op struct {
 }
 
 func (p projEQInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -33807,7 +32483,7 @@ func (p projEQInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33880,12 +32556,6 @@ type projEQInt64Int32Op struct {
 }
 
 func (p projEQInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -33977,7 +32647,7 @@ func (p projEQInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34050,12 +32720,6 @@ type projEQInt64Int64Op struct {
 }
 
 func (p projEQInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -34147,7 +32811,7 @@ func (p projEQInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34220,12 +32884,6 @@ type projEQInt64Float64Op struct {
 }
 
 func (p projEQInt64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -34333,7 +32991,7 @@ func (p projEQInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34422,12 +33080,6 @@ type projEQInt64DecimalOp struct {
 }
 
 func (p projEQInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -34466,9 +33118,9 @@ func (p projEQInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -34493,9 +33145,9 @@ func (p projEQInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -34509,7 +33161,7 @@ func (p projEQInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34521,9 +33173,9 @@ func (p projEQInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -34544,9 +33196,9 @@ func (p projEQInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -34572,12 +33224,6 @@ type projEQFloat64Int16Op struct {
 }
 
 func (p projEQFloat64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -34685,7 +33331,7 @@ func (p projEQFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34774,12 +33420,6 @@ type projEQFloat64Int32Op struct {
 }
 
 func (p projEQFloat64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -34887,7 +33527,7 @@ func (p projEQFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34976,12 +33616,6 @@ type projEQFloat64Int64Op struct {
 }
 
 func (p projEQFloat64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -35089,7 +33723,7 @@ func (p projEQFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35178,12 +33812,6 @@ type projEQFloat64Float64Op struct {
 }
 
 func (p projEQFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -35291,7 +33919,7 @@ func (p projEQFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35380,12 +34008,6 @@ type projEQFloat64DecimalOp struct {
 }
 
 func (p projEQFloat64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -35424,11 +34046,11 @@ func (p projEQFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -35453,11 +34075,11 @@ func (p projEQFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -35471,7 +34093,7 @@ func (p projEQFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35483,11 +34105,11 @@ func (p projEQFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -35508,11 +34130,11 @@ func (p projEQFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -35538,12 +34160,6 @@ type projEQTimestampTimestampOp struct {
 }
 
 func (p projEQTimestampTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -35627,7 +34243,7 @@ func (p projEQTimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35692,12 +34308,6 @@ type projEQIntervalIntervalOp struct {
 }
 
 func (p projEQIntervalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -35767,7 +34377,7 @@ func (p projEQIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35818,12 +34428,6 @@ type projEQJSONJSONOp struct {
 }
 
 func (p projEQJSONJSONOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -35903,7 +34507,7 @@ func (p projEQJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35964,12 +34568,6 @@ type projEQDatumDatumOp struct {
 }
 
 func (p projEQDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -36041,7 +34639,7 @@ func (p projEQDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36094,12 +34692,6 @@ type projNEBoolBoolOp struct {
 }
 
 func (p projNEBoolBoolOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -36185,7 +34777,7 @@ func (p projNEBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36252,12 +34844,6 @@ type projNEBytesBytesOp struct {
 }
 
 func (p projNEBytesBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -36325,7 +34911,7 @@ func (p projNEBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36374,12 +34960,6 @@ type projNEDecimalInt16Op struct {
 }
 
 func (p projNEDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -36418,9 +34998,9 @@ func (p projNEDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -36445,9 +35025,9 @@ func (p projNEDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -36461,7 +35041,7 @@ func (p projNEDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36473,9 +35053,9 @@ func (p projNEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -36496,9 +35076,9 @@ func (p projNEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -36524,12 +35104,6 @@ type projNEDecimalInt32Op struct {
 }
 
 func (p projNEDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -36568,9 +35142,9 @@ func (p projNEDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -36595,9 +35169,9 @@ func (p projNEDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -36611,7 +35185,7 @@ func (p projNEDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36623,9 +35197,9 @@ func (p projNEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -36646,9 +35220,9 @@ func (p projNEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -36674,12 +35248,6 @@ type projNEDecimalInt64Op struct {
 }
 
 func (p projNEDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -36718,9 +35286,9 @@ func (p projNEDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -36745,9 +35313,9 @@ func (p projNEDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -36761,7 +35329,7 @@ func (p projNEDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36773,9 +35341,9 @@ func (p projNEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -36796,9 +35364,9 @@ func (p projNEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -36824,12 +35392,6 @@ type projNEDecimalFloat64Op struct {
 }
 
 func (p projNEDecimalFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -36868,11 +35430,11 @@ func (p projNEDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -36897,11 +35459,11 @@ func (p projNEDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -36915,7 +35477,7 @@ func (p projNEDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36927,11 +35489,11 @@ func (p projNEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -36952,11 +35514,11 @@ func (p projNEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -36982,12 +35544,6 @@ type projNEDecimalDecimalOp struct {
 }
 
 func (p projNEDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -37057,7 +35613,7 @@ func (p projNEDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37108,12 +35664,6 @@ type projNEInt16Int16Op struct {
 }
 
 func (p projNEInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -37205,7 +35755,7 @@ func (p projNEInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37278,12 +35828,6 @@ type projNEInt16Int32Op struct {
 }
 
 func (p projNEInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -37375,7 +35919,7 @@ func (p projNEInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37448,12 +35992,6 @@ type projNEInt16Int64Op struct {
 }
 
 func (p projNEInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -37545,7 +36083,7 @@ func (p projNEInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37618,12 +36156,6 @@ type projNEInt16Float64Op struct {
 }
 
 func (p projNEInt16Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -37731,7 +36263,7 @@ func (p projNEInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37820,12 +36352,6 @@ type projNEInt16DecimalOp struct {
 }
 
 func (p projNEInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -37864,9 +36390,9 @@ func (p projNEInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -37891,9 +36417,9 @@ func (p projNEInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -37907,7 +36433,7 @@ func (p projNEInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37919,9 +36445,9 @@ func (p projNEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -37942,9 +36468,9 @@ func (p projNEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -37970,12 +36496,6 @@ type projNEInt32Int16Op struct {
 }
 
 func (p projNEInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -38067,7 +36587,7 @@ func (p projNEInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38140,12 +36660,6 @@ type projNEInt32Int32Op struct {
 }
 
 func (p projNEInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -38237,7 +36751,7 @@ func (p projNEInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38310,12 +36824,6 @@ type projNEInt32Int64Op struct {
 }
 
 func (p projNEInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -38407,7 +36915,7 @@ func (p projNEInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38480,12 +36988,6 @@ type projNEInt32Float64Op struct {
 }
 
 func (p projNEInt32Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -38593,7 +37095,7 @@ func (p projNEInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38682,12 +37184,6 @@ type projNEInt32DecimalOp struct {
 }
 
 func (p projNEInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -38726,9 +37222,9 @@ func (p projNEInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -38753,9 +37249,9 @@ func (p projNEInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -38769,7 +37265,7 @@ func (p projNEInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38781,9 +37277,9 @@ func (p projNEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -38804,9 +37300,9 @@ func (p projNEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -38832,12 +37328,6 @@ type projNEInt64Int16Op struct {
 }
 
 func (p projNEInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -38929,7 +37419,7 @@ func (p projNEInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39002,12 +37492,6 @@ type projNEInt64Int32Op struct {
 }
 
 func (p projNEInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -39099,7 +37583,7 @@ func (p projNEInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39172,12 +37656,6 @@ type projNEInt64Int64Op struct {
 }
 
 func (p projNEInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -39269,7 +37747,7 @@ func (p projNEInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39342,12 +37820,6 @@ type projNEInt64Float64Op struct {
 }
 
 func (p projNEInt64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -39455,7 +37927,7 @@ func (p projNEInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39544,12 +38016,6 @@ type projNEInt64DecimalOp struct {
 }
 
 func (p projNEInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -39588,9 +38054,9 @@ func (p projNEInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -39615,9 +38081,9 @@ func (p projNEInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -39631,7 +38097,7 @@ func (p projNEInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39643,9 +38109,9 @@ func (p projNEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -39666,9 +38132,9 @@ func (p projNEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -39694,12 +38160,6 @@ type projNEFloat64Int16Op struct {
 }
 
 func (p projNEFloat64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -39807,7 +38267,7 @@ func (p projNEFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39896,12 +38356,6 @@ type projNEFloat64Int32Op struct {
 }
 
 func (p projNEFloat64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -40009,7 +38463,7 @@ func (p projNEFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40098,12 +38552,6 @@ type projNEFloat64Int64Op struct {
 }
 
 func (p projNEFloat64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -40211,7 +38659,7 @@ func (p projNEFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40300,12 +38748,6 @@ type projNEFloat64Float64Op struct {
 }
 
 func (p projNEFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -40413,7 +38855,7 @@ func (p projNEFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40502,12 +38944,6 @@ type projNEFloat64DecimalOp struct {
 }
 
 func (p projNEFloat64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -40546,11 +38982,11 @@ func (p projNEFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -40575,11 +39011,11 @@ func (p projNEFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -40593,7 +39029,7 @@ func (p projNEFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40605,11 +39041,11 @@ func (p projNEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -40630,11 +39066,11 @@ func (p projNEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -40660,12 +39096,6 @@ type projNETimestampTimestampOp struct {
 }
 
 func (p projNETimestampTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -40749,7 +39179,7 @@ func (p projNETimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40814,12 +39244,6 @@ type projNEIntervalIntervalOp struct {
 }
 
 func (p projNEIntervalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -40889,7 +39313,7 @@ func (p projNEIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40940,12 +39364,6 @@ type projNEJSONJSONOp struct {
 }
 
 func (p projNEJSONJSONOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -41025,7 +39443,7 @@ func (p projNEJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41086,12 +39504,6 @@ type projNEDatumDatumOp struct {
 }
 
 func (p projNEDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -41163,7 +39575,7 @@ func (p projNEDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41216,12 +39628,6 @@ type projLTBoolBoolOp struct {
 }
 
 func (p projLTBoolBoolOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -41307,7 +39713,7 @@ func (p projLTBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41374,12 +39780,6 @@ type projLTBytesBytesOp struct {
 }
 
 func (p projLTBytesBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -41447,7 +39847,7 @@ func (p projLTBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41496,12 +39896,6 @@ type projLTDecimalInt16Op struct {
 }
 
 func (p projLTDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -41540,9 +39934,9 @@ func (p projLTDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -41567,9 +39961,9 @@ func (p projLTDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -41583,7 +39977,7 @@ func (p projLTDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41595,9 +39989,9 @@ func (p projLTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -41618,9 +40012,9 @@ func (p projLTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -41646,12 +40040,6 @@ type projLTDecimalInt32Op struct {
 }
 
 func (p projLTDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -41690,9 +40078,9 @@ func (p projLTDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -41717,9 +40105,9 @@ func (p projLTDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -41733,7 +40121,7 @@ func (p projLTDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41745,9 +40133,9 @@ func (p projLTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -41768,9 +40156,9 @@ func (p projLTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -41796,12 +40184,6 @@ type projLTDecimalInt64Op struct {
 }
 
 func (p projLTDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -41840,9 +40222,9 @@ func (p projLTDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -41867,9 +40249,9 @@ func (p projLTDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -41883,7 +40265,7 @@ func (p projLTDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41895,9 +40277,9 @@ func (p projLTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -41918,9 +40300,9 @@ func (p projLTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -41946,12 +40328,6 @@ type projLTDecimalFloat64Op struct {
 }
 
 func (p projLTDecimalFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -41990,11 +40366,11 @@ func (p projLTDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -42019,11 +40395,11 @@ func (p projLTDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -42037,7 +40413,7 @@ func (p projLTDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42049,11 +40425,11 @@ func (p projLTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -42074,11 +40450,11 @@ func (p projLTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -42104,12 +40480,6 @@ type projLTDecimalDecimalOp struct {
 }
 
 func (p projLTDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -42179,7 +40549,7 @@ func (p projLTDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42230,12 +40600,6 @@ type projLTInt16Int16Op struct {
 }
 
 func (p projLTInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -42327,7 +40691,7 @@ func (p projLTInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42400,12 +40764,6 @@ type projLTInt16Int32Op struct {
 }
 
 func (p projLTInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -42497,7 +40855,7 @@ func (p projLTInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42570,12 +40928,6 @@ type projLTInt16Int64Op struct {
 }
 
 func (p projLTInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -42667,7 +41019,7 @@ func (p projLTInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42740,12 +41092,6 @@ type projLTInt16Float64Op struct {
 }
 
 func (p projLTInt16Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -42853,7 +41199,7 @@ func (p projLTInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42942,12 +41288,6 @@ type projLTInt16DecimalOp struct {
 }
 
 func (p projLTInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -42986,9 +41326,9 @@ func (p projLTInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -43013,9 +41353,9 @@ func (p projLTInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -43029,7 +41369,7 @@ func (p projLTInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43041,9 +41381,9 @@ func (p projLTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -43064,9 +41404,9 @@ func (p projLTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -43092,12 +41432,6 @@ type projLTInt32Int16Op struct {
 }
 
 func (p projLTInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -43189,7 +41523,7 @@ func (p projLTInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43262,12 +41596,6 @@ type projLTInt32Int32Op struct {
 }
 
 func (p projLTInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -43359,7 +41687,7 @@ func (p projLTInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43432,12 +41760,6 @@ type projLTInt32Int64Op struct {
 }
 
 func (p projLTInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -43529,7 +41851,7 @@ func (p projLTInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43602,12 +41924,6 @@ type projLTInt32Float64Op struct {
 }
 
 func (p projLTInt32Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -43715,7 +42031,7 @@ func (p projLTInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43804,12 +42120,6 @@ type projLTInt32DecimalOp struct {
 }
 
 func (p projLTInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -43848,9 +42158,9 @@ func (p projLTInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -43875,9 +42185,9 @@ func (p projLTInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -43891,7 +42201,7 @@ func (p projLTInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43903,9 +42213,9 @@ func (p projLTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -43926,9 +42236,9 @@ func (p projLTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -43954,12 +42264,6 @@ type projLTInt64Int16Op struct {
 }
 
 func (p projLTInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -44051,7 +42355,7 @@ func (p projLTInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44124,12 +42428,6 @@ type projLTInt64Int32Op struct {
 }
 
 func (p projLTInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -44221,7 +42519,7 @@ func (p projLTInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44294,12 +42592,6 @@ type projLTInt64Int64Op struct {
 }
 
 func (p projLTInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -44391,7 +42683,7 @@ func (p projLTInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44464,12 +42756,6 @@ type projLTInt64Float64Op struct {
 }
 
 func (p projLTInt64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -44577,7 +42863,7 @@ func (p projLTInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44666,12 +42952,6 @@ type projLTInt64DecimalOp struct {
 }
 
 func (p projLTInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -44710,9 +42990,9 @@ func (p projLTInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -44737,9 +43017,9 @@ func (p projLTInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -44753,7 +43033,7 @@ func (p projLTInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44765,9 +43045,9 @@ func (p projLTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -44788,9 +43068,9 @@ func (p projLTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -44816,12 +43096,6 @@ type projLTFloat64Int16Op struct {
 }
 
 func (p projLTFloat64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -44929,7 +43203,7 @@ func (p projLTFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45018,12 +43292,6 @@ type projLTFloat64Int32Op struct {
 }
 
 func (p projLTFloat64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -45131,7 +43399,7 @@ func (p projLTFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45220,12 +43488,6 @@ type projLTFloat64Int64Op struct {
 }
 
 func (p projLTFloat64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -45333,7 +43595,7 @@ func (p projLTFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45422,12 +43684,6 @@ type projLTFloat64Float64Op struct {
 }
 
 func (p projLTFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -45535,7 +43791,7 @@ func (p projLTFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45624,12 +43880,6 @@ type projLTFloat64DecimalOp struct {
 }
 
 func (p projLTFloat64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -45668,11 +43918,11 @@ func (p projLTFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -45697,11 +43947,11 @@ func (p projLTFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -45715,7 +43965,7 @@ func (p projLTFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45727,11 +43977,11 @@ func (p projLTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -45752,11 +44002,11 @@ func (p projLTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -45782,12 +44032,6 @@ type projLTTimestampTimestampOp struct {
 }
 
 func (p projLTTimestampTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -45871,7 +44115,7 @@ func (p projLTTimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45936,12 +44180,6 @@ type projLTIntervalIntervalOp struct {
 }
 
 func (p projLTIntervalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -46011,7 +44249,7 @@ func (p projLTIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46062,12 +44300,6 @@ type projLTJSONJSONOp struct {
 }
 
 func (p projLTJSONJSONOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -46147,7 +44379,7 @@ func (p projLTJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46208,12 +44440,6 @@ type projLTDatumDatumOp struct {
 }
 
 func (p projLTDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -46285,7 +44511,7 @@ func (p projLTDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46338,12 +44564,6 @@ type projLEBoolBoolOp struct {
 }
 
 func (p projLEBoolBoolOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -46429,7 +44649,7 @@ func (p projLEBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46496,12 +44716,6 @@ type projLEBytesBytesOp struct {
 }
 
 func (p projLEBytesBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -46569,7 +44783,7 @@ func (p projLEBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46618,12 +44832,6 @@ type projLEDecimalInt16Op struct {
 }
 
 func (p projLEDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -46662,9 +44870,9 @@ func (p projLEDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -46689,9 +44897,9 @@ func (p projLEDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -46705,7 +44913,7 @@ func (p projLEDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46717,9 +44925,9 @@ func (p projLEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -46740,9 +44948,9 @@ func (p projLEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -46768,12 +44976,6 @@ type projLEDecimalInt32Op struct {
 }
 
 func (p projLEDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -46812,9 +45014,9 @@ func (p projLEDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -46839,9 +45041,9 @@ func (p projLEDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -46855,7 +45057,7 @@ func (p projLEDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46867,9 +45069,9 @@ func (p projLEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -46890,9 +45092,9 @@ func (p projLEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -46918,12 +45120,6 @@ type projLEDecimalInt64Op struct {
 }
 
 func (p projLEDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -46962,9 +45158,9 @@ func (p projLEDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -46989,9 +45185,9 @@ func (p projLEDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -47005,7 +45201,7 @@ func (p projLEDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47017,9 +45213,9 @@ func (p projLEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -47040,9 +45236,9 @@ func (p projLEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -47068,12 +45264,6 @@ type projLEDecimalFloat64Op struct {
 }
 
 func (p projLEDecimalFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -47112,11 +45302,11 @@ func (p projLEDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -47141,11 +45331,11 @@ func (p projLEDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -47159,7 +45349,7 @@ func (p projLEDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47171,11 +45361,11 @@ func (p projLEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -47196,11 +45386,11 @@ func (p projLEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -47226,12 +45416,6 @@ type projLEDecimalDecimalOp struct {
 }
 
 func (p projLEDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -47301,7 +45485,7 @@ func (p projLEDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47352,12 +45536,6 @@ type projLEInt16Int16Op struct {
 }
 
 func (p projLEInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -47449,7 +45627,7 @@ func (p projLEInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47522,12 +45700,6 @@ type projLEInt16Int32Op struct {
 }
 
 func (p projLEInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -47619,7 +45791,7 @@ func (p projLEInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47692,12 +45864,6 @@ type projLEInt16Int64Op struct {
 }
 
 func (p projLEInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -47789,7 +45955,7 @@ func (p projLEInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47862,12 +46028,6 @@ type projLEInt16Float64Op struct {
 }
 
 func (p projLEInt16Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -47975,7 +46135,7 @@ func (p projLEInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48064,12 +46224,6 @@ type projLEInt16DecimalOp struct {
 }
 
 func (p projLEInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -48108,9 +46262,9 @@ func (p projLEInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -48135,9 +46289,9 @@ func (p projLEInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -48151,7 +46305,7 @@ func (p projLEInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48163,9 +46317,9 @@ func (p projLEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -48186,9 +46340,9 @@ func (p projLEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -48214,12 +46368,6 @@ type projLEInt32Int16Op struct {
 }
 
 func (p projLEInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -48311,7 +46459,7 @@ func (p projLEInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48384,12 +46532,6 @@ type projLEInt32Int32Op struct {
 }
 
 func (p projLEInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -48481,7 +46623,7 @@ func (p projLEInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48554,12 +46696,6 @@ type projLEInt32Int64Op struct {
 }
 
 func (p projLEInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -48651,7 +46787,7 @@ func (p projLEInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48724,12 +46860,6 @@ type projLEInt32Float64Op struct {
 }
 
 func (p projLEInt32Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -48837,7 +46967,7 @@ func (p projLEInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48926,12 +47056,6 @@ type projLEInt32DecimalOp struct {
 }
 
 func (p projLEInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -48970,9 +47094,9 @@ func (p projLEInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -48997,9 +47121,9 @@ func (p projLEInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -49013,7 +47137,7 @@ func (p projLEInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49025,9 +47149,9 @@ func (p projLEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -49048,9 +47172,9 @@ func (p projLEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -49076,12 +47200,6 @@ type projLEInt64Int16Op struct {
 }
 
 func (p projLEInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -49173,7 +47291,7 @@ func (p projLEInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49246,12 +47364,6 @@ type projLEInt64Int32Op struct {
 }
 
 func (p projLEInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -49343,7 +47455,7 @@ func (p projLEInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49416,12 +47528,6 @@ type projLEInt64Int64Op struct {
 }
 
 func (p projLEInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -49513,7 +47619,7 @@ func (p projLEInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49586,12 +47692,6 @@ type projLEInt64Float64Op struct {
 }
 
 func (p projLEInt64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -49699,7 +47799,7 @@ func (p projLEInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49788,12 +47888,6 @@ type projLEInt64DecimalOp struct {
 }
 
 func (p projLEInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -49832,9 +47926,9 @@ func (p projLEInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -49859,9 +47953,9 @@ func (p projLEInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -49875,7 +47969,7 @@ func (p projLEInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49887,9 +47981,9 @@ func (p projLEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -49910,9 +48004,9 @@ func (p projLEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -49938,12 +48032,6 @@ type projLEFloat64Int16Op struct {
 }
 
 func (p projLEFloat64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -50051,7 +48139,7 @@ func (p projLEFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50140,12 +48228,6 @@ type projLEFloat64Int32Op struct {
 }
 
 func (p projLEFloat64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -50253,7 +48335,7 @@ func (p projLEFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50342,12 +48424,6 @@ type projLEFloat64Int64Op struct {
 }
 
 func (p projLEFloat64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -50455,7 +48531,7 @@ func (p projLEFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50544,12 +48620,6 @@ type projLEFloat64Float64Op struct {
 }
 
 func (p projLEFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -50657,7 +48727,7 @@ func (p projLEFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50746,12 +48816,6 @@ type projLEFloat64DecimalOp struct {
 }
 
 func (p projLEFloat64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -50790,11 +48854,11 @@ func (p projLEFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -50819,11 +48883,11 @@ func (p projLEFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -50837,7 +48901,7 @@ func (p projLEFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50849,11 +48913,11 @@ func (p projLEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -50874,11 +48938,11 @@ func (p projLEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -50904,12 +48968,6 @@ type projLETimestampTimestampOp struct {
 }
 
 func (p projLETimestampTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -50993,7 +49051,7 @@ func (p projLETimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51058,12 +49116,6 @@ type projLEIntervalIntervalOp struct {
 }
 
 func (p projLEIntervalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -51133,7 +49185,7 @@ func (p projLEIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51184,12 +49236,6 @@ type projLEJSONJSONOp struct {
 }
 
 func (p projLEJSONJSONOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -51269,7 +49315,7 @@ func (p projLEJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51330,12 +49376,6 @@ type projLEDatumDatumOp struct {
 }
 
 func (p projLEDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -51407,7 +49447,7 @@ func (p projLEDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51460,12 +49500,6 @@ type projGTBoolBoolOp struct {
 }
 
 func (p projGTBoolBoolOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -51551,7 +49585,7 @@ func (p projGTBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51618,12 +49652,6 @@ type projGTBytesBytesOp struct {
 }
 
 func (p projGTBytesBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -51691,7 +49719,7 @@ func (p projGTBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51740,12 +49768,6 @@ type projGTDecimalInt16Op struct {
 }
 
 func (p projGTDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -51784,9 +49806,9 @@ func (p projGTDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -51811,9 +49833,9 @@ func (p projGTDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -51827,7 +49849,7 @@ func (p projGTDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51839,9 +49861,9 @@ func (p projGTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -51862,9 +49884,9 @@ func (p projGTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -51890,12 +49912,6 @@ type projGTDecimalInt32Op struct {
 }
 
 func (p projGTDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -51934,9 +49950,9 @@ func (p projGTDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -51961,9 +49977,9 @@ func (p projGTDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -51977,7 +49993,7 @@ func (p projGTDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51989,9 +50005,9 @@ func (p projGTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -52012,9 +50028,9 @@ func (p projGTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -52040,12 +50056,6 @@ type projGTDecimalInt64Op struct {
 }
 
 func (p projGTDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -52084,9 +50094,9 @@ func (p projGTDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -52111,9 +50121,9 @@ func (p projGTDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -52127,7 +50137,7 @@ func (p projGTDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52139,9 +50149,9 @@ func (p projGTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -52162,9 +50172,9 @@ func (p projGTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -52190,12 +50200,6 @@ type projGTDecimalFloat64Op struct {
 }
 
 func (p projGTDecimalFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -52234,11 +50238,11 @@ func (p projGTDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -52263,11 +50267,11 @@ func (p projGTDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -52281,7 +50285,7 @@ func (p projGTDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52293,11 +50297,11 @@ func (p projGTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -52318,11 +50322,11 @@ func (p projGTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -52348,12 +50352,6 @@ type projGTDecimalDecimalOp struct {
 }
 
 func (p projGTDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -52423,7 +50421,7 @@ func (p projGTDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52474,12 +50472,6 @@ type projGTInt16Int16Op struct {
 }
 
 func (p projGTInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -52571,7 +50563,7 @@ func (p projGTInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52644,12 +50636,6 @@ type projGTInt16Int32Op struct {
 }
 
 func (p projGTInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -52741,7 +50727,7 @@ func (p projGTInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52814,12 +50800,6 @@ type projGTInt16Int64Op struct {
 }
 
 func (p projGTInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -52911,7 +50891,7 @@ func (p projGTInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52984,12 +50964,6 @@ type projGTInt16Float64Op struct {
 }
 
 func (p projGTInt16Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -53097,7 +51071,7 @@ func (p projGTInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53186,12 +51160,6 @@ type projGTInt16DecimalOp struct {
 }
 
 func (p projGTInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -53230,9 +51198,9 @@ func (p projGTInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -53257,9 +51225,9 @@ func (p projGTInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -53273,7 +51241,7 @@ func (p projGTInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53285,9 +51253,9 @@ func (p projGTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -53308,9 +51276,9 @@ func (p projGTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -53336,12 +51304,6 @@ type projGTInt32Int16Op struct {
 }
 
 func (p projGTInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -53433,7 +51395,7 @@ func (p projGTInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53506,12 +51468,6 @@ type projGTInt32Int32Op struct {
 }
 
 func (p projGTInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -53603,7 +51559,7 @@ func (p projGTInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53676,12 +51632,6 @@ type projGTInt32Int64Op struct {
 }
 
 func (p projGTInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -53773,7 +51723,7 @@ func (p projGTInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53846,12 +51796,6 @@ type projGTInt32Float64Op struct {
 }
 
 func (p projGTInt32Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -53959,7 +51903,7 @@ func (p projGTInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54048,12 +51992,6 @@ type projGTInt32DecimalOp struct {
 }
 
 func (p projGTInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -54092,9 +52030,9 @@ func (p projGTInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -54119,9 +52057,9 @@ func (p projGTInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -54135,7 +52073,7 @@ func (p projGTInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54147,9 +52085,9 @@ func (p projGTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -54170,9 +52108,9 @@ func (p projGTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -54198,12 +52136,6 @@ type projGTInt64Int16Op struct {
 }
 
 func (p projGTInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -54295,7 +52227,7 @@ func (p projGTInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54368,12 +52300,6 @@ type projGTInt64Int32Op struct {
 }
 
 func (p projGTInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -54465,7 +52391,7 @@ func (p projGTInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54538,12 +52464,6 @@ type projGTInt64Int64Op struct {
 }
 
 func (p projGTInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -54635,7 +52555,7 @@ func (p projGTInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54708,12 +52628,6 @@ type projGTInt64Float64Op struct {
 }
 
 func (p projGTInt64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -54821,7 +52735,7 @@ func (p projGTInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54910,12 +52824,6 @@ type projGTInt64DecimalOp struct {
 }
 
 func (p projGTInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -54954,9 +52862,9 @@ func (p projGTInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -54981,9 +52889,9 @@ func (p projGTInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -54997,7 +52905,7 @@ func (p projGTInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55009,9 +52917,9 @@ func (p projGTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -55032,9 +52940,9 @@ func (p projGTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -55060,12 +52968,6 @@ type projGTFloat64Int16Op struct {
 }
 
 func (p projGTFloat64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -55173,7 +53075,7 @@ func (p projGTFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55262,12 +53164,6 @@ type projGTFloat64Int32Op struct {
 }
 
 func (p projGTFloat64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -55375,7 +53271,7 @@ func (p projGTFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55464,12 +53360,6 @@ type projGTFloat64Int64Op struct {
 }
 
 func (p projGTFloat64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -55577,7 +53467,7 @@ func (p projGTFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55666,12 +53556,6 @@ type projGTFloat64Float64Op struct {
 }
 
 func (p projGTFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -55779,7 +53663,7 @@ func (p projGTFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55868,12 +53752,6 @@ type projGTFloat64DecimalOp struct {
 }
 
 func (p projGTFloat64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -55912,11 +53790,11 @@ func (p projGTFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -55941,11 +53819,11 @@ func (p projGTFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -55959,7 +53837,7 @@ func (p projGTFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55971,11 +53849,11 @@ func (p projGTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -55996,11 +53874,11 @@ func (p projGTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -56026,12 +53904,6 @@ type projGTTimestampTimestampOp struct {
 }
 
 func (p projGTTimestampTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -56115,7 +53987,7 @@ func (p projGTTimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56180,12 +54052,6 @@ type projGTIntervalIntervalOp struct {
 }
 
 func (p projGTIntervalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -56255,7 +54121,7 @@ func (p projGTIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56306,12 +54172,6 @@ type projGTJSONJSONOp struct {
 }
 
 func (p projGTJSONJSONOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -56391,7 +54251,7 @@ func (p projGTJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56452,12 +54312,6 @@ type projGTDatumDatumOp struct {
 }
 
 func (p projGTDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -56529,7 +54383,7 @@ func (p projGTDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56582,12 +54436,6 @@ type projGEBoolBoolOp struct {
 }
 
 func (p projGEBoolBoolOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -56673,7 +54521,7 @@ func (p projGEBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56740,12 +54588,6 @@ type projGEBytesBytesOp struct {
 }
 
 func (p projGEBytesBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -56813,7 +54655,7 @@ func (p projGEBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56862,12 +54704,6 @@ type projGEDecimalInt16Op struct {
 }
 
 func (p projGEDecimalInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -56906,9 +54742,9 @@ func (p projGEDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -56933,9 +54769,9 @@ func (p projGEDecimalInt16Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -56949,7 +54785,7 @@ func (p projGEDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56961,9 +54797,9 @@ func (p projGEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -56984,9 +54820,9 @@ func (p projGEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -57012,12 +54848,6 @@ type projGEDecimalInt32Op struct {
 }
 
 func (p projGEDecimalInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -57056,9 +54886,9 @@ func (p projGEDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -57083,9 +54913,9 @@ func (p projGEDecimalInt32Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -57099,7 +54929,7 @@ func (p projGEDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57111,9 +54941,9 @@ func (p projGEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -57134,9 +54964,9 @@ func (p projGEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -57162,12 +54992,6 @@ type projGEDecimalInt64Op struct {
 }
 
 func (p projGEDecimalInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -57206,9 +55030,9 @@ func (p projGEDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -57233,9 +55057,9 @@ func (p projGEDecimalInt64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg2))
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -57249,7 +55073,7 @@ func (p projGEDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57261,9 +55085,9 @@ func (p projGEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -57284,9 +55108,9 @@ func (p projGEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -57312,12 +55136,6 @@ type projGEDecimalFloat64Op struct {
 }
 
 func (p projGEDecimalFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -57356,11 +55174,11 @@ func (p projGEDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -57385,11 +55203,11 @@ func (p projGEDecimalFloat64Op) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+								cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -57403,7 +55221,7 @@ func (p projGEDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57415,11 +55233,11 @@ func (p projGEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -57440,11 +55258,11 @@ func (p projGEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -57470,12 +55288,6 @@ type projGEDecimalDecimalOp struct {
 }
 
 func (p projGEDecimalDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -57545,7 +55357,7 @@ func (p projGEDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57596,12 +55408,6 @@ type projGEInt16Int16Op struct {
 }
 
 func (p projGEInt16Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -57693,7 +55499,7 @@ func (p projGEInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57766,12 +55572,6 @@ type projGEInt16Int32Op struct {
 }
 
 func (p projGEInt16Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -57863,7 +55663,7 @@ func (p projGEInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57936,12 +55736,6 @@ type projGEInt16Int64Op struct {
 }
 
 func (p projGEInt16Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -58033,7 +55827,7 @@ func (p projGEInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58106,12 +55900,6 @@ type projGEInt16Float64Op struct {
 }
 
 func (p projGEInt16Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -58219,7 +56007,7 @@ func (p projGEInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58308,12 +56096,6 @@ type projGEInt16DecimalOp struct {
 }
 
 func (p projGEInt16DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -58352,9 +56134,9 @@ func (p projGEInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -58379,9 +56161,9 @@ func (p projGEInt16DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -58395,7 +56177,7 @@ func (p projGEInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58407,9 +56189,9 @@ func (p projGEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -58430,9 +56212,9 @@ func (p projGEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -58458,12 +56240,6 @@ type projGEInt32Int16Op struct {
 }
 
 func (p projGEInt32Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -58555,7 +56331,7 @@ func (p projGEInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58628,12 +56404,6 @@ type projGEInt32Int32Op struct {
 }
 
 func (p projGEInt32Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -58725,7 +56495,7 @@ func (p projGEInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58798,12 +56568,6 @@ type projGEInt32Int64Op struct {
 }
 
 func (p projGEInt32Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -58895,7 +56659,7 @@ func (p projGEInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58968,12 +56732,6 @@ type projGEInt32Float64Op struct {
 }
 
 func (p projGEInt32Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -59081,7 +56839,7 @@ func (p projGEInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59170,12 +56928,6 @@ type projGEInt32DecimalOp struct {
 }
 
 func (p projGEInt32DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -59214,9 +56966,9 @@ func (p projGEInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -59241,9 +56993,9 @@ func (p projGEInt32DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -59257,7 +57009,7 @@ func (p projGEInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59269,9 +57021,9 @@ func (p projGEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -59292,9 +57044,9 @@ func (p projGEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -59320,12 +57072,6 @@ type projGEInt64Int16Op struct {
 }
 
 func (p projGEInt64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -59417,7 +57163,7 @@ func (p projGEInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59490,12 +57236,6 @@ type projGEInt64Int32Op struct {
 }
 
 func (p projGEInt64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -59587,7 +57327,7 @@ func (p projGEInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59660,12 +57400,6 @@ type projGEInt64Int64Op struct {
 }
 
 func (p projGEInt64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -59757,7 +57491,7 @@ func (p projGEInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59830,12 +57564,6 @@ type projGEInt64Float64Op struct {
 }
 
 func (p projGEInt64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -59943,7 +57671,7 @@ func (p projGEInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60032,12 +57760,6 @@ type projGEInt64DecimalOp struct {
 }
 
 func (p projGEInt64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -60076,9 +57798,9 @@ func (p projGEInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -60103,9 +57825,9 @@ func (p projGEInt64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								tmpDec.SetInt64(int64(arg1))
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -60119,7 +57841,7 @@ func (p projGEInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60131,9 +57853,9 @@ func (p projGEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -60154,9 +57876,9 @@ func (p projGEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -60182,12 +57904,6 @@ type projGEFloat64Int16Op struct {
 }
 
 func (p projGEFloat64Int16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -60295,7 +58011,7 @@ func (p projGEFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60384,12 +58100,6 @@ type projGEFloat64Int32Op struct {
 }
 
 func (p projGEFloat64Int32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -60497,7 +58207,7 @@ func (p projGEFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60586,12 +58296,6 @@ type projGEFloat64Int64Op struct {
 }
 
 func (p projGEFloat64Int64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -60699,7 +58403,7 @@ func (p projGEFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60788,12 +58492,6 @@ type projGEFloat64Float64Op struct {
 }
 
 func (p projGEFloat64Float64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -60901,7 +58599,7 @@ func (p projGEFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60990,12 +58688,6 @@ type projGEFloat64DecimalOp struct {
 }
 
 func (p projGEFloat64DecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -61034,11 +58726,11 @@ func (p projGEFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -61063,11 +58755,11 @@ func (p projGEFloat64DecimalOp) Next() coldata.Batch {
 							var cmpResult int
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
+								var tmpDec apd.Decimal //gcassert:noescape
 								if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 									colexecerror.ExpectedError(err)
 								}
-								cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+								cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -61081,7 +58773,7 @@ func (p projGEFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61093,11 +58785,11 @@ func (p projGEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -61118,11 +58810,11 @@ func (p projGEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -61148,12 +58840,6 @@ type projGETimestampTimestampOp struct {
 }
 
 func (p projGETimestampTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -61237,7 +58923,7 @@ func (p projGETimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61302,12 +58988,6 @@ type projGEIntervalIntervalOp struct {
 }
 
 func (p projGEIntervalIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -61377,7 +59057,7 @@ func (p projGEIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61428,12 +59108,6 @@ type projGEJSONJSONOp struct {
 }
 
 func (p projGEJSONJSONOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -61513,7 +59187,7 @@ func (p projGEJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61574,12 +59248,6 @@ type projGEDatumDatumOp struct {
 }
 
 func (p projGEDatumDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -61651,7 +59319,7 @@ func (p projGEDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61721,7 +59389,6 @@ func GetProjectionOperator(
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,
 		outputIdx:      outputIdx,
-		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
@@ -61737,12 +59404,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitandInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitandInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitandInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -61750,12 +59420,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitandInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitandInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitandInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -61764,12 +59437,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitandInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitandInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitandInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitandInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -61782,7 +59458,9 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projBitandDatumDatumOp{projOpBase: projOpBase}, nil
+							op := &projBitandDatumDatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -61796,12 +59474,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitorInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitorInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitorInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -61809,12 +59490,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitorInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitorInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitorInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -61823,12 +59507,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitorInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitorInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitorInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitorInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -61841,7 +59528,9 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projBitorDatumDatumOp{projOpBase: projOpBase}, nil
+							op := &projBitorDatumDatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -61855,12 +59544,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitxorInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitxorInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitxorInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -61868,12 +59560,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitxorInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitxorInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitxorInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -61882,12 +59577,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitxorInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projBitxorInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projBitxorInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projBitxorInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -61900,7 +59598,9 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projBitxorDatumDatumOp{projOpBase: projOpBase}, nil
+							op := &projBitxorDatumDatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -61915,18 +59615,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusDecimalInt16Op{projOpBase: projOpBase}, nil
+							op := &projPlusDecimalInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projPlusDecimalInt32Op{projOpBase: projOpBase}, nil
+							op := &projPlusDecimalInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusDecimalInt64Op{projOpBase: projOpBase}, nil
+							op := &projPlusDecimalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusDecimalDecimalOp{projOpBase: projOpBase}, nil
+							op := &projPlusDecimalDecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -61937,24 +59641,30 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projPlusInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt16DecimalOp{projOpBase: projOpBase}, nil
+							op := &projPlusInt16DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt16DatumOp{projOpBase: projOpBase}, nil
+							op := &projPlusInt16DatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				case 32:
@@ -61962,24 +59672,30 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projPlusInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt32DecimalOp{projOpBase: projOpBase}, nil
+							op := &projPlusInt32DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt32DatumOp{projOpBase: projOpBase}, nil
+							op := &projPlusInt32DatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				case -1:
@@ -61988,24 +59704,30 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projPlusInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projPlusInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt64DecimalOp{projOpBase: projOpBase}, nil
+							op := &projPlusInt64DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt64DatumOp{projOpBase: projOpBase}, nil
+							op := &projPlusInt64DatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -62018,7 +59740,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusFloat64Float64Op{projOpBase: projOpBase}, nil
+							op := &projPlusFloat64Float64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62031,7 +59754,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusTimestampIntervalOp{projOpBase: projOpBase}, nil
+							op := &projPlusTimestampIntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62044,19 +59768,23 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusIntervalTimestampOp{projOpBase: projOpBase}, nil
+							op := &projPlusIntervalTimestampOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusIntervalIntervalOp{projOpBase: projOpBase}, nil
+							op := &projPlusIntervalIntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusIntervalDatumOp{projOpBase: projOpBase}, nil
+							op := &projPlusIntervalDatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -62069,17 +59797,25 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusDatumIntervalOp{projOpBase: projOpBase}, nil
+							op := &projPlusDatumIntervalOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusDatumInt16Op{projOpBase: projOpBase}, nil
+							op := &projPlusDatumInt16Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case 32:
-							return &projPlusDatumInt32Op{projOpBase: projOpBase}, nil
+							op := &projPlusDatumInt32Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusDatumInt64Op{projOpBase: projOpBase}, nil
+							op := &projPlusDatumInt64Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -62094,18 +59830,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusDecimalInt16Op{projOpBase: projOpBase}, nil
+							op := &projMinusDecimalInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMinusDecimalInt32Op{projOpBase: projOpBase}, nil
+							op := &projMinusDecimalInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusDecimalInt64Op{projOpBase: projOpBase}, nil
+							op := &projMinusDecimalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusDecimalDecimalOp{projOpBase: projOpBase}, nil
+							op := &projMinusDecimalDecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62116,24 +59856,30 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMinusInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt16DecimalOp{projOpBase: projOpBase}, nil
+							op := &projMinusInt16DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt16DatumOp{projOpBase: projOpBase}, nil
+							op := &projMinusInt16DatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				case 32:
@@ -62141,24 +59887,30 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMinusInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt32DecimalOp{projOpBase: projOpBase}, nil
+							op := &projMinusInt32DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt32DatumOp{projOpBase: projOpBase}, nil
+							op := &projMinusInt32DatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				case -1:
@@ -62167,24 +59919,30 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMinusInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projMinusInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt64DecimalOp{projOpBase: projOpBase}, nil
+							op := &projMinusInt64DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt64DatumOp{projOpBase: projOpBase}, nil
+							op := &projMinusInt64DatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -62197,7 +59955,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusFloat64Float64Op{projOpBase: projOpBase}, nil
+							op := &projMinusFloat64Float64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62210,13 +59969,15 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusTimestampTimestampOp{projOpBase: projOpBase}, nil
+							op := &projMinusTimestampTimestampOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusTimestampIntervalOp{projOpBase: projOpBase}, nil
+							op := &projMinusTimestampIntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62229,13 +59990,16 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusIntervalIntervalOp{projOpBase: projOpBase}, nil
+							op := &projMinusIntervalIntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusIntervalDatumOp{projOpBase: projOpBase}, nil
+							op := &projMinusIntervalDatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -62248,17 +60012,21 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusJSONBytesOp{projOpBase: projOpBase}, nil
+							op := &projMinusJSONBytesOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusJSONInt16Op{projOpBase: projOpBase}, nil
+							op := &projMinusJSONInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMinusJSONInt32Op{projOpBase: projOpBase}, nil
+							op := &projMinusJSONInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusJSONInt64Op{projOpBase: projOpBase}, nil
+							op := &projMinusJSONInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62271,29 +60039,41 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusDatumDatumOp{projOpBase: projOpBase}, nil
+							op := &projMinusDatumDatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusDatumIntervalOp{projOpBase: projOpBase}, nil
+							op := &projMinusDatumIntervalOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusDatumBytesOp{projOpBase: projOpBase}, nil
+							op := &projMinusDatumBytesOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusDatumInt16Op{projOpBase: projOpBase}, nil
+							op := &projMinusDatumInt16Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case 32:
-							return &projMinusDatumInt32Op{projOpBase: projOpBase}, nil
+							op := &projMinusDatumInt32Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusDatumInt64Op{projOpBase: projOpBase}, nil
+							op := &projMinusDatumInt64Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -62308,24 +60088,29 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultDecimalInt16Op{projOpBase: projOpBase}, nil
+							op := &projMultDecimalInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMultDecimalInt32Op{projOpBase: projOpBase}, nil
+							op := &projMultDecimalInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMultDecimalInt64Op{projOpBase: projOpBase}, nil
+							op := &projMultDecimalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultDecimalDecimalOp{projOpBase: projOpBase}, nil
+							op := &projMultDecimalDecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultDecimalIntervalOp{projOpBase: projOpBase}, nil
+							op := &projMultDecimalIntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62336,24 +60121,29 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projMultInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMultInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projMultInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMultInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projMultInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt16DecimalOp{projOpBase: projOpBase}, nil
+							op := &projMultInt16DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt16IntervalOp{projOpBase: projOpBase}, nil
+							op := &projMultInt16IntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -62361,24 +60151,29 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projMultInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMultInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projMultInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMultInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projMultInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt32DecimalOp{projOpBase: projOpBase}, nil
+							op := &projMultInt32DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt32IntervalOp{projOpBase: projOpBase}, nil
+							op := &projMultInt32IntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -62387,24 +60182,29 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projMultInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMultInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projMultInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMultInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projMultInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt64DecimalOp{projOpBase: projOpBase}, nil
+							op := &projMultInt64DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt64IntervalOp{projOpBase: projOpBase}, nil
+							op := &projMultInt64IntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62417,13 +60217,15 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultFloat64Float64Op{projOpBase: projOpBase}, nil
+							op := &projMultFloat64Float64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultFloat64IntervalOp{projOpBase: projOpBase}, nil
+							op := &projMultFloat64IntervalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62435,24 +60237,29 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultIntervalInt16Op{projOpBase: projOpBase}, nil
+							op := &projMultIntervalInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projMultIntervalInt32Op{projOpBase: projOpBase}, nil
+							op := &projMultIntervalInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projMultIntervalInt64Op{projOpBase: projOpBase}, nil
+							op := &projMultIntervalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultIntervalFloat64Op{projOpBase: projOpBase}, nil
+							op := &projMultIntervalFloat64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultIntervalDecimalOp{projOpBase: projOpBase}, nil
+							op := &projMultIntervalDecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62467,18 +60274,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projDivDecimalInt16Op{projOpBase: projOpBase}, nil
+							op := &projDivDecimalInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projDivDecimalInt32Op{projOpBase: projOpBase}, nil
+							op := &projDivDecimalInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projDivDecimalInt64Op{projOpBase: projOpBase}, nil
+							op := &projDivDecimalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivDecimalDecimalOp{projOpBase: projOpBase}, nil
+							op := &projDivDecimalDecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62489,18 +60300,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projDivInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projDivInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projDivInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projDivInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projDivInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projDivInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivInt16DecimalOp{projOpBase: projOpBase}, nil
+							op := &projDivInt16DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -62508,18 +60323,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projDivInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projDivInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projDivInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projDivInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projDivInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projDivInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivInt32DecimalOp{projOpBase: projOpBase}, nil
+							op := &projDivInt32DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -62528,18 +60347,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projDivInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projDivInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projDivInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projDivInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projDivInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projDivInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivInt64DecimalOp{projOpBase: projOpBase}, nil
+							op := &projDivInt64DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62552,7 +60375,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivFloat64Float64Op{projOpBase: projOpBase}, nil
+							op := &projDivFloat64Float64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62565,13 +60389,15 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivIntervalInt64Op{projOpBase: projOpBase}, nil
+							op := &projDivIntervalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivIntervalFloat64Op{projOpBase: projOpBase}, nil
+							op := &projDivIntervalFloat64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62586,18 +60412,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projFloorDivDecimalInt16Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivDecimalInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projFloorDivDecimalInt32Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivDecimalInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projFloorDivDecimalInt64Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivDecimalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivDecimalDecimalOp{projOpBase: projOpBase}, nil
+							op := &projFloorDivDecimalDecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62608,18 +60438,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projFloorDivInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projFloorDivInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projFloorDivInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivInt16DecimalOp{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt16DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -62627,18 +60461,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projFloorDivInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projFloorDivInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projFloorDivInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivInt32DecimalOp{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt32DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -62647,18 +60485,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projFloorDivInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projFloorDivInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projFloorDivInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivInt64DecimalOp{projOpBase: projOpBase}, nil
+							op := &projFloorDivInt64DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62671,7 +60513,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivFloat64Float64Op{projOpBase: projOpBase}, nil
+							op := &projFloorDivFloat64Float64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62686,18 +60529,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projModDecimalInt16Op{projOpBase: projOpBase}, nil
+							op := &projModDecimalInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projModDecimalInt32Op{projOpBase: projOpBase}, nil
+							op := &projModDecimalInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projModDecimalInt64Op{projOpBase: projOpBase}, nil
+							op := &projModDecimalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModDecimalDecimalOp{projOpBase: projOpBase}, nil
+							op := &projModDecimalDecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62708,18 +60555,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projModInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projModInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projModInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projModInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projModInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projModInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModInt16DecimalOp{projOpBase: projOpBase}, nil
+							op := &projModInt16DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -62727,18 +60578,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projModInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projModInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projModInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projModInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projModInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projModInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModInt32DecimalOp{projOpBase: projOpBase}, nil
+							op := &projModInt32DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -62747,18 +60602,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projModInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projModInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projModInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projModInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projModInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projModInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModInt64DecimalOp{projOpBase: projOpBase}, nil
+							op := &projModInt64DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62771,7 +60630,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModFloat64Float64Op{projOpBase: projOpBase}, nil
+							op := &projModFloat64Float64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62786,18 +60646,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPowDecimalInt16Op{projOpBase: projOpBase}, nil
+							op := &projPowDecimalInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projPowDecimalInt32Op{projOpBase: projOpBase}, nil
+							op := &projPowDecimalInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projPowDecimalInt64Op{projOpBase: projOpBase}, nil
+							op := &projPowDecimalInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowDecimalDecimalOp{projOpBase: projOpBase}, nil
+							op := &projPowDecimalDecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62808,18 +60672,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPowInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projPowInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projPowInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projPowInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projPowInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projPowInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowInt16DecimalOp{projOpBase: projOpBase}, nil
+							op := &projPowInt16DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -62827,18 +60695,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPowInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projPowInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projPowInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projPowInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projPowInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projPowInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowInt32DecimalOp{projOpBase: projOpBase}, nil
+							op := &projPowInt32DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -62847,18 +60719,22 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPowInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projPowInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projPowInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projPowInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projPowInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projPowInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowInt64DecimalOp{projOpBase: projOpBase}, nil
+							op := &projPowInt64DecimalOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62871,7 +60747,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowFloat64Float64Op{projOpBase: projOpBase}, nil
+							op := &projPowFloat64Float64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62887,7 +60764,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projConcatBytesBytesOp{projOpBase: projOpBase}, nil
+							op := &projConcatBytesBytesOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62900,7 +60778,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projConcatJSONJSONOp{projOpBase: projOpBase}, nil
+							op := &projConcatJSONJSONOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62913,7 +60792,9 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projConcatDatumDatumOp{projOpBase: projOpBase}, nil
+							op := &projConcatDatumDatumOp{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -62927,12 +60808,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projLShiftInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projLShiftInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projLShiftInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -62940,12 +60824,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projLShiftInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projLShiftInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projLShiftInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -62954,12 +60841,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projLShiftInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projLShiftInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projLShiftInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projLShiftInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -62971,12 +60861,18 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projLShiftDatumInt16Op{projOpBase: projOpBase}, nil
+							op := &projLShiftDatumInt16Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case 32:
-							return &projLShiftDatumInt32Op{projOpBase: projOpBase}, nil
+							op := &projLShiftDatumInt32Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case -1:
 						default:
-							return &projLShiftDatumInt64Op{projOpBase: projOpBase}, nil
+							op := &projLShiftDatumInt64Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -62990,12 +60886,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projRShiftInt16Int16Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt16Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projRShiftInt16Int32Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt16Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projRShiftInt16Int64Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt16Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case 32:
@@ -63003,12 +60902,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projRShiftInt32Int16Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt32Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projRShiftInt32Int32Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt32Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projRShiftInt32Int64Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt32Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				case -1:
@@ -63017,12 +60919,15 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projRShiftInt64Int16Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt64Int16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projRShiftInt64Int32Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt64Int32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projRShiftInt64Int64Op{projOpBase: projOpBase}, nil
+							op := &projRShiftInt64Int64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -63034,12 +60939,18 @@ func GetProjectionOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projRShiftDatumInt16Op{projOpBase: projOpBase}, nil
+							op := &projRShiftDatumInt16Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case 32:
-							return &projRShiftDatumInt32Op{projOpBase: projOpBase}, nil
+							op := &projRShiftDatumInt32Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case -1:
 						default:
-							return &projRShiftDatumInt64Op{projOpBase: projOpBase}, nil
+							op := &projRShiftDatumInt64Op{projOpBase: projOpBase}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -63055,17 +60966,21 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchValJSONBytesOp{projOpBase: projOpBase}, nil
+							op := &projJSONFetchValJSONBytesOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projJSONFetchValJSONInt16Op{projOpBase: projOpBase}, nil
+							op := &projJSONFetchValJSONInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projJSONFetchValJSONInt32Op{projOpBase: projOpBase}, nil
+							op := &projJSONFetchValJSONInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projJSONFetchValJSONInt64Op{projOpBase: projOpBase}, nil
+							op := &projJSONFetchValJSONInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -63081,17 +60996,21 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchTextJSONBytesOp{projOpBase: projOpBase}, nil
+							op := &projJSONFetchTextJSONBytesOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projJSONFetchTextJSONInt16Op{projOpBase: projOpBase}, nil
+							op := &projJSONFetchTextJSONInt16Op{projOpBase: projOpBase}
+							return op, nil
 						case 32:
-							return &projJSONFetchTextJSONInt32Op{projOpBase: projOpBase}, nil
+							op := &projJSONFetchTextJSONInt32Op{projOpBase: projOpBase}
+							return op, nil
 						case -1:
 						default:
-							return &projJSONFetchTextJSONInt64Op{projOpBase: projOpBase}, nil
+							op := &projJSONFetchTextJSONInt64Op{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -63107,7 +61026,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchValPathJSONDatumOp{projOpBase: projOpBase}, nil
+							op := &projJSONFetchValPathJSONDatumOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}
@@ -63123,7 +61043,8 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchTextPathJSONDatumOp{projOpBase: projOpBase}, nil
+							op := &projJSONFetchTextPathJSONDatumOp{projOpBase: projOpBase}
+							return op, nil
 						}
 					}
 				}

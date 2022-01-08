@@ -43,6 +43,8 @@ build:devdarwinx86_64 --platforms=//build/toolchains:darwin_x86_64
 build:devdarwinx86_64 --config=dev
 build:dev --define cockroach_bazel_dev=y
 build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh
+build:dev --action_env=PATH
+build:dev --host_action_env=PATH
 
 build:nonogo --define cockroach_nonogo=y
 # vi: ft=sh

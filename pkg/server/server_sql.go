@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/commenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -572,6 +573,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
 
+		DistSender:               cfg.distSender,
 		RangeCache:               cfg.distSender.RangeDescriptorCache(),
 		SQLSQLResponseAdmissionQ: cfg.sqlSQLResponseAdmissionQ,
 		CollectionFactory:        collectionFactory,
@@ -808,6 +810,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sql.ValidateInvertedIndexes,
 		sql.NewFakeSessionData,
 	)
+	execCfg.CommentUpdaterFactory = commenter.NewCommentUpdaterFactory(
+		ieFactory,
+		sql.MakeConstraintOidBuilder)
 	execCfg.InternalExecutorFactory = ieFactory
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
@@ -902,7 +907,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			spanConfigKnobs,
 		)
 
-		execCfg.SpanConfigReconciliationJobDeps = spanConfig.manager
+		execCfg.SpanConfigReconciler = spanConfigReconciler
 	}
 	execCfg.SpanConfigKVAccessor = cfg.sqlServerOptionalKVArgs.spanConfigKVAccessor
 
