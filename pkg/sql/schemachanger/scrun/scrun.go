@@ -16,11 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 )
@@ -59,7 +57,7 @@ func runTransactionPhase(
 		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
 	})
 	if err != nil {
-		return scpb.CurrentState{}, jobspb.InvalidJobID, scgraphviz.DecorateErrorWithPlanDetails(err, sc)
+		return scpb.CurrentState{}, jobspb.InvalidJobID, err
 	}
 	after := state.Current
 	if len(after) == 0 {
@@ -93,7 +91,7 @@ func RunSchemaChangesInJob(
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 	})
 	if err != nil {
-		return scgraphviz.DecorateErrorWithPlanDetails(err, sc)
+		return err
 	}
 
 	for i := range sc.Stages {
@@ -113,17 +111,15 @@ func executeStage(
 	deps scexec.Dependencies,
 	p scplan.Plan,
 	stageIdx int,
-	stage scstage.Stage,
+	stage scplan.Stage,
 ) error {
 	if knobs != nil && knobs.BeforeStage != nil {
 		if err := knobs.BeforeStage(p, stageIdx); err != nil {
 			return err
 		}
 	}
-	err := scexec.ExecuteStage(ctx, deps, stage.Ops())
-	if err != nil {
-		err = errors.Wrapf(err, "error executing %s", stage.String())
-		return scgraphviz.DecorateErrorWithPlanDetails(err, p)
+	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
+		return errors.Wrapf(p.DecorateErrorWithPlanDetails(err), "error executing %s", stage.String())
 	}
 	return nil
 }

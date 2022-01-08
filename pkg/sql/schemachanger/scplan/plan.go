@@ -12,13 +12,14 @@ package scplan
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/deprules"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/opgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scopt"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/deprules"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scopt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,6 +33,15 @@ type Params struct {
 	SchemaChangerJobIDSupplier func() jobspb.JobID
 }
 
+// Exported internal types
+type (
+	// Graph is an exported alias of scgraph.Graph.
+	Graph = scgraph.Graph
+
+	// Stage is an exported alias of scstage.Stage.
+	Stage = scstage.Stage
+)
+
 // A Plan is a schema change plan, primarily containing ops to be executed that
 // are partitioned into stages.
 type Plan struct {
@@ -39,7 +49,7 @@ type Plan struct {
 	Params Params
 	Graph  *scgraph.Graph
 	JobID  jobspb.JobID
-	Stages []scstage.Stage
+	Stages []Stage
 }
 
 // StagesForCurrentPhase returns the stages in the execution phase specified in
@@ -51,6 +61,21 @@ func (p Plan) StagesForCurrentPhase() []scstage.Stage {
 		}
 	}
 	return p.Stages
+}
+
+// DecorateErrorWithPlanDetails adds plan graphviz URLs as error details.
+func (p Plan) DecorateErrorWithPlanDetails(err error) error {
+	return scgraphviz.DecorateErrorWithPlanDetails(err, p.CurrentState, p.Graph, p.Stages)
+}
+
+// DependenciesURL returns a URL to render the dependency graph in the Plan.
+func (p Plan) DependenciesURL() (string, error) {
+	return scgraphviz.DependenciesURL(p.CurrentState, p.Graph)
+}
+
+// StagesURL returns a URL to render the stages in the Plan.
+func (p Plan) StagesURL() (string, error) {
+	return scgraphviz.StagesURL(p.CurrentState, p.Graph, p.Stages)
 }
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
@@ -68,7 +93,7 @@ func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 			if !ok {
 				rAsErr = errors.Errorf("panic during MakePlan: %v", r)
 			}
-			err = errors.CombineErrors(err, rAsErr)
+			err = p.DecorateErrorWithPlanDetails(rAsErr)
 		}
 	}()
 
@@ -78,7 +103,7 @@ func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 		// Only get the job ID if it's actually been assigned already.
 		p.JobID = params.SchemaChangerJobIDSupplier()
 	}
-	if err = scstage.ValidateStages(p.TargetState, p.Stages, p.Graph); err != nil {
+	if err := scstage.ValidateStages(p.TargetState, p.Stages, p.Graph); err != nil {
 		panic(errors.Wrapf(err, "invalid execution plan"))
 	}
 	return p, nil

@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,11 +74,11 @@ func (n *explainDDLNode) startExec(params runParams) error {
 	}
 	var vizURL string
 	if n.options.Flags[tree.ExplainFlagDeps] {
-		if vizURL, err = scgraphviz.DependenciesURL(sc); err != nil {
+		if vizURL, err = sc.DependenciesURL(); err != nil {
 			return errors.WithAssertionFailure(err)
 		}
 	} else {
-		if vizURL, err = scgraphviz.StagesURL(sc); err != nil {
+		if vizURL, err = sc.StagesURL(); err != nil {
 			return errors.WithAssertionFailure(err)
 		}
 	}

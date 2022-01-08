@@ -10,7 +10,7 @@ go_library(
         "iteration.go",
         ":gen-depedgekind-stringer",  # keep
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/schemachanger/rel",
