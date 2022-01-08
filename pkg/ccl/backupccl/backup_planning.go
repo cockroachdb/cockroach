@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -904,33 +903,16 @@ func backupPlanHook(
 				}
 			}
 
-			var err error
-			_, coveredTime, err := makeImportSpans(
-				spans,
-				prevBackups,
-				nil,         /*backupLocalityMaps*/
-				keys.MinKey, /* lowWatermark */
-				func(span covering.Range, start, end hlc.Timestamp) error {
-					if start.IsEmpty() {
-						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
-						return nil
-					}
-					return errOnMissingRange(span, start, end)
-				},
-			)
-			if err != nil {
-				return errors.Wrap(err, "invalid previous backups")
-			}
+			var cov roachpb.SpanGroup
+			cov.Add(spans...)
+			cov.Sub(prevBackups[len(prevBackups)-1].Spans...)
+			newSpans = cov.Slice()
 
 			tableSpans, err := getReintroducedSpans(ctx, p, prevBackups, tables, revs, endTime)
 			if err != nil {
 				return err
 			}
 			newSpans = append(newSpans, tableSpans...)
-
-			if coveredTime != startTime {
-				return errors.Errorf("expected previous backups to cover until time %v, got %v", startTime, coveredTime)
-			}
 		}
 
 		// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
@@ -962,19 +944,10 @@ func backupPlanHook(
 			DescriptorCoverage:  backupStmt.Coverage(),
 		}
 
-		// Sanity check: re-run the validation that RESTORE will do, but this time
-		// including this backup, to ensure that the this backup plus any previous
-		// backups does cover the interval expected.
-		if _, coveredEnd, err := makeImportSpans(
-			spans,
-			append(prevBackups, backupManifest),
-			nil, /*backupLocalityInfo*/
-			keys.MinKey,
-			errOnMissingRange,
-		); err != nil {
-			return err
-		} else if coveredEnd != endTime {
-			return errors.Errorf("expected backup (along with any previous backups) to cover to %v, not %v", endTime, coveredEnd)
+		// Verify this backup on its prior chain cover its spans up to its end time,
+		// as restore would do if it tried to restore this backup.
+		if err := checkCoverage(ctx, spans, append(prevBackups, backupManifest)); err != nil {
+			return errors.Wrap(err, "new backup would not cover expected time")
 		}
 
 		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.kmsURIs, resolvedSubdir)
