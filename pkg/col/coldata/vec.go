@@ -128,7 +128,7 @@ type Vec interface {
 	Nulls() *Nulls
 
 	// SetNulls sets the nulls vector for this column.
-	SetNulls(*Nulls)
+	SetNulls(Nulls)
 
 	// Length returns the length of the slice that is underlying this Vec.
 	Length() int
@@ -294,8 +294,8 @@ func (m *memColumn) Nulls() *Nulls {
 	return &m.nulls
 }
 
-func (m *memColumn) SetNulls(n *Nulls) {
-	m.nulls = *n
+func (m *memColumn) SetNulls(n Nulls) {
+	m.nulls = n
 }
 
 func (m *memColumn) Length() int {
