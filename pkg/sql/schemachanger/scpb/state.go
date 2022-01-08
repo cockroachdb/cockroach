@@ -15,34 +15,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// State represents a current or potential future state of the
-// schema change system. Additionally, it tracks any metadata
-// for the schema change such as the Statements and Authorization
-// information. Nodes may refer to this information for different
-// purposes.
-type State struct {
-	Nodes         []*Node
-	Statements    []*Statement
-	Authorization Authorization
+// CurrentState is a TargetState decorated with the current status of the
+// elements in the target state.
+type CurrentState struct {
+	TargetState
+	Current []Status
 }
 
-// Statuses returns a slice of statuses extracted from the Nodes.
-func (s *State) Statuses() []Status {
-	statuses := make([]Status, len(s.Nodes))
-	for i := range s.Nodes {
-		statuses[i] = s.Nodes[i].Status
+// DeepCopy returns a deep copy of the receiver.
+func (s CurrentState) DeepCopy() CurrentState {
+	return CurrentState{
+		TargetState: *protoutil.Clone(&s.TargetState).(*TargetState),
+		Current:     append(make([]Status, 0, len(s.Current)), s.Current...),
 	}
-	return statuses
 }
 
 // NumStatus is the number of values which Status may take on.
 var NumStatus = len(Status_name)
-
-// Node represents a Target with a given status.
-type Node struct {
-	*Target
-	Status
-}
 
 // Element represents a logical component of a catalog entry's schema (e.g., an
 // index or column in a table).
@@ -54,7 +43,7 @@ type Element interface {
 	element()
 }
 
-//go:generate go run element_generator.go --in scpb.proto --out elements_generated.go
+//go:generate go run element_generator.go --in elements.proto --out elements_generated.go
 //go:generate go run element_uml_generator.go --out uml/table.puml
 
 // Element returns an Element from its wrapper for serialization.
@@ -62,9 +51,9 @@ func (e *ElementProto) Element() Element {
 	return e.GetValue().(Element)
 }
 
-// NewTarget constructs a new Target. The passed elem must be one of the oneOf
+// MakeTarget constructs a new Target. The passed elem must be one of the oneOf
 // members of Element. If not, this call will panic.
-func NewTarget(status Status, elem Element, metadata *TargetMetadata) *Target {
+func MakeTarget(status Status, elem Element, metadata *TargetMetadata) Target {
 	t := Target{
 		TargetStatus: status,
 	}
@@ -74,5 +63,10 @@ func NewTarget(status Status, elem Element, metadata *TargetMetadata) *Target {
 	if !t.SetValue(elem) {
 		panic(errors.Errorf("unknown element type %T", elem))
 	}
-	return &t
+	return t
 }
+
+// SourceElementID elements ID's for identifying parent elements.
+// This ID is dynamically allocated when any parent element is
+// created and has no relation to the descriptor ID.
+type SourceElementID uint32

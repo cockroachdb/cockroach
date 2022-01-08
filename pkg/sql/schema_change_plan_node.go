@@ -57,7 +57,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p.ExecCfg().Settings,
 		scs.stmts,
 	)
-	outputNodes, err := scbuild.Build(ctx, deps, scs.state, stmt)
+	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scerrors.HasNotImplemented(err) &&
 		mode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
 		return nil, false, nil
@@ -70,9 +70,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		}
 		return nil, false, err
 	}
-	return &schemaChangePlanNode{
-		plannedState: outputNodes,
-	}, true, nil
+	return &schemaChangePlanNode{plannedState: state}, true, nil
 }
 
 // WaitForDescriptorSchemaChanges polls the specified descriptor (in separate
@@ -125,10 +123,10 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 // schemaChangePlanNode is the planNode utilized by the new schema changer to
 // perform all schema changes, unified in the new schema changer.
 type schemaChangePlanNode struct {
-	// plannedState contains the set of states produced by the builder combining
+	// plannedState contains the state produced by the builder combining
 	// the nodes that existed preceding the current statement with the output of
 	// the built current statement.
-	plannedState scpb.State
+	plannedState scpb.CurrentState
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {

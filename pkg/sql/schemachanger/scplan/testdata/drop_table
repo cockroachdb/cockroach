@@ -151,9 +151,9 @@ PreCommitPhase stage 1 of 1 with 22 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP TABLE defaultdb.shipments CASCADE
 PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
@@ -169,44 +169,41 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
     [[Sequence:{DescID: 58}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 57
+      Authorization:
+        UserName: root
       Element:
-        table:
+        Table:
           tableId: 57
-      Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 57
     *scop.LogEvent
-      DescID: 59
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 59
-      Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-        Username: root
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 59
     *scop.LogEvent
-      DescID: 58
+      Authorization:
+        UserName: root
       Element:
-        sequence:
+        Sequence:
           sequenceId: 58
-      Metadata:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-        Username: root
+      Statement: DROP TABLE defaultdb.shipments CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 58

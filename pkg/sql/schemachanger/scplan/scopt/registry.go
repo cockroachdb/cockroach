@@ -13,7 +13,7 @@ package scopt
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 type deleteNodeOpt struct {
@@ -46,10 +46,10 @@ func targetNodeVars(el rel.Var) (element, target, node rel.Var) {
 // original with these any transformations / optimizations applied.
 func OptimizeGraph(graph *scgraph.Graph) (*scgraph.Graph, error) {
 	db := graph.Database()
-	nodesToMark := make(map[*scpb.Node]struct{})
+	nodesToMark := make(map[*screl.Node]struct{})
 	for _, delete := range optRegistry.deleteQueries {
 		err := delete.query.Iterate(db, func(r rel.Result) error {
-			nodesToMark[r.Var(delete.edgeFromVar).(*scpb.Node)] = struct{}{}
+			nodesToMark[r.Var(delete.edgeFromVar).(*screl.Node)] = struct{}{}
 			return nil
 		})
 		if err != nil {

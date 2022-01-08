@@ -99,7 +99,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Setup the column ID.
 	for _, columnNode := range n.Columns {
 		// If the column was just added the new schema changer is not supported.
-		if b.HasNode(func(status, _ scpb.Status, elem scpb.Element) bool {
+		if b.HasElementStatus(func(status, _ scpb.Status, elem scpb.Element) bool {
 			if status != scpb.Status_ABSENT {
 				return false
 			}

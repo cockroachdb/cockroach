@@ -27,7 +27,7 @@ var equalityAttrs = []rel.Attr{
 	Username,
 	IndexID,
 	TargetStatus,
-	Status,
+	CurrentStatus,
 }
 
 // EqualElements returns true if the two elements are equal.

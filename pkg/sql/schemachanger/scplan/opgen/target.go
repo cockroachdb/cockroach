@@ -23,7 +23,7 @@ type target struct {
 	e           scpb.Element
 	status      scpb.Status
 	transitions []transition
-	iterateFunc func(*rel.Database, func(*scpb.Node) error) error
+	iterateFunc func(*rel.Database, func(*screl.Node) error) error
 }
 
 // transition represents a transition from one status to the next towards a
@@ -59,9 +59,9 @@ func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
 	if err != nil {
 		return t, errors.Wrap(err, "failed to construct query")
 	}
-	t.iterateFunc = func(database *rel.Database, f func(*scpb.Node) error) error {
+	t.iterateFunc = func(database *rel.Database, f func(*screl.Node) error) error {
 		return q.Iterate(database, func(r rel.Result) error {
-			return f(r.Var(node).(*scpb.Node))
+			return f(r.Var(node).(*screl.Node))
 		})
 	}
 

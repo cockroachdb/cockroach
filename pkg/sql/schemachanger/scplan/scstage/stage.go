@@ -21,14 +21,12 @@ import (
 )
 
 // A Stage is a sequence of ops to be executed "together" as part of a schema
-// change.
-//
-// stages also contain the state before and after the execution of the ops in
-// the stage, reflecting the fact that any set of ops can be thought of as a
-// transition from one state to another.
+// change. Stages also contain the statuses before and after the execution of
+// the ops in the stage, reflecting the fact that any set of ops can be thought
+// of as a transition from one state to another.
 type Stage struct {
 	// Before and After are the states before and after the stage gets executed.
-	Before, After scpb.State
+	Before, After []scpb.Status
 
 	// EdgeOps and ExtraOps are the collected ops in this stage:
 	// - EdgeOps contains the ops originating from op-edges, that is to say, state
@@ -74,15 +72,16 @@ func (s Stage) String() string {
 }
 
 // ValidateStages checks that the plan is valid.
-func ValidateStages(stages []Stage, g *scgraph.Graph) error {
+func ValidateStages(ts scpb.TargetState, stages []Stage, g *scgraph.Graph) error {
 	if len(stages) == 0 {
 		return nil
 	}
 
 	// Check that each stage has internally-consistent states.
 	for _, stage := range stages {
-		if err := validateInternalStageStates(stage); err != nil {
-			return errors.Wrapf(err, "%s", stage)
+		if na, nb := len(stage.After), len(stage.Before); na != nb {
+			return errors.Errorf("%s: Before state has %d nodes and After state has %d nodes",
+				stage, nb, na)
 		}
 	}
 
@@ -97,11 +96,12 @@ func ValidateStages(stages []Stage, g *scgraph.Graph) error {
 	}
 
 	// Check that the final state is valid.
-	final := stages[len(stages)-1].After.Nodes
-	for i, node := range final {
-		if node.TargetStatus != node.Status {
-			return errors.Errorf("final status is %s instead of %s at index %d for adding %+v",
-				node.Status, node.TargetStatus, i, node.Element())
+	final := stages[len(stages)-1].After
+	for i, actual := range final {
+		expected := ts.Targets[i].TargetStatus
+		if actual != expected {
+			return errors.Errorf("final status is %s instead of %s at index %d for adding %s",
+				actual, expected, i, screl.ElementString(ts.Targets[i].Element()))
 		}
 	}
 
@@ -116,60 +116,29 @@ func ValidateStages(stages []Stage, g *scgraph.Graph) error {
 
 	// Check stage internal subgraph consistency.
 	for _, stage := range stages {
-		if err := validateStageSubgraph(stage, g); err != nil {
+		if err := validateStageSubgraph(ts, stage, g); err != nil {
 			return errors.Wrapf(err, "%s", stage.String())
 		}
 	}
 	return nil
 }
 
-func validateInternalStageStates(stage Stage) error {
-	before := stage.Before.Nodes
-	after := stage.After.Nodes
-	if na, nb := len(after), len(before); na != nb {
-		return errors.Errorf("Before state has %d nodes and After state has %d nodes",
-			nb, na)
-	}
-	for j := range before {
-		beforeTarget, afterTarget := before[j].Target, after[j].Target
-		if ea, eb := afterTarget.Element(), beforeTarget.Element(); ea != eb {
-			return errors.Errorf("target at index %d has Before element %+v and After element %+v",
-				j, eb, ea)
-		}
-		if ta, tb := afterTarget.TargetStatus, beforeTarget.TargetStatus; ta != tb {
-			return errors.Errorf("target at index %d has Before status %s and After status %s",
-				j, tb, ta)
-		}
-	}
-	return nil
-}
-
 func validateAdjacentStagesStates(previous, next Stage) error {
-	after := previous.After.Nodes
-	before := next.Before.Nodes
-	if na, nb := len(after), len(before); na != nb {
+	if na, nb := len(previous.After), len(next.Before); na != nb {
 		return errors.Errorf("node count mismatch: %d != %d",
 			na, nb)
 	}
-	for j, beforeNode := range before {
-		afterNode := after[j]
-		if sa, sb := afterNode.Status, beforeNode.Status; sa != sb {
+	for j, before := range next.Before {
+		after := previous.After[j]
+		if before != after {
 			return errors.Errorf("node status mismatch at index %d: %s != %s",
-				j, afterNode.Status.String(), beforeNode.Status.String())
-		}
-		if ta, tb := afterNode.TargetStatus, beforeNode.TargetStatus; ta != tb {
-			return errors.Errorf("target status mismatch at index %d: %s != %s",
-				j, ta.String(), tb.String())
-		}
-		if ea, eb := afterNode.Element(), beforeNode.Element(); ea != eb {
-			return errors.Errorf("target element mismatch at index %d: %+v != %+v",
-				j, ea, eb)
+				j, after.String(), before.String())
 		}
 	}
 	return nil
 }
 
-func validateStageSubgraph(stage Stage, g *scgraph.Graph) error {
+func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) error {
 	// Transform the ops in a non-repeating sequence of their original op edges.
 	var queue []*scgraph.OpEdge
 	for _, op := range stage.EdgeOps {
@@ -185,16 +154,25 @@ func validateStageSubgraph(stage Stage, g *scgraph.Graph) error {
 
 	// Build the initial set of fulfilled nodes by traversing the graph
 	// recursively and backwards.
-	fulfilled := map[*scpb.Node]bool{}
-	current := append([]*scpb.Node{}, stage.Before.Nodes...)
+	fulfilled := map[*screl.Node]bool{}
+	current := make([]*screl.Node, len(ts.Targets))
+	for i, status := range stage.Before {
+		t := &ts.Targets[i]
+		n, ok := g.GetNode(t, status)
+		if !ok {
+			// This shouldn't happen.
+			return errors.Errorf("cannot find starting node for %s", screl.ElementString(t.Element()))
+		}
+		current[i] = n
+	}
 	{
-		edgesTo := make(map[*scpb.Node][]scgraph.Edge, g.Order())
+		edgesTo := make(map[*screl.Node][]scgraph.Edge, g.Order())
 		_ = g.ForEachEdge(func(e scgraph.Edge) error {
 			edgesTo[e.To()] = append(edgesTo[e.To()], e)
 			return nil
 		})
-		var dfs func(n *scpb.Node)
-		dfs = func(n *scpb.Node) {
+		var dfs func(n *screl.Node)
+		dfs = func(n *screl.Node) {
 			if _, found := fulfilled[n]; found {
 				return
 			}
@@ -217,15 +195,15 @@ func validateStageSubgraph(stage Stage, g *scgraph.Graph) error {
 		hasProgressed = false
 		// Try to make progress for each target.
 		for i, n := range current {
-			if n.Status == stage.After.Nodes[i].Status {
+			if n.CurrentStatus == stage.After[i] {
 				// We're done for this target.
 				continue
 			}
 			oe, ok := g.GetOpEdgeFrom(n)
 			if !ok {
 				// This shouldn't happen.
-				return errors.Errorf("cannot find op-edge path from %s to %s",
-					screl.NodeString(stage.Before.Nodes[i]), screl.NodeString(stage.After.Nodes[i]))
+				return errors.Errorf("cannot find op-edge path from %s to %s for %s",
+					stage.Before[i], stage.After[i], screl.ElementString(ts.Targets[i].Element()))
 			}
 
 			// Prevent making progress on this target if there are unmet dependencies.
@@ -255,9 +233,10 @@ func validateStageSubgraph(stage Stage, g *scgraph.Graph) error {
 	}
 	// When we stop making progress we expect to have reached the After state.
 	for i, n := range current {
-		if n != stage.After.Nodes[i] {
-			return errors.Errorf("internal inconsistency, ended in non-terminal node %s after walking the graph",
-				screl.NodeString(stage.After.Nodes[i]))
+		if n.CurrentStatus != stage.After[i] {
+			return errors.Errorf("internal inconsistency, "+
+				"ended in non-terminal status %s after walking the graph towards %s for %s",
+				n.CurrentStatus, stage.After[i], screl.ElementString(ts.Targets[i].Element()))
 		}
 	}
 

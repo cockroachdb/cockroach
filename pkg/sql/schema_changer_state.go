@@ -19,7 +19,7 @@ import (
 // SchemaChangerState is state associated with the new schema changer.
 type SchemaChangerState struct {
 	mode  sessiondatapb.NewSchemaChangerMode
-	state scpb.State
+	state scpb.CurrentState
 	// jobID contains the ID of the schema changer job, if it is to be created.
 	jobID jobspb.JobID
 	// stmts contains the SQL statements involved in the schema change. This is

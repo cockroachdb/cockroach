@@ -23,67 +23,84 @@ import (
 
 // BuildStages builds the plan's stages for this and all subsequent phases.
 func BuildStages(
-	init scpb.State, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
+	init scpb.CurrentState, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
 ) []Stage {
-	newBuildState := func(isRevertibilityIgnored bool) *buildState {
-		b := buildState{
-			g:                      g,
-			phase:                  phase,
-			state:                  shallowCopy(init),
-			fulfilled:              make(map[*scpb.Node]struct{}, g.Order()),
-			scJobIDSupplier:        scJobIDSupplier,
-			isRevertibilityIgnored: isRevertibilityIgnored,
-		}
-		for _, n := range init.Nodes {
-			b.fulfilled[n] = struct{}{}
-		}
-		return &b
+	c := buildContext{
+		g:                      g,
+		scJobIDSupplier:        scJobIDSupplier,
+		isRevertibilityIgnored: true,
+		targetState:            init.TargetState,
+		startingStatuses:       init.Current,
+		startingPhase:          phase,
 	}
 
 	// Try building stages while ignoring revertibility constraints.
 	// This is fine as long as there are no post-commit stages.
-	stages := buildStages(newBuildState(true /* isRevertibilityIgnored */))
+	stages := buildStages(c)
 	if n := len(stages); n > 0 && stages[n-1].Phase > scop.PreCommitPhase {
-		stages = buildStages(newBuildState(false /* isRevertibilityIgnored */))
+		c.isRevertibilityIgnored = false
+		stages = buildStages(c)
 	}
 	return decorateStages(stages)
 }
 
-func buildStages(b *buildState) (stages []Stage) {
+// buildContext contains the global constants for building the stages.
+// Only the BuildStages function mutates it, it's read-only everywhere else.
+type buildContext struct {
+	g                      *scgraph.Graph
+	scJobIDSupplier        func() jobspb.JobID
+	isRevertibilityIgnored bool
+	targetState            scpb.TargetState
+	startingStatuses       []scpb.Status
+	startingPhase          scop.Phase
+}
+
+func buildStages(bc buildContext) (stages []Stage) {
+	// Initialize the build state for this buildContext.
+	bs := buildState{
+		incumbent: make([]scpb.Status, len(bc.startingStatuses)),
+		phase:     bc.startingPhase,
+		fulfilled: make(map[*screl.Node]struct{}, bc.g.Order()),
+	}
+	for i, n := range bc.nodes(bc.startingStatuses) {
+		bs.incumbent[i] = n.CurrentStatus
+		bs.fulfilled[n] = struct{}{}
+	}
 	// Build stages until reaching the terminal state.
-	for !b.isStateTerminal(b.state) {
+	for !bc.isStateTerminal(bs.incumbent) {
 		// Generate a stage builder which can make progress.
-		sb := b.makeStageBuilder()
+		sb := bc.makeStageBuilder(bs)
 		for !sb.canMakeProgress() {
 			// When no further progress is possible, move to the next phase and try
 			// again, until progress is possible. We haven't reached the terminal
 			// state yet, so this is guaranteed (barring any horrible bugs).
-			if b.phase == scop.PreCommitPhase {
+			if bs.phase == scop.PreCommitPhase {
 				// This is a special case.
 				// We need to move to the post-commit phase, but this will require
 				// creating a schema changer job, which in turn will require this
 				// otherwise-empty pre-commit stage.
 				break
 			}
-			if b.phase == scop.LatestPhase {
+			if bs.phase == scop.LatestPhase {
 				// This should never happen, we should always be able to make forward
 				// progress because we haven't reached the terminal state yet.
 				panic(errors.AssertionFailedf("unable to make progress"))
 			}
-			b.phase++
-			sb = b.makeStageBuilder()
+			bs.phase++
+			sb = bc.makeStageBuilder(bs)
 		}
 		// Build the stage.
-		stages = append(stages, sb.build())
+		stage := sb.build()
+		stages = append(stages, stage)
 		// Update the build state with this stage's progress.
 		for n := range sb.fulfilling {
-			b.fulfilled[n] = struct{}{}
+			bs.fulfilled[n] = struct{}{}
 		}
-		b.state = sb.after()
-		switch b.phase {
+		bs.incumbent = stage.After
+		switch bs.phase {
 		case scop.StatementPhase, scop.PreCommitPhase:
 			// These phases can only have at most one stage each.
-			b.phase++
+			bs.phase++
 		}
 	}
 	return stages
@@ -92,20 +109,16 @@ func buildStages(b *buildState) (stages []Stage) {
 // buildState contains the global build state for building the stages.
 // Only the buildStages function mutates it, it's read-only everywhere else.
 type buildState struct {
-	g                      *scgraph.Graph
-	scJobIDSupplier        func() jobspb.JobID
-	isRevertibilityIgnored bool
-
-	state     scpb.State
+	incumbent []scpb.Status
 	phase     scop.Phase
-	fulfilled map[*scpb.Node]struct{}
+	fulfilled map[*screl.Node]struct{}
 }
 
 // isStateTerminal returns true iff the state is terminal, according to the
 // graph.
-func (b buildState) isStateTerminal(state scpb.State) bool {
-	for _, n := range state.Nodes {
-		if _, found := b.g.GetOpEdgeFrom(n); found {
+func (bc buildContext) isStateTerminal(current []scpb.Status) bool {
+	for _, n := range bc.nodes(current) {
+		if _, found := bc.g.GetOpEdgeFrom(n); found {
 			return false
 		}
 	}
@@ -114,15 +127,15 @@ func (b buildState) isStateTerminal(state scpb.State) bool {
 
 // makeStageBuilder returns a stage builder with an operation type for which
 // progress can be made. Defaults to the mutation type if none make progress.
-func (b buildState) makeStageBuilder() (sb stageBuilder) {
+func (bc buildContext) makeStageBuilder(bs buildState) (sb stageBuilder) {
 	opTypes := []scop.Type{scop.BackfillType, scop.ValidationType, scop.MutationType}
-	switch b.phase {
+	switch bs.phase {
 	case scop.StatementPhase, scop.PreCommitPhase:
 		// We don't allow expensive operations pre-commit.
 		opTypes = []scop.Type{scop.MutationType}
 	}
 	for _, opType := range opTypes {
-		sb = b.makeStageBuilderForType(opType)
+		sb = bc.makeStageBuilderForType(bs, opType)
 		if sb.canMakeProgress() {
 			break
 		}
@@ -132,14 +145,15 @@ func (b buildState) makeStageBuilder() (sb stageBuilder) {
 
 // makeStageBuilderForType creates and populates a stage builder for the given
 // op type.
-func (b buildState) makeStageBuilderForType(opType scop.Type) stageBuilder {
+func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) stageBuilder {
 	sb := stageBuilder{
-		bs:         b,
+		bc:         bc,
+		bs:         bs,
 		opType:     opType,
-		current:    make([]currentTargetState, len(b.state.Nodes)),
-		fulfilling: map[*scpb.Node]struct{}{},
+		current:    make([]currentTargetState, len(bc.targetState.Targets)),
+		fulfilling: map[*screl.Node]struct{}{},
 	}
-	for i, n := range b.state.Nodes {
+	for i, n := range bc.nodes(bs.incumbent) {
 		t := sb.makeCurrentTargetState(n)
 		sb.current[i] = t
 	}
@@ -167,15 +181,16 @@ func (b buildState) makeStageBuilderForType(opType scop.Type) stageBuilder {
 
 // stageBuilder contains the state for building one stage.
 type stageBuilder struct {
+	bc         buildContext
 	bs         buildState
 	opType     scop.Type
 	current    []currentTargetState
-	fulfilling map[*scpb.Node]struct{}
+	fulfilling map[*screl.Node]struct{}
 	opEdges    []*scgraph.OpEdge
 }
 
 type currentTargetState struct {
-	n *scpb.Node
+	n *screl.Node
 	e *scgraph.OpEdge
 
 	// hasOpEdgeWithOps is true iff this stage already includes an op edge with
@@ -183,15 +198,15 @@ type currentTargetState struct {
 	hasOpEdgeWithOps bool
 }
 
-func (sb stageBuilder) makeCurrentTargetState(n *scpb.Node) currentTargetState {
-	e, found := sb.bs.g.GetOpEdgeFrom(n)
+func (sb stageBuilder) makeCurrentTargetState(n *screl.Node) currentTargetState {
+	e, found := sb.bc.g.GetOpEdgeFrom(n)
 	if !found || !sb.isOutgoingOpEdgeAllowed(e) {
 		return currentTargetState{n: n}
 	}
 	return currentTargetState{
 		n:                n,
 		e:                e,
-		hasOpEdgeWithOps: !sb.bs.g.IsNoOp(e),
+		hasOpEdgeWithOps: !sb.bc.g.IsNoOp(e),
 	}
 }
 
@@ -214,7 +229,7 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 	if !e.IsPhaseSatisfied(sb.bs.phase) {
 		return false
 	}
-	if !sb.bs.isRevertibilityIgnored && sb.bs.phase == scop.PostCommitPhase && !e.Revertible() {
+	if !sb.bc.isRevertibilityIgnored && sb.bs.phase == scop.PostCommitPhase && !e.Revertible() {
 		return false
 	}
 	return true
@@ -241,8 +256,8 @@ func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState 
 	return next
 }
 
-func (sb stageBuilder) hasUnmetInboundDeps(n *scpb.Node) (ret bool) {
-	_ = sb.bs.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
+func (sb stageBuilder) hasUnmetInboundDeps(n *screl.Node) (ret bool) {
+	_ = sb.bc.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
 		if sb.isUnmetInboundDep(de) {
 			ret = true
 			return iterutil.StopIteration()
@@ -281,16 +296,16 @@ func (sb *stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 		de.String(), de.Name()))
 }
 
-func (sb stageBuilder) hasUnmeetableOutboundDeps(n *scpb.Node) (ret bool) {
-	candidates := make(map[*scpb.Node]int, len(sb.current))
+func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
+	candidates := make(map[*screl.Node]int, len(sb.current))
 	for i, t := range sb.current {
 		if t.e != nil {
 			candidates[t.e.To()] = i
 		}
 	}
-	visited := make(map[*scpb.Node]bool)
-	var visit func(n *scpb.Node)
-	visit = func(n *scpb.Node) {
+	visited := make(map[*screl.Node]bool)
+	var visit func(n *screl.Node)
+	visit = func(n *screl.Node) {
 		if ret || visited[n] {
 			return
 		}
@@ -309,7 +324,7 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *scpb.Node) (ret bool) {
 			ret = true
 			return
 		}
-		_ = sb.bs.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
+		_ = sb.bc.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
 			if ret {
 				return iterutil.StopIteration()
 			}
@@ -326,7 +341,7 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *scpb.Node) (ret bool) {
 			}
 			return nil
 		})
-		_ = sb.bs.g.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
+		_ = sb.bc.g.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			if ret {
 				return iterutil.StopIteration()
 			}
@@ -344,13 +359,17 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *scpb.Node) (ret bool) {
 }
 
 func (sb stageBuilder) build() Stage {
+	after := make([]scpb.Status, len(sb.current))
+	for i, t := range sb.current {
+		after[i] = t.n.CurrentStatus
+	}
 	s := Stage{
-		Before: sb.bs.state,
-		After:  sb.after(),
+		Before: sb.bs.incumbent,
+		After:  after,
 		Phase:  sb.bs.phase,
 	}
 	for _, e := range sb.opEdges {
-		if sb.bs.g.IsNoOp(e) {
+		if sb.bc.g.IsNoOp(e) {
 			continue
 		}
 		s.EdgeOps = append(s.EdgeOps, e.Op()...)
@@ -368,43 +387,36 @@ func (sb stageBuilder) build() Stage {
 		// If this pre-commit stage is non-terminal, this means there will be at
 		// least one post-commit stage, so we need to create a schema changer job
 		// and update references for the affected descriptors.
-		if !sb.bs.isStateTerminal(s.After) {
-			s.ExtraOps = append(sb.addJobReferenceOps(s.After), sb.createSchemaChangeJobOp(s.After))
+		if !sb.bc.isStateTerminal(after) {
+			s.ExtraOps = append(sb.bc.addJobReferenceOps(), sb.bc.createSchemaChangeJobOp(after))
 		}
 	case scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase:
 		if sb.opType == scop.MutationType {
-			if sb.bs.isStateTerminal(s.After) {
+			if sb.bc.isStateTerminal(after) {
 				// The terminal mutation stage needs to remove references to the schema
 				// changer job in the affected descriptors.
-				s.ExtraOps = sb.removeJobReferenceOps(s.After)
+				s.ExtraOps = sb.bc.removeJobReferenceOps()
 			}
 			// Post-commit mutation stages all update the progress of the schema
 			// changer job.
-			s.ExtraOps = append(s.ExtraOps, sb.updateJobProgressOp(s.After))
+			s.ExtraOps = append(s.ExtraOps, sb.bc.updateJobProgressOp(after, s.Phase > scop.PostCommitPhase))
 		}
 	}
 	return s
 }
 
-func (sb stageBuilder) after() scpb.State {
-	state := shallowCopy(sb.bs.state)
-	for i, t := range sb.current {
-		state.Nodes[i] = t.n
-	}
-	return state
-}
-
-func (sb stageBuilder) createSchemaChangeJobOp(state scpb.State) scop.Op {
+func (bc buildContext) createSchemaChangeJobOp(current []scpb.Status) scop.Op {
 	return &scop.CreateDeclarativeSchemaChangerJob{
-		JobID: sb.bs.scJobIDSupplier(),
-		State: shallowCopy(state),
+		JobID:       bc.scJobIDSupplier(),
+		TargetState: bc.targetState,
+		Current:     current,
 	}
 }
 
-func (sb stageBuilder) addJobReferenceOps(state scpb.State) []scop.Op {
-	jobID := sb.bs.scJobIDSupplier()
+func (bc buildContext) addJobReferenceOps() []scop.Op {
+	jobID := bc.scJobIDSupplier()
 	return generateOpsForJobIDs(
-		screl.GetDescIDs(state),
+		screl.GetDescIDs(bc.targetState),
 		jobID,
 		func(descID descpb.ID, id jobspb.JobID) scop.Op {
 			return &scop.AddJobReference{DescriptorID: descID, JobID: jobID}
@@ -412,18 +424,18 @@ func (sb stageBuilder) addJobReferenceOps(state scpb.State) []scop.Op {
 	)
 }
 
-func (sb stageBuilder) updateJobProgressOp(state scpb.State) scop.Op {
+func (bc buildContext) updateJobProgressOp(current []scpb.Status, isNonCancellable bool) scop.Op {
 	return &scop.UpdateSchemaChangerJob{
-		JobID:           sb.bs.scJobIDSupplier(),
-		Statuses:        state.Statuses(),
-		IsNonCancelable: sb.bs.phase >= scop.PostCommitNonRevertiblePhase,
+		JobID:           bc.scJobIDSupplier(),
+		Current:         current,
+		IsNonCancelable: isNonCancellable,
 	}
 }
 
-func (sb stageBuilder) removeJobReferenceOps(state scpb.State) []scop.Op {
-	jobID := sb.bs.scJobIDSupplier()
+func (bc buildContext) removeJobReferenceOps() []scop.Op {
+	jobID := bc.scJobIDSupplier()
 	return generateOpsForJobIDs(
-		screl.GetDescIDs(state),
+		screl.GetDescIDs(bc.targetState),
 		jobID,
 		func(descID descpb.ID, id jobspb.JobID) scop.Op {
 			return &scop.RemoveJobReference{DescriptorID: descID, JobID: jobID}
@@ -441,21 +453,18 @@ func generateOpsForJobIDs(
 	return ops
 }
 
-// shallowCopy creates a shallow copy of the passed state. Importantly, it
-// retains copies to the same underlying nodes while allocating new backing
-// slices.
-func shallowCopy(cur scpb.State) scpb.State {
-	return scpb.State{
-		Nodes: append(
-			make([]*scpb.Node, 0, len(cur.Nodes)),
-			cur.Nodes...,
-		),
-		Statements: append(
-			make([]*scpb.Statement, 0, len(cur.Statements)),
-			cur.Statements...,
-		),
-		Authorization: cur.Authorization,
+func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
+	nodes := make([]*screl.Node, len(bc.targetState.Targets))
+	for i, status := range current {
+		t := &bc.targetState.Targets[i]
+		n, ok := bc.g.GetNode(t, status)
+		if !ok {
+			panic(errors.AssertionFailedf("could not find node for element %s, target status %s, current status %s",
+				screl.ElementString(t.Element()), t.TargetStatus, status))
+		}
+		nodes[i] = n
 	}
+	return nodes
 }
 
 // decorateStages decorates stages with position in plan.

@@ -80,51 +80,45 @@ func TestGraphRanks(t *testing.T) {
 		t *testing.T, tc testCase,
 	) {
 		// Setup a state based on if it is a add or drop.
-		state := scpb.State{
-			Nodes: make([]*scpb.Node, 0, len(tc.addNode)),
-		}
+		ts := scpb.TargetState{Targets: make([]scpb.Target, len(tc.addNode))}
+		status := make([]scpb.Status, len(tc.addNode))
 		for idx := range tc.addNode {
+			ts.Targets[idx] = scpb.MakeTarget(
+				scpb.Status_PUBLIC,
+				&scpb.Table{
+					TableID: descpb.ID(idx),
+				},
+				nil, /* metadata */
+			)
 			if tc.addNode[idx] {
-				state.Nodes = append(state.Nodes, &scpb.Node{
-					Target: scpb.NewTarget(
-						scpb.Status_PUBLIC,
-						&scpb.Table{
-							TableID: descpb.ID(idx),
-						},
-						nil /* metadata */),
-					Status: scpb.Status_ABSENT,
-				})
+				status[idx] = scpb.Status_ABSENT
 			} else {
-				state.Nodes = append(state.Nodes, &scpb.Node{
-					Target: scpb.NewTarget(
-						scpb.Status_PUBLIC,
-						&scpb.Table{
-							TableID: descpb.ID(idx),
-						},
-						nil /* metadata */),
-					Status: scpb.Status_PUBLIC,
-				})
+				status[idx] = scpb.Status_PUBLIC
 			}
 		}
 		// Setup the nodes first.
-		graph, err := scgraph.New(state)
+		graph, err := scgraph.New(scpb.CurrentState{TargetState: ts, Current: status})
 		require.NoError(t, err)
 		// Setup op edges for all the nodes.
 		for idx := range tc.addNode {
 			if tc.addNode[idx] {
-				require.NoError(t, graph.AddOpEdges(state.Nodes[idx].Target,
+				require.NoError(t, graph.AddOpEdges(
+					&ts.Targets[idx],
 					scpb.Status_ABSENT,
 					scpb.Status_PUBLIC,
 					true,
 					scop.StatementPhase,
-					&scop.MakeColumnAbsent{}))
+					&scop.MakeColumnAbsent{},
+				))
 			} else {
-				require.NoError(t, graph.AddOpEdges(state.Nodes[idx].Target,
+				require.NoError(t, graph.AddOpEdges(
+					&ts.Targets[idx],
 					scpb.Status_PUBLIC,
 					scpb.Status_ABSENT,
 					true,
 					scop.StatementPhase,
-					&scop.MakeColumnAbsent{}))
+					&scop.MakeColumnAbsent{},
+				))
 			}
 		}
 		// Add the dep edges next.
@@ -132,9 +126,9 @@ func TestGraphRanks(t *testing.T) {
 			require.NoError(t, graph.AddDepEdge(
 				fmt.Sprintf("%d to %d", edge.from, edge.to),
 				scgraph.Precedence,
-				state.Nodes[edge.from].Target,
+				&ts.Targets[edge.from],
 				scpb.Status_PUBLIC,
-				state.Nodes[edge.to].Target,
+				&ts.Targets[edge.to],
 				scpb.Status_PUBLIC,
 			))
 		}

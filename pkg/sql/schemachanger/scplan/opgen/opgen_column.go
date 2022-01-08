@@ -42,13 +42,8 @@ func init() {
 						Virtual:                           this.Virtual,
 					}
 				}),
-				emit(func(this *scpb.Column, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{
-						Metadata:     *md,
-						DescID:       this.TableID,
-						Element:      &scpb.ElementProto{Column: this},
-						TargetStatus: scpb.Status_PUBLIC,
-					}
+				emit(func(this *scpb.Column, ts scpb.TargetState) scop.Op {
+					return newLogEventOp(this, ts)
 				}),
 			),
 			to(scpb.Status_DELETE_AND_WRITE_ONLY,
@@ -78,13 +73,8 @@ func init() {
 						ColumnID: this.ColumnID,
 					}
 				}),
-				emit(func(this *scpb.Column, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{
-						Metadata:     *md,
-						DescID:       this.TableID,
-						Element:      &scpb.ElementProto{Column: this},
-						TargetStatus: scpb.Status_ABSENT,
-					}
+				emit(func(this *scpb.Column, ts scpb.TargetState) scop.Op {
+					return newLogEventOp(this, ts)
 				}),
 			),
 			to(scpb.Status_DELETE_ONLY,

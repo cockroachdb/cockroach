@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -68,27 +69,27 @@ func TestDepEdgeTree(t *testing.T) {
 	// testCaseState is used for each queryCase in a testCase.
 	type testCaseState struct {
 		tree      *depEdgeTree
-		nodes     []*scpb.Node // nodes with lower indexes sort lower
-		nodesToID map[*scpb.Node]nodeID
+		nodes     []*screl.Node // nodes with lower indexes sort lower
+		nodesToID map[*screl.Node]nodeID
 	}
 	makeTestCaseState := func(tc testCase) testCaseState {
 		tcs := testCaseState{
-			nodesToID: make(map[*scpb.Node]nodeID),
+			nodesToID: make(map[*screl.Node]nodeID),
 		}
 		target := scpb.Target{}
-		getNode := func(i nodeID) *scpb.Node {
+		getNode := func(i nodeID) *screl.Node {
 			if i > nodeID(len(tcs.nodes)-1) {
 				for j := nodeID(len(tcs.nodes)); j <= i; j++ {
-					tcs.nodes = append(tcs.nodes, &scpb.Node{
-						Target: &target,
-						Status: scpb.Status(j),
+					tcs.nodes = append(tcs.nodes, &screl.Node{
+						Target:        &target,
+						CurrentStatus: scpb.Status(j),
 					})
 					tcs.nodesToID[tcs.nodes[j]] = j
 				}
 			}
 			return tcs.nodes[i]
 		}
-		tcs.tree = newDepEdgeTree(tc.order, func(a, b *scpb.Node) (less, eq bool) {
+		tcs.tree = newDepEdgeTree(tc.order, func(a, b *screl.Node) (less, eq bool) {
 			ai, bi := tcs.nodesToID[a], tcs.nodesToID[b]
 			return ai < bi, ai == bi
 		})
@@ -131,16 +132,20 @@ func TestDepEdgeTree(t *testing.T) {
 // TestGraphCompareNodes ensures the semantics of (*Graph).compareNodes is sane.
 func TestGraphCompareNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t1 := scpb.NewTarget(scpb.Status_PUBLIC, &scpb.Table{TableID: 1}, nil)
-	t2 := scpb.NewTarget(scpb.Status_ABSENT, &scpb.Table{TableID: 2}, nil)
-	mkNode := func(t *scpb.Target, s scpb.Status) *scpb.Node {
-		return &scpb.Node{Target: t, Status: s}
+	ts := scpb.TargetState{
+		Targets: []scpb.Target{
+			scpb.MakeTarget(scpb.Status_PUBLIC, &scpb.Table{TableID: 1}, nil),
+			scpb.MakeTarget(scpb.Status_ABSENT, &scpb.Table{TableID: 2}, nil),
+		},
+	}
+	t1 := &ts.Targets[0]
+	t2 := &ts.Targets[1]
+	mkNode := func(t *scpb.Target, s scpb.Status) *screl.Node {
+		return &screl.Node{Target: t, CurrentStatus: s}
 	}
 	t1ABSENT := mkNode(t1, scpb.Status_ABSENT)
 	t2PUBLIC := mkNode(t2, scpb.Status_PUBLIC)
-	g, err := New(scpb.State{
-		Nodes: []*scpb.Node{t1ABSENT, t2PUBLIC},
-	})
+	g, err := New(scpb.CurrentState{TargetState: ts, Current: []scpb.Status{scpb.Status_ABSENT, scpb.Status_PUBLIC}})
 	targetStr := func(target *scpb.Target) string {
 		switch target {
 		case t1:
@@ -151,16 +156,16 @@ func TestGraphCompareNodes(t *testing.T) {
 			panic("unexpected target")
 		}
 	}
-	nodeStr := func(n *scpb.Node) string {
+	nodeStr := func(n *screl.Node) string {
 		if n == nil {
 			return "nil"
 		}
-		return fmt.Sprintf("%s:%s", targetStr(n.Target), n.Status.String())
+		return fmt.Sprintf("%s:%s", targetStr(n.Target), n.CurrentStatus.String())
 	}
 
 	require.NoError(t, err)
 	for _, tc := range []struct {
-		a, b     *scpb.Node
+		a, b     *screl.Node
 		less, eq bool
 	}{
 		{a: nil, b: nil, less: false, eq: true},

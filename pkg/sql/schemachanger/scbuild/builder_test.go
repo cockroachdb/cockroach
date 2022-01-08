@@ -131,16 +131,16 @@ func run(
 
 		return ""
 	case "build":
-		var outputNodes scpb.State
+		var output scpb.CurrentState
 		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			for i := range stmts {
-				outputNodes, err = scbuild.Build(ctx, deps, outputNodes, stmts[i].AST)
+				output, err = scbuild.Build(ctx, deps, output, stmts[i].AST)
 				require.NoError(t, err)
 			}
 		})
-		return marshalNodes(t, outputNodes)
+		return marshalState(t, output)
 
 	case "unimplemented":
 		withDependencies(t, s, tdb, func(deps scbuild.Dependencies) {
@@ -152,7 +152,7 @@ func run(
 			alter, ok := stmt.AST.(*tree.AlterTable)
 			require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
 
-			_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
+			_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter)
 			require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
 		})
 		return ""
@@ -176,21 +176,25 @@ func indentText(input string, tab string) string {
 	return result.String()
 }
 
-// marshalNodes marshals a scpb.State to YAML.
-func marshalNodes(t *testing.T, nodes scpb.State) string {
+// marshalState marshals a scpb.CurrentState to YAML.
+func marshalState(t *testing.T, state scpb.CurrentState) string {
 	var sortedEntries []string
-	for _, node := range nodes.Nodes {
+	for i, status := range state.Current {
+		node := screl.Node{
+			Target:        &state.Targets[i],
+			CurrentStatus: status,
+		}
 		yaml, err := sctestutils.ProtoToYAML(node.Target.Element())
 		require.NoError(t, err)
 		entry := strings.Builder{}
 		entry.WriteString("- ")
-		entry.WriteString(screl.NodeString(node))
+		entry.WriteString(screl.NodeString(&node))
 		entry.WriteString("\n")
 		entry.WriteString(indentText("details:\n", "  "))
 		entry.WriteString(indentText(yaml, "    "))
 		sortedEntries = append(sortedEntries, entry.String())
 	}
-	// Sort the output buffer of nodes for determinism.
+	// Sort the output buffer of state for determinism.
 	result := strings.Builder{}
 	sort.Strings(sortedEntries)
 	for _, entry := range sortedEntries {

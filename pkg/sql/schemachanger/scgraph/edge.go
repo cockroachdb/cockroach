@@ -14,7 +14,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
@@ -23,13 +22,13 @@ import (
 // TODO(ajwerner): Consider hiding Node pointers behind an interface to clarify
 // mutability.
 type Edge interface {
-	From() *scpb.Node
-	To() *scpb.Node
+	From() *screl.Node
+	To() *screl.Node
 }
 
 // OpEdge represents an edge changing the state of a target with an op.
 type OpEdge struct {
-	from, to   *scpb.Node
+	from, to   *screl.Node
 	op         []scop.Op
 	typ        scop.Type
 	revertible bool
@@ -37,10 +36,10 @@ type OpEdge struct {
 }
 
 // From implements the Edge interface.
-func (oe *OpEdge) From() *scpb.Node { return oe.from }
+func (oe *OpEdge) From() *screl.Node { return oe.from }
 
 // To implements the Edge interface.
-func (oe *OpEdge) To() *scpb.Node { return oe.to }
+func (oe *OpEdge) To() *screl.Node { return oe.to }
 
 // Op returns the scop.Op for execution that is associated with the op edge.
 func (oe *OpEdge) Op() []scop.Op { return oe.op }
@@ -65,7 +64,7 @@ func (oe *OpEdge) String() string {
 	if !oe.revertible {
 		nonRevertible = "non-revertible"
 	}
-	return fmt.Sprintf("%s -op-%s-> %s", from, nonRevertible, oe.to.Status)
+	return fmt.Sprintf("%s -op-%s-> %s", from, nonRevertible, oe.to.CurrentStatus)
 }
 
 // DepEdgeKind indicates the kind of constraint enforced by the edge.
@@ -89,7 +88,7 @@ const (
 // implies that the To() node cannot be reached before the From() node. It
 // can be reached concurrently.
 type DepEdge struct {
-	from, to *scpb.Node
+	from, to *screl.Node
 	kind     DepEdgeKind
 
 	// TODO(ajwerner): Deal with the possibility that multiple rules could
@@ -98,10 +97,10 @@ type DepEdge struct {
 }
 
 // From implements the Edge interface.
-func (de *DepEdge) From() *scpb.Node { return de.from }
+func (de *DepEdge) From() *screl.Node { return de.from }
 
 // To implements the Edge interface.
-func (de *DepEdge) To() *scpb.Node { return de.to }
+func (de *DepEdge) To() *screl.Node { return de.to }
 
 // Name returns the name of the rule which generated this edge.
 func (de *DepEdge) Name() string { return de.rule }

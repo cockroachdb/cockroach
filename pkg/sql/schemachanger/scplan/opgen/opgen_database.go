@@ -50,13 +50,8 @@ func init() {
 						TableID: this.DatabaseID,
 					}
 				}),
-				emit(func(this *scpb.Database, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{
-						Metadata:     *md,
-						DescID:       this.DatabaseID,
-						Element:      &scpb.ElementProto{Database: this},
-						TargetStatus: scpb.Status_ABSENT,
-					}
+				emit(func(this *scpb.Database, ts scpb.TargetState) scop.Op {
+					return newLogEventOp(this, ts)
 				}),
 				emit(func(this *scpb.Database) scop.Op {
 					return &scop.CreateGcJobForDatabase{

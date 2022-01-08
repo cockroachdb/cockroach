@@ -47,13 +47,8 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.Type, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{
-						Metadata:     *md,
-						DescID:       this.TypeID,
-						Element:      &scpb.ElementProto{Type: this},
-						TargetStatus: scpb.Status_ABSENT,
-					}
+				emit(func(this *scpb.Type, ts scpb.TargetState) scop.Op {
+					return newLogEventOp(this, ts)
 				}),
 				emit(func(this *scpb.Type) scop.Op {
 					return &scop.DeleteDescriptor{

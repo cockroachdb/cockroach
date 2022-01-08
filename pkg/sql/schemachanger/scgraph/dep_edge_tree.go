@@ -11,7 +11,7 @@
 package scgraph
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/google/btree"
 )
@@ -22,7 +22,7 @@ type depEdgeTree struct {
 	cmp   nodeCmpFn
 }
 
-type nodeCmpFn func(a, b *scpb.Node) (less, eq bool)
+type nodeCmpFn func(a, b *screl.Node) (less, eq bool)
 
 func newDepEdgeTree(order edgeTreeOrder, cmp nodeCmpFn) *depEdgeTree {
 	const degree = 8 // arbitrary
@@ -37,14 +37,14 @@ func newDepEdgeTree(order edgeTreeOrder, cmp nodeCmpFn) *depEdgeTree {
 // either based on from/to node indexes.
 type edgeTreeOrder bool
 
-func (o edgeTreeOrder) first(e Edge) *scpb.Node {
+func (o edgeTreeOrder) first(e Edge) *screl.Node {
 	if o == fromTo {
 		return e.From()
 	}
 	return e.To()
 }
 
-func (o edgeTreeOrder) second(e Edge) *scpb.Node {
+func (o edgeTreeOrder) second(e Edge) *screl.Node {
 	if o == toFrom {
 		return e.From()
 	}
@@ -70,7 +70,7 @@ func (et *depEdgeTree) insert(e *DepEdge) {
 	})
 }
 
-func (et *depEdgeTree) iterateSourceNode(n *scpb.Node, it DepEdgeIterator) (err error) {
+func (et *depEdgeTree) iterateSourceNode(n *screl.Node, it DepEdgeIterator) (err error) {
 	e := &edgeTreeEntry{t: et, edge: &DepEdge{}}
 	if et.order == fromTo {
 		e.edge.from = n

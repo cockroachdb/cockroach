@@ -56,10 +56,10 @@ const (
 	Name
 	// IndexID is the index ID to which this element corresponds.
 	IndexID
-	// TargetStatus is the Status of a Target.
+	// TargetStatus is the target status of an element.
 	TargetStatus
-	// Status is the Status of a Node.
-	Status
+	// CurrentStatus is the current status of an element.
+	CurrentStatus
 	// Element references an element.
 	Element
 	// Target is the reference from a node to a target.
@@ -77,13 +77,11 @@ var t = reflect.TypeOf
 // Schema is the schema exported by this package covering the elements of scpb.
 var Schema = rel.MustSchema("screl",
 	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
-	rel.EntityMapping(
-		t((*scpb.Node)(nil)),
-		rel.EntityAttr(Status, "Status"),
+	rel.EntityMapping(t((*Node)(nil)),
+		rel.EntityAttr(CurrentStatus, "CurrentStatus"),
 		rel.EntityAttr(Target, "Target"),
 	),
-	rel.EntityMapping(
-		t((*scpb.Target)(nil)),
+	rel.EntityMapping(t((*scpb.Target)(nil)),
 		rel.EntityAttr(TargetStatus, "TargetStatus"),
 		rel.EntityAttr(Element, elementProtoElementSelectors...),
 	),
@@ -231,7 +229,7 @@ func JoinTargetNode(element, target, node rel.Var) rel.Clause {
 	return rel.And(
 		target.Type((*scpb.Target)(nil)),
 		target.AttrEqVar(Element, element),
-		node.Type((*scpb.Node)(nil)),
+		node.Type((*Node)(nil)),
 		node.AttrEqVar(Target, target),
 	)
 }

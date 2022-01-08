@@ -35,6 +35,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
