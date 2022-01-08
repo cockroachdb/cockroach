@@ -226,7 +226,7 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -496,7 +496,7 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -756,7 +756,7 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -1044,7 +1044,7 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -1332,7 +1332,7 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -1628,7 +1628,7 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -1900,7 +1900,7 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -2184,7 +2184,7 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -2512,7 +2512,7 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -2840,7 +2840,7 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -3200,7 +3200,7 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -3540,7 +3540,7 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -3848,7 +3848,7 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -4176,7 +4176,7 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -4504,7 +4504,7 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -4864,7 +4864,7 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -5204,7 +5204,7 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -5512,7 +5512,7 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -5840,7 +5840,7 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -6168,7 +6168,7 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -6528,7 +6528,7 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -6868,7 +6868,7 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -7208,7 +7208,7 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -7600,7 +7600,7 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -7992,7 +7992,7 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -8384,7 +8384,7 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -8732,7 +8732,7 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -9032,7 +9032,7 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -9300,7 +9300,7 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -9562,7 +9562,7 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -9828,7 +9828,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -10104,7 +10104,7 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -10374,7 +10374,7 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -10634,7 +10634,7 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -10922,7 +10922,7 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -11210,7 +11210,7 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -11506,7 +11506,7 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -11778,7 +11778,7 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -12062,7 +12062,7 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -12390,7 +12390,7 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -12718,7 +12718,7 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -13078,7 +13078,7 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -13418,7 +13418,7 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -13726,7 +13726,7 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -14054,7 +14054,7 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -14382,7 +14382,7 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -14742,7 +14742,7 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -15082,7 +15082,7 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -15390,7 +15390,7 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -15718,7 +15718,7 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -16046,7 +16046,7 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -16406,7 +16406,7 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -16746,7 +16746,7 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -17086,7 +17086,7 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -17478,7 +17478,7 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -17870,7 +17870,7 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -18262,7 +18262,7 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -18610,7 +18610,7 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -18910,7 +18910,7 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -19178,7 +19178,7 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -19440,7 +19440,7 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -19706,7 +19706,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -19982,7 +19982,7 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -20252,7 +20252,7 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -20512,7 +20512,7 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -20800,7 +20800,7 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -21088,7 +21088,7 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -21384,7 +21384,7 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -21656,7 +21656,7 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -21940,7 +21940,7 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -22268,7 +22268,7 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -22596,7 +22596,7 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -22956,7 +22956,7 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -23296,7 +23296,7 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -23604,7 +23604,7 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -23932,7 +23932,7 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -24260,7 +24260,7 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -24620,7 +24620,7 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -24960,7 +24960,7 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -25268,7 +25268,7 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -25596,7 +25596,7 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -25924,7 +25924,7 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -26284,7 +26284,7 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -26624,7 +26624,7 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -26964,7 +26964,7 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -27356,7 +27356,7 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -27748,7 +27748,7 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -28140,7 +28140,7 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -28488,7 +28488,7 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -28788,7 +28788,7 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -29056,7 +29056,7 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -29318,7 +29318,7 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -29584,7 +29584,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -29860,7 +29860,7 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -30130,7 +30130,7 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -30390,7 +30390,7 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -30678,7 +30678,7 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -30966,7 +30966,7 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -31262,7 +31262,7 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -31534,7 +31534,7 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -31818,7 +31818,7 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -32146,7 +32146,7 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -32474,7 +32474,7 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -32834,7 +32834,7 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -33174,7 +33174,7 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -33482,7 +33482,7 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -33810,7 +33810,7 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -34138,7 +34138,7 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -34498,7 +34498,7 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -34838,7 +34838,7 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -35146,7 +35146,7 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -35474,7 +35474,7 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -35802,7 +35802,7 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -36162,7 +36162,7 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -36502,7 +36502,7 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -36842,7 +36842,7 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -37234,7 +37234,7 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -37626,7 +37626,7 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -38018,7 +38018,7 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -38366,7 +38366,7 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -38666,7 +38666,7 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -38934,7 +38934,7 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -39196,7 +39196,7 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -39462,7 +39462,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -39738,7 +39738,7 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -40008,7 +40008,7 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -40268,7 +40268,7 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -40556,7 +40556,7 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -40844,7 +40844,7 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -41140,7 +41140,7 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -41412,7 +41412,7 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -41696,7 +41696,7 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -42024,7 +42024,7 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -42352,7 +42352,7 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -42712,7 +42712,7 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -43052,7 +43052,7 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -43360,7 +43360,7 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -43688,7 +43688,7 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -44016,7 +44016,7 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -44376,7 +44376,7 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -44716,7 +44716,7 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -45024,7 +45024,7 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -45352,7 +45352,7 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -45680,7 +45680,7 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -46040,7 +46040,7 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -46380,7 +46380,7 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -46720,7 +46720,7 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -47112,7 +47112,7 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -47504,7 +47504,7 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -47896,7 +47896,7 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -48244,7 +48244,7 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -48544,7 +48544,7 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -48812,7 +48812,7 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -49074,7 +49074,7 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -49340,7 +49340,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -49616,7 +49616,7 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -49886,7 +49886,7 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -50146,7 +50146,7 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -50434,7 +50434,7 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -50722,7 +50722,7 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -51018,7 +51018,7 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -51290,7 +51290,7 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -51574,7 +51574,7 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -51902,7 +51902,7 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -52230,7 +52230,7 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -52590,7 +52590,7 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -52930,7 +52930,7 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -53238,7 +53238,7 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -53566,7 +53566,7 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -53894,7 +53894,7 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -54254,7 +54254,7 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -54594,7 +54594,7 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -54902,7 +54902,7 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -55230,7 +55230,7 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -55558,7 +55558,7 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -55918,7 +55918,7 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -56258,7 +56258,7 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -56598,7 +56598,7 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -56990,7 +56990,7 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -57382,7 +57382,7 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -57774,7 +57774,7 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -58122,7 +58122,7 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -58422,7 +58422,7 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -58690,7 +58690,7 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -58952,7 +58952,7 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
@@ -59218,7 +59218,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {

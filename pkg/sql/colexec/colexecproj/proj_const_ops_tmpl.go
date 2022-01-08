@@ -166,7 +166,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 	// If _HAS_NULLS is false, then there are no input Nulls. _outNulls is
 	// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	// {{if _HAS_NULLS}}
-	projVec.SetNulls(_outNulls.Or(colNulls))
+	projVec.SetNulls(_outNulls.Or(*colNulls))
 	// {{end}}
 	// {{end}}
 	// {{end}}
