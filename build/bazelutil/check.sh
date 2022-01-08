@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# This script performs assorted checks to make sure there is nothing obviously
+# wrong with the Bazel build.
+
 EXISTING_GO_GENERATE_COMMENTS="
 pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
 pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go

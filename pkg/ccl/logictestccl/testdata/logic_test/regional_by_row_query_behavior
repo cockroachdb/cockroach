@@ -383,7 +383,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 Scan /Table/60/1/"\xc0"/1/0
 Scan /Table/60/1/"@"/1/0
 Scan /Table/60/1/"\x80"/1/0
-fetched: /regional_by_row_table/regional_by_row_table_pkey/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+fetched: /regional_by_row_table/regional_by_row_table_pkey/?/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
 statement ok
@@ -449,7 +449,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/60/1/"@"/1/0
-fetched: /regional_by_row_table/regional_by_row_table_pkey/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+fetched: /regional_by_row_table/regional_by_row_table_pkey/?/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
 statement ok
@@ -469,7 +469,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 Scan /Table/60/1/"@"/10/0
 Scan /Table/60/1/"\x80"/10/0
-fetched: /regional_by_row_table/regional_by_row_table_pkey/'ca-central-1'/10/pk2/a/b -> /10/11/12
+fetched: /regional_by_row_table/regional_by_row_table_pkey/?/10/pk2/a/b -> /10/11/12
 output row: [10 10 11 12 NULL]
 
 statement ok
@@ -544,9 +544,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/60/1/"@"/1/0, /Table/60/1/"@"/4/0
-fetched: /regional_by_row_table/regional_by_row_table_pkey/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+fetched: /regional_by_row_table/regional_by_row_table_pkey/?/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
-fetched: /regional_by_row_table/regional_by_row_table_pkey/'ap-southeast-2'/4/pk2/a/b/j -> /4/5/6/'{"c": "d"}'
+fetched: /regional_by_row_table/regional_by_row_table_pkey/?/4/pk2/a/b/j -> /4/5/6/'{"c": "d"}'
 output row: [4 4 5 6 '{"c": "d"}']
 
 # Tests using locality optimized search for lookup joins (including foreign
@@ -616,9 +616,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0, /Table/62/1/"\x80"/10/0, /Table/62/1/"\xc0"/10/0
-fetched: /child/child_pkey/'ap-southeast-2'/10/c_p_id -> /10
+fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/61/1/"@"/10/0, /Table/61/1/"\x80"/10/0, /Table/61/1/"\xc0"/10/0
-fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> NULL
+fetched: /parent/parent_pkey/?/? -> <undecoded>
 
 # Semi join with locality optimized search disabled.
 query T
@@ -646,9 +646,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0, /Table/62/1/"\x80"/10/0, /Table/62/1/"\xc0"/10/0
-fetched: /child/child_pkey/'ap-southeast-2'/10/c_p_id -> /10
+fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/61/1/"@"/10/0, /Table/61/1/"\x80"/10/0, /Table/61/1/"\xc0"/10/0
-fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> NULL
+fetched: /parent/parent_pkey/?/? -> <undecoded>
 output row: [10 10]
 
 # Inner join with locality optimized search disabled.
@@ -677,9 +677,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0, /Table/62/1/"\x80"/10/0, /Table/62/1/"\xc0"/10/0
-fetched: /child/child_pkey/'ap-southeast-2'/10/c_p_id -> /10
+fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/61/1/"@"/10/0, /Table/61/1/"\x80"/10/0, /Table/61/1/"\xc0"/10/0
-fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> NULL
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10 10]
 
 # Left join with locality optimized search disabled.
@@ -708,9 +708,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0, /Table/62/1/"\x80"/10/0, /Table/62/1/"\xc0"/10/0
-fetched: /child/child_pkey/'ap-southeast-2'/10/c_p_id -> /10
+fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/61/1/"@"/10/0, /Table/61/1/"\x80"/10/0, /Table/61/1/"\xc0"/10/0
-fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> NULL
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10 10]
 
 statement ok
@@ -775,9 +775,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0
-fetched: /child/child_pkey/'ap-southeast-2'/10/c_p_id -> /10
+fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/61/1/"@"/10/0
-fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> NULL
+fetched: /parent/parent_pkey/?/? -> <undecoded>
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
@@ -792,10 +792,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 Scan /Table/62/1/"@"/20/0
 Scan /Table/62/1/"\x80"/20/0, /Table/62/1/"\xc0"/20/0
-fetched: /child/child_pkey/'ca-central-1'/20/c_p_id -> /20
+fetched: /child/child_pkey/?/20/c_p_id -> /20
 Scan /Table/61/1/"@"/20/0
 Scan /Table/61/1/"\x80"/20/0, /Table/61/1/"\xc0"/20/0
-fetched: /parent/parent_pkey/'ca-central-1'/20 -> NULL
+fetched: /parent/parent_pkey/?/? -> <undecoded>
 
 # Semi join with locality optimized search enabled.
 query T
@@ -851,9 +851,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0
-fetched: /child/child_pkey/'ap-southeast-2'/10/c_p_id -> /10
+fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/61/1/"@"/10/0
-fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> NULL
+fetched: /parent/parent_pkey/?/? -> <undecoded>
 output row: [10 10]
 
 statement ok
@@ -869,10 +869,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 Scan /Table/62/1/"@"/20/0
 Scan /Table/62/1/"\x80"/20/0, /Table/62/1/"\xc0"/20/0
-fetched: /child/child_pkey/'ca-central-1'/20/c_p_id -> /20
+fetched: /child/child_pkey/?/20/c_p_id -> /20
 Scan /Table/61/1/"@"/20/0
 Scan /Table/61/1/"\x80"/20/0, /Table/61/1/"\xc0"/20/0
-fetched: /parent/parent_pkey/'ca-central-1'/20 -> NULL
+fetched: /parent/parent_pkey/?/? -> <undecoded>
 output row: [20 20]
 
 # Inner join with locality optimized search enabled.
@@ -929,9 +929,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0
-fetched: /child/child_pkey/'ap-southeast-2'/10/c_p_id -> /10
+fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/61/1/"@"/10/0
-fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> NULL
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10 10]
 
 statement ok
@@ -947,10 +947,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 Scan /Table/62/1/"@"/20/0
 Scan /Table/62/1/"\x80"/20/0, /Table/62/1/"\xc0"/20/0
-fetched: /child/child_pkey/'ca-central-1'/20/c_p_id -> /20
+fetched: /child/child_pkey/?/20/c_p_id -> /20
 Scan /Table/61/1/"@"/20/0
 Scan /Table/61/1/"\x80"/20/0, /Table/61/1/"\xc0"/20/0
-fetched: /parent/parent_pkey/'ca-central-1'/20 -> NULL
+fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20 20]
 
 # Left join with locality optimized search enabled.
@@ -1007,9 +1007,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0
-fetched: /child/child_pkey/'ap-southeast-2'/10/c_p_id -> /10
+fetched: /child/child_pkey/?/10/c_p_id -> /10
 Scan /Table/61/1/"@"/10/0
-fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> NULL
+fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10 10]
 
 statement ok
@@ -1025,10 +1025,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 Scan /Table/62/1/"@"/20/0
 Scan /Table/62/1/"\x80"/20/0, /Table/62/1/"\xc0"/20/0
-fetched: /child/child_pkey/'ca-central-1'/20/c_p_id -> /20
+fetched: /child/child_pkey/?/20/c_p_id -> /20
 Scan /Table/61/1/"@"/20/0
 Scan /Table/61/1/"\x80"/20/0, /Table/61/1/"\xc0"/20/0
-fetched: /parent/parent_pkey/'ca-central-1'/20 -> NULL
+fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20 20]
 
 query T

@@ -31,19 +31,19 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/kv_pkey/'A' -> NULL
-fetched: /kv/kv_pkey/'a' -> NULL
+fetched: /kv/kv_pkey/'A' -> <undecoded>
+fetched: /kv/kv_pkey/'a' -> <undecoded>
 fetched: /kv/kv_pkey/'a'/v -> 'b'
-fetched: /kv/kv_pkey/'c' -> NULL
+fetched: /kv/kv_pkey/'c' -> <undecoded>
 fetched: /kv/kv_pkey/'c'/v -> 'd'
-fetched: /kv/kv_pkey/'e' -> NULL
+fetched: /kv/kv_pkey/'e' -> <undecoded>
 fetched: /kv/kv_pkey/'e'/v -> 'f'
-fetched: /kv/kv_pkey/'g' -> NULL
+fetched: /kv/kv_pkey/'g' -> <undecoded>
 fetched: /kv/kv_pkey/'g'/v -> ''
-fetched: /kv/kv_pkey/'nil1' -> NULL
-fetched: /kv/kv_pkey/'nil2' -> NULL
-fetched: /kv/kv_pkey/'nil3' -> NULL
-fetched: /kv/kv_pkey/'nil4' -> NULL
+fetched: /kv/kv_pkey/'nil1' -> <undecoded>
+fetched: /kv/kv_pkey/'nil2' -> <undecoded>
+fetched: /kv/kv_pkey/'nil3' -> <undecoded>
+fetched: /kv/kv_pkey/'nil4' -> <undecoded>
 output row: ['A' NULL]
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -92,19 +92,19 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/kv_pkey/'A' -> NULL
-fetched: /kv/kv_pkey/'a' -> NULL
+fetched: /kv/kv_pkey/'A' -> <undecoded>
+fetched: /kv/kv_pkey/'a' -> <undecoded>
 fetched: /kv/kv_pkey/'a'/v -> 'b'
-fetched: /kv/kv_pkey/'c' -> NULL
+fetched: /kv/kv_pkey/'c' -> <undecoded>
 fetched: /kv/kv_pkey/'c'/v -> 'd'
-fetched: /kv/kv_pkey/'e' -> NULL
+fetched: /kv/kv_pkey/'e' -> <undecoded>
 fetched: /kv/kv_pkey/'e'/v -> 'f'
-fetched: /kv/kv_pkey/'g' -> NULL
+fetched: /kv/kv_pkey/'g' -> <undecoded>
 fetched: /kv/kv_pkey/'g'/v -> ''
-fetched: /kv/kv_pkey/'nil1' -> NULL
-fetched: /kv/kv_pkey/'nil2' -> NULL
-fetched: /kv/kv_pkey/'nil3' -> NULL
-fetched: /kv/kv_pkey/'nil4' -> NULL
+fetched: /kv/kv_pkey/'nil1' -> <undecoded>
+fetched: /kv/kv_pkey/'nil2' -> <undecoded>
+fetched: /kv/kv_pkey/'nil3' -> <undecoded>
+fetched: /kv/kv_pkey/'nil4' -> <undecoded>
 output row: ['A' NULL]
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -153,21 +153,21 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/kv_pkey/'A' -> NULL
-fetched: /kv/kv_pkey/'a' -> NULL
+fetched: /kv/kv_pkey/'A' -> <undecoded>
+fetched: /kv/kv_pkey/'a' -> <undecoded>
 fetched: /kv/kv_pkey/'a'/v -> 'b'
-fetched: /kv/kv_pkey/'c' -> NULL
+fetched: /kv/kv_pkey/'c' -> <undecoded>
 fetched: /kv/kv_pkey/'c'/v -> 'd'
-fetched: /kv/kv_pkey/'e' -> NULL
+fetched: /kv/kv_pkey/'e' -> <undecoded>
 fetched: /kv/kv_pkey/'e'/v -> 'f'
-fetched: /kv/kv_pkey/'f' -> NULL
+fetched: /kv/kv_pkey/'f' -> <undecoded>
 fetched: /kv/kv_pkey/'f'/v -> 'g'
-fetched: /kv/kv_pkey/'g' -> NULL
+fetched: /kv/kv_pkey/'g' -> <undecoded>
 fetched: /kv/kv_pkey/'g'/v -> ''
-fetched: /kv/kv_pkey/'nil1' -> NULL
-fetched: /kv/kv_pkey/'nil2' -> NULL
-fetched: /kv/kv_pkey/'nil3' -> NULL
-fetched: /kv/kv_pkey/'nil4' -> NULL
+fetched: /kv/kv_pkey/'nil1' -> <undecoded>
+fetched: /kv/kv_pkey/'nil2' -> <undecoded>
+fetched: /kv/kv_pkey/'nil3' -> <undecoded>
+fetched: /kv/kv_pkey/'nil4' -> <undecoded>
 output row: ['A' NULL]
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -219,21 +219,21 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv/kv_pkey/'A' -> NULL
-fetched: /kv/kv_pkey/'a' -> NULL
+fetched: /kv/kv_pkey/'A' -> <undecoded>
+fetched: /kv/kv_pkey/'a' -> <undecoded>
 fetched: /kv/kv_pkey/'a'/v -> 'b'
-fetched: /kv/kv_pkey/'c' -> NULL
+fetched: /kv/kv_pkey/'c' -> <undecoded>
 fetched: /kv/kv_pkey/'c'/v -> 'd'
-fetched: /kv/kv_pkey/'e' -> NULL
+fetched: /kv/kv_pkey/'e' -> <undecoded>
 fetched: /kv/kv_pkey/'e'/v -> 'f'
-fetched: /kv/kv_pkey/'f' -> NULL
+fetched: /kv/kv_pkey/'f' -> <undecoded>
 fetched: /kv/kv_pkey/'f'/v -> 'g'
-fetched: /kv/kv_pkey/'g' -> NULL
+fetched: /kv/kv_pkey/'g' -> <undecoded>
 fetched: /kv/kv_pkey/'g'/v -> ''
-fetched: /kv/kv_pkey/'nil1' -> NULL
-fetched: /kv/kv_pkey/'nil2' -> NULL
-fetched: /kv/kv_pkey/'nil3' -> NULL
-fetched: /kv/kv_pkey/'nil4' -> NULL
+fetched: /kv/kv_pkey/'nil1' -> <undecoded>
+fetched: /kv/kv_pkey/'nil2' -> <undecoded>
+fetched: /kv/kv_pkey/'nil3' -> <undecoded>
+fetched: /kv/kv_pkey/'nil4' -> <undecoded>
 output row: ['A' NULL]
 output row: ['a' 'b']
 output row: ['c' 'd']
@@ -292,7 +292,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /kv5/a/NULL/'a' -> NULL
+fetched: /kv5/a/NULL/'a' -> <undecoded>
 output row: ['a' NULL]
 
 statement ok
