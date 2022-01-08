@@ -1842,6 +1842,15 @@ func planSelectionOperators(
 			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
 		)
 		return op, resultIdx, typs, err
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op = colexec.NewNotExprSelOp(op, resultIdx)
+		return op, resultIdx, typs, err
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
 		leftOp, leftIdx, ct, err := planProjectionOperators(
@@ -1978,6 +1987,8 @@ func planProjectionOperators(
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory, releasables)
 	case *tree.IsNotNullExpr:
 		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory, releasables)
+	case *tree.NotExpr:
+		return planNotExprProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables)
 	case *tree.CastExpr:
 		expr := t.Expr.(tree.TypedExpr)
 		op, resultIdx, typs, err = planProjectionOperators(
@@ -2436,6 +2447,30 @@ func planIsNullProjectionOp(
 	op = colexec.NewIsNullProjOp(
 		colmem.NewAllocator(ctx, acc, factory), op, resultIdx, outputIdx, negate, isTupleNull,
 	)
+	typs = appendOneType(typs, outputType)
+	return op, outputIdx, typs, nil
+}
+
+// planNotExprProjectionOp plans the operator for NOT expression (tree.NotExpr)
+func planNotExprProjectionOp(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	outputType *types.T,
+	expr tree.TypedExpr,
+	columnTypes []*types.T,
+	input colexecop.Operator,
+	acc *mon.BoundAccount,
+	factory coldata.ColumnFactory,
+	releasables *[]execinfra.Releasable,
+) (op colexecop.Operator, inputIdx int, typs []*types.T, err error) {
+	op, inputIdx, typs, err = planProjectionOperators(
+		ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
+	)
+	if err != nil {
+		return op, inputIdx, typs, err
+	}
+	outputIdx := len(typs)
+	op = colexec.NewNotExprProjOp(colmem.NewAllocator(ctx, acc, factory), op, inputIdx, outputIdx)
 	typs = appendOneType(typs, outputType)
 	return op, outputIdx, typs, nil
 }
