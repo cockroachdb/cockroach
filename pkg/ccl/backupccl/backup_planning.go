@@ -1592,10 +1592,7 @@ func getBackupDetailAndManifest(
 			}
 		}
 
-		var cov roachpb.SpanGroup
-		cov.Add(spans...)
-		cov.Sub(prevBackups[len(prevBackups)-1].Spans...)
-		newSpans = cov.Slice()
+		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 
 		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
