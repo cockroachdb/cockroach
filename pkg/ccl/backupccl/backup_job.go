@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -69,53 +68,13 @@ func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
 	return res
 }
 
-// coveringFromSpans creates an interval.Covering with a fixed payload from a
-// slice of roachpb.Spans.
-func coveringFromSpans(spans []roachpb.Span, payload interface{}) covering.Covering {
-	var c covering.Covering
-	for _, span := range spans {
-		c = append(c, covering.Range{
-			Start:   []byte(span.Key),
-			End:     []byte(span.EndKey),
-			Payload: payload,
-		})
-	}
-	return c
-}
-
 // filterSpans returns the spans that represent the set difference
 // (includes - excludes).
 func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Span {
-	type includeMarker struct{}
-	type excludeMarker struct{}
-
-	includeCovering := coveringFromSpans(includes, includeMarker{})
-	excludeCovering := coveringFromSpans(excludes, excludeMarker{})
-
-	splits := covering.OverlapCoveringMerge(
-		[]covering.Covering{includeCovering, excludeCovering},
-	)
-
-	var out []roachpb.Span
-	for _, split := range splits {
-		include := false
-		exclude := false
-		for _, payload := range split.Payload.([]interface{}) {
-			switch payload.(type) {
-			case includeMarker:
-				include = true
-			case excludeMarker:
-				exclude = true
-			}
-		}
-		if include && !exclude {
-			out = append(out, roachpb.Span{
-				Key:    roachpb.Key(split.Start),
-				EndKey: roachpb.Key(split.End),
-			})
-		}
-	}
-	return out
+	var cov roachpb.SpanGroup
+	cov.Add(includes...)
+	cov.Sub(excludes...)
+	return cov.Slice()
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
