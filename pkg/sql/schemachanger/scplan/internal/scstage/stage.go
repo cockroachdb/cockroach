@@ -13,9 +13,9 @@ package scstage
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	scgraph2 "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
 )
@@ -72,7 +72,7 @@ func (s Stage) String() string {
 }
 
 // ValidateStages checks that the plan is valid.
-func ValidateStages(ts scpb.TargetState, stages []Stage, g *scgraph.Graph) error {
+func ValidateStages(ts scpb.TargetState, stages []Stage, g *scgraph2.Graph) error {
 	if len(stages) == 0 {
 		return nil
 	}
@@ -138,9 +138,9 @@ func validateAdjacentStagesStates(previous, next Stage) error {
 	return nil
 }
 
-func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) error {
+func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph2.Graph) error {
 	// Transform the ops in a non-repeating sequence of their original op edges.
-	var queue []*scgraph.OpEdge
+	var queue []*scgraph2.OpEdge
 	for _, op := range stage.EdgeOps {
 		oe := g.GetOpEdgeFromOp(op)
 		if oe == nil {
@@ -166,8 +166,8 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 		current[i] = n
 	}
 	{
-		edgesTo := make(map[*screl.Node][]scgraph.Edge, g.Order())
-		_ = g.ForEachEdge(func(e scgraph.Edge) error {
+		edgesTo := make(map[*screl.Node][]scgraph2.Edge, g.Order())
+		_ = g.ForEachEdge(func(e scgraph2.Edge) error {
 			edgesTo[e.To()] = append(edgesTo[e.To()], e)
 			return nil
 		})
@@ -208,7 +208,7 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 
 			// Prevent making progress on this target if there are unmet dependencies.
 			var hasUnmetDeps bool
-			if err := g.ForEachDepEdgeTo(oe.To(), func(de *scgraph.DepEdge) error {
+			if err := g.ForEachDepEdgeTo(oe.To(), func(de *scgraph2.DepEdge) error {
 				hasUnmetDeps = hasUnmetDeps || !fulfilled[de.From()]
 				return nil
 			}); err != nil {

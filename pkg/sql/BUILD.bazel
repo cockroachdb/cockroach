@@ -354,7 +354,6 @@ go_library(
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scexec",
-        "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",

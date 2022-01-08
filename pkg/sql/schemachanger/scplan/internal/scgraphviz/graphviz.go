@@ -23,10 +23,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -35,8 +35,8 @@ import (
 )
 
 // StagesURL returns a URL to a rendering of the stages of the Plan.
-func StagesURL(p scplan.Plan) (string, error) {
-	gv, err := DrawStages(p)
+func StagesURL(cs scpb.CurrentState, g *scgraph.Graph, stages []scstage.Stage) (string, error) {
+	gv, err := DrawStages(cs, g, stages)
 	if err != nil {
 		return "", err
 	}
@@ -45,8 +45,8 @@ func StagesURL(p scplan.Plan) (string, error) {
 
 // DependenciesURL returns a URL to a rendering of the graph used to build
 // the Plan.
-func DependenciesURL(p scplan.Plan) (string, error) {
-	gv, err := DrawDependencies(p)
+func DependenciesURL(cs scpb.CurrentState, g *scgraph.Graph) (string, error) {
+	gv, err := DrawDependencies(cs, g)
 	if err != nil {
 		return "", err
 	}
@@ -71,21 +71,23 @@ func buildURL(gv string) (string, error) {
 }
 
 // DecorateErrorWithPlanDetails adds plan graphviz URLs as error details.
-func DecorateErrorWithPlanDetails(err error, p scplan.Plan) error {
+func DecorateErrorWithPlanDetails(
+	err error, cs scpb.CurrentState, g *scgraph.Graph, stages []scstage.Stage,
+) error {
 	if err == nil {
 		return nil
 	}
 
-	if p.Stages != nil {
-		stagesURL, stagesErr := StagesURL(p)
+	if len(stages) > 0 {
+		stagesURL, stagesErr := StagesURL(cs, g, stages)
 		if stagesErr != nil {
 			return errors.CombineErrors(err, stagesErr)
 		}
 		err = errors.WithDetailf(err, "stages: %s", stagesURL)
 	}
 
-	if p.Graph != nil {
-		dependenciesURL, dependenciesErr := DependenciesURL(p)
+	if g != nil {
+		dependenciesURL, dependenciesErr := DependenciesURL(cs, g)
 		if dependenciesErr != nil {
 			return errors.CombineErrors(err, dependenciesErr)
 		}
@@ -96,11 +98,11 @@ func DecorateErrorWithPlanDetails(err error, p scplan.Plan) error {
 }
 
 // DrawStages returns a graphviz string of the stages of the Plan.
-func DrawStages(p scplan.Plan) (string, error) {
-	if p.Stages == nil {
+func DrawStages(cs scpb.CurrentState, g *scgraph.Graph, stages []scstage.Stage) (string, error) {
+	if len(stages) == 0 {
 		return "", errors.Errorf("missing stages in plan")
 	}
-	gv, err := drawStages(p)
+	gv, err := drawStages(cs, g, stages)
 	if err != nil {
 		return "", err
 	}
@@ -108,34 +110,36 @@ func DrawStages(p scplan.Plan) (string, error) {
 }
 
 // DrawDependencies returns a graphviz string of graph used to build the Plan.
-func DrawDependencies(p scplan.Plan) (string, error) {
-	if p.Graph == nil {
+func DrawDependencies(cs scpb.CurrentState, g *scgraph.Graph) (string, error) {
+	if g == nil {
 		return "", errors.Errorf("missing graph in plan")
 	}
-	gv, err := drawDeps(p)
+	gv, err := drawDeps(cs, g)
 	if err != nil {
 		return "", err
 	}
 	return gv.String(), nil
 }
 
-func drawStages(p scplan.Plan) (*dot.Graph, error) {
+func drawStages(
+	cs scpb.CurrentState, g *scgraph.Graph, stages []scstage.Stage,
+) (*dot.Graph, error) {
 	dg := dot.NewGraph()
 	stagesSubgraph := dg.Subgraph("stages", dot.ClusterOption{})
 	targetsSubgraph := stagesSubgraph.Subgraph("targets", dot.ClusterOption{})
 	statementsSubgraph := stagesSubgraph.Subgraph("statements", dot.ClusterOption{})
-	targetNodes := make([]dot.Node, len(p.TargetState.Targets))
+	targetNodes := make([]dot.Node, len(cs.TargetState.Targets))
 	// Add all the statements in their own section.
 	// Note: Explains can only have one statement, so we aren't
 	// going to bother adding arrows to them.
-	for idx, stmt := range p.TargetState.Statements {
-		stmtNode := statementsSubgraph.Node(itoa(idx, len(p.TargetState.Statements)))
+	for idx, stmt := range cs.TargetState.Statements {
+		stmtNode := statementsSubgraph.Node(itoa(idx, len(cs.TargetState.Statements)))
 		stmtNode.Attr("label", htmlLabel(stmt))
 		stmtNode.Attr("fontsize", "9")
 		stmtNode.Attr("shape", "none")
 	}
-	for idx, t := range p.TargetState.Targets {
-		tn := targetsSubgraph.Node(itoa(idx, len(p.TargetState.Targets)))
+	for idx, t := range cs.TargetState.Targets {
+		tn := targetsSubgraph.Node(itoa(idx, len(cs.TargetState.Targets)))
 		tn.Attr("label", htmlLabel(t.Element()))
 		tn.Attr("fontsize", "9")
 		tn.Attr("shape", "none")
@@ -144,29 +148,29 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 
 	// Want to draw an edge to the initial target statuses with some dots
 	// or something.
-	curNodes := make([]dot.Node, len(p.Current))
-	cur := p.Current
+	curNodes := make([]dot.Node, len(cs.Current))
+	cur := cs.Current
 	curDummy := targetsSubgraph.Node("dummy")
 	curDummy.Attr("shape", "point")
 	curDummy.Attr("style", "invis")
-	for i, status := range p.Current {
+	for i, status := range cs.Current {
 		label := targetStatusID(i, status)
 		tsn := stagesSubgraph.Node(fmt.Sprintf("initial %d", i))
 		tsn.Attr("label", label)
 		tn := targetNodes[i]
 		e := tn.Edge(tsn)
 		e.Dashed()
-		e.Label(fmt.Sprintf("to %s", p.TargetState.Targets[i].TargetStatus.String()))
+		e.Label(fmt.Sprintf("to %s", cs.TargetState.Targets[i].TargetStatus.String()))
 		curNodes[i] = tsn
 	}
-	for _, st := range p.Stages {
+	for _, st := range stages {
 		stage := st.String()
 		sg := stagesSubgraph.Subgraph(stage, dot.ClusterOption{})
 		next := st.After
 		nextNodes := make([]dot.Node, len(curNodes))
 		m := make(map[scpb.Element][]scop.Op, len(curNodes))
 		for _, op := range st.EdgeOps {
-			if oe := p.Graph.GetOpEdgeFromOp(op); oe != nil {
+			if oe := g.GetOpEdgeFromOp(op); oe != nil {
 				e := oe.To().Element()
 				m[e] = append(m[e], op)
 			}
@@ -177,7 +181,7 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 			cst.Attr("label", targetStatusID(i, status))
 			ge := curNodes[i].Edge(cst)
 			if status != cur[i] {
-				if ops := m[p.TargetState.Targets[i].Element()]; len(ops) > 0 {
+				if ops := m[cs.TargetState.Targets[i].Element()]; len(ops) > 0 {
 					ge.Attr("label", htmlLabel(ops))
 					ge.Attr("fontsize", "9")
 				}
@@ -200,27 +204,27 @@ func drawStages(p scplan.Plan) (*dot.Graph, error) {
 	return dg, nil
 }
 
-func drawDeps(p scplan.Plan) (*dot.Graph, error) {
+func drawDeps(cs scpb.CurrentState, g *scgraph.Graph) (*dot.Graph, error) {
 	dg := dot.NewGraph()
 
 	depsSubgraph := dg.Subgraph("deps", dot.ClusterOption{})
 	targetsSubgraph := depsSubgraph.Subgraph("targets", dot.ClusterOption{})
 	statementsSubgraph := depsSubgraph.Subgraph("statements", dot.ClusterOption{})
-	targetNodes := make([]dot.Node, len(p.Current))
+	targetNodes := make([]dot.Node, len(cs.Current))
 	targetIdxMap := make(map[*scpb.Target]int)
 	// Add all the statements in their own section.
 	// Note: Explains can only have one statement, so we aren't
 	// going to bother adding arrows to them.
-	for idx, stmt := range p.TargetState.Statements {
-		stmtNode := statementsSubgraph.Node(itoa(idx, len(p.TargetState.Statements)))
+	for idx, stmt := range cs.TargetState.Statements {
+		stmtNode := statementsSubgraph.Node(itoa(idx, len(cs.TargetState.Statements)))
 		stmtNode.Attr("label", htmlLabel(stmt))
 		stmtNode.Attr("fontsize", "9")
 		stmtNode.Attr("shape", "none")
 	}
-	targetStatusNodes := make([]map[scpb.Status]dot.Node, len(p.Current))
-	for idx, status := range p.Current {
-		t := &p.TargetState.Targets[idx]
-		tn := targetsSubgraph.Node(itoa(idx, len(p.Current)))
+	targetStatusNodes := make([]map[scpb.Status]dot.Node, len(cs.Current))
+	for idx, status := range cs.Current {
+		t := &cs.TargetState.Targets[idx]
+		tn := targetsSubgraph.Node(itoa(idx, len(cs.Current)))
 		tn.Attr("label", htmlLabel(t.Element()))
 		tn.Attr("fontsize", "9")
 		tn.Attr("shape", "none")
@@ -228,20 +232,20 @@ func drawDeps(p scplan.Plan) (*dot.Graph, error) {
 		targetIdxMap[t] = idx
 		targetStatusNodes[idx] = map[scpb.Status]dot.Node{status: tn}
 	}
-	_ = p.Graph.ForEachNode(func(n *screl.Node) error {
+	_ = g.ForEachNode(func(n *screl.Node) error {
 		tn := depsSubgraph.Node(targetStatusID(targetIdxMap[n.Target], n.CurrentStatus))
 		targetStatusNodes[targetIdxMap[n.Target]][n.CurrentStatus] = tn
 		return nil
 	})
-	for idx, status := range p.Current {
+	for idx, status := range cs.Current {
 		nn := targetStatusNodes[idx][status]
 		tn := targetNodes[idx]
 		e := tn.Edge(nn)
-		e.Label(fmt.Sprintf("to %s", p.TargetState.Targets[idx].TargetStatus.String()))
+		e.Label(fmt.Sprintf("to %s", cs.TargetState.Targets[idx].TargetStatus.String()))
 		e.Dashed()
 	}
 
-	_ = p.Graph.ForEachEdge(func(e scgraph.Edge) error {
+	_ = g.ForEachEdge(func(e scgraph.Edge) error {
 		from := targetStatusNodes[targetIdxMap[e.From().Target]][e.From().CurrentStatus]
 		to := targetStatusNodes[targetIdxMap[e.To().Target]][e.To().CurrentStatus]
 		ge := from.Edge(to)

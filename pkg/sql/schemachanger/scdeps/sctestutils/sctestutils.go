@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -164,7 +163,7 @@ func MakePlan(t *testing.T, state scpb.CurrentState, phase scop.Phase) scplan.Pl
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
 	})
-	require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(err, plan))
+	require.NoError(t, err)
 	// Remove really long ops details that aren't that important anyway.
 	for _, s := range plan.Stages {
 		for _, o := range s.ExtraOps {
