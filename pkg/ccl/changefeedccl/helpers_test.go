@@ -412,7 +412,7 @@ func startTestTenant(
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
 	ctx := context.Background()
 
-	kvServer, _, cleanup := startTestFullServer(t, options)
+	kvServer, _, cleanupCluster := startTestFullServer(t, options)
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -439,7 +439,12 @@ func startTestTenant(
 	// Log so that it is clear if a failed test happened
 	// to run on a tenant.
 	t.Logf("Running test using tenant %s", tenantID)
-	return server, tenantDB, cleanup
+	return server, tenantDB, func() {
+		tenantServer.Stopper().Stop(context.Background())
+		log.Infof(context.Background(), "tenant server stopped")
+		cleanupCluster()
+		log.Infof(context.Background(), "cluster shut down")
+	}
 }
 
 type cdcTestFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)
