@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 type registry struct {
@@ -24,12 +25,12 @@ var opRegistry = &registry{}
 
 // BuildGraph constructs a graph with operation edges populated from an initial
 // state.
-func BuildGraph(initial scpb.State) (*scgraph.Graph, error) {
-	return opRegistry.buildGraph(initial)
+func BuildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
+	return opRegistry.buildGraph(cs)
 }
 
-func (r *registry) buildGraph(initial scpb.State) (*scgraph.Graph, error) {
-	g, err := scgraph.New(initial)
+func (r *registry) buildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
+	g, err := scgraph.New(cs)
 	if err != nil {
 		return nil, err
 	}
@@ -38,13 +39,13 @@ func (r *registry) buildGraph(initial scpb.State) (*scgraph.Graph, error) {
 	// to not mutate the database in place.
 	type toAdd struct {
 		transition
-		n *scpb.Node
+		n *screl.Node
 	}
 	var edgesToAdd []toAdd
 	for _, t := range r.targets {
 		edgesToAdd = edgesToAdd[:0]
-		if err := t.iterateFunc(g.Database(), func(n *scpb.Node) error {
-			status := n.Status
+		if err := t.iterateFunc(g.Database(), func(n *screl.Node) error {
+			status := n.CurrentStatus
 			for _, op := range t.transitions {
 				if op.from == status {
 					edgesToAdd = append(edgesToAdd, toAdd{
@@ -59,10 +60,9 @@ func (r *registry) buildGraph(initial scpb.State) (*scgraph.Graph, error) {
 			return nil, err
 		}
 		for _, op := range edgesToAdd {
-			metadata := g.GetMetadataFromTarget(op.n.Target)
 			var ops []scop.Op
 			if op.ops != nil {
-				ops = op.ops(op.n.Element(), &metadata)
+				ops = op.ops(op.n.Element(), cs.TargetState)
 			}
 			if err := g.AddOpEdges(
 				op.n.Target, op.from, op.to, op.revertible, op.minPhase, ops...,

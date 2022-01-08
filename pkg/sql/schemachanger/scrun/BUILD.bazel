@@ -12,7 +12,6 @@ go_library(
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scop",

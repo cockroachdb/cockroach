@@ -15,12 +15,29 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
+func newLogEventOp(e scpb.Element, ts scpb.TargetState) *scop.LogEvent {
+	for _, t := range ts.Targets {
+		if t.Element() == e {
+			return &scop.LogEvent{
+				TargetMetadata: *protoutil.Clone(&t.Metadata).(*scpb.TargetMetadata),
+				Authorization:  *protoutil.Clone(&ts.Authorization).(*scpb.Authorization),
+				Statement:      ts.Statements[t.Metadata.StatementID].Statement,
+				Element:        *protoutil.Clone(&t.ElementProto).(*scpb.ElementProto),
+				TargetStatus:   t.TargetStatus,
+			}
+		}
+	}
+	panic(errors.AssertionFailedf("could not find element %s in target state", screl.ElementString(e)))
+}
+
 // opsFunc are a fully-compiled and checked set of functions to emit operations
 // given an element value.
-type opsFunc func(element scpb.Element, metadata *scpb.ElementMetadata) []scop.Op
+type opsFunc func(element scpb.Element, targetState scpb.TargetState) []scop.Op
 
 func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, error) {
 	var funcValues []reflect.Value
@@ -30,10 +47,10 @@ func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, error) {
 		}
 		funcValues = append(funcValues, reflect.ValueOf(fn))
 	}
-	return func(element scpb.Element, metadata *scpb.ElementMetadata) []scop.Op {
+	return func(element scpb.Element, targetState scpb.TargetState) []scop.Op {
 		ret := make([]scop.Op, 0, len(funcValues))
 		in := []reflect.Value{reflect.ValueOf(element)}
-		inWithMeta := []reflect.Value{reflect.ValueOf(element), reflect.ValueOf(metadata)}
+		inWithMeta := []reflect.Value{reflect.ValueOf(element), reflect.ValueOf(targetState)}
 		for _, fn := range funcValues {
 			var out []reflect.Value
 			if fn.Type().NumIn() == 1 {
@@ -60,7 +77,7 @@ func checkOpFunc(el scpb.Element, fn interface{}) error {
 	elType := reflect.TypeOf(el)
 	if !(fnT.NumIn() == 1 && fnT.In(0) == elType) &&
 		!(fnT.NumIn() == 2 && fnT.In(0) == elType &&
-			fnT.In(1) == reflect.TypeOf((*scpb.ElementMetadata)(nil))) {
+			fnT.In(1) == reflect.TypeOf(scpb.TargetState{})) {
 		return errors.Errorf(
 			"expected %v to be a func with one argument of type %s", fnT, elType,
 		)

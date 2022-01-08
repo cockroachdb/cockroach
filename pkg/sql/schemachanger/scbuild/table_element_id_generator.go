@@ -55,7 +55,7 @@ func (b buildCtx) NextColumnFamilyID(tbl catalog.TableDescriptor) descpb.FamilyI
 // NextIndexID implements the scbuildstmt.TableElementIDGenerator interface.
 func (b buildCtx) NextIndexID(tbl catalog.TableDescriptor) descpb.IndexID {
 	var maxAddedIndexID descpb.IndexID
-	b.ForEachNode(func(_, targetStatus scpb.Status, elem scpb.Element) {
+	b.ForEachElementStatus(func(_, targetStatus scpb.Status, elem scpb.Element) {
 		if targetStatus != scpb.Status_PUBLIC || screl.GetDescID(elem) != tbl.GetID() {
 			return
 		}

@@ -12,12 +12,13 @@ package scgraph
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 // NodeIterator is used to iterate nodes. Return iterutil.StopIteration to
 // return early with no error.
-type NodeIterator func(n *scpb.Node) error
+type NodeIterator func(n *screl.Node) error
 
 // ForEachNode iterates the nodes in the graph.
 func (g *Graph) ForEachNode(it NodeIterator) error {
@@ -59,12 +60,12 @@ type DepEdgeIterator func(de *DepEdge) error
 
 // ForEachDepEdgeFrom iterates the dep edges in the graph with the selected
 // source.
-func (g *Graph) ForEachDepEdgeFrom(n *scpb.Node, it DepEdgeIterator) (err error) {
+func (g *Graph) ForEachDepEdgeFrom(n *screl.Node, it DepEdgeIterator) (err error) {
 	return g.depEdgesFrom.iterateSourceNode(n, it)
 }
 
 // ForEachDepEdgeTo iterates the dep edges in the graph with the selected
 // destination.
-func (g *Graph) ForEachDepEdgeTo(n *scpb.Node, it DepEdgeIterator) (err error) {
+func (g *Graph) ForEachDepEdgeTo(n *screl.Node, it DepEdgeIterator) (err error) {
 	return g.depEdgesTo.iterateSourceNode(n, it)
 }

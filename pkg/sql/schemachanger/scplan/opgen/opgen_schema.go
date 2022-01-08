@@ -49,13 +49,8 @@ func init() {
 						TableID: this.SchemaID,
 					}
 				}),
-				emit(func(this *scpb.Schema, md *scpb.ElementMetadata) scop.Op {
-					return &scop.LogEvent{
-						Metadata:     *md,
-						DescID:       this.SchemaID,
-						Element:      &scpb.ElementProto{Schema: this},
-						TargetStatus: scpb.Status_ABSENT,
-					}
+				emit(func(this *scpb.Schema, ts scpb.TargetState) scop.Op {
+					return newLogEventOp(this, ts)
 				}),
 				emit(func(this *scpb.Schema) scop.Op {
 					return &scop.DeleteDescriptor{

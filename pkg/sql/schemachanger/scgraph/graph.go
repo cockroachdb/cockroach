@@ -27,21 +27,15 @@ type Graph struct {
 	// Targets is an interned slice of targets.
 	targets []*scpb.Target
 
-	// Statement metadata for targets.
-	statements []*scpb.Statement
-
-	// Authorization information used by the targets.
-	authorization scpb.Authorization
-
 	// Interns the Node so that pointer equality can be used.
-	targetNodes []map[scpb.Status]*scpb.Node
+	targetNodes []map[scpb.Status]*screl.Node
 
 	// Maps a target to its index in targetNodes.
 	targetIdxMap map[*scpb.Target]int
 
 	// opEdgesFrom maps a Node to an opEdge that proceeds
 	// from it. A Node may have at most one opEdge from it.
-	opEdgesFrom map[*scpb.Node]*OpEdge
+	opEdgesFrom map[*screl.Node]*OpEdge
 
 	// depEdgesFrom and depEdgesTo map a Node from and to its dependencies.
 	// A Node dependency is another target node which cannot be reached before
@@ -68,7 +62,7 @@ func (g *Graph) Database() *rel.Database {
 
 // New constructs a new Graph. All initial nodes ought to correspond to distinct
 // targets. If they do not, an error will be returned.
-func New(initial scpb.State) (*Graph, error) {
+func New(cs scpb.CurrentState) (*Graph, error) {
 	db, err := rel.NewDatabase(screl.Schema, [][]rel.Attr{
 		{rel.Type, screl.DescID},
 		{screl.DescID, rel.Type},
@@ -80,26 +74,24 @@ func New(initial scpb.State) (*Graph, error) {
 		return nil, err
 	}
 	g := Graph{
-		targetIdxMap:  map[*scpb.Target]int{},
-		opEdgesFrom:   map[*scpb.Node]*OpEdge{},
-		noOpOpEdges:   map[*OpEdge]bool{},
-		opToOpEdge:    map[scop.Op]*OpEdge{},
-		entities:      db,
-		statements:    initial.Statements,
-		authorization: initial.Authorization,
+		targetIdxMap: map[*scpb.Target]int{},
+		opEdgesFrom:  map[*screl.Node]*OpEdge{},
+		noOpOpEdges:  map[*OpEdge]bool{},
+		opToOpEdge:   map[scop.Op]*OpEdge{},
+		entities:     db,
 	}
 	g.depEdgesFrom = newDepEdgeTree(fromTo, g.compareNodes)
 	g.depEdgesTo = newDepEdgeTree(toFrom, g.compareNodes)
-	for _, n := range initial.Nodes {
-		if existing, ok := g.targetIdxMap[n.Target]; ok {
-			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", n, initial.Nodes[existing])
+	for i, status := range cs.Current {
+		t := &cs.Targets[i]
+		if existing, ok := g.targetIdxMap[t]; ok {
+			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", *t, cs.Targets[existing])
 		}
 		idx := len(g.targets)
-		g.targetIdxMap[n.Target] = idx
-		g.targets = append(g.targets, n.Target)
-		g.targetNodes = append(g.targetNodes, map[scpb.Status]*scpb.Node{
-			n.Status: n,
-		})
+		g.targetIdxMap[t] = idx
+		g.targets = append(g.targets, t)
+		n := &screl.Node{Target: t, CurrentStatus: status}
+		g.targetNodes = append(g.targetNodes, map[scpb.Status]*screl.Node{status: n})
 		if err := g.entities.Insert(n); err != nil {
 			return nil, err
 		}
@@ -112,18 +104,16 @@ func New(initial scpb.State) (*Graph, error) {
 func (g *Graph) ShallowClone() *Graph {
 	// Shallow copy the base structure.
 	clone := &Graph{
-		targets:       g.targets,
-		statements:    g.statements,
-		authorization: g.authorization,
-		targetNodes:   g.targetNodes,
-		targetIdxMap:  g.targetIdxMap,
-		opEdgesFrom:   g.opEdgesFrom,
-		depEdgesFrom:  g.depEdgesFrom,
-		depEdgesTo:    g.depEdgesTo,
-		opToOpEdge:    g.opToOpEdge,
-		edges:         g.edges,
-		entities:      g.entities,
-		noOpOpEdges:   make(map[*OpEdge]bool),
+		targets:      g.targets,
+		targetNodes:  g.targetNodes,
+		targetIdxMap: g.targetIdxMap,
+		opEdgesFrom:  g.opEdgesFrom,
+		depEdgesFrom: g.depEdgesFrom,
+		depEdgesTo:   g.depEdgesTo,
+		opToOpEdge:   g.opToOpEdge,
+		edges:        g.edges,
+		entities:     g.entities,
+		noOpOpEdges:  make(map[*OpEdge]bool),
 	}
 	// Any decorations for mutations will be copied.
 	for edge, noop := range g.noOpOpEdges {
@@ -133,7 +123,7 @@ func (g *Graph) ShallowClone() *Graph {
 }
 
 // GetNode returns the cached node for a given target and status.
-func (g *Graph) GetNode(t *scpb.Target, s scpb.Status) (*scpb.Node, bool) {
+func (g *Graph) GetNode(t *scpb.Target, s scpb.Status) (*screl.Node, bool) {
 	targetStatuses := g.getTargetStatusMap(t)
 	ts, ok := targetStatuses[s]
 	return ts, ok
@@ -142,14 +132,14 @@ func (g *Graph) GetNode(t *scpb.Target, s scpb.Status) (*scpb.Node, bool) {
 // Suppress the linter.
 var _ = (*Graph)(nil).GetNode
 
-func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) (*scpb.Node, error) {
+func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) (*screl.Node, error) {
 	targetStatuses := g.getTargetStatusMap(t)
 	if ts, ok := targetStatuses[s]; ok {
 		return ts, nil
 	}
-	ts := &scpb.Node{
-		Target: t,
-		Status: s,
+	ts := &screl.Node{
+		Target:        t,
+		CurrentStatus: s,
 	}
 	targetStatuses[s] = ts
 	if err := g.entities.Insert(ts); err != nil {
@@ -158,7 +148,7 @@ func (g *Graph) getOrCreateNode(t *scpb.Target, s scpb.Status) (*scpb.Node, erro
 	return ts, nil
 }
 
-func (g *Graph) getTargetStatusMap(target *scpb.Target) map[scpb.Status]*scpb.Node {
+func (g *Graph) getTargetStatusMap(target *scpb.Target) map[scpb.Status]*screl.Node {
 	idx, ok := g.targetIdxMap[target]
 	if !ok {
 		panic(errors.Errorf("target %v does not exist", target))
@@ -176,7 +166,7 @@ var _ = (*Graph)(nil).containsTarget
 
 // GetOpEdgeFrom returns the unique outgoing op edge from the specified node,
 // if one exists.
-func (g *Graph) GetOpEdgeFrom(n *scpb.Node) (*OpEdge, bool) {
+func (g *Graph) GetOpEdgeFrom(n *screl.Node) (*OpEdge, bool) {
 	oe, ok := g.opEdgesFrom[n]
 	return oe, ok
 }
@@ -259,20 +249,6 @@ func (g *Graph) IsNoOp(edge *OpEdge) bool {
 	return len(edge.op) == 0 || g.noOpOpEdges[edge]
 }
 
-// GetMetadataFromTarget returns the metadata for a given target node.
-func (g *Graph) GetMetadataFromTarget(target *scpb.Target) scpb.ElementMetadata {
-	return scpb.ElementMetadata{
-		TargetMetadata: scpb.TargetMetadata{
-			SourceElementID: target.Metadata.SourceElementID,
-			SubWorkID:       target.Metadata.SubWorkID,
-			StatementID:     target.Metadata.StatementID,
-		},
-		Statement: g.statements[target.Metadata.StatementID].Statement,
-		Username:  g.authorization.Username,
-		AppName:   g.authorization.AppName,
-	}
-}
-
 // Order returns the number of nodes in this graph.
 func (g *Graph) Order() int {
 	n := 0
@@ -284,9 +260,9 @@ func (g *Graph) Order() int {
 
 // Validate returns an error if there's a cycle in the graph.
 func (g *Graph) Validate() (err error) {
-	marks := make(map[*scpb.Node]bool, g.Order())
-	var visit func(n *scpb.Node)
-	visit = func(n *scpb.Node) {
+	marks := make(map[*screl.Node]bool, g.Order())
+	var visit func(n *screl.Node)
+	visit = func(n *screl.Node) {
 		if err != nil {
 			return
 		}
@@ -305,7 +281,7 @@ func (g *Graph) Validate() (err error) {
 		})
 		marks[n] = true
 	}
-	_ = g.ForEachNode(func(n *scpb.Node) error {
+	_ = g.ForEachNode(func(n *screl.Node) error {
 		visit(n)
 		return nil
 	})
@@ -313,7 +289,7 @@ func (g *Graph) Validate() (err error) {
 }
 
 // compareNodes compares two nodes in a graph. A nil nodes is the minimum value.
-func (g *Graph) compareNodes(a, b *scpb.Node) (less, eq bool) {
+func (g *Graph) compareNodes(a, b *screl.Node) (less, eq bool) {
 	switch {
 	case a == b:
 		return false, true
@@ -322,7 +298,7 @@ func (g *Graph) compareNodes(a, b *scpb.Node) (less, eq bool) {
 	case b == nil:
 		return false, false
 	case a.Target == b.Target:
-		return a.Status < b.Status, a.Status == b.Status
+		return a.CurrentStatus < b.CurrentStatus, a.CurrentStatus == b.CurrentStatus
 	default:
 		aIdx, bIdx := g.targetIdxMap[a.Target], g.targetIdxMap[b.Target]
 		return aIdx < bIdx, aIdx == bIdx

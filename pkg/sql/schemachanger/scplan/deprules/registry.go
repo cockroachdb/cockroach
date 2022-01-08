@@ -15,7 +15,7 @@ package deprules
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 // Apply will add the dependency edges to the graph which ought to exist
@@ -23,10 +23,10 @@ import (
 func Apply(g *scgraph.Graph) error {
 	for _, dr := range depRules {
 		if err := dr.q.Iterate(g.Database(), func(r rel.Result) error {
-			from := r.Var(dr.from).(*scpb.Node)
-			to := r.Var(dr.to).(*scpb.Node)
+			from := r.Var(dr.from).(*screl.Node)
+			to := r.Var(dr.to).(*screl.Node)
 			return g.AddDepEdge(
-				dr.name, dr.kind, from.Target, from.Status, to.Target, to.Status,
+				dr.name, dr.kind, from.Target, from.CurrentStatus, to.Target, to.CurrentStatus,
 			)
 		}); err != nil {
 			return err

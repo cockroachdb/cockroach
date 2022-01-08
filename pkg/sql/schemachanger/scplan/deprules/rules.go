@@ -27,7 +27,7 @@ func joinTargetNode(element, target, node rel.Var, targetStatus, status scpb.Sta
 	return rel.And(
 		screl.JoinTargetNode(element, target, node),
 		target.AttrEq(screl.TargetStatus, targetStatus),
-		node.AttrEq(screl.Status, status),
+		node.AttrEq(screl.CurrentStatus, status),
 	)
 }
 
@@ -70,7 +70,7 @@ func init() {
 
 			screl.JoinTargetNode(parent, parentTarget, parentNode),
 			parentTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			parentNode.AttrEq(screl.Status, scpb.Status_ABSENT),
+			parentNode.AttrEq(screl.CurrentStatus, scpb.Status_ABSENT),
 
 			joinTargetNode(other, otherTarget, otherNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
@@ -131,7 +131,7 @@ func init() {
 			rel.Filter("columnInIndex", column, index)(columnInIndex),
 
 			targetStatus.Entities(screl.TargetStatus, columnTarget, indexTarget),
-			status.Entities(screl.Status, columnNode, indexNode),
+			status.Entities(screl.CurrentStatus, columnNode, indexNode),
 
 			screl.JoinTargetNode(column, columnTarget, columnNode),
 			screl.JoinTargetNode(index, indexTarget, indexNode),
@@ -437,7 +437,7 @@ func init() {
 
 			screl.JoinTargetNode(index, indexTarget, indexNode),
 			indexTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			indexNode.AttrEq(screl.Status, scpb.Status_VALIDATED),
+			indexNode.AttrEq(screl.CurrentStatus, scpb.Status_VALIDATED),
 			joinTargetNode(indexName, indexNameTarget, indexNameNode, scpb.Status_ABSENT, scpb.Status_ABSENT),
 		),
 	)
