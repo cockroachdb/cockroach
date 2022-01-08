@@ -27,6 +27,7 @@ const (
 	stressTarget = "@com_github_cockroachdb_stress//:stress"
 
 	// General testing flags.
+	countFlag       = "count"
 	vFlag           = "verbose"
 	showLogsFlag    = "show-logs"
 	stressFlag      = "stress"
@@ -35,6 +36,7 @@ const (
 	ignoreCacheFlag = "ignore-cache"
 	rewriteFlag     = "rewrite"
 	rewriteArgFlag  = "rewrite-arg"
+	vModuleFlag     = "vmodule"
 )
 
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -46,6 +48,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		Example: `
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
+	dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
 	dev test --stress --race ...`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -63,14 +66,16 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	// under test, controlling whether the process-internal logs are made
 	// visible.
 	testCmd.Flags().BoolP(vFlag, "v", false, "show testing process output")
+	testCmd.Flags().Int(countFlag, 1, "run test the given number of times")
 	testCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
-	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying (only applicable for certain tests, e.g. logic and datadriven tests). If unspecified, -rewrite will be passed to the test binary.")
+	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying test binary (only applicable to certain tests)")
 	testCmd.Flags().String(rewriteArgFlag, "", "additional argument to pass to -rewrite (implies --rewrite)")
 	testCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
+	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
 	return testCmd
 }
 
@@ -89,6 +94,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		timeout     = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose     = mustGetFlagBool(cmd, vFlag)
 		showLogs    = mustGetFlagBool(cmd, showLogsFlag)
+		count       = mustGetFlagInt(cmd, countFlag)
+		vModule     = mustGetFlagString(cmd, vModuleFlag)
 	)
 
 	var args []string
@@ -227,6 +234,15 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if showLogs {
 		args = append(args, "--test_arg", "-show-logs")
 	}
+	if count != 1 {
+		args = append(args, "--test_arg", fmt.Sprintf("-test.count=%d", count))
+	}
+	if vModule != "" {
+		args = append(args, "--test_arg", fmt.Sprintf("-vmodule=%s", vModule))
+	}
+	// TODO(irfansharif): Support --go-flags, to pass in an arbitrary set of
+	// flags into the go test binaries. Gives better coverage to everything
+	// listed under `go help testflags`.
 
 	{ // Handle test output flags.
 		testOutputArgs := []string{"--test_output", "errors"}
