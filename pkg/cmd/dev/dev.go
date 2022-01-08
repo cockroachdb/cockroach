@@ -37,13 +37,60 @@ func makeDevCmd() *dev {
 		Use:     "dev [command] (flags)",
 		Short:   "Dev is the general-purpose dev tool for working on cockroach/cockroachdb.",
 		Version: "v0.0",
-		Long: `
-Dev is the general-purpose dev tool for working on cockroachdb/cockroach. With dev you can:
+		Long: `Dev is the general-purpose dev tool for working on cockroachdb/cockroach. With dev you can:
 
 - build various binaries (cockroach, optgen, ...)
-- run arbitrary tests (unit tests, logic tests, ...)
-- run tests under arbitrary configurations (under stress, using race builds, ...)
-- generate code (bazel files, docs, ...)
+- run arbitrary tests (unit tests, logic tests, ...) under various configurations (stress, race, ...)
+- generate code (bazel files, docs, protos, ...)
+
+Typical usage:
+    dev build
+        Build the full cockroach binary.
+
+    dev build short
+        Build the cockroach binary without UI.
+
+    dev generate go
+        Regenerate all generated go code (protos, stringer, ...)
+
+    dev generate bazel
+        Regenerate all BUILD.bazel files.
+
+    dev lint
+        Run all style checkers and linters.
+
+    dev lint --short
+        Run a fast subset of the style checkers and linters.
+
+    dev bench pkg/sql/parser -f=BenchmarkParse
+        Run BenchmarkParse in pkg/sql/parser.
+
+    dev test pkg/sql
+        Run all unit tests in pkg/sql.
+
+    dev test pkg/sql/parser -f=TestParse
+        Run TestParse in pkg/sql/parser.
+
+    dev testlogic
+        Run all base, opt exec builder, and ccl logic tests.
+
+    dev testlogic ccl
+        Run all ccl logic tests.
+
+    dev testlogic opt
+        Run all opt exec builder logic tests.
+
+    dev testlogic base
+        Run all OSS logic tests.
+
+    dev testlogic --files='prepare|fk'
+        Run the logic tests in the files named prepare and fk (the full path is not required).
+
+    dev testlogic --files=fk --subtests='20042|20045'
+        Run the logic tests within subtests 20042 and 20045 in the file named fk.
+
+    dev testlogic --config=local
+        Run the logic tests for the cluster configuration 'local'.
 `,
 		// Disable automatic printing of usage information whenever an error
 		// occurs. We presume that most errors will not the result of bad
