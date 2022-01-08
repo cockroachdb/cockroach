@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"path/filepath"
 	"testing"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -1464,5 +1466,102 @@ func BenchmarkMVCCIncrementalIterator(b *testing.B) {
 				})
 			}
 		})
+	}
+}
+
+// BenchmarkMVCCIncrementalIteratorForOldData is a benchmark for the case of
+// finding old data when most data is in L6. This uses the MVCC timestamp to
+// define age, for convenience, though it could be a different field in the
+// key if one wrote a BlockPropertyCollector that could parse the key to find
+// the field (for instance the crdb_internal_ttl_expiration used in
+// https://github.com/cockroachdb/cockroach/pull/70241).
+func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
+	numKeys := 10000
+	// 1 in 400 keys is being looked for. Roughly corresponds to a TTL of
+	// slightly longer than 1 year, where each day, we run a pass to expire 1
+	// day of keys. The old keys are uniformly distributed in the key space,
+	// which is the worst case for block property filters.
+	keyAgeInterval := 400
+	setupMVCCPebbleWithBlockProperties := func(b *testing.B) Engine {
+		eng, err := Open(
+			context.Background(),
+			InMemory(),
+			// Use a small cache size. Scanning large tables with mostly cold data
+			// will mostly miss the cache (especially since the block cache is meant
+			// to be scan resistant).
+			CacheSize(1<<10),
+			func(cfg *engineConfig) error {
+				cfg.Opts.FormatMajorVersion = pebble.FormatBlockPropertyCollector
+				return nil
+			})
+		if err != nil {
+			b.Fatal(err)
+		}
+		return eng
+	}
+
+	baseTimestamp := int64(1000)
+	setupData := func(b *testing.B, eng Engine, valueSize int) {
+		// Generate the same data every time.
+		rng := rand.New(rand.NewSource(1449168817))
+		batch := eng.NewBatch()
+		for i := 0; i < numKeys; i++ {
+			if (i+1)%100 == 0 {
+				if err := batch.Commit(false /* sync */); err != nil {
+					b.Fatal(err)
+				}
+				batch.Close()
+				batch = eng.NewBatch()
+			}
+			key := encoding.EncodeUvarintAscending([]byte("key-"), uint64(i))
+			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
+			value.InitChecksum(key)
+			ts := hlc.Timestamp{WallTime: baseTimestamp + 100*int64(i%keyAgeInterval)}
+			if err := MVCCPut(
+				context.Background(), batch, nil /* ms */, key, ts, value, nil); err != nil {
+				b.Fatal(err)
+			}
+		}
+		if err := eng.Flush(); err != nil {
+			b.Fatal(err)
+		}
+		if err := eng.Compact(); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	for _, valueSize := range []int{100, 500, 1000, 2000} {
+		eng := setupMVCCPebbleWithBlockProperties(b)
+		setupData(b, eng, valueSize)
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			for _, useTBI := range []bool{true, false} {
+				b.Run(fmt.Sprintf("useTBI=%t", useTBI), func(b *testing.B) {
+					startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))
+					endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(numKeys)))
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						it := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
+							EnableTimeBoundIteratorOptimization: useTBI,
+							EndKey:                              endKey,
+							StartTime:                           hlc.Timestamp{},
+							EndTime:                             hlc.Timestamp{WallTime: baseTimestamp},
+						})
+						it.SeekGE(MVCCKey{Key: startKey})
+						for {
+							if ok, err := it.Valid(); err != nil {
+								b.Fatalf("failed incremental iteration: %+v", err)
+							} else if !ok {
+								break
+							}
+							it.Next()
+						}
+						it.Close()
+					}
+				})
+			}
+		})
+		eng.Close()
 	}
 }

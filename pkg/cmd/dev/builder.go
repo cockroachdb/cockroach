@@ -28,7 +28,7 @@ const volumeFlag = "volume"
 func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	builderCmd := &cobra.Command{
 		Use:     "builder",
-		Short:   "Run the Bazel builder image.",
+		Short:   "Run the Bazel builder image",
 		Long:    "Run the Bazel builder image.",
 		Example: `dev builder`,
 		Args:    cobra.MinimumNArgs(0),

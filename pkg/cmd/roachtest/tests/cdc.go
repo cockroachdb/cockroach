@@ -1741,9 +1741,9 @@ func createChangefeed(db *gosql.DB, targets, sinkURL string, args cdcTestArgs) (
 	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1`, targets)
 	extraArgs := []interface{}{sinkURL}
 	if args.whichSink == cloudStorageSink || args.whichSink == webhookSink {
-		createStmt += ` WITH resolved='10s', envelope=wrapped`
+		createStmt += ` WITH resolved='10s', envelope=wrapped, min_checkpoint_frequency='10s'`
 	} else {
-		createStmt += ` WITH resolved`
+		createStmt += ` WITH resolved,  min_checkpoint_frequency='10s'`
 	}
 	if !args.initialScan {
 		createStmt += `, cursor='-1s'`

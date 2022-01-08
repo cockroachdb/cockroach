@@ -412,45 +412,11 @@ func NewColIndexJoin(
 	// retrieving the hydrated immutable from cache.
 	table := spec.BuildTableDescriptor()
 	index := table.ActiveIndexes()[spec.IndexIdx]
-	tableArgs, idxMap, err := populateTableArgs(
+	tableArgs, neededColumns, err := populateTableArgs(
 		ctx, flowCtx, table, index, nil, /* invertedCol */
 		spec.Visibility, spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
-		return nil, err
-	}
-	if idxMap != nil {
-		// The index join is fetching from the primary index, so there should be
-		// no mapping needed.
-		return nil, errors.AssertionFailedf("unexpectedly non-nil idx map for the index join")
-	}
-
-	// Retrieve the set of columns that the index join needs to fetch.
-	var neededColumns []uint32
-	var neededColOrdsInWholeTable util.FastIntSet
-	if post.OutputColumns != nil {
-		neededColumns = post.OutputColumns
-		for _, neededColOrd := range neededColumns {
-			neededColOrdsInWholeTable.Add(int(neededColOrd))
-		}
-	} else {
-		proc := &execinfra.ProcOutputHelper{}
-		// It is ok to use the evalCtx of the flowCtx here since we only use the
-		// ProcOutputHelper to get a set of the needed columns and will not be
-		// evaluating any expressions.
-		if err = proc.Init(post, tableArgs.typs, helper.SemaCtx, flowCtx.EvalCtx); err != nil {
-			return nil, err
-		}
-		neededColOrdsInWholeTable = proc.NeededColumns()
-		neededColumns = make([]uint32, 0, neededColOrdsInWholeTable.Len())
-		for i, ok := neededColOrdsInWholeTable.Next(0); ok; i, ok = neededColOrdsInWholeTable.Next(i + 1) {
-			neededColumns = append(neededColumns, uint32(i))
-		}
-	}
-
-	if err = keepOnlyNeededColumns(
-		flowCtx, tableArgs, idxMap, neededColumns, post, helper,
-	); err != nil {
 		return nil, err
 	}
 
@@ -472,7 +438,7 @@ func NewColIndexJoin(
 	}
 
 	spanAssembler := colexecspan.NewColSpanAssembler(
-		flowCtx.Codec(), allocator, table, index, inputTypes, neededColOrdsInWholeTable,
+		flowCtx.Codec(), allocator, table, index, inputTypes, neededColumns,
 	)
 
 	op := &ColIndexJoin{
