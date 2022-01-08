@@ -26,10 +26,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		Short: `Run the specified benchmarks`,
 		Long:  `Run the specified benchmarks.`,
 		Example: `
-	dev bench
-        dev bench pkg/sql/parser
-        dev bench pkg/sql/parser/...
-        dev bench pkg/sql/parser --filter=BenchmarkParse`,
+	dev bench pkg/sql/parser --filter=BenchmarkParse`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}

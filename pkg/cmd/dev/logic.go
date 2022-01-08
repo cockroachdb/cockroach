@@ -28,12 +28,12 @@ const (
 func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	testLogicCmd := &cobra.Command{
 		Use:   "testlogic {,base,ccl,opt}",
-		Short: "Run logic tests.",
+		Short: "Run logic tests",
 		Long:  "Run logic tests.",
 		Example: `
 	dev testlogic
-	dev testlogic ccl
-	dev testlogic --files=fk --subtests=20042 --config=local`,
+	dev testlogic ccl opt
+	dev testlogic --files=fk --subtests='20042|20045' --config=local`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
