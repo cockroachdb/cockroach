@@ -12,6 +12,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/url"
@@ -339,6 +341,10 @@ func makeCloudStorageSink(
 	u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
 
 	sinkID := atomic.AddInt64(&cloudStorageSinkIDAtomic, 1)
+	sessID, err := generateChangefeedSessionID()
+	if err != nil {
+		return nil, err
+	}
 	s := &cloudStorageSink{
 		srcID:             srcID,
 		sinkID:            sinkID,
@@ -348,7 +354,7 @@ func makeCloudStorageSink(
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
-		jobSessionID: generateChangefeedSessionID(),
+		jobSessionID: sessID,
 		metrics:      m,
 	}
 
@@ -397,7 +403,6 @@ func makeCloudStorageSink(
 		}
 	}
 
-	var err error
 	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user); err != nil {
 		return nil, err
 	}
@@ -618,4 +623,34 @@ func keyLess(a, b cloudStorageSinkKey) bool {
 		return a.schemaID < b.schemaID
 	}
 	return a.topic < b.topic
+}
+
+// generateChangefeedSessionID generates a unique string that is used to
+// prevent overwriting of output files by the cloudStorageSink.
+func generateChangefeedSessionID() (string, error) {
+	// We read exactly 8 random bytes. 8 bytes should be enough because:
+	// Consider that each new session for a changefeed job can occur at the
+	// same highWater timestamp for its catch up scan. This session ID is
+	// used to ensure that a session emitting files with the same timestamp
+	// as the session before doesn't clobber existing files. Let's assume that
+	// each of these runs for 0 seconds. Our node liveness duration is currently
+	// 9 seconds, but let's go with a conservative duration of 1 second.
+	// With 8 bytes using the rough approximation for the birthday problem
+	// https://en.wikipedia.org/wiki/Birthday_problem#Square_approximation, we
+	// will have a 50% chance of a single collision after sqrt(2^64) = 2^32
+	// sessions. So if we start a new job every second, we get a coin flip chance of
+	// single collision after 136 years. With this same approximation, we get
+	// something like 220 days to have a 0.001% chance of a collision. In practice,
+	// jobs are likely to run for longer and it's likely to take longer for
+	// job adoption, so we should be good with 8 bytes. Similarly, it's clear that
+	// 16 would be way overkill. 4 bytes gives us a 50% chance of collision after
+	// 65K sessions at the same timestamp.
+	const size = 8
+	p := make([]byte, size)
+	buf := make([]byte, hex.EncodedLen(size))
+	if _, err := rand.Read(p); err != nil {
+		return "", err
+	}
+	hex.Encode(buf, p)
+	return string(buf), nil
 }

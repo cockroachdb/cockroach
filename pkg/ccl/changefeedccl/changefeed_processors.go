@@ -547,7 +547,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved *jobspb.ResolvedSpan) erro
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
 	checkpointFrontier := advanced &&
-		(forceFlush || ca.lastFlush.Add(ca.flushFrequency).Before(timeutil.Now()))
+		(forceFlush || timeutil.Since(ca.lastFlush) > ca.flushFrequency)
 
 	// If backfilling we must also consider the Backfill Checkpointing frequency
 	checkpointBackfill := ca.spec.JobID != 0 && /* enterprise changefeed */

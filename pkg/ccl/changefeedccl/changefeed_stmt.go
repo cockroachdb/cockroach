@@ -10,9 +10,7 @@ package changefeedccl
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"net/url"
 	"sort"
 	"strings"
@@ -52,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -631,37 +630,13 @@ type changefeedResumer struct {
 	job *jobs.Job
 }
 
-// generateChangefeedSessionID generates a unique string that is used to
-// prevent overwriting of output files by the cloudStorageSink.
-func generateChangefeedSessionID() string {
-	// We read exactly 8 random bytes. 8 bytes should be enough because:
-	// Consider that each new session for a changefeed job can occur at the
-	// same highWater timestamp for its catch up scan. This session ID is
-	// used to ensure that a session emitting files with the same timestamp
-	// as the session before doesn't clobber existing files. Let's assume that
-	// each of these runs for 0 seconds. Our node liveness duration is currently
-	// 9 seconds, but let's go with a conservative duration of 1 second.
-	// With 8 bytes using the rough approximation for the birthday problem
-	// https://en.wikipedia.org/wiki/Birthday_problem#Square_approximation, we
-	// will have a 50% chance of a single collision after sqrt(2^64) = 2^32
-	// sessions. So if we start a new job every second, we get a coin flip chance of
-	// single collision after 136 years. With this same approximation, we get
-	// something like 220 days to have a 0.001% chance of a collision. In practice,
-	// jobs are likely to run for longer and it's likely to take longer for
-	// job adoption, so we should be good with 8 bytes. Similarly, it's clear that
-	// 16 would be way overkill. 4 bytes gives us a 50% chance of collision after
-	// 65K sessions at the same timestamp.
-	const size = 8
-	p := make([]byte, size)
-	buf := make([]byte, hex.EncodedLen(size))
-	rand.Read(p)
-	hex.Encode(buf, p)
-	return string(buf)
-}
-
 func (b *changefeedResumer) setJobRunningStatus(
-	ctx context.Context, fmtOrMsg string, args ...interface{},
-) {
+	ctx context.Context, lastUpdate time.Time, fmtOrMsg string, args ...interface{},
+) time.Time {
+	if timeutil.Since(lastUpdate) < runStatusUpdateFrequency {
+		return lastUpdate
+	}
+
 	status := jobs.RunningStatus(fmt.Sprintf(fmtOrMsg, args...))
 	if err := b.job.RunningStatus(ctx, nil,
 		func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
@@ -670,6 +645,8 @@ func (b *changefeedResumer) setJobRunningStatus(
 	); err != nil {
 		log.Warningf(ctx, "failed to set running status: %v", err)
 	}
+
+	return timeutil.Now()
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -740,6 +717,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		MaxBackoff:     10 * time.Second,
 	}
 	var err error
+	var lastRunStatusUpdate time.Time
 
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		// startedCh is normally used to signal back to the creator of the job that
@@ -770,7 +748,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				// Instead, we want to make sure that the changefeed job is not marked failed
 				// due to a transient, retryable error.
 				err = jobs.MarkAsRetryJobError(err)
-				b.setJobRunningStatus(ctx, "retryable flow error: %s", err)
+				lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable flow error: %s", err)
 			}
 
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
@@ -778,7 +756,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 
 		log.Warningf(ctx, `WARNING: CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
-		b.setJobRunningStatus(ctx, "retryable error: %s", err)
+		lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable error: %s", err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			sli, err := metrics.getSLIMetrics(details.Opts[changefeedbase.OptMetricsScope])
 			if err != nil {
