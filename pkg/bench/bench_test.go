@@ -1162,7 +1162,7 @@ func BenchmarkIndexJoin(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, "select * from bench.tidx where v < 1000")
+			db.Exec(b, "select * from bench.tidx@idx where v < 1000")
 		}
 	})
 }
