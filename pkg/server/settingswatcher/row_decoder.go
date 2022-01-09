@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 // RowDecoder decodes rows from the settings table.
@@ -36,6 +38,16 @@ type RawValue struct {
 	Value string
 	Type  string
 }
+
+func (r RawValue) String() string {
+	return redact.Sprint(r).StripMarkers()
+}
+
+func (r RawValue) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.Printf("%q (%s)", r.Value, redact.SafeString(r.Type))
+}
+
+var _ redact.SafeFormatter = (*RawValue)(nil)
 
 // MakeRowDecoder makes a new RowDecoder for the settings table.
 func MakeRowDecoder(codec keys.SQLCodec) RowDecoder {
