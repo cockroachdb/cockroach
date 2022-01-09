@@ -97,7 +97,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	tenantSettings.SV.SetNonSystemTenant()
 	sw := settingswatcher.New(s0.Clock(), fakeCodec, tenantSettings,
 		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
-		tc.Stopper())
+		s0.Stopper())
 	require.NoError(t, sw.Start(ctx))
 	require.NoError(t, checkSettingsValuesMatch(s0.ClusterSettings(), tenantSettings))
 	for k, v := range toSet {
