@@ -14,5 +14,5 @@ import "context"
 
 // TestingRunInner exports the inner run method for testing purposes.
 func (s *KVSubscriber) TestingRunInner(ctx context.Context) error {
-	return s.run(ctx)
+	return s.rfc.Run(ctx)
 }
