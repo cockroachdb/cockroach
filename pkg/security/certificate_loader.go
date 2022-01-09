@@ -95,6 +95,8 @@ const (
 	ClientPem
 	// TenantPem describes a SQL tenant client certificate.
 	TenantPem
+	// TenantSigningPem describes a SQL tenant signing certificate.
+	TenantSigningPem
 
 	// Maximum allowable permissions.
 	maxKeyPermissions os.FileMode = 0700
@@ -233,6 +235,13 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
 			return nil, errors.Errorf("tenant certificate filename should match client-tenant.<tenantid>%s", certExtension)
+		}
+	case `tenant-signing`:
+		fileUsage = TenantSigningPem
+		// Strip prefix and suffix and re-join middle parts.
+		name = strings.Join(parts[1:numParts-1], `.`)
+		if len(name) == 0 {
+			return nil, errors.Errorf("tenant signing certificate filename should match tenant-signing.<tenantid>%s", certExtension)
 		}
 	default:
 		return nil, errors.Errorf("unknown prefix %q", prefix)
