@@ -300,7 +300,7 @@ func (b *encDatumRowBuffer) Pop() rowenc.EncDatumRow {
 
 type bufferSink struct {
 	buf     encDatumRowBuffer
-	alloc   rowenc.DatumAlloc
+	alloc   tree.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
 	metrics *sliMetrics

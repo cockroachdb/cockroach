@@ -21,7 +21,6 @@ go_library(
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/memsize",
-        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
         "//pkg/util/json",  # keep
@@ -47,7 +46,6 @@ go_test(
         "//pkg/sql/colexec/execgen",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
-        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",

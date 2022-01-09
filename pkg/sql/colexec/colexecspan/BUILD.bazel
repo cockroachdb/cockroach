@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/execinfra",  # keep
         "//pkg/sql/rowenc",  # keep
+        "//pkg/sql/rowenc/keyside",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util",  # keep

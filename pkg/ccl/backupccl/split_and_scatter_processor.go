@@ -427,7 +427,7 @@ func routingDatumsForNode(nodeID roachpb.NodeID) (rowenc.EncDatum, rowenc.EncDat
 // routingSpanForNode provides the mapping to be used during distsql planning
 // when setting up the output router.
 func routingSpanForNode(nodeID roachpb.NodeID) ([]byte, []byte, error) {
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 	startDatum, endDatum := routingDatumsForNode(nodeID)
 
 	startBytes, endBytes := make([]byte, 0), make([]byte, 0)

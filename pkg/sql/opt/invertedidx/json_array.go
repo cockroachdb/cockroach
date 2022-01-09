@@ -168,7 +168,7 @@ type jsonOrArrayDatumsToInvertedExpr struct {
 	invertedExpr tree.TypedExpr
 
 	row   rowenc.EncDatumRow
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 }
 
 var _ invertedexpr.DatumsToInvertedExpr = &jsonOrArrayDatumsToInvertedExpr{}

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -183,7 +183,7 @@ type HashTable struct {
 	allowNullEquality bool
 
 	overloadHelper execgen.OverloadHelper
-	datumAlloc     rowenc.DatumAlloc
+	datumAlloc     tree.DatumAlloc
 	cancelChecker  colexecutils.CancelChecker
 
 	BuildMode HashTableBuildMode

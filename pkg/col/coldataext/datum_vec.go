@@ -14,13 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,7 +33,7 @@ type datumVec struct {
 	evalCtx *tree.EvalContext
 
 	scratch []byte
-	da      rowenc.DatumAlloc
+	da      tree.DatumAlloc
 }
 
 var _ coldata.DatumVec = &datumVec{}
@@ -59,7 +58,7 @@ func CompareDatum(d, dVec, other interface{}) int {
 }
 
 // Hash returns the hash of the datum as a byte slice.
-func Hash(d tree.Datum, da *rowenc.DatumAlloc) []byte {
+func Hash(d tree.Datum, da *tree.DatumAlloc) []byte {
 	ed := rowenc.EncDatum{Datum: convertToDatum(d)}
 	// We know that we have tree.Datum, so there will definitely be no need to
 	// decode ed for fingerprinting, so we pass in nil memory account.
@@ -134,15 +133,15 @@ func (dv *datumVec) Cap() int {
 // MarshalAt implements coldata.DatumVec interface.
 func (dv *datumVec) MarshalAt(appendTo []byte, i int) ([]byte, error) {
 	dv.maybeSetDNull(i)
-	return rowenc.EncodeTableValue(
-		appendTo, descpb.ColumnID(encoding.NoColumnID), dv.data[i], dv.scratch,
+	return valueside.Encode(
+		appendTo, valueside.NoColumnID, dv.data[i], dv.scratch,
 	)
 }
 
 // UnmarshalTo implements coldata.DatumVec interface.
 func (dv *datumVec) UnmarshalTo(i int, b []byte) error {
 	var err error
-	dv.data[i], _, err = rowenc.DecodeTableValue(&dv.da, dv.t, b)
+	dv.data[i], _, err = valueside.Decode(&dv.da, dv.t, b)
 	return err
 }
 

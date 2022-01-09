@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,7 +43,7 @@ func TestHashFunctionFamily(t *testing.T) {
 	var (
 		cancelChecker     colexecutils.CancelChecker
 		overloadHelperVar execgen.OverloadHelper
-		datumAlloc        rowenc.DatumAlloc
+		datumAlloc        tree.DatumAlloc
 	)
 	cancelChecker.Init(context.Background())
 

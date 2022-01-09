@@ -23,9 +23,9 @@ import (
 
 // This file contains functions to encode geoindex.{UnionKeySpans, RPKeyExpr}
 // into a SpanExpression. These functions are in this package since they
-// need to use sqlbase.EncodeTableKey to convert geoindex.Key to
-// invertedexpr.EncVal and that cannot be done in the geoindex package
-// as it introduces a circular dependency.
+// need to use keyside.Encode to convert geoindex.Key to invertedexpr.EncVal and
+// that cannot be done in the geoindex package as it introduces a circular
+// dependency.
 //
 // TODO(sumeer): change geoindex to produce SpanExpressions directly.
 

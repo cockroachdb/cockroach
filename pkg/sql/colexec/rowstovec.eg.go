@@ -42,7 +42,7 @@ func EncDatumRowsToColVec(
 	vec coldata.Vec,
 	columnIdx int,
 	t *types.T,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 ) error {
 	var err error
 	allocator.PerformOperation(

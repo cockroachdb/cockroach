@@ -52,10 +52,7 @@ type aggregatorHelper interface {
 // DISTINCT or FILTER aggregation, then the defaultAggregatorHelper
 // is returned which has negligible performance overhead.
 func newAggregatorHelper(
-	args *colexecagg.NewAggregatorArgs,
-	datumAlloc *rowenc.DatumAlloc,
-	isHashAgg bool,
-	maxBatchSize int,
+	args *colexecagg.NewAggregatorArgs, datumAlloc *tree.DatumAlloc, isHashAgg bool, maxBatchSize int,
 ) aggregatorHelper {
 	hasDistinct, hasFilterAgg := false, false
 	aggFilter := make([]int, len(args.Spec.Aggregations))
@@ -261,7 +258,7 @@ type distinctAggregatorHelperBase struct {
 	inputTypes       []*types.T
 	aggColsConverter *colconv.VecToDatumConverter
 	arena            stringarena.Arena
-	datumAlloc       *rowenc.DatumAlloc
+	datumAlloc       *tree.DatumAlloc
 	scratch          struct {
 		ed      rowenc.EncDatum
 		encoded []byte
@@ -272,7 +269,7 @@ type distinctAggregatorHelperBase struct {
 }
 
 func newDistinctAggregatorHelperBase(
-	args *colexecagg.NewAggregatorArgs, datumAlloc *rowenc.DatumAlloc, maxBatchSize int,
+	args *colexecagg.NewAggregatorArgs, datumAlloc *tree.DatumAlloc, maxBatchSize int,
 ) *distinctAggregatorHelperBase {
 	b := &distinctAggregatorHelperBase{
 		aggregatorHelperBase: newAggregatorHelperBase(args.Spec, maxBatchSize),
@@ -396,7 +393,7 @@ var _ aggregatorHelper = &filteringDistinctHashAggregatorHelper{}
 func newFilteringDistinctHashAggregatorHelper(
 	args *colexecagg.NewAggregatorArgs,
 	filters []*filteringSingleFunctionHashHelper,
-	datumAlloc *rowenc.DatumAlloc,
+	datumAlloc *tree.DatumAlloc,
 	maxBatchSize int,
 ) aggregatorHelper {
 	return &filteringDistinctHashAggregatorHelper{
@@ -454,7 +451,7 @@ type distinctOrderedAggregatorHelper struct {
 var _ aggregatorHelper = &distinctOrderedAggregatorHelper{}
 
 func newDistinctOrderedAggregatorHelper(
-	args *colexecagg.NewAggregatorArgs, datumAlloc *rowenc.DatumAlloc, maxBatchSize int,
+	args *colexecagg.NewAggregatorArgs, datumAlloc *tree.DatumAlloc, maxBatchSize int,
 ) aggregatorHelper {
 	return &distinctOrderedAggregatorHelper{
 		distinctAggregatorHelperBase: newDistinctAggregatorHelperBase(

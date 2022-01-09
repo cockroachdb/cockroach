@@ -239,7 +239,7 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err error) {
 	rng, _ := randutil.NewPseudoRand()
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	var buf []byte
 	rowCount := 0
 	lastWakeupTime := timeutil.Now()
@@ -493,7 +493,7 @@ func (s *samplerProcessor) DoesNotUseTxn() bool {
 
 // addRow adds a row to the sketch and updates row counts.
 func (s *sketchInfo) addRow(
-	ctx context.Context, row rowenc.EncDatumRow, typs []*types.T, buf *[]byte, da *rowenc.DatumAlloc,
+	ctx context.Context, row rowenc.EncDatumRow, typs []*types.T, buf *[]byte, da *tree.DatumAlloc,
 ) error {
 	var err error
 	s.numRows++

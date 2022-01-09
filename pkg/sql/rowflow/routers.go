@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -516,7 +517,7 @@ type hashRouter struct {
 
 	hashCols []uint32
 	buffer   []byte
-	alloc    rowenc.DatumAlloc
+	alloc    tree.DatumAlloc
 }
 
 // rangeRouter is a router that assumes the keyColumn'th column of incoming
@@ -527,7 +528,7 @@ type hashRouter struct {
 type rangeRouter struct {
 	routerBase
 
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 	// b is a temp storage location used during encoding
 	b         []byte
 	encodings []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding

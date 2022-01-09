@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -4022,7 +4023,7 @@ value if you rely on the HLC for accuracy.`,
 				var out []byte
 				for i, arg := range args {
 					var err error
-					out, err = rowenc.EncodeTableKey(out, arg, encoding.Ascending)
+					out, err = keyside.Encode(out, arg, encoding.Ascending)
 					if err != nil {
 						return nil, pgerror.Newf(
 							pgcode.DatatypeMismatch,
@@ -4749,8 +4750,8 @@ value if you rely on the HLC for accuracy.`,
 					colMap.Set(id, i)
 				}
 				// Finally, encode the index key using the provided datums.
-				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, index.GetID())
-				res, _, err := rowenc.EncodePartialIndexKey(tableDesc, index, len(datums), colMap, datums, keyPrefix)
+				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc.GetID(), index.GetID())
+				res, _, err := rowenc.EncodePartialIndexKey(index, len(datums), colMap, datums, keyPrefix)
 				if err != nil {
 					return nil, err
 				}

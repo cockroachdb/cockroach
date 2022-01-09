@@ -320,7 +320,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			typ := dStartOffset.ResolvedType()
 			spec.Start.OffsetType = DatumInfo{Encoding: descpb.DatumEncoding_VALUE, Type: typ}
 			var buf []byte
-			var a rowenc.DatumAlloc
+			var a tree.DatumAlloc
 			datum := rowenc.DatumToEncDatum(typ, dStartOffset)
 			buf, err = datum.Encode(typ, &a, descpb.DatumEncoding_VALUE, buf)
 			if err != nil {
@@ -364,7 +364,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				typ := dEndOffset.ResolvedType()
 				spec.End.OffsetType = DatumInfo{Encoding: descpb.DatumEncoding_VALUE, Type: typ}
 				var buf []byte
-				var a rowenc.DatumAlloc
+				var a tree.DatumAlloc
 				datum := rowenc.DatumToEncDatum(typ, dEndOffset)
 				buf, err = datum.Encode(typ, &a, descpb.DatumEncoding_VALUE, buf)
 				if err != nil {

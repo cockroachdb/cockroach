@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -351,7 +352,7 @@ INSERT INTO t.test VALUES (10, 2);
 	// Create the primary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(2)}
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -366,8 +367,8 @@ INSERT INTO t.test VALUES (10, 2);
 	// constraint.
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(0)}
 	// Encode the column value.
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+	valueBuf, err := valueside.Encode(
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -591,7 +592,7 @@ INSERT INTO t.test VALUES (217, 314);
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -674,7 +675,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -687,8 +688,8 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 
 	// Encode the second column value.
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+	valueBuf, err := valueside.Encode(
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -779,7 +780,7 @@ CREATE TABLE t.test (
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -790,8 +791,8 @@ CREATE TABLE t.test (
 	primaryIndexKeyWithFamily := keys.MakeFamilyKey(primaryIndexKey, uint32(tableDesc.GetFamilies()[1].ID))
 
 	// Encode the second column value.
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+	valueBuf, err := valueside.Encode(
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -808,8 +809,8 @@ CREATE TABLE t.test (
 		uint32(oldTableDesc.GetFamilies()[1].ID))
 
 	// Encode the second column value.
-	valueBuf, err = rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+	valueBuf, err = valueside.Encode(
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -884,7 +885,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 
 	// Create the primary index key
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
+		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -895,13 +896,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 
 	// Encode the second column values. The second column is encoded with
 	// a garbage colIDDiff.
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.PublicColumns()[1].GetID(), values[1], []byte(nil))
+	valueBuf, err := valueside.Encode(
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.PublicColumns()[1].GetID()), values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	valueBuf, err = rowenc.EncodeTableValue(valueBuf, 1000, values[2], []byte(nil))
+	valueBuf, err = valueside.Encode(valueBuf, 1000, values[2], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

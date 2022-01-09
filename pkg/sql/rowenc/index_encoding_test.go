@@ -14,10 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
-	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -32,13 +29,8 @@ import (
 	. "github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -110,7 +102,7 @@ func decodeIndex(
 	}
 
 	decodedValues := make([]tree.Datum, len(values))
-	var da DatumAlloc
+	var da tree.DatumAlloc
 	for i, value := range values {
 		err := value.EnsureDecoded(types[i], &da)
 		if err != nil {
@@ -124,7 +116,7 @@ func decodeIndex(
 
 func TestIndexKey(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
-	var a DatumAlloc
+	var a tree.DatumAlloc
 
 	tests := []indexKeyTest{
 		{
@@ -206,7 +198,7 @@ func TestIndexKey(t *testing.T) {
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
 		codec := keys.SystemSQLCodec
-		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
+		primaryKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 		primaryKey, _, err := EncodeIndexKey(tableDesc, tableDesc.GetPrimaryIndex(), colMap, testValues, primaryKeyPrefix)
 		if err != nil {
 			t.Fatal(err)
@@ -240,7 +232,7 @@ func TestIndexKey(t *testing.T) {
 				}
 			}
 
-			indexID, _, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
+			indexID, _, err := DecodeIndexKeyPrefix(codec, tableDesc.GetID(), entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -650,327 +642,14 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 	}
 }
 
-type arrayEncodingTest struct {
-	name     string
-	datum    tree.DArray
-	encoding []byte
-}
-
-func TestArrayEncoding(t *testing.T) {
-	tests := []arrayEncodingTest{
-		{
-			"empty int array",
-			tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{},
-			},
-			[]byte{1, 3, 0},
-		}, {
-			"single int array",
-			tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{tree.NewDInt(1)},
-			},
-			[]byte{1, 3, 1, 2},
-		}, {
-			"multiple int array",
-			tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(3)},
-			},
-			[]byte{1, 3, 3, 2, 4, 6},
-		}, {
-			"string array",
-			tree.DArray{
-				ParamTyp: types.String,
-				Array:    tree.Datums{tree.NewDString("foo"), tree.NewDString("bar"), tree.NewDString("baz")},
-			},
-			[]byte{1, 6, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
-		}, {
-			"name array",
-			tree.DArray{
-				ParamTyp: types.Name,
-				Array:    tree.Datums{tree.NewDName("foo"), tree.NewDName("bar"), tree.NewDName("baz")},
-			},
-			[]byte{1, 6, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
-		},
-		{
-			"bool array",
-			tree.DArray{
-				ParamTyp: types.Bool,
-				Array:    tree.Datums{tree.MakeDBool(true), tree.MakeDBool(false)},
-			},
-			[]byte{1, 10, 2, 10, 11},
-		}, {
-			"array containing a single null",
-			tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{tree.DNull},
-				HasNulls: true,
-			},
-			[]byte{17, 3, 1, 1},
-		}, {
-			"array containing multiple nulls",
-			tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{tree.NewDInt(1), tree.DNull, tree.DNull},
-				HasNulls: true,
-			},
-			[]byte{17, 3, 3, 6, 2},
-		}, {
-			"array whose NULL bitmap spans exactly one byte",
-			tree.DArray{
-				ParamTyp: types.Int,
-				Array: tree.Datums{
-					tree.NewDInt(1), tree.DNull, tree.DNull, tree.NewDInt(2), tree.NewDInt(3),
-					tree.NewDInt(4), tree.NewDInt(5), tree.NewDInt(6),
-				},
-				HasNulls: true,
-			},
-			[]byte{17, 3, 8, 6, 2, 4, 6, 8, 10, 12},
-		}, {
-			"array whose NULL bitmap spans more than one byte",
-			tree.DArray{
-				ParamTyp: types.Int,
-				Array: tree.Datums{
-					tree.NewDInt(1), tree.DNull, tree.DNull, tree.NewDInt(2), tree.NewDInt(3),
-					tree.NewDInt(4), tree.NewDInt(5), tree.NewDInt(6), tree.DNull,
-				},
-				HasNulls: true,
-			},
-			[]byte{17, 3, 9, 6, 1, 2, 4, 6, 8, 10, 12},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run("encode "+test.name, func(t *testing.T) {
-			enc, err := EncodeArray(&test.datum, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(enc, test.encoding) {
-				t.Fatalf("expected %s to encode to %v, got %v", test.datum.String(), test.encoding, enc)
-			}
-		})
-
-		t.Run("decode "+test.name, func(t *testing.T) {
-			enc := make([]byte, 0)
-			enc = append(enc, byte(len(test.encoding)))
-			enc = append(enc, test.encoding...)
-			d, _, err := DecodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
-			hasNulls := d.(*tree.DArray).HasNulls
-			if test.datum.HasNulls != hasNulls {
-				t.Fatalf("expected %v to have HasNulls=%t, got %t", enc, test.datum.HasNulls, hasNulls)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			if d.Compare(evalContext, &test.datum) != 0 {
-				t.Fatalf("expected %v to decode to %s, got %s", enc, test.datum.String(), d.String())
-			}
-		})
-	}
-}
-
-func BenchmarkArrayEncoding(b *testing.B) {
-	ary := tree.DArray{ParamTyp: types.Int, Array: tree.Datums{}}
-	for i := 0; i < 10000; i++ {
-		_ = ary.Append(tree.NewDInt(1))
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = EncodeArray(&ary, nil)
-	}
-}
-
-func TestMarshalColumnValue(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tests := []struct {
-		typ   *types.T
-		datum tree.Datum
-		exp   roachpb.Value
-	}{
-		{
-			typ:   types.Bool,
-			datum: tree.MakeDBool(true),
-			exp:   func() (v roachpb.Value) { v.SetBool(true); return }(),
-		},
-		{
-			typ:   types.Bool,
-			datum: tree.MakeDBool(false),
-			exp:   func() (v roachpb.Value) { v.SetBool(false); return }(),
-		},
-		{
-			typ:   types.Int,
-			datum: tree.NewDInt(314159),
-			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
-		},
-		{
-			typ:   types.Float,
-			datum: tree.NewDFloat(3.14159),
-			exp:   func() (v roachpb.Value) { v.SetFloat(3.14159); return }(),
-		},
-		{
-			typ: types.Decimal,
-			datum: func() (v tree.Datum) {
-				v, err := tree.ParseDDecimal("1234567890.123456890")
-				if err != nil {
-					t.Fatalf("Unexpected error while creating expected value: %s", err)
-				}
-				return
-			}(),
-			exp: func() (v roachpb.Value) {
-				dDecimal, err := tree.ParseDDecimal("1234567890.123456890")
-				if err != nil {
-					t.Fatalf("Unexpected error while creating expected value: %s", err)
-				}
-				err = v.SetDecimal(&dDecimal.Decimal)
-				if err != nil {
-					t.Fatalf("Unexpected error while creating expected value: %s", err)
-				}
-				return
-			}(),
-		},
-		{
-			typ:   types.Date,
-			datum: tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(314159)),
-			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
-		},
-		{
-			typ:   types.Date,
-			datum: tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(math.MinInt64)),
-			exp:   func() (v roachpb.Value) { v.SetInt(math.MinInt64); return }(),
-		},
-		{
-			typ:   types.Date,
-			datum: tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(math.MaxInt64)),
-			exp:   func() (v roachpb.Value) { v.SetInt(math.MaxInt64); return }(),
-		},
-		{
-			typ:   types.Time,
-			datum: tree.MakeDTime(timeofday.FromInt(314159)),
-			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
-		},
-		{
-			typ:   types.Timestamp,
-			datum: tree.MustMakeDTimestamp(timeutil.Unix(314159, 1000), time.Microsecond),
-			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
-		},
-		{
-			typ:   types.TimestampTZ,
-			datum: tree.MustMakeDTimestampTZ(timeutil.Unix(314159, 1000), time.Microsecond),
-			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
-		},
-		{
-			typ:   types.String,
-			datum: tree.NewDString("testing123"),
-			exp:   func() (v roachpb.Value) { v.SetString("testing123"); return }(),
-		},
-		{
-			typ:   types.Name,
-			datum: tree.NewDName("testingname123"),
-			exp:   func() (v roachpb.Value) { v.SetString("testingname123"); return }(),
-		},
-		{
-			typ:   types.Bytes,
-			datum: tree.NewDBytes(tree.DBytes([]byte{0x31, 0x41, 0x59})),
-			exp:   func() (v roachpb.Value) { v.SetBytes([]byte{0x31, 0x41, 0x59}); return }(),
-		},
-		{
-			typ: types.Uuid,
-			datum: func() (v tree.Datum) {
-				v, err := tree.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
-				if err != nil {
-					t.Fatalf("Unexpected error while creating expected value: %s", err)
-				}
-				return
-			}(),
-			exp: func() (v roachpb.Value) {
-				dUUID, err := tree.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
-				if err != nil {
-					t.Fatalf("Unexpected error while creating expected value: %s", err)
-				}
-				v.SetBytes(dUUID.GetBytes())
-				return
-			}(),
-		},
-		{
-			typ: types.INet,
-			datum: func() (v tree.Datum) {
-				v, err := tree.ParseDIPAddrFromINetString("192.168.0.1")
-				if err != nil {
-					t.Fatalf("Unexpected error while creating expected value: %s", err)
-				}
-				return
-			}(),
-			exp: func() (v roachpb.Value) {
-				ipAddr, err := tree.ParseDIPAddrFromINetString("192.168.0.1")
-				if err != nil {
-					t.Fatalf("Unexpected error while creating expected value: %s", err)
-				}
-				data := ipAddr.ToBuffer(nil)
-				v.SetBytes(data)
-				return
-			}(),
-		},
-	}
-
-	for i, testCase := range tests {
-		typ := testCase.typ
-		if actual, err := MarshalColumnTypeValue("testcol", typ, testCase.datum); err != nil {
-			t.Errorf("%d: unexpected error with column type %v: %v", i, typ, err)
-		} else if !reflect.DeepEqual(actual, testCase.exp) {
-			t.Errorf("%d: MarshalColumnValue() got %v, expected %v", i, actual, testCase.exp)
-		}
-	}
-}
-
-func TestDecodeTableValue(t *testing.T) {
-	a := &DatumAlloc{}
-	for _, tc := range []struct {
-		in  tree.Datum
-		typ *types.T
-		err string
-	}{
-		// These test cases are not intended to be exhaustive, but rather exercise
-		// the special casing and error handling of DecodeTableValue.
-		{tree.DNull, types.Bool, ""},
-		{tree.DBoolTrue, types.Bool, ""},
-		{tree.NewDInt(tree.DInt(4)), types.Bool, "value type is not True or False: Int"},
-		{tree.DNull, types.Int, ""},
-		{tree.NewDInt(tree.DInt(4)), types.Int, ""},
-		{tree.DBoolTrue, types.Int, "decoding failed"},
-	} {
-		t.Run("", func(t *testing.T) {
-			var prefix, scratch []byte
-			buf, err := EncodeTableValue(prefix, 0 /* colID */, tc.in, scratch)
-			if err != nil {
-				t.Fatal(err)
-			}
-			d, _, err := DecodeTableValue(a, tc.typ, buf)
-			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("expected error %q, but got %v", tc.err, err)
-			} else if err != nil {
-				return
-			}
-			if tc.in.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), d) != 0 {
-				t.Fatalf("decoded datum %[1]v (%[1]T) does not match encoded datum %[2]v (%[2]T)", d, tc.in)
-			}
-		})
-	}
-}
-
 // ExtractIndexKey constructs the index (primary) key for a row from any index
 // key/value entry, including secondary indexes.
 //
 // Don't use this function in the scan "hot path".
 func ExtractIndexKey(
-	a *DatumAlloc, codec keys.SQLCodec, tableDesc catalog.TableDescriptor, entry kv.KeyValue,
+	a *tree.DatumAlloc, codec keys.SQLCodec, tableDesc catalog.TableDescriptor, entry kv.KeyValue,
 ) (roachpb.Key, error) {
-	indexID, key, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
+	indexID, key, err := DecodeIndexKeyPrefix(codec, tableDesc.GetID(), entry.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -1028,7 +707,7 @@ func ExtractIndexKey(
 		columnID := index.GetKeySuffixColumnID(i)
 		colMap.Set(columnID, i+index.NumKeyColumns())
 	}
-	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.GetPrimaryIndexID())
+	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 
 	decodedValues := make([]tree.Datum, len(values)+len(extraValues))
 	for i, value := range values {

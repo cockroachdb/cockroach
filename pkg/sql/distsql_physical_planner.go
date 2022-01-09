@@ -3297,7 +3297,7 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	planCtx *PlanningCtx, tuples [][]tree.TypedExpr, resultTypes []*types.T,
 ) (*execinfrapb.ValuesCoreSpec, error) {
-	var a rowenc.DatumAlloc
+	var a tree.DatumAlloc
 	evalCtx := &planCtx.ExtendedEvalCtx.EvalContext
 	numRows := len(tuples)
 	if len(resultTypes) == 0 {

@@ -3848,7 +3848,7 @@ func addPartitioningRows(
 	}
 	colNames := tree.NewDString(buf.String())
 
-	var datumAlloc rowenc.DatumAlloc
+	var datumAlloc tree.DatumAlloc
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we
 	// only use the tree.Datums part of the output.

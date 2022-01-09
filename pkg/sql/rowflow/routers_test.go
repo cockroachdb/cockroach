@@ -80,7 +80,7 @@ func TestRouters(t *testing.T) {
 	const numRows = 200
 
 	rng, _ := randutil.NewTestRand()
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
@@ -241,7 +241,7 @@ func TestRouters(t *testing.T) {
 			case execinfrapb.OutputRouterSpec_BY_RANGE:
 				// Verify each row is in the correct output stream.
 				enc := testRangeRouterSpec.Encodings[0]
-				var alloc rowenc.DatumAlloc
+				var alloc tree.DatumAlloc
 				for bIdx := range rows {
 					for _, row := range rows[bIdx] {
 						data, err := row[enc.Column].Encode(types[enc.Column], &alloc, enc.Encoding, nil)
@@ -790,7 +790,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		},
 		DiskMonitor: diskMonitor,
 	}
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	extraMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
 	defer extraMemMonitor.Stop(ctx)

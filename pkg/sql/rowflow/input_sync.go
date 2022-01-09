@@ -114,7 +114,7 @@ type serialOrderedSynchronizer struct {
 	// err can be set by the Less function (used by the heap implementation)
 	err error
 
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 
 	// metadata is accumulated from all the sources and is passed on as soon as
 	// possible.

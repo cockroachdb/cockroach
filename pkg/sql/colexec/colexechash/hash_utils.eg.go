@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -46,7 +45,7 @@ func rehash(
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
 	overloadHelper *execgen.OverloadHelper,
-	datumAlloc *rowenc.DatumAlloc,
+	datumAlloc *tree.DatumAlloc,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
 	// "_overloadHelper" local variable of type "execgen.OverloadHelper".

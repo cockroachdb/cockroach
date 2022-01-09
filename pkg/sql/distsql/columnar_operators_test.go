@@ -122,7 +122,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 		groupingCols[i] = i
 		orderingCols[i].ColIdx = i
 	}
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 
 	// We need +1 because an entry for index=6 was omitted by mistake.
 	numSupportedAggFns := len(execinfrapb.AggregatorSpec_Func_name) + 1
@@ -344,7 +344,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 func TestDistinctAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
@@ -547,7 +547,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 func TestSortChunksAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
@@ -817,7 +817,7 @@ func generateEqualityColumns(rng *rand.Rand, nCols int, nEqCols int) []uint32 {
 func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 

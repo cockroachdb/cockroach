@@ -87,7 +87,7 @@ type invertedJoiner struct {
 	fetcher rowFetcher
 	// rowsRead is the total number of rows that the fetcher read from disk.
 	rowsRead int64
-	alloc    rowenc.DatumAlloc
+	alloc    tree.DatumAlloc
 	rowAlloc rowenc.EncDatumRowAlloc
 
 	// tableRow represents a row with all the columns of the table, where only

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -187,10 +187,10 @@ func prepareInsertOrUpdateBatch(
 			if lastColID > col.GetID() {
 				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
 			}
-			colIDDiff := col.GetID() - lastColID
+			colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
 			lastColID = col.GetID()
 			var err error
-			rawValueBuf, err = rowenc.EncodeTableValue(rawValueBuf, colIDDiff, values[idx], nil)
+			rawValueBuf, err = valueside.Encode(rawValueBuf, colIDDelta, values[idx], nil)
 			if err != nil {
 				return nil, err
 			}

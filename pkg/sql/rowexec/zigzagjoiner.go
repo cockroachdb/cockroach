@@ -383,7 +383,7 @@ type zigzagJoinerInfo struct {
 	fetcher rowFetcher
 	// rowsRead is the total number of rows that this fetcher read from disk.
 	rowsRead   int64
-	alloc      *rowenc.DatumAlloc
+	alloc      *tree.DatumAlloc
 	table      catalog.TableDescriptor
 	index      catalog.Index
 	indexTypes []*types.T
@@ -427,7 +427,7 @@ func (z *zigzagJoiner) setupInfo(
 	z.side = side
 	info := z.infos[side]
 
-	info.alloc = &rowenc.DatumAlloc{}
+	info.alloc = &tree.DatumAlloc{}
 	info.table = tables[side]
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexOrdinal := spec.IndexOrdinals[side]
@@ -504,7 +504,7 @@ func (z *zigzagJoiner) setupInfo(
 		info.fetcher = &fetcher
 	}
 
-	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.GetID())
+	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table.GetID(), info.index.GetID())
 	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {
@@ -718,7 +718,7 @@ func (z *zigzagJoiner) matchBase(curRow rowenc.EncDatumRow, side int) (bool, err
 	}
 
 	// Compare the equality columns of the baseRow to that of the curRow.
-	da := &rowenc.DatumAlloc{}
+	da := &tree.DatumAlloc{}
 	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
@@ -866,7 +866,7 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			if err != nil {
 				return nil, err
 			}
-			da := &rowenc.DatumAlloc{}
+			da := &tree.DatumAlloc{}
 			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, err

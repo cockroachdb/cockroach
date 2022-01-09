@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // initHash, rehash, and finalizeHash work together to compute the hash value
@@ -119,7 +119,7 @@ type TupleHashDistributor struct {
 	// check for query cancellation.
 	cancelChecker  colexecutils.CancelChecker
 	overloadHelper execgen.OverloadHelper
-	datumAlloc     rowenc.DatumAlloc
+	datumAlloc     tree.DatumAlloc
 }
 
 // NewTupleHashDistributor returns a new TupleHashDistributor.

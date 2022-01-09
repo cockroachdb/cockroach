@@ -8,11 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowenc
+package tree
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -28,31 +27,30 @@ type DatumAlloc struct {
 	// it will be set to defaultDatumAllocSize automatically.
 	AllocSize int
 
-	datumAlloc        []tree.Datum
-	dintAlloc         []tree.DInt
-	dfloatAlloc       []tree.DFloat
-	dstringAlloc      []tree.DString
-	dbytesAlloc       []tree.DBytes
-	dbitArrayAlloc    []tree.DBitArray
-	ddecimalAlloc     []tree.DDecimal
-	ddateAlloc        []tree.DDate
-	denumAlloc        []tree.DEnum
-	dbox2dAlloc       []tree.DBox2D
-	dgeometryAlloc    []tree.DGeometry
-	dgeographyAlloc   []tree.DGeography
-	dtimeAlloc        []tree.DTime
-	dtimetzAlloc      []tree.DTimeTZ
-	dtimestampAlloc   []tree.DTimestamp
-	dtimestampTzAlloc []tree.DTimestampTZ
-	dintervalAlloc    []tree.DInterval
-	duuidAlloc        []tree.DUuid
-	dipnetAlloc       []tree.DIPAddr
-	djsonAlloc        []tree.DJSON
-	dtupleAlloc       []tree.DTuple
-	doidAlloc         []tree.DOid
-	dvoidAlloc        []tree.DVoid
-	scratch           []byte
-	env               tree.CollationEnvironment
+	datumAlloc        []Datum
+	dintAlloc         []DInt
+	dfloatAlloc       []DFloat
+	dstringAlloc      []DString
+	dbytesAlloc       []DBytes
+	dbitArrayAlloc    []DBitArray
+	ddecimalAlloc     []DDecimal
+	ddateAlloc        []DDate
+	denumAlloc        []DEnum
+	dbox2dAlloc       []DBox2D
+	dgeometryAlloc    []DGeometry
+	dgeographyAlloc   []DGeography
+	dtimeAlloc        []DTime
+	dtimetzAlloc      []DTimeTZ
+	dtimestampAlloc   []DTimestamp
+	dtimestampTzAlloc []DTimestampTZ
+	dintervalAlloc    []DInterval
+	duuidAlloc        []DUuid
+	dipnetAlloc       []DIPAddr
+	djsonAlloc        []DJSON
+	dtupleAlloc       []DTuple
+	doidAlloc         []DOid
+	dvoidAlloc        []DVoid
+	env               CollationEnvironment
 
 	// Allocations for geopb.SpatialObject.EWKB
 	ewkbAlloc               []byte
@@ -66,7 +64,7 @@ const defaultEWKBAllocSize = 4096 // Arbitrary, could be tuned.
 const maxEWKBAllocSize = 16384    // Arbitrary, could be tuned.
 
 // NewDatums allocates Datums of the specified size.
-func (a *DatumAlloc) NewDatums(num int) tree.Datums {
+func (a *DatumAlloc) NewDatums(num int) Datums {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
@@ -76,7 +74,7 @@ func (a *DatumAlloc) NewDatums(num int) tree.Datums {
 		if extTupleLen := num * datumAllocMultiplier; extensionSize < extTupleLen {
 			extensionSize = extTupleLen
 		}
-		*buf = make(tree.Datums, extensionSize)
+		*buf = make(Datums, extensionSize)
 	}
 	r := (*buf)[:num]
 	*buf = (*buf)[num:]
@@ -84,13 +82,13 @@ func (a *DatumAlloc) NewDatums(num int) tree.Datums {
 }
 
 // NewDInt allocates a DInt.
-func (a *DatumAlloc) NewDInt(v tree.DInt) *tree.DInt {
+func (a *DatumAlloc) NewDInt(v DInt) *DInt {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dintAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DInt, a.AllocSize)
+		*buf = make([]DInt, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -99,13 +97,13 @@ func (a *DatumAlloc) NewDInt(v tree.DInt) *tree.DInt {
 }
 
 // NewDFloat allocates a DFloat.
-func (a *DatumAlloc) NewDFloat(v tree.DFloat) *tree.DFloat {
+func (a *DatumAlloc) NewDFloat(v DFloat) *DFloat {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dfloatAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DFloat, a.AllocSize)
+		*buf = make([]DFloat, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -114,13 +112,13 @@ func (a *DatumAlloc) NewDFloat(v tree.DFloat) *tree.DFloat {
 }
 
 // NewDString allocates a DString.
-func (a *DatumAlloc) NewDString(v tree.DString) *tree.DString {
+func (a *DatumAlloc) NewDString(v DString) *DString {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dstringAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DString, a.AllocSize)
+		*buf = make([]DString, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -128,19 +126,24 @@ func (a *DatumAlloc) NewDString(v tree.DString) *tree.DString {
 	return r
 }
 
+// NewDCollatedString allocates a DCollatedString.
+func (a *DatumAlloc) NewDCollatedString(contents string, locale string) (*DCollatedString, error) {
+	return NewDCollatedString(contents, locale, &a.env)
+}
+
 // NewDName allocates a DName.
-func (a *DatumAlloc) NewDName(v tree.DString) tree.Datum {
-	return tree.NewDNameFromDString(a.NewDString(v))
+func (a *DatumAlloc) NewDName(v DString) Datum {
+	return NewDNameFromDString(a.NewDString(v))
 }
 
 // NewDBytes allocates a DBytes.
-func (a *DatumAlloc) NewDBytes(v tree.DBytes) *tree.DBytes {
+func (a *DatumAlloc) NewDBytes(v DBytes) *DBytes {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dbytesAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DBytes, a.AllocSize)
+		*buf = make([]DBytes, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -149,13 +152,13 @@ func (a *DatumAlloc) NewDBytes(v tree.DBytes) *tree.DBytes {
 }
 
 // NewDBitArray allocates a DBitArray.
-func (a *DatumAlloc) NewDBitArray(v tree.DBitArray) *tree.DBitArray {
+func (a *DatumAlloc) NewDBitArray(v DBitArray) *DBitArray {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dbitArrayAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DBitArray, a.AllocSize)
+		*buf = make([]DBitArray, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -164,13 +167,13 @@ func (a *DatumAlloc) NewDBitArray(v tree.DBitArray) *tree.DBitArray {
 }
 
 // NewDDecimal allocates a DDecimal.
-func (a *DatumAlloc) NewDDecimal(v tree.DDecimal) *tree.DDecimal {
+func (a *DatumAlloc) NewDDecimal(v DDecimal) *DDecimal {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.ddecimalAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DDecimal, a.AllocSize)
+		*buf = make([]DDecimal, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -179,13 +182,13 @@ func (a *DatumAlloc) NewDDecimal(v tree.DDecimal) *tree.DDecimal {
 }
 
 // NewDDate allocates a DDate.
-func (a *DatumAlloc) NewDDate(v tree.DDate) *tree.DDate {
+func (a *DatumAlloc) NewDDate(v DDate) *DDate {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.ddateAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DDate, a.AllocSize)
+		*buf = make([]DDate, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -194,13 +197,13 @@ func (a *DatumAlloc) NewDDate(v tree.DDate) *tree.DDate {
 }
 
 // NewDEnum allocates a DEnum.
-func (a *DatumAlloc) NewDEnum(v tree.DEnum) *tree.DEnum {
+func (a *DatumAlloc) NewDEnum(v DEnum) *DEnum {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.denumAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DEnum, a.AllocSize)
+		*buf = make([]DEnum, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -209,13 +212,13 @@ func (a *DatumAlloc) NewDEnum(v tree.DEnum) *tree.DEnum {
 }
 
 // NewDBox2D allocates a DBox2D.
-func (a *DatumAlloc) NewDBox2D(v tree.DBox2D) *tree.DBox2D {
+func (a *DatumAlloc) NewDBox2D(v DBox2D) *DBox2D {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dbox2dAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DBox2D, a.AllocSize)
+		*buf = make([]DBox2D, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -224,13 +227,13 @@ func (a *DatumAlloc) NewDBox2D(v tree.DBox2D) *tree.DBox2D {
 }
 
 // NewDGeography allocates a DGeography.
-func (a *DatumAlloc) NewDGeography(v tree.DGeography) *tree.DGeography {
+func (a *DatumAlloc) NewDGeography(v DGeography) *DGeography {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dgeographyAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DGeography, a.AllocSize)
+		*buf = make([]DGeography, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -239,13 +242,13 @@ func (a *DatumAlloc) NewDGeography(v tree.DGeography) *tree.DGeography {
 }
 
 // NewDVoid allocates a new DVoid.
-func (a *DatumAlloc) NewDVoid() *tree.DVoid {
+func (a *DatumAlloc) NewDVoid() *DVoid {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dvoidAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DVoid, a.AllocSize)
+		*buf = make([]DVoid, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*buf = (*buf)[1:]
@@ -255,8 +258,8 @@ func (a *DatumAlloc) NewDVoid() *tree.DVoid {
 // NewDGeographyEmpty allocates a new empty DGeography for unmarshalling.
 // After unmarshalling, DoneInitNewDGeo must be called to return unused
 // pre-allocated space to the DatumAlloc.
-func (a *DatumAlloc) NewDGeographyEmpty() *tree.DGeography {
-	r := a.NewDGeography(tree.DGeography{})
+func (a *DatumAlloc) NewDGeographyEmpty() *DGeography {
+	r := a.NewDGeography(DGeography{})
 	a.giveBytesToEWKB(r.SpatialObjectRef())
 	return r
 }
@@ -277,13 +280,13 @@ func (a *DatumAlloc) DoneInitNewDGeo(so *geopb.SpatialObject) {
 }
 
 // NewDGeometry allocates a DGeometry.
-func (a *DatumAlloc) NewDGeometry(v tree.DGeometry) *tree.DGeometry {
+func (a *DatumAlloc) NewDGeometry(v DGeometry) *DGeometry {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dgeometryAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DGeometry, a.AllocSize)
+		*buf = make([]DGeometry, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -294,8 +297,8 @@ func (a *DatumAlloc) NewDGeometry(v tree.DGeometry) *tree.DGeometry {
 // NewDGeometryEmpty allocates a new empty DGeometry for unmarshalling. After
 // unmarshalling, DoneInitNewDGeo must be called to return unused
 // pre-allocated space to the DatumAlloc.
-func (a *DatumAlloc) NewDGeometryEmpty() *tree.DGeometry {
-	r := a.NewDGeometry(tree.DGeometry{})
+func (a *DatumAlloc) NewDGeometryEmpty() *DGeometry {
+	r := a.NewDGeometry(DGeometry{})
 	a.giveBytesToEWKB(r.SpatialObjectRef())
 	return r
 }
@@ -315,13 +318,13 @@ func (a *DatumAlloc) giveBytesToEWKB(so *geopb.SpatialObject) {
 }
 
 // NewDTime allocates a DTime.
-func (a *DatumAlloc) NewDTime(v tree.DTime) *tree.DTime {
+func (a *DatumAlloc) NewDTime(v DTime) *DTime {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dtimeAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DTime, a.AllocSize)
+		*buf = make([]DTime, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -330,13 +333,13 @@ func (a *DatumAlloc) NewDTime(v tree.DTime) *tree.DTime {
 }
 
 // NewDTimeTZ allocates a DTimeTZ.
-func (a *DatumAlloc) NewDTimeTZ(v tree.DTimeTZ) *tree.DTimeTZ {
+func (a *DatumAlloc) NewDTimeTZ(v DTimeTZ) *DTimeTZ {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dtimetzAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DTimeTZ, a.AllocSize)
+		*buf = make([]DTimeTZ, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -345,13 +348,13 @@ func (a *DatumAlloc) NewDTimeTZ(v tree.DTimeTZ) *tree.DTimeTZ {
 }
 
 // NewDTimestamp allocates a DTimestamp.
-func (a *DatumAlloc) NewDTimestamp(v tree.DTimestamp) *tree.DTimestamp {
+func (a *DatumAlloc) NewDTimestamp(v DTimestamp) *DTimestamp {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dtimestampAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DTimestamp, a.AllocSize)
+		*buf = make([]DTimestamp, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -360,13 +363,13 @@ func (a *DatumAlloc) NewDTimestamp(v tree.DTimestamp) *tree.DTimestamp {
 }
 
 // NewDTimestampTZ allocates a DTimestampTZ.
-func (a *DatumAlloc) NewDTimestampTZ(v tree.DTimestampTZ) *tree.DTimestampTZ {
+func (a *DatumAlloc) NewDTimestampTZ(v DTimestampTZ) *DTimestampTZ {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dtimestampTzAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DTimestampTZ, a.AllocSize)
+		*buf = make([]DTimestampTZ, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -375,13 +378,13 @@ func (a *DatumAlloc) NewDTimestampTZ(v tree.DTimestampTZ) *tree.DTimestampTZ {
 }
 
 // NewDInterval allocates a DInterval.
-func (a *DatumAlloc) NewDInterval(v tree.DInterval) *tree.DInterval {
+func (a *DatumAlloc) NewDInterval(v DInterval) *DInterval {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dintervalAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DInterval, a.AllocSize)
+		*buf = make([]DInterval, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -390,13 +393,13 @@ func (a *DatumAlloc) NewDInterval(v tree.DInterval) *tree.DInterval {
 }
 
 // NewDUuid allocates a DUuid.
-func (a *DatumAlloc) NewDUuid(v tree.DUuid) *tree.DUuid {
+func (a *DatumAlloc) NewDUuid(v DUuid) *DUuid {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.duuidAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DUuid, a.AllocSize)
+		*buf = make([]DUuid, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -405,13 +408,13 @@ func (a *DatumAlloc) NewDUuid(v tree.DUuid) *tree.DUuid {
 }
 
 // NewDIPAddr allocates a DIPAddr.
-func (a *DatumAlloc) NewDIPAddr(v tree.DIPAddr) *tree.DIPAddr {
+func (a *DatumAlloc) NewDIPAddr(v DIPAddr) *DIPAddr {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dipnetAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DIPAddr, a.AllocSize)
+		*buf = make([]DIPAddr, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -420,13 +423,13 @@ func (a *DatumAlloc) NewDIPAddr(v tree.DIPAddr) *tree.DIPAddr {
 }
 
 // NewDJSON allocates a DJSON.
-func (a *DatumAlloc) NewDJSON(v tree.DJSON) *tree.DJSON {
+func (a *DatumAlloc) NewDJSON(v DJSON) *DJSON {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.djsonAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DJSON, a.AllocSize)
+		*buf = make([]DJSON, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -435,13 +438,13 @@ func (a *DatumAlloc) NewDJSON(v tree.DJSON) *tree.DJSON {
 }
 
 // NewDTuple allocates a DTuple.
-func (a *DatumAlloc) NewDTuple(v tree.DTuple) *tree.DTuple {
+func (a *DatumAlloc) NewDTuple(v DTuple) *DTuple {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.dtupleAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DTuple, a.AllocSize)
+		*buf = make([]DTuple, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -450,13 +453,13 @@ func (a *DatumAlloc) NewDTuple(v tree.DTuple) *tree.DTuple {
 }
 
 // NewDOid allocates a DOid.
-func (a *DatumAlloc) NewDOid(v tree.DOid) tree.Datum {
+func (a *DatumAlloc) NewDOid(v DOid) Datum {
 	if a.AllocSize == 0 {
 		a.AllocSize = defaultDatumAllocSize
 	}
 	buf := &a.doidAlloc
 	if len(*buf) == 0 {
-		*buf = make([]tree.DOid, a.AllocSize)
+		*buf = make([]DOid, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v

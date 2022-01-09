@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "valueside",
+    srcs = [
+        "array.go",
+        "decode.go",
+        "doc.go",
+        "encode.go",
+        "legacy.go",
+        "tuple.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/lex",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//pkg/util/ipaddr",
+        "//pkg/util/json",
+        "//pkg/util/timeutil/pgdate",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "valueside_test",
+    srcs = [
+        "array_test.go",
+        "valueside_test.go",
+    ],
+    embed = [":valueside"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/settings/cluster",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils",
+        "//pkg/util/timeofday",
+        "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
+        "@com_github_leanovate_gopter//:gopter",
+        "@com_github_leanovate_gopter//prop",
+        "@com_github_stretchr_testify//require",
+    ],
+)

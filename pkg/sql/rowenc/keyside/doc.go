@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,10 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowenc
-
-// EncodeArray forwards the definition of encodeArray for testing.
-var EncodeArray = encodeArray
-
-// DecodeArray forwards the definition of decodeArray for testing.
-var DecodeArray = decodeArray
+// Package keyside contains low-level primitives used to encode/decode SQL
+// values into/from KV Keys (see roachpb.Key).
+//
+// Low-level here means that these primitives do not operate with table or index
+// descriptors.
+//
+// See also: docs/tech-notes/encoding.md.
+package keyside

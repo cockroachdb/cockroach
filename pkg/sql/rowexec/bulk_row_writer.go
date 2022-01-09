@@ -184,7 +184,7 @@ func (sp *bulkRowWriter) convertLoop(
 	defer close(kvCh)
 
 	done := false
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	typs := sp.input.OutputTypes()
 
 	for {

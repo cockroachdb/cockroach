@@ -255,7 +255,7 @@ func runSampleAggregator(
 				if err != nil {
 					t.Fatal(err)
 				}
-				var d rowenc.DatumAlloc
+				var d tree.DatumAlloc
 				if err := ed.EnsureDecoded(histEncType, &d); err != nil {
 					t.Fatal(err)
 				}

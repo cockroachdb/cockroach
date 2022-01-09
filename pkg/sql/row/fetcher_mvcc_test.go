@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -106,7 +105,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0,    /* lockTimeout */
 		true, /* isCheck */
-		&rowenc.DatumAlloc{},
+		&tree.DatumAlloc{},
 		nil, /* memMonitor */
 		table,
 	); err != nil {

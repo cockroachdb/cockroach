@@ -37,7 +37,7 @@ type streamMerger struct {
 	// when we want NULL to be meaningful during equality, for example
 	// during SCRUB secondary index checks.
 	nullEquality bool
-	datumAlloc   rowenc.DatumAlloc
+	datumAlloc   tree.DatumAlloc
 }
 
 func (sm *streamMerger) start(ctx context.Context) {
@@ -111,7 +111,7 @@ func CompareEncDatumRowForMerge(
 	lhs, rhs rowenc.EncDatumRow,
 	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 	nullEquality bool,
-	da *rowenc.DatumAlloc,
+	da *tree.DatumAlloc,
 	evalCtx *tree.EvalContext,
 ) (int, error) {
 	if lhs == nil && rhs == nil {

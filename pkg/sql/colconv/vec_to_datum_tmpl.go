@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -66,7 +65,7 @@ var (
 type VecToDatumConverter struct {
 	convertedVecs    []tree.Datums
 	vecIdxsToConvert []int
-	da               rowenc.DatumAlloc
+	da               tree.DatumAlloc
 }
 
 var _ execinfra.Releasable = &VecToDatumConverter{}
@@ -260,7 +259,7 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 // selection vector. It doesn't account for the memory used by the newly
 // created tree.Datums, so it is up to the caller to do the memory accounting.
 func ColVecToDatumAndDeselect(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
 ) {
 	if length == 0 {
 		return
@@ -282,7 +281,7 @@ func ColVecToDatumAndDeselect(
 // doesn't account for the memory used by the newly created tree.Datums, so it
 // is up to the caller to do the memory accounting.
 func ColVecToDatum(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
 ) {
 	if length == 0 {
 		return
@@ -342,7 +341,7 @@ func vecToDatum(
 	col coldata.Vec,
 	length int,
 	sel []int,
-	da *rowenc.DatumAlloc,
+	da *tree.DatumAlloc,
 	hasNulls bool,
 	hasSel bool,
 	deselect bool,
