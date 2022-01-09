@@ -110,3 +110,33 @@ If no server addresses are passed, then a default list containing 127.0.0.1, ::1
 				"failed to write tenant client certificate and key")
 		}),
 }
+
+// A mtCreateTenantSigningCertCmd command generates a signing
+// certificate and stores it in the cert directory under
+// tenant-signing.<ID>.crt and key under tenant-signing.<ID>.key.
+var mtCreateTenantSigningCertCmd = &cobra.Command{
+	Use:   "create-tenant-signing --certs-dir=<path to cockroach certs dir> <tenant-id>",
+	Short: "create tenant signing certificate and key",
+	Long: `
+Generate a tenant signing certificate "<certs-dir>/tenant-signing.<tenant-id>.crt" and signing key
+"<certs-dir>/tenant-signing.<tenant-id>.key".
+
+If --overwrite is true, any existing files are overwritten.
+`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: clierrorplus.MaybeDecorateError(
+		func(cmd *cobra.Command, args []string) error {
+			tenantIDs := args[0]
+			tenantID, err := strconv.ParseUint(tenantIDs, 10, 64)
+			if err != nil {
+				return errors.Wrapf(err, "%s is invalid uint64", tenantIDs)
+			}
+			return errors.Wrap(
+				security.CreateTenantSigningPair(
+					certCtx.certsDir,
+					certCtx.certificateLifetime,
+					certCtx.overwriteFiles,
+					tenantID),
+				"failed to generate tenant signing cert and key")
+		}),
+}

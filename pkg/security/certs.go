@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -539,6 +540,58 @@ func WriteTenantPair(certsDir string, cp *TenantPair, overwrite bool) error {
 		return errors.Wrapf(err, "error writing tenant key to %s", keyPath)
 	}
 	log.Infof(context.Background(), "generated tenant key: %s", keyPath)
+	return nil
+}
+
+// CreateTenantSigningPair creates a tenant signing pair. The private key and
+// public key are both created in certsDir.
+func CreateTenantSigningPair(
+	certsDir string, lifetime time.Duration, overwrite bool, tenantID uint64,
+) error {
+	if len(certsDir) == 0 {
+		return errors.New("the path to the certs directory is required")
+	}
+	if tenantID == 0 {
+		return errors.Errorf("tenantId %d is invalid (requires != 0)", tenantID)
+	}
+
+	tenantIdentifier := fmt.Sprintf("%d", tenantID)
+
+	// Create a certificate manager with "create dir if not exist".
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
+	if err != nil {
+		return err
+	}
+
+	signingKeyPath := cm.TenantSigningKeyPath(tenantIdentifier)
+	signingCertPath := cm.TenantSigningCertPath(tenantIdentifier)
+	var pubKey crypto.PublicKey
+	var privKey crypto.PrivateKey
+	pubKey, privKey, err = ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return errors.Wrap(err, "could not generate new tenant signing key")
+	}
+
+	if err := writeKeyToFile(signingKeyPath, privKey, overwrite); err != nil {
+		return errors.Wrapf(err, "could not write tenant signing key to file %s", signingKeyPath)
+	}
+
+	log.Infof(context.Background(), "generated tenant signing key %s", signingKeyPath)
+
+	// Generate certificate.
+	certContents, err := GenerateTenantSigningCert(pubKey, privKey, lifetime)
+	if err != nil {
+		return errors.Wrap(err, "could not generate tenant signing certificate")
+	}
+
+	certificates := []*pem.Block{{Type: "CERTIFICATE", Bytes: certContents}}
+
+	if err := WritePEMToFile(signingCertPath, certFileMode, overwrite, certificates...); err != nil {
+		return errors.Wrapf(err, "could not write tenant signing certificate file %s", signingCertPath)
+	}
+
+	log.Infof(context.Background(), "wrote certificate to %s", signingCertPath)
+
 	return nil
 }
 

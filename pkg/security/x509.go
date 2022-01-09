@@ -276,3 +276,26 @@ func GenerateClientCert(
 
 	return certBytes, nil
 }
+
+// GenerateTenantSigningCert generates a signing certificate and returns the
+// cert bytes. Takes in the signing keypair and the certificate lifetime.
+func GenerateTenantSigningCert(
+	publicKey crypto.PublicKey, privateKey crypto.PrivateKey, lifetime time.Duration,
+) ([]byte, error) {
+	template, err := newTemplate(caCommonName, lifetime)
+	if err != nil {
+		return nil, err
+	}
+
+	certBytes, err := x509.CreateCertificate(
+		rand.Reader,
+		template,
+		template,
+		publicKey,
+		privateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
+}
