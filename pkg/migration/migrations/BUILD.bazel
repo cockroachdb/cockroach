@@ -75,6 +75,7 @@ go_test(
         "//pkg/jobs",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/kv/kvserver",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
