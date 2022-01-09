@@ -90,7 +90,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	fakeSettings := cluster.MakeTestingClusterSettings()
 	sw := settingswatcher.New(s0.Clock(), fakeCodec, fakeSettings,
 		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
-		tc.Stopper())
+		s0.Stopper())
 	require.NoError(t, sw.Start(ctx))
 	require.NoError(t, checkSettingsValuesMatch(s0.ClusterSettings(), fakeSettings))
 	for k, v := range toSet {

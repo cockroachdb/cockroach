@@ -14,15 +14,15 @@ package settingswatcher
 
 import (
 	"context"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -93,7 +93,6 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		Key:    settingsTablePrefix,
 		EndKey: settingsTablePrefix.PrefixEnd(),
 	}
-	now := s.clock.Now()
 	u := s.settings.MakeUpdater()
 	initialScanDone := make(chan struct{})
 	var initialScanErr error
@@ -125,62 +124,42 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		}
 	}
 
-	rf, err := s.f.RangeFeed(ctx, "settings", []roachpb.Span{settingsTableSpan}, now, func(
-		ctx context.Context, kv *roachpb.RangeFeedValue,
-	) {
-		setting, val, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
-			Key:   kv.Key,
-			Value: kv.Value,
-		})
-		if err != nil {
-			log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
-			return
-		}
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		_, hasOverride := s.mu.overrides[setting]
-		if tombstone {
-			// This event corresponds to a deletion.
-			delete(s.mu.values, setting)
-			if !hasOverride {
-				s.setDefault(ctx, u, setting)
+	c := rangefeedcache.NewWatcher(
+		"settings-watcher",
+		s.clock, s.f,
+		0, // bufferSize
+		[]roachpb.Span{settingsTableSpan},
+		false,
+		func(ctx context.Context, kv *roachpb.RangeFeedValue) rangefeedbuffer.Event {
+			return s.handleKV(ctx, kv, u)
+		},
+		func(ctx context.Context, update rangefeedcache.Update) {
+			if update.Type == rangefeedcache.CompleteUpdate {
+				u.ResetRemaining(ctx)
+				close(initialScanDone)
 			}
-		} else {
-			s.mu.values[setting] = val
-			if !hasOverride {
-				s.set(ctx, u, setting, val)
-			}
-		}
-	}, rangefeed.WithInitialScan(func(ctx context.Context) {
-		u.ResetRemaining(ctx)
-		close(initialScanDone)
-	}), rangefeed.WithOnInitialScanError(func(
-		ctx context.Context, err error,
-	) (shouldFail bool) {
-		// TODO(ajwerner): Consider if there are other errors which we want to
-		// treat as permanent.
-		if grpcutil.IsAuthError(err) ||
-			// This is a hack around the fact that we do not get properly structured
-			// errors out of gRPC. See #56208.
-			strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
+		},
+		rangefeedcache.Knobs{},
+	)
+	if err := s.stopper.RunAsyncTask(ctx, "setting", func(ctx context.Context) {
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+		err := c.Run(ctx)
+		select {
+		case <-initialScanDone:
+		default:
 			initialScanErr = err
 			close(initialScanDone)
-			shouldFail = true
 		}
-		return shouldFail
-	}))
-	if err != nil {
-		// We are shutting down
-		return err
+	}); err != nil {
+		return err // we're shutting down
 	}
-
 	// Wait for the initial scan before returning.
 	select {
 	case <-initialScanDone:
 		if initialScanErr != nil {
 			return initialScanErr
 		}
-		s.stopper.AddCloser(rf)
 		return nil
 
 	case <-s.stopper.ShouldQuiesce():
@@ -189,6 +168,35 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	case <-ctx.Done():
 		return errors.Wrap(ctx.Err(), "failed to retrieve initial cluster settings")
 	}
+}
+
+func (s *SettingsWatcher) handleKV(
+	ctx context.Context, kv *roachpb.RangeFeedValue, u settings.Updater,
+) rangefeedbuffer.Event {
+	setting, val, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
+		Key:   kv.Key,
+		Value: kv.Value,
+	})
+	if err != nil {
+		log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, hasOverride := s.mu.overrides[setting]
+	if tombstone {
+		// This event corresponds to a deletion.
+		delete(s.mu.values, setting)
+		if !hasOverride {
+			s.setDefault(ctx, u, setting)
+		}
+	} else {
+		s.mu.values[setting] = val
+		if !hasOverride {
+			s.set(ctx, u, setting, val)
+		}
+	}
+	return nil
 }
 
 const versionSettingKey = "version"
