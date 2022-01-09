@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "rangefeedcache",
+    srcs = ["watcher.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//build/bazelutil:noop",
+        "//pkg/base",
+        "//pkg/kv/kvclient/rangefeed:with-mocks",  # keep
+        "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/grpcutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)

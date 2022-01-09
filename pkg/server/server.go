@@ -651,7 +651,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		} else {
 			spanConfig.subscriber = spanconfigkvsubscriber.New(
 				stopper,
-				db,
 				clock,
 				rangeFeedFactory,
 				keys.SpanConfigurationsTableID,
@@ -1795,7 +1794,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 
 	if s.cfg.SpanConfigsEnabled && s.spanConfigSubscriber != nil {
-		if err := s.spanConfigSubscriber.Start(ctx); err != nil {
+		if err := s.spanConfigSubscriber.Start(ctx, s.stopper); err != nil {
 			return err
 		}
 	}

@@ -110,9 +110,9 @@ func WithOnInternalError(f OnUnrecoverableError) Option {
 
 // WithDiff makes an option to enable an initial scan which defaults to
 // false.
-func WithDiff() Option {
+func WithDiff(withDiff bool) Option {
 	return optionFunc(func(c *config) {
-		c.withDiff = true
+		c.withDiff = withDiff
 	})
 }
 

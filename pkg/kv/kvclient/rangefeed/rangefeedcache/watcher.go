@@ -1,0 +1,301 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package rangefeedcache
+
+import (
+	"context"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+)
+
+// UpdateType is passed to an OnUpdateFunc to indicate whether
+// the set of events represents a complete update or a partial
+// update.
+type UpdateType bool
+
+const (
+
+	// CompleteUpdate indicates that the events represent the entirety of
+	// data in the spans.
+	CompleteUpdate UpdateType = true
+
+	// PartialUpdate indicates that the events represent an incremental update
+	// since the previous update.
+	PartialUpdate UpdateType = false
+)
+
+// TranslateEventFunc is used by the client to translate a low-level event
+// into an event for buffering. if nil is returned, the event is skipped.
+type TranslateEventFunc func(
+	context.Context, *roachpb.RangeFeedValue,
+) rangefeedbuffer.Event
+
+// OnUpdateFunc is used by the client to receive a batch of updates.
+type OnUpdateFunc func(context.Context, Update)
+
+// Update corresponds to a set of events derived from the underlying RangeFeed.
+type Update struct {
+	Type      UpdateType
+	Timestamp hlc.Timestamp
+	Events    []rangefeedbuffer.Event
+}
+
+// Watcher is used to implement a consistent cache over spans of KV data
+// on top of a RangeFeed.
+//
+// It's expected to Start-ed once. Start internally invokes Run in a retry
+// loop. Rangefeeds used as is don't offer any ordering guarantees with
+// respect to updates made over non-overlapping keys, which is something we care
+// about. For that reason we inject logic to make use of a rangefeed buffer,
+// accumulating raw rangefeed updates and flushing them out en-masse in timestamp
+// order when the rangefeed frontier is bumped. If the buffer overflows (as
+// dictated by the buffer limit the Watcher is instantiated with), the old
+// rangefeed is wound down and a new one re-established. The client interacts
+// with data from the RangeFeed in two ways, firstly, by translating raw KVs
+// into kvbuffer.Events, and by handling a batch of such events when either the
+// initial scan completes or the frontier changes. The OnUpdateCallback which
+// is handed a batch of updates is informed whether the batch of events
+// corresponds to a complete or incremental update.
+//
+// The expectation is that the caller will use a mutex to update an underlying
+// data structure.
+type Watcher struct {
+	name             redact.SafeString
+	clock            *hlc.Clock
+	rangefeedFactory *rangefeed.Factory
+	spans            []roachpb.Span
+	bufferSize       int
+	withPrevValue    bool
+
+	started int32 // accessed atomically
+
+	translateEvent TranslateEventFunc
+	onUpdate       OnUpdateFunc
+
+	lastFrontierTS hlc.Timestamp // used to assert monotonicity across rangefeed attempts
+	beforeExit     func()
+
+	knobs Knobs
+}
+
+// Knobs allows tests to inject behavior into the Watcher.
+type Knobs struct {
+
+	// PostRangeFeedStart is invoked after the rangefeed is started.
+	PostRangeFeedStart func()
+
+	// PreExit is invoked right before returning from Run, after tearing
+	// down internal components.
+	PreExit func()
+
+	// OnTimestampAdvance is called after the update to the data have been
+	// handled for the given timestamp.
+	OnTimestampAdvance func(timestamp hlc.Timestamp)
+
+	// ErrorInjectionCh is a way for tests to conveniently inject buffer
+	// overflow errors in order to test recovery.
+	ErrorInjectionCh chan error
+}
+
+// NewWatcher instantiates a Watcher.
+func NewWatcher(
+	name redact.SafeString,
+	clock *hlc.Clock,
+	rangeFeedFactory *rangefeed.Factory,
+	bufferSize int,
+	spans []roachpb.Span,
+	withPrevValue bool,
+	translateEvent TranslateEventFunc,
+	onUpdate OnUpdateFunc,
+	knobs Knobs,
+) *Watcher {
+	return &Watcher{
+		name:             name,
+		clock:            clock,
+		rangefeedFactory: rangeFeedFactory,
+		spans:            spans,
+		bufferSize:       bufferSize,
+		withPrevValue:    withPrevValue,
+		translateEvent:   translateEvent,
+		onUpdate:         onUpdate,
+		knobs:            knobs,
+	}
+}
+
+// Start calls Run on the Watcher as an async task with exponential backoff.
+// If the Watcher ran for what is deemed long enough, the backoff is reset.
+func Start(ctx context.Context, stopper *stop.Stopper, c *Watcher) error {
+	return stopper.RunAsyncTask(ctx, string(c.name), func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
+		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+
+			started := timeutil.Now()
+			if err := c.Run(ctx); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return // we're done here
+				}
+
+				if timeutil.Since(started) > aWhile {
+					r.Reset()
+				}
+
+				log.Warningf(ctx, "%s: failed with %v, retrying...", c.name, err)
+				continue
+			}
+
+			return // we're done here (the stopper was stopped, Run exited cleanly)
+		}
+	})
+}
+
+// Run establishes a rangefeed over the global store of span configs.
+// This is a blocking operation, returning only when the context is canceled,
+// or when a retryable error occurs. For the latter, it's expected that callers
+// will re-run the cache.
+func (s *Watcher) Run(ctx context.Context) error {
+	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
+		log.Fatal(ctx, "currently started: only allowed once at any point in time")
+	}
+	if fn := s.knobs.PreExit; fn != nil {
+		defer fn()
+	}
+	defer func() { atomic.StoreInt32(&s.started, 0) }()
+
+	buffer := rangefeedbuffer.New(s.bufferSize)
+	frontierBumpedCh, initialScanDoneCh, errCh := make(chan struct{}), make(chan struct{}), make(chan error)
+	mu := struct { // serializes access between the rangefeed and the main thread here
+		syncutil.Mutex
+		frontierTS hlc.Timestamp
+	}{}
+
+	defer func() {
+		mu.Lock()
+		s.lastFrontierTS.Forward(mu.frontierTS)
+		mu.Unlock()
+	}()
+
+	onValue := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
+		bEv := s.translateEvent(ctx, ev)
+		if bEv == nil {
+			return
+		}
+
+		if err := buffer.Add(bEv); err != nil {
+			select {
+			case <-ctx.Done():
+				// The context is canceled when the rangefeed is closed by the
+				// main handler goroutine. It's closed after we stop listening
+				// to errCh.
+			case errCh <- err:
+			}
+		}
+	}
+
+	initialScanTS := s.clock.Now()
+	if initialScanTS.Less(s.lastFrontierTS) {
+		log.Fatalf(ctx, "%s: initial scan timestamp (%s) regressed from last recorded frontier (%s)", s.name, initialScanTS, s.lastFrontierTS)
+	}
+
+	rangeFeed := s.rangefeedFactory.New(string(s.name), initialScanTS,
+		onValue,
+		rangefeed.WithInitialScan(func(ctx context.Context) {
+			select {
+			case <-ctx.Done():
+				// The context is canceled when the rangefeed is closed by the
+				// main handler goroutine. It's closed after we stop listening
+				// to initialScanDoneCh.
+			case initialScanDoneCh <- struct{}{}:
+			}
+		}),
+		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, frontierTS hlc.Timestamp) {
+			mu.Lock()
+			mu.frontierTS = frontierTS
+			mu.Unlock()
+
+			select {
+			case <-ctx.Done():
+			case frontierBumpedCh <- struct{}{}:
+			}
+		}),
+		rangefeed.WithDiff(s.withPrevValue),
+		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
+			// TODO(irfansharif): Consider if there are other errors which we
+			// want to treat as permanent. This was cargo culted from the
+			// settings watcher.
+			if grpcutil.IsAuthError(err) ||
+				strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
+				return true
+			}
+			return false
+		}),
+	)
+	if err := rangeFeed.Start(ctx, s.spans); err != nil {
+		return err
+	}
+	defer rangeFeed.Close()
+	if fn := s.knobs.PostRangeFeedStart; fn != nil {
+		fn()
+	}
+
+	log.Infof(ctx, "%s: established range feed cache", s.name)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-frontierBumpedCh:
+			mu.Lock()
+			frontierTS := mu.frontierTS
+			mu.Unlock()
+			s.handleUpdate(ctx, buffer, frontierTS, PartialUpdate)
+
+		case <-initialScanDoneCh:
+			s.handleUpdate(ctx, buffer, initialScanTS, CompleteUpdate)
+
+		case err := <-errCh:
+			return err
+		case err := <-s.knobs.ErrorInjectionCh:
+			return err
+		}
+	}
+}
+
+func (s *Watcher) handleUpdate(
+	ctx context.Context, buffer *rangefeedbuffer.Buffer, ts hlc.Timestamp, updateType UpdateType,
+) {
+	s.onUpdate(ctx, Update{
+		Type:      updateType,
+		Timestamp: ts,
+		Events:    buffer.Flush(ctx, ts),
+	})
+	if fn := s.knobs.OnTimestampAdvance; fn != nil {
+		fn(ts)
+	}
+}

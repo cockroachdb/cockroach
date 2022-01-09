@@ -12,6 +12,7 @@ go_library(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/roachpb:with-mocks",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

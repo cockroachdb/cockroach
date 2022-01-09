@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 )
 
 // TestingKnobs provide fine-grained control over the various span config
@@ -37,20 +37,9 @@ type TestingKnobs struct {
 	// not.
 	ManagerAfterCheckedReconciliationJobExistsInterceptor func(exists bool)
 
-	// KVSubscriberPostRangefeedStartInterceptor is invoked after the rangefeed is started.
-	KVSubscriberPostRangefeedStartInterceptor func()
-
-	// KVSubscriberPreExitInterceptor is invoked right before returning from
-	// subscribeInner, after tearing down internal components.
-	KVSubscriberPreExitInterceptor func()
-
-	// KVSubscriberOnTimestampAdvanceInterceptor is invoked each time the
-	// KVSubscriber has process all updates before the provided timestamp.
-	KVSubscriberOnTimestampAdvanceInterceptor func(hlc.Timestamp)
-
-	// KVSubscriberErrorInjectionCh is a way for tests to conveniently inject
-	// buffer overflow errors into the subscriber in order to test recovery.
-	KVSubscriberErrorInjectionCh chan error
+	// KVSubscriberRangeFeedKnobs control lifecycle events for the rangefeed
+	// underlying the KVSubscriber.
+	KVSubscriberRangeFeedKnobs rangefeedcache.Knobs
 
 	// StoreKVSubscriberOverride is used to override the KVSubscriber used when
 	// setting up a new store.
