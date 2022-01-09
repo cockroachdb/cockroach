@@ -108,12 +108,12 @@ func WithOnInternalError(f OnUnrecoverableError) Option {
 	})
 }
 
-// WithDiff makes an option to request that rangefeed events carry the previous
+// WithDiff makes an option to set whether rangefeed events carry the previous
 // value in addition to the new value. The option defaults to false. If set,
 // initial scan events will carry the same value for both Value and PrevValue.
-func WithDiff() Option {
+func WithDiff(withDiff bool) Option {
 	return optionFunc(func(c *config) {
-		c.withDiff = true
+		c.withDiff = withDiff
 	})
 }
 

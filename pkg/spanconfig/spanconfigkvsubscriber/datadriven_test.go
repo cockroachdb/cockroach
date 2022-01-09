@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
@@ -141,30 +142,30 @@ func TestDataDriven(t *testing.T) {
 		injectedErrCh := make(chan error)
 
 		kvSubscriber := spanconfigkvsubscriber.New(
-			ts.Stopper(),
-			ts.DB(),
 			ts.Clock(),
 			ts.RangeFeedFactory().(*rangefeed.Factory),
 			dummyTableID,
 			10<<20, /* 10 MB */
 			spanconfigtestutils.ParseConfig(t, "MISSING"),
 			&spanconfig.TestingKnobs{
-				KVSubscriberOnTimestampAdvanceInterceptor: func(ts hlc.Timestamp) {
-					mu.Lock()
-					defer mu.Unlock()
-					mu.lastFrontierTS = ts
+				KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
+					OnTimestampAdvance: func(ts hlc.Timestamp) {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.lastFrontierTS = ts
+					},
+					PostRangeFeedStart: func() {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.subscriberRunning = true
+					},
+					PreExit: func() {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.subscriberRunning = false
+					},
+					ErrorInjectionCh: injectedErrCh,
 				},
-				KVSubscriberPostRangefeedStartInterceptor: func() {
-					mu.Lock()
-					defer mu.Unlock()
-					mu.subscriberRunning = true
-				},
-				KVSubscriberPreExitInterceptor: func() {
-					mu.Lock()
-					defer mu.Unlock()
-					mu.subscriberRunning = false
-				},
-				KVSubscriberErrorInjectionCh: injectedErrCh,
 			},
 		)
 
@@ -265,7 +266,6 @@ func TestDataDriven(t *testing.T) {
 						return errors.New("expected subscriber to have stopped")
 					}
 					return nil
-
 				})
 
 			case "store-reader":

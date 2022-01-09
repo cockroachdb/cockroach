@@ -79,7 +79,7 @@ func TestRangeFeedIntegration(t *testing.T) {
 			case <-ctx.Done():
 			}
 		},
-		rangefeed.WithDiff(),
+		rangefeed.WithDiff(true),
 		rangefeed.WithInitialScan(func(ctx context.Context) {
 			close(initialScanDone)
 		}),
@@ -383,7 +383,7 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 			case <-ctx.Done():
 			}
 		},
-		rangefeed.WithDiff(),
+		rangefeed.WithDiff(true),
 	)
 	require.NoError(t, err)
 	defer r.Close()
@@ -491,7 +491,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 	}{}
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, preGCThresholdTS,
 		func(context.Context, *roachpb.RangeFeedValue) {},
-		rangefeed.WithDiff(),
+		rangefeed.WithDiff(true),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
 			mu.Lock()
 			defer mu.Unlock()
