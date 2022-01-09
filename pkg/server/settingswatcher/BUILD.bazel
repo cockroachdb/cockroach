@@ -29,6 +29,8 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
     ],
 )
 
@@ -37,10 +39,11 @@ go_test(
     srcs = [
         "main_test.go",
         "row_decoder_external_test.go",
+        "row_decoder_test.go",
         "settings_watcher_external_test.go",
     ],
+    embed = [":settingswatcher"],
     deps = [
-        ":settingswatcher",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
@@ -59,6 +62,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )
