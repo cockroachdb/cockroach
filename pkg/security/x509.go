@@ -276,3 +276,34 @@ func GenerateClientCert(
 
 	return certBytes, nil
 }
+
+// GenerateTenantSigningCert generates a signing certificate and returns the
+// cert bytes. Takes in the signing keypair and the certificate lifetime.
+func GenerateTenantSigningCert(
+	publicKey crypto.PublicKey, privateKey crypto.PrivateKey, lifetime time.Duration, tenantID uint64,
+) ([]byte, error) {
+	template := &x509.Certificate{
+		Subject: pkix.Name{
+			CommonName: fmt.Sprintf("Tenant %d Token Signing Certificate", tenantID),
+		},
+		SerialNumber:          big.NewInt(1), // The serial number does not matter because we are not using a certificate authority.
+		BasicConstraintsValid: true,
+		IsCA:                  false, // This certificate CANNOT sign other certificates.
+		PublicKey:             publicKey,
+		NotBefore:             time.Now().Add(validFrom),
+		NotAfter:              time.Now().Add(lifetime),
+		KeyUsage:              x509.KeyUsageDigitalSignature, // This certificate can ONLY make signatures.
+	}
+
+	certBytes, err := x509.CreateCertificate(
+		rand.Reader,
+		template,
+		template,
+		publicKey,
+		privateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
+}
