@@ -281,7 +281,7 @@ func TestRangeFeedMock(t *testing.T) {
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
 			rows <- value
-		}, rangefeed.WithDiff())
+		}, rangefeed.WithDiff(true))
 		require.NoError(t, err)
 		<-rows
 		r.Close()

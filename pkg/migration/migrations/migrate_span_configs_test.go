@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -200,8 +201,8 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 					),
 				},
 				SpanConfig: &spanconfig.TestingKnobs{
-					KVSubscriberPostRangefeedStartInterceptor: func() {
-						<-blockSubscriberCh
+					KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
+						PostRangeFeedStart: func() { <-blockSubscriberCh },
 					},
 				},
 			},
