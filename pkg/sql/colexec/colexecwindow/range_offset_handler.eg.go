@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -59,7 +58,7 @@ type rangeOffsetHandler interface {
 
 func newRangeOffsetHandler(
 	evalCtx *tree.EvalContext,
-	datumAlloc *rowenc.DatumAlloc,
+	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
 	ordColType *types.T,
 	ordColAsc, isStart bool,
@@ -11069,7 +11068,7 @@ func (b *rangeOffsetHandlerBase) startPartition(
 
 // decodeOffset decodes the given encoded offset into the given type.
 func decodeOffset(
-	datumAlloc *rowenc.DatumAlloc, orderColType *types.T, typedOffset []byte,
+	datumAlloc *tree.DatumAlloc, orderColType *types.T, typedOffset []byte,
 ) interface{} {
 	offsetType := getOffsetType(orderColType)
 	datum, err := execinfra.DecodeDatum(datumAlloc, offsetType, typedOffset)

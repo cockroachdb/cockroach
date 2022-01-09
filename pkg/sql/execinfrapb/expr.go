@@ -110,7 +110,7 @@ type ExprHelper struct {
 
 	Types      []*types.T
 	Row        rowenc.EncDatumRow
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 }
 
 func (eh *ExprHelper) String() string {

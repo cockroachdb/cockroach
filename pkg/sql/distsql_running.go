@@ -615,7 +615,7 @@ type DistSQLReceiver struct {
 
 	row    tree.Datums
 	status execinfra.ConsumerStatus
-	alloc  rowenc.DatumAlloc
+	alloc  tree.DatumAlloc
 	closed bool
 
 	rangeCache *rangecache.RangeCache

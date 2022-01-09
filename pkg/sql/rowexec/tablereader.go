@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
@@ -49,7 +50,7 @@ type tableReader struct {
 	// fetcher wraps a row.Fetcher, allowing the tableReader to add a stat
 	// collection layer.
 	fetcher rowFetcher
-	alloc   rowenc.DatumAlloc
+	alloc   tree.DatumAlloc
 
 	scanStats execinfra.ScanStats
 

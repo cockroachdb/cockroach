@@ -56,7 +56,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 		DiskMonitor: diskMonitor,
 	}
 
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	rng, _ := randutil.NewTestRand()
 	typesToTest := 20
 

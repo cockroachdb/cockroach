@@ -64,7 +64,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

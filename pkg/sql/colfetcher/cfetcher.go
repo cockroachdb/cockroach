@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -115,7 +116,7 @@ type cTableInfo struct {
 	// only be used for unique secondary indexes.
 	extraValDirections []descpb.IndexDescriptor_Direction
 
-	da rowenc.DatumAlloc
+	da tree.DatumAlloc
 }
 
 var _ execinfra.Releasable = &cTableInfo{}
@@ -427,7 +428,7 @@ func (rf *cFetcher) Init(
 		}
 	}
 
-	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
+	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc.GetID(), table.index.GetID()))
 
 	var indexColumnIDs []descpb.ColumnID
 	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)
@@ -871,7 +872,7 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
 					var err error
 					// Slice off an extra encoded column from remainingBytes.
-					remainingBytes, err = rowenc.SkipTableKey(remainingBytes)
+					remainingBytes, err = keyside.Skip(remainingBytes)
 					if err != nil {
 						return nil, err
 					}

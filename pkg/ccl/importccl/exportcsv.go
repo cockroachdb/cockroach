@@ -181,7 +181,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		sp.input.Start(ctx)
 		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 
-		alloc := &rowenc.DatumAlloc{}
+		alloc := &tree.DatumAlloc{}
 
 		writer := newCSVExporter(sp.spec)
 

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -34,11 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1762,8 +1760,8 @@ func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) 
 // use in testing window functions in RANGE mode with offsets.
 func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
 	var encoded, scratch []byte
-	encoded, err := rowenc.EncodeTableValue(
-		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
+	encoded, err := valueside.Encode(
+		encoded, valueside.NoColumnID, offset, scratch)
 	require.NoError(t, err)
 	return encoded
 }

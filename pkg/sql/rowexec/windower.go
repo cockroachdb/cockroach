@@ -64,7 +64,7 @@ type windower struct {
 	inputDone    bool
 	inputTypes   []*types.T
 	outputTypes  []*types.T
-	datumAlloc   rowenc.DatumAlloc
+	datumAlloc   tree.DatumAlloc
 	acc          mon.BoundAccount
 	diskMonitor  *mon.BytesMonitor
 

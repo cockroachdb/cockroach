@@ -237,7 +237,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	var rowsProcessed uint64
 	progressUpdates := util.Every(SampleAggregatorProgressInterval)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
@@ -339,7 +339,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 }
 
 func (s *sampleAggregator) processSketchRow(
-	sketch *sketchInfo, row rowenc.EncDatumRow, da *rowenc.DatumAlloc,
+	sketch *sketchInfo, row rowenc.EncDatumRow, da *tree.DatumAlloc,
 ) error {
 	var tmpSketch hyperloglog.Sketch
 

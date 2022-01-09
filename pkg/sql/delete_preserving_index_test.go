@@ -126,7 +126,7 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 		}
 
 		// Grab the revision histories for both indices.
-		prefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, index.ID)
+		prefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.ID)
 		prefixEnd := append(prefix, []byte("\xff")...)
 
 		revisions, err := kvclient.GetAllRevisions(context.Background(), kvDB, prefix, prefixEnd, now, end)

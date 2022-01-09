@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -824,7 +824,7 @@ func getRangesBeforeAndAfter(
 		for i := range boundArr {
 			var err error
 			// Encode each bound value into a sortable byte format.
-			boundArrByte[i], err = rowenc.EncodeTableKey(nil, boundArr[i], encoding.Ascending)
+			boundArrByte[i], err = keyside.Encode(nil, boundArr[i], encoding.Ascending)
 			if err != nil {
 				return 0, 0, false
 			}

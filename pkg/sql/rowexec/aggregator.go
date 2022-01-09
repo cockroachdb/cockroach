@@ -56,7 +56,7 @@ type aggregatorBase struct {
 	inputTypes   []*types.T
 	funcs        []*aggregateFuncHolder
 	outputTypes  []*types.T
-	datumAlloc   rowenc.DatumAlloc
+	datumAlloc   tree.DatumAlloc
 	rowAlloc     rowenc.EncDatumRowAlloc
 
 	bucketsAcc  mon.BoundAccount
@@ -905,7 +905,7 @@ func (ag *aggregatorBase) newAggregateFuncHolder(
 // row in the group.
 func (a *aggregateFuncHolder) isDistinct(
 	ctx context.Context,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	prefix []byte,
 	firstArg tree.Datum,
 	otherArgs tree.Datums,

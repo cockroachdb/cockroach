@@ -43,7 +43,7 @@ func compareRows(
 	lTypes []*types.T,
 	l, r rowenc.EncDatumRow,
 	e *tree.EvalContext,
-	d *rowenc.DatumAlloc,
+	d *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
 ) (int, error) {
 	for _, orderInfo := range ordering {
@@ -343,7 +343,7 @@ func makeUniqueRows(
 ) (int, rowenc.EncDatumRows) {
 	rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 	// It is possible there was some duplication, so remove duplicates.
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 	sort.Slice(rows, func(i, j int) bool {
 		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, rows[j])
 		require.NoError(t, err)
@@ -408,7 +408,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	evalCtx := tree.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {

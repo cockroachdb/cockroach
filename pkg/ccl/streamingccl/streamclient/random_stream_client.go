@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -427,7 +428,7 @@ func makeRandomKey(
 	var colIDToRowIndex catalog.TableColMap
 	colIDToRowIndex.Set(index.GetKeyColumnID(0), 0)
 
-	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, index.GetID())
+	keyPrefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.GetID())
 	k, _, err := rowenc.EncodeIndexKey(tableDesc, index, colIDToRowIndex, tree.Datums{keyDatum}, keyPrefix)
 	if err != nil {
 		panic(err)
@@ -438,8 +439,8 @@ func makeRandomKey(
 
 	// Create a value holding a random integer.
 	valueDatum := tree.NewDInt(tree.DInt(r.Intn(config.valueRange)))
-	valueBuf, err := rowenc.EncodeTableValue(
-		[]byte(nil), tableDesc.Columns[1].ID, valueDatum, []byte(nil))
+	valueBuf, err := valueside.Encode(
+		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.Columns[1].ID), valueDatum, []byte(nil))
 	if err != nil {
 		panic(err)
 	}

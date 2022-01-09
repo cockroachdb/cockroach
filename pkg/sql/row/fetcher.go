@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -256,7 +258,7 @@ type Fetcher struct {
 	IgnoreUnexpectedNulls bool
 
 	// Buffered allocation of decoded datums.
-	alloc *rowenc.DatumAlloc
+	alloc *tree.DatumAlloc
 
 	// Memory monitor and memory account for the bytes fetched by this fetcher.
 	mon             *mon.BytesMonitor
@@ -295,7 +297,7 @@ func (rf *Fetcher) Init(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
 	isCheck bool,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	memMonitor *mon.BytesMonitor,
 	tableArgs FetcherTableArgs,
 ) error {
@@ -356,7 +358,7 @@ func (rf *Fetcher) Init(
 	}
 
 	table.knownPrefixLength = len(
-		rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()),
+		rowenc.MakeIndexKeyPrefix(codec, table.desc.GetID(), table.index.GetID()),
 	)
 
 	var indexColumnIDs []descpb.ColumnID
@@ -735,7 +737,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 		for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
 			var err error
 			// Slice off an extra encoded column from rf.keyRemainingBytes.
-			rf.keyRemainingBytes, err = rowenc.SkipTableKey(rf.keyRemainingBytes)
+			rf.keyRemainingBytes, err = keyside.Skip(rf.keyRemainingBytes)
 			if err != nil {
 				return false, err
 			}
@@ -1020,7 +1022,7 @@ func (rf *Fetcher) processValueSingle(
 			// although that would require changing UnmarshalColumnValue to operate
 			// on bytes, and for Encode/DecodeTableValue to operate on marshaled
 			// single values.
-			value, err := rowenc.UnmarshalColumnValue(rf.alloc, typ, kv.Value)
+			value, err := valueside.UnmarshalLegacy(rf.alloc, typ, kv.Value)
 			if err != nil {
 				return "", "", err
 			}
@@ -1294,17 +1296,17 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 			if lastColID > col.GetID() {
 				return errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
 			}
-			colIDDiff := col.GetID() - lastColID
+			colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
 			lastColID = col.GetID()
 
-			if result, err := rowenc.EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
+			if result, err := valueside.Encode([]byte(nil), colIDDelta, rowVal.Datum,
 				scratch); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
 					col.GetName(), rowVal.Datum)
 			} else if !rowVal.BytesEqual(result) {
 				return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
-					"value failed to round-trip encode. Column=%s colIDDiff=%d Key=%s expected %#v, got: %#v",
-					col.GetName(), colIDDiff, rf.kv.Key, rowVal.EncodedString(), result))
+					"value failed to round-trip encode. Column=%s colIDDelta=%d Key=%s expected %#v, got: %#v",
+					col.GetName(), colIDDelta, rf.kv.Key, rowVal.EncodedString(), result))
 			}
 		}
 		return nil

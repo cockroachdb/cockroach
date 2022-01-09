@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -72,7 +73,7 @@ func initRowFetcher(
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
 	mon *mon.BytesMonitor,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	scanVisibility execinfrapb.ScanVisibility,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
