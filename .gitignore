@@ -15,6 +15,7 @@ artifacts
 /lib
 /lib.*
 .buildinfo
+build/release/terraform/.terraform*
 # cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
 /cockroach*
 /certs
