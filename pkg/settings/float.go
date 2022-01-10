@@ -30,7 +30,7 @@ var _ internalSetting = &FloatSetting{}
 
 // Get retrieves the float value in the setting.
 func (f *FloatSetting) Get(sv *Values) float64 {
-	return math.Float64frombits(uint64(sv.getInt64(f.slotIdx)))
+	return math.Float64frombits(uint64(sv.getInt64(f.slot)))
 }
 
 func (f *FloatSetting) String(sv *Values) string {
@@ -68,7 +68,7 @@ func (f *FloatSetting) Override(ctx context.Context, sv *Values, v float64) {
 	if err := f.set(ctx, sv, v); err != nil {
 		panic(err)
 	}
-	sv.setDefaultOverrideInt64(f.slotIdx, int64(math.Float64bits(v)))
+	sv.setDefaultOverrideInt64(f.slot, int64(math.Float64bits(v)))
 }
 
 // Validate that a value conforms with the validation function.
@@ -85,13 +85,13 @@ func (f *FloatSetting) set(ctx context.Context, sv *Values, v float64) error {
 	if err := f.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(ctx, f.slotIdx, int64(math.Float64bits(v)))
+	sv.setInt64(ctx, f.slot, int64(math.Float64bits(v)))
 	return nil
 }
 
 func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(f.slotIdx)
+	ok, val, _ := sv.getDefaultOverride(f.slot)
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.

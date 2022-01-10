@@ -140,19 +140,19 @@ func (v *VersionSetting) EncodedDefault() string {
 func (v *VersionSetting) Get(sv *Values) string {
 	encV := v.GetInternal(sv)
 	if encV == nil {
-		panic(fmt.Sprintf("missing value for version setting in slot %d", v.getSlotIdx()))
+		panic(fmt.Sprintf("missing value for version setting in slot %d", v.slot))
 	}
 	return string(encV.([]byte))
 }
 
 // GetInternal returns the setting's current value.
 func (v *VersionSetting) GetInternal(sv *Values) interface{} {
-	return sv.getGeneric(v.getSlotIdx())
+	return sv.getGeneric(v.slot)
 }
 
 // SetInternal updates the setting's value in the provided Values container.
 func (v *VersionSetting) SetInternal(ctx context.Context, sv *Values, newVal interface{}) {
-	sv.setGeneric(ctx, v.getSlotIdx(), newVal)
+	sv.setGeneric(ctx, v.slot, newVal)
 }
 
 // setToDefault is part of the extendingSetting interface. This is a no-op for

@@ -43,7 +43,7 @@ func (d *DurationSettingWithExplicitUnit) ErrorHint() (bool, string) {
 
 // Get retrieves the duration value in the setting.
 func (d *DurationSetting) Get(sv *Values) time.Duration {
-	return time.Duration(sv.getInt64(d.slotIdx))
+	return time.Duration(sv.getInt64(d.slot))
 }
 
 func (d *DurationSetting) String(sv *Values) string {
@@ -88,21 +88,21 @@ func (d *DurationSetting) Validate(v time.Duration) error {
 //
 // For testing usage only.
 func (d *DurationSetting) Override(ctx context.Context, sv *Values, v time.Duration) {
-	sv.setInt64(ctx, d.slotIdx, int64(v))
-	sv.setDefaultOverrideInt64(d.slotIdx, int64(v))
+	sv.setInt64(ctx, d.slot, int64(v))
+	sv.setDefaultOverrideInt64(d.slot, int64(v))
 }
 
 func (d *DurationSetting) set(ctx context.Context, sv *Values, v time.Duration) error {
 	if err := d.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(ctx, d.slotIdx, int64(v))
+	sv.setInt64(ctx, d.slot, int64(v))
 	return nil
 }
 
 func (d *DurationSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(d.slotIdx)
+	ok, val, _ := sv.getDefaultOverride(d.slot)
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
