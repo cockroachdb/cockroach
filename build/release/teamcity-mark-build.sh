@@ -31,3 +31,27 @@ mark_build() {
   gcloud container images add-tag "${gcr_repository}:${TC_BUILD_BRANCH}" "${gcr_repository}:latest-${release_branch}-${build_label}-build"
   tc_end_block "Push new docker image tag"
 }
+
+# Publish potential release metadata to a stable location.
+publish_metadata() {
+  # TODO: move to a separate file?
+  tc_start_block "Metadata"
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  metadata_file="artifacts/metadata.json"
+  mkdir -p artifacts
+  cat > "$metadata_file" << EOF
+{
+  "sha": "$BUILD_VCS_NUMBER",
+  "timestamp": "$timestamp",
+  "tag": "$TC_BUILD_BRANCH"
+}
+EOF
+  cat "$metadata_file"
+  # TODO: verify json by running jq on it
+  # TODO: create a GCS buckets
+  # TODO: create credentials to publish to the buckets above and add them to TeamCity
+  # TODO: add logic to set prod and dev buckets
+  # TODO: make sure gsutil is installed on the agents or in the docker image we may want to use
+  # gsutil cp "$metadata_file" "gs://$gcs_bucket/release-qualification/$BUILD_VCS_NUMBER.json"
+  tc_end_block "Metadata"
+}
