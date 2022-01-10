@@ -1677,3 +1677,19 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 func (s *ScanStats) String() string {
 	return redact.StringWithoutMarkers(s)
 }
+
+// TenantSettingsTier identifies a tier of setting overrides. It is used by the
+// TenantSettings API which supports passing multiple overrides for the same
+// setting, with the tier indicating the precedence.
+type TenantSettingsTier uint32
+
+const (
+	// SpecificTenantOverrides is the first tier of tenant setting overrides. In
+	// this tier, overrides take precedence over other tiers.
+	SpecificTenantOverrides TenantSettingsTier = 1 + iota
+
+	// AllTenantsOverrides is the second tier of tenant setting overrides. These
+	// overrides are only effectual for a tenant if there is no override in the
+	// SpecificTenantOverrides tier.
+	AllTenantsOverrides
+)

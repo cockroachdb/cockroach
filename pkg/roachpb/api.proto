@@ -2610,6 +2610,59 @@ message GossipSubscriptionEvent {
   kv.kvpb.Error error = 4;
 }
 
+// TenantSettingsRequest establishes an indefinite stream that provides
+// up-to-date overrides for tenant settings.
+//
+// Upon establishment of the stream, the current overrides are returned as an
+// event, and any time the overrides change a new event is generated.
+message TenantSettingsRequest {
+  TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+}
+
+// TenantSettingsEvent is used to report changes to setting overrides for a
+// particular tenant.
+//
+// Each event pertains to one of at most two tiers (see TenantSettingsTier). If
+// the same variable has overrides in both tiers, the tier 1 override takes
+// precedence.
+//
+// Note: this API is designed to allow flexibility of implementation on the
+// server side (e.g. to make it maintain very little state per tenant).
+message TenantSettingsEvent {
+  // Tier indicates the tier and must be a valid TenantSettingsTier value.
+  uint32 tier = 1 [(gogoproto.casttype) = "TenantSettingsTier"];
+
+  // Incremental is true if the list of overrides is a list of changes since the
+  // last event. In that case, any overrides that have been removed are returned
+  // as TenantSettings with empty RawValue and ValueType fields.
+  //
+  // When Incremental is false, the overrides contains the complete list of
+  // current overrides for this tier.
+  //
+  // The first event for a tier is never incremental.
+  bool incremental = 2;
+
+  // Overrides contains:
+  //  - all current setting overrides for the given tier if Incremental is
+  //    false; or
+  //  - the changed overrides since the last event for the tier if Incremental
+  //    is true (removed overrides have empty RawValue and ValueType fields).
+  repeated TenantSetting overrides = 3;
+}
+
+// TenantSetting contains the name and value of a tenant setting.
+//
+// The value representation is the same as that used by the system.settings
+// table (value and valueType columns).
+message TenantSetting {
+  string name = 1;
+  string raw_value = 2;
+  string value_type = 3;
+  // If non-nil, the other fields will be empty and this will be the final event
+  // sent on the stream before it is terminated.
+  errorspb.EncodedError error = 4 [(gogoproto.nullable) = false];
+}
+
 // TenantConsumption contains information about resource utilization by a
 // tenant, which directly factors into their bill.
 message TenantConsumption {
@@ -2743,6 +2796,10 @@ service Internal {
   // UpdateSpanConfigs is used to update the span configurations over given
   // keyspans.
   rpc UpdateSpanConfigs (UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) { }
+
+  // TenantSettings is used by tenants to obtain and stay up to date with tenant
+  // setting overrides.
+  rpc TenantSettings (TenantSettingsRequest) returns (stream TenantSettingsEvent) { }
 }
 
 // ContentionEvent is a message that will be attached to BatchResponses
