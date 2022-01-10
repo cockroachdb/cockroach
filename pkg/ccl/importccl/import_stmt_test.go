@@ -7045,7 +7045,7 @@ func TestImportRowErrorLargeRows(t *testing.T) {
 	importIntoQuery := `IMPORT INTO simple CSV DATA ($1)`
 	// Without truncation this would fail with:
 	// pq: job 715036628973879297: could not mark as reverting: job-update: command is too large: 33561185 bytes (max: 4194304)
-	sqlDB.ExpectErr(t, ".*error parsing row 2: expected 1 fields, got 4.*-- TRUNCATED", importIntoQuery, srv.URL)
+	sqlDB.ExpectErr(t, ".*error parsing row 2: expected 1 fields, got 4", importIntoQuery, srv.URL)
 }
 
 func TestImportJobEventLogging(t *testing.T) {
