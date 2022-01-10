@@ -15,6 +15,25 @@ option go_package = "loqrecoverypb";
 import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
+enum DescriptorChangeType {
+  Split = 0;
+  Merge = 1;
+  ReplicaChange = 2;
+}
+
+// DescriptorChangeInfo future descriptor change info extracted from commit
+// triggers in raft log.
+message DescriptorChangeInfo {
+  // Change type.
+  DescriptorChangeType changeType = 1;
+  // Range descriptor containing new state of for replica change updates and
+  // LHS for split and merge operations.
+  roachpb.RangeDescriptor desc = 2;
+  // Optional range descriptor with is populated for split and merge changes
+  // and contains RHS descriptor for the operation.
+  roachpb.RangeDescriptor otherDesc = 3;
+}
+
 // ReplicaInfo contains info about state of range replica for the purpose of range
 // recovery. This information should be enough for recovery algorithm to pick a
 // survivor replica in when not replicas are available.
@@ -27,7 +46,10 @@ message ReplicaInfo {
   roachpb.RangeDescriptor desc = 3 [(gogoproto.nullable) = false];
   uint64 raft_applied_index = 4;
   uint64 raft_committed_index = 5;
+  // Deprecated
   bool has_uncommitted_descriptors = 6;
+  repeated DescriptorChangeInfo raft_log_descriptor_changes = 7 [(gogoproto.nullable) = false,
+    (gogoproto.jsontag) = ",omitempty"];
 }
 
 // Collection of replica information gathered from a collect-info run on a single node.

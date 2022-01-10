@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/hintdetail"
 	"github.com/spf13/cobra"
 )
 
@@ -257,6 +258,7 @@ var debugRecoverPlanOpts struct {
 	outputFileName string
 	deadStoreIDs   []int
 	confirmAction  confirmActionFlag
+	force          bool
 }
 
 func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
@@ -295,28 +297,69 @@ Discarded live replicas: %d
 		_, _ = fmt.Fprintf(stderr, "%s\n\n", deadStoreMsg)
 	}
 
+	planingErr := report.Error()
+	if planingErr != nil {
+		_, _ = fmt.Fprintf(stderr,
+			"Found replica inconsistencies:\n\n%s\n\n",
+			hintdetail.FlattenDetails(planingErr))
+	}
+
+	if debugRecoverPlanOpts.confirmAction == allNo {
+		return nil
+	}
+
 	if len(plan.Updates) == 0 {
 		_, _ = fmt.Fprintf(stderr, "No recoverable ranges found.\n")
+		if planingErr != nil && !debugRecoverPlanOpts.force {
+			return errors.New("cluster has inconsistent range descriptors")
+		}
 		return nil
 	}
 
 	switch debugRecoverPlanOpts.confirmAction {
 	case prompt:
-		_, _ = fmt.Fprintf(stderr, "Proceed with plan creation [y/N] ")
-		reader := bufio.NewReader(os.Stdin)
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return errors.Wrap(err, "failed to read user input")
+		opts := "y/N"
+		if planingErr != nil {
+			// Need to warn user before they make a decision that ignoring
+			// inconsistencies is a really bad idea.
+			_, _ = fmt.Fprintln(stderr, "Only proceed as a last resort!")
+			opts = "f/N"
 		}
-		_, _ = fmt.Fprintf(stderr, "\n")
-		if len(line) < 1 || (line[0] != 'y' && line[0] != 'Y') {
-			_, _ = fmt.Fprint(stderr, "Aborted at user request\n")
-			return nil
+	input:
+		for {
+			_, _ = fmt.Fprintf(stderr, "Proceed with plan creation [%s] ", opts)
+			reader := bufio.NewReader(os.Stdin)
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return errors.Wrap(err, "failed to read user input")
+			}
+			// When user just hits <enter> we'll have a new line only string which
+			// we need to turn into default option.
+			if len(line) == 1 {
+				line = "n"
+			}
+			switch strings.ToLower(line)[0] {
+			case 'y':
+				// We ignore y if we have errors. In that case you can only force or
+				// abandon attempt.
+				if planingErr != nil {
+					continue
+				}
+				break input
+			case 'f':
+				break input
+			case 'n':
+				return nil
+			}
 		}
 	case allYes:
-		// All actions enabled by default.
-	default:
-		return errors.New("Aborted by --confirm option")
+		if planingErr != nil {
+			if !debugRecoverPlanOpts.force {
+				return errors.Errorf(
+					"can not create plan because of errors and no --force flag is given")
+			}
+			_, _ = fmt.Fprintln(stderr, "Produced plan should be used as a last resort!")
+		}
 	}
 
 	var writer io.Writer = os.Stdout

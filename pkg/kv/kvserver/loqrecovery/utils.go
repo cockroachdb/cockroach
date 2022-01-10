@@ -55,14 +55,24 @@ func keyMin(key1 roachpb.RKey, key2 roachpb.RKey) roachpb.RKey {
 	return key1
 }
 
-// keyspaceCoverageAnomaly records errors found when checking keyspace coverage.
-// Anomaly is a key span where there's no coverage or there are more than one
-// range that covers the span.
+// KeyspaceAnomaly records errors found when checking keyspace coverage and
+// health of survivor replicas. Anomaly covers a key span that is either not
+// covered by any ranges, covered multiple times or correspond to replicas data
+// in which could not act as a source of truth in absence of other replicas.
+// Main goal of this interface to provide a human-readable representations of
+// problem discovered during planning process.
+// Anomalies contain span so that they could be ordered for user presentations.
 // Anomaly also contains additional information about ranges that either
 // bordering the gap or overlap over the anomaly span.
-type keyspaceCoverageAnomaly struct {
-	span    roachpb.Span
-	overlap bool
+type KeyspaceAnomaly interface {
+	fmt.Stringer
+	// Span returns span for detected problem. Anomalies should report consistent
+	// span for the sake of ordered data presentation.
+	Span() roachpb.Span
+}
+
+type keyspaceGapAnomaly struct {
+	span roachpb.Span
 
 	range1     roachpb.RangeID
 	range1Span roachpb.Span
@@ -71,34 +81,94 @@ type keyspaceCoverageAnomaly struct {
 	range2Span roachpb.Span
 }
 
-func (i keyspaceCoverageAnomaly) String() string {
-	if i.overlap {
-		return fmt.Sprintf("range overlap %v\n  r%d: %v\n  r%d: %v",
-			i.span, i.range1, i.range1Span, i.range2, i.range2Span)
-	}
+func (i keyspaceGapAnomaly) String() string {
 	return fmt.Sprintf("range gap %v\n  r%d: %v\n  r%d: %v",
 		i.span, i.range1, i.range1Span, i.range2, i.range2Span)
 }
 
-// KeyspaceCoverageError is returned by replica planner when it detects problems
-// with key coverage. Error contains all anomalies found. It also provides a
-// convenience function to print report.
-type KeyspaceCoverageError struct {
-	anomalies []keyspaceCoverageAnomaly
+func (i keyspaceGapAnomaly) Span() roachpb.Span {
+	return i.span
 }
 
-func (e *KeyspaceCoverageError) Error() string {
-	return "keyspace coverage error"
+type keyspaceOverlapAnomaly struct {
+	span roachpb.Span
+
+	range1     roachpb.RangeID
+	range1Span roachpb.Span
+
+	range2     roachpb.RangeID
+	range2Span roachpb.Span
+}
+
+func (i keyspaceOverlapAnomaly) String() string {
+	return fmt.Sprintf("range overlap %v\n  r%d: %v\n  r%d: %v",
+		i.span, i.range1, i.range1Span, i.range2, i.range2Span)
+}
+
+func (i keyspaceOverlapAnomaly) Span() roachpb.Span {
+	return i.span
+}
+
+type rangeSplitAnomaly struct {
+	rangeID roachpb.RangeID
+	span    roachpb.Span
+
+	rHSRangeID   roachpb.RangeID
+	rHSRangeSpan roachpb.Span
+}
+
+func (i rangeSplitAnomaly) String() string {
+	return fmt.Sprintf("range has unapplied split operation\n  r%d, %v rhs r%d, %v",
+		i.rangeID, i.span, i.rHSRangeID, i.rHSRangeSpan)
+}
+
+func (i rangeSplitAnomaly) Span() roachpb.Span {
+	return i.span
+}
+
+type rangeMergeAnomaly rangeSplitAnomaly
+
+func (i rangeMergeAnomaly) String() string {
+	return fmt.Sprintf("range has unapplied merge operation\n  r%d, %v with r%d, %v",
+		i.rangeID, i.span, i.rHSRangeID, i.rHSRangeSpan)
+}
+
+func (i rangeMergeAnomaly) Span() roachpb.Span {
+	return i.span
+}
+
+type rangeReplicaRemovalAnomaly struct {
+	rangeID roachpb.RangeID
+	span    roachpb.Span
+}
+
+func (i rangeReplicaRemovalAnomaly) String() string {
+	return fmt.Sprintf("range has unapplied descriptor change that removes current replica\n  r%d: %v",
+		i.rangeID,
+		i.span)
+}
+
+func (i rangeReplicaRemovalAnomaly) Span() roachpb.Span {
+	return i.span
+}
+
+// KeyspaceError is returned by replica planner when it detects problems
+// with replicas in key space. Error contains all anomalies found.
+// KeyspaceError implements ErrorDetailer to integrate into cli commands.
+type KeyspaceError struct {
+	anomalies []KeyspaceAnomaly
+}
+
+func (e *KeyspaceError) Error() string {
+	return "keyspace error"
 }
 
 // ErrorDetail returns a properly formatted report that could be presented
 // to user.
-func (e *KeyspaceCoverageError) ErrorDetail() string {
+func (e *KeyspaceError) ErrorDetail() string {
 	descriptions := make([]string, 0, len(e.anomalies))
 	for _, id := range e.anomalies {
 		descriptions = append(descriptions, fmt.Sprintf("%v", id))
 	}
-	return fmt.Sprintf(
-		"Key space covering is not complete. Discovered following inconsistencies:\n%s\n",
-		strings.Join(descriptions, "\n"))
+	return strings.Join(descriptions, "\n")
 }

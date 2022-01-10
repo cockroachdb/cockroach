@@ -1654,6 +1654,8 @@ func init() {
 		"list of dead store IDs")
 	f.VarP(&debugRecoverPlanOpts.confirmAction, cliflags.ConfirmActions.Name, cliflags.ConfirmActions.Shorthand,
 		cliflags.ConfirmActions.Usage())
+	f.BoolVar(&debugRecoverPlanOpts.force, "force", false,
+		"force creation of plan even if some descriptors could not be consistently recovered")
 
 	f = debugRecoverExecuteCmd.Flags()
 	f.VarP(&debugRecoverExecuteOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
