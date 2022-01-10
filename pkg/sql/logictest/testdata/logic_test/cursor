@@ -347,3 +347,27 @@ statement error relation \"doesntexist\" does not exist
 ROLLBACK;
 BEGIN;
 DECLARE foo CURSOR FOR SELECT * FROM doesntexist
+
+# Test that schema changes cannot be created in the same transaction as open
+# cursors.
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 1;
+FETCH foo
+
+statement error cannot run schema change in a transaction with open DECLARE cursors
+ALTER TABLE a ADD COLUMN c INT
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 1;
+CLOSE foo
+
+# Cursor is closed; make sure schema change is allowed again.
+
+statement ok
+ALTER TABLE a ADD COLUMN c INT
+
