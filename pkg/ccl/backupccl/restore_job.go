@@ -415,25 +415,16 @@ func restore(
 		return emptyRowCount, errors.Wrap(err, "resolving locality locations")
 	}
 
+	if err := checkCoverage(restoreCtx, dataToRestore.getSpans(), backupManifests); err != nil {
+		return emptyRowCount, err
+	}
+
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
-	const useSimpleImportSpans = true
-	var importSpans []execinfrapb.RestoreSpanEntry
-	if useSimpleImportSpans {
-		if err := checkCoverage(restoreCtx, dataToRestore.getSpans(), backupManifests); err != nil {
-			return emptyRowCount, err
-		}
-		importSpans = makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
-			highWaterMark)
-	} else {
-		importSpans, _, err = makeImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
-			highWaterMark, errOnMissingRange)
-		if err != nil {
-			return emptyRowCount, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
-		}
-	}
+	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
+		highWaterMark)
 
 	if len(importSpans) == 0 {
 		// There are no files to restore.
