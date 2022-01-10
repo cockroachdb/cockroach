@@ -62,6 +62,7 @@ require (
 	github.com/emicklei/dot v0.15.0
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
 	github.com/fraugster/parquet-go v0.4.0
+	github.com/fsnotify/fsnotify v1.5.1
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/go-swagger/go-swagger v0.26.1
@@ -159,8 +160,6 @@ require (
 	honnef.co/go/tools v0.2.1
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
-
-require github.com/fsnotify/fsnotify v1.5.1
 
 require (
 	cloud.google.com/go v0.99.0 // indirect
