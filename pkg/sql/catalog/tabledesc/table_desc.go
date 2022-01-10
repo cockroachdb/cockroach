@@ -418,6 +418,67 @@ func (desc *wrapper) SystemColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().system
 }
 
+// IndexColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.all
+	}
+	return nil
+}
+
+// IndexKeyColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexKeyColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.key
+	}
+	return nil
+}
+
+// IndexKeySuffixColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexKeySuffixColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.keySuffix
+	}
+	return nil
+}
+
+// IndexFullColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexFullColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.full
+	}
+	return nil
+}
+
+// IndexCompositeColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexCompositeColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.composite
+	}
+	return nil
+}
+
+// IndexStoredColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexStoredColumns(idx catalog.Index) []catalog.Column {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.stored
+	}
+	return nil
+}
+
+// getExistingOrNewIndexColumnCache is a convenience method for Index*Columns
+// methods.
+func (desc *wrapper) getExistingOrNewIndexColumnCache(idx catalog.Index) *indexColumnCache {
+	if idx == nil {
+		return nil
+	}
+	c := desc.getExistingOrNewColumnCache()
+	if idx.Ordinal() >= len(c.index) {
+		return nil
+	}
+	return &c.index[idx.Ordinal()]
+}
+
 // FindColumnWithID implements the TableDescriptor interface.
 func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error) {
 	for _, col := range desc.AllColumns() {
