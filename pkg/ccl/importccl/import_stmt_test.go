@@ -5601,6 +5601,26 @@ func TestImportPgDump(t *testing.T) {
 			"PGDUMP file format is currently unsupported by IMPORT INTO",
 			fmt.Sprintf(`IMPORT INTO t (a, b) PGDUMP DATA (%q)`, srv.URL))
 	})
+	t.Run("more-target-cols-than-data", func(t *testing.T) {
+		data := `
+CREATE TABLE public.t (c STRING, a STRING, b STRING, d STRING);
+COPY public.t (a, b, c) FROM stdin;
+a	b	c
+\.
+INSERT INTO public.t (a, b, c) VALUES ('a', 'b', 'c');
+			`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		defer sqlDB.Exec(t, "DROP TABLE t")
+		sqlDB.Exec(t, `
+IMPORT TABLE t FROM PGDUMP ($1) WITH ignore_unsupported_statements`, srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * from t`,
+			[][]string{{"c", "a", "b", "NULL"}, {"c", "a", "b", "NULL"}})
+	})
 }
 
 func TestImportPgDumpIgnoredStmts(t *testing.T) {
