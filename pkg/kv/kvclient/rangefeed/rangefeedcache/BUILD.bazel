@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "rangefeedcache",
@@ -20,5 +20,39 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "rangefeedcache_test",
+    srcs = [
+        "cache_impl_test.go",
+        "cache_test.go",
+        "main_test.go",
+    ],
+    embed = [":rangefeedcache"],
+    deps = [
+        "//build/bazelutil:noop",
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/rangefeed:with-mocks",  # keep
+        "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
     ],
 )
