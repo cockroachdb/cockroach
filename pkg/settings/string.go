@@ -56,7 +56,7 @@ var _ = (*StringSetting).Default
 
 // Get retrieves the string value in the setting.
 func (s *StringSetting) Get(sv *Values) string {
-	loaded := sv.getGeneric(s.slotIdx)
+	loaded := sv.getGeneric(s.slot)
 	if loaded == nil {
 		return ""
 	}
@@ -84,7 +84,7 @@ func (s *StringSetting) set(ctx context.Context, sv *Values, v string) error {
 		return err
 	}
 	if s.Get(sv) != v {
-		sv.setGeneric(ctx, s.slotIdx, v)
+		sv.setGeneric(ctx, s.slot, v)
 	}
 	return nil
 }
