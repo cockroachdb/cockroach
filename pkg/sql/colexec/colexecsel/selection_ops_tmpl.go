@@ -252,7 +252,7 @@ func (p *_OP_NAME) Next() coldata.Batch {
 
 		var idx int
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
-			nulls := vec1.Nulls().Or(vec2.Nulls())
+			nulls := vec1.Nulls().Or(*vec2.Nulls())
 			_SEL_LOOP(true)
 		} else {
 			_SEL_LOOP(false)

@@ -121,9 +121,9 @@ func (r *Replica) canUnquiesceRLocked() bool {
 		r.mu.internalRaftGroup != nil
 }
 
-// maybeQuiesceLocked checks to see if the replica is quiescable and initiates
-// quiescence if it is. Returns true if the replica has been quiesced and false
-// otherwise.
+// maybeQuiesceRaftMuLockedReplicaMuLocked checks to see if the replica is
+// quiescable and initiates quiescence if it is. Returns true if the replica has
+// been quiesced and false otherwise.
 //
 // A quiesced range is not ticked and thus doesn't create MsgHeartbeat requests
 // or cause elections. The Raft leader for a range checks various
@@ -178,14 +178,14 @@ func (r *Replica) canUnquiesceRLocked() bool {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-func (r *Replica) maybeQuiesceLocked(
+func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 	ctx context.Context, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap,
 ) bool {
 	status, lagging, ok := shouldReplicaQuiesce(ctx, r, now, livenessMap)
 	if !ok {
 		return false
 	}
-	return r.quiesceAndNotifyLocked(ctx, status, lagging)
+	return r.quiesceAndNotifyRaftMuLockedReplicaMuLocked(ctx, status, lagging)
 }
 
 type quiescer interface {
@@ -398,10 +398,10 @@ func shouldReplicaQuiesce(
 	return status, lagging, true
 }
 
-func (r *Replica) quiesceAndNotifyLocked(
+func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 	ctx context.Context, status *raft.Status, lagging laggingReplicaSet,
 ) bool {
-	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.mu.replicaID, r.mu.lastToReplica)
+	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.mu.replicaID, r.raftMu.lastToReplica)
 	if fromErr != nil {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: cannot find from replica (%d)", r.mu.replicaID)
@@ -416,7 +416,7 @@ func (r *Replica) quiesceAndNotifyLocked(
 			continue
 		}
 		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
-			roachpb.ReplicaID(id), r.mu.lastFromReplica)
+			roachpb.ReplicaID(id), r.raftMu.lastFromReplica)
 		if toErr != nil {
 			if log.V(4) {
 				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)

@@ -80,7 +80,7 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -172,7 +172,7 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -264,7 +264,7 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -356,7 +356,7 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -448,7 +448,7 @@ func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -540,7 +540,7 @@ func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -632,7 +632,7 @@ func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -724,7 +724,7 @@ func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
+			projVec.SetNulls(_outNulls.Or(*colNulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
