@@ -40,6 +40,7 @@ type SettingsWatcher struct {
 	f        *rangefeed.Factory
 	stopper  *stop.Stopper
 	dec      RowDecoder
+	storage  Storage
 
 	overridesMonitor OverridesMonitor
 
@@ -51,6 +52,11 @@ type SettingsWatcher struct {
 	}
 }
 
+// Storage is used to write a snapshot of KVs out to disk for use upon restart.
+type Storage interface {
+	SnapshotKVs(ctx context.Context, kvs []roachpb.KeyValue)
+}
+
 // New constructs a new SettingsWatcher.
 func New(
 	clock *hlc.Clock,
@@ -58,6 +64,7 @@ func New(
 	settingsToUpdate *cluster.Settings,
 	f *rangefeed.Factory,
 	stopper *stop.Stopper,
+	storage Storage, // optional
 ) *SettingsWatcher {
 	return &SettingsWatcher{
 		clock:    clock,
@@ -66,6 +73,7 @@ func New(
 		f:        f,
 		stopper:  stopper,
 		dec:      MakeRowDecoder(codec),
+		storage:  storage,
 	}
 }
 
@@ -78,8 +86,9 @@ func NewWithOverrides(
 	f *rangefeed.Factory,
 	stopper *stop.Stopper,
 	overridesMonitor OverridesMonitor,
+	storage Storage,
 ) *SettingsWatcher {
-	s := New(clock, codec, settingsToUpdate, f, stopper)
+	s := New(clock, codec, settingsToUpdate, f, stopper, storage)
 	s.overridesMonitor = overridesMonitor
 	return s
 }
@@ -96,6 +105,14 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	u := s.settings.MakeUpdater()
 	initialScanDone := make(chan struct{})
 	var initialScanErr error
+	noteUpdate := func(update rangefeedcache.Update) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if update.Type == rangefeedcache.CompleteUpdate {
+			u.ResetRemaining(ctx)
+			close(initialScanDone)
+		}
+	}
 
 	s.mu.values = make(map[string]RawValue)
 
@@ -124,10 +141,39 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		}
 	}
 
-	// bufferSize is set to 0 because we never return any events from
-	// s.handleKV() to buffer. We'll add logic to buffer events when
-	// snapshotting state to disk in a subsequent commit.
-	const bufferSize = 0
+	// bufferSize configures how large of a buffer to permit for accumulated
+	// changes of settings between resolved timestamps. It's an arbitrary
+	// number thought ought to be big enough. Note that if there is no underlying
+	// storage, we'll never produce any events in s.handleKV() so we can use a
+	// bufferSize of 0.
+	//
+	// TODO(ajwerner): Use rangefeedcache.Start and run the cache in a loop
+	// to deal with buffer overflows. On a fresh scan, there ought not be
+	// more settings values than there exists cluster settings, though we
+	// need to deal with the fact that new settings can be added in the next
+	// version and we can have retired values we don't know about.
+	var bufferSize int
+	if s.storage != nil {
+		bufferSize = settings.MaxSettings * 3
+	}
+	var snapshot []roachpb.KeyValue // used with storage
+	maybeUpdateSnapshot := func(update rangefeedcache.Update) {
+		// Only record the update to the buffer if we're writing to storage.
+		if s.storage == nil ||
+			// and the update has some new information to write.
+			(update.Type == rangefeedcache.PartialUpdate && len(update.Events) == 0) {
+			return
+		}
+		eventKVs := rangefeedbuffer.EventsToKVs(update.Events,
+			rangefeedbuffer.RangeFeedValueEventToKV)
+		switch update.Type {
+		case rangefeedcache.CompleteUpdate:
+			snapshot = eventKVs
+		case rangefeedcache.PartialUpdate:
+			snapshot = rangefeedbuffer.MergeKVs(snapshot, eventKVs)
+		}
+		s.storage.SnapshotKVs(ctx, snapshot)
+	}
 	c := rangefeedcache.NewWatcher(
 		"settings-watcher",
 		s.clock, s.f,
@@ -138,12 +184,8 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			return s.handleKV(ctx, kv, u)
 		},
 		func(ctx context.Context, update rangefeedcache.Update) {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			if update.Type == rangefeedcache.CompleteUpdate {
-				u.ResetRemaining(ctx)
-				close(initialScanDone)
-			}
+			noteUpdate(update)
+			maybeUpdateSnapshot(update)
 		},
 		nil, // knobs
 	)
@@ -214,6 +256,9 @@ func (s *SettingsWatcher) handleKV(
 		if !hasOverride {
 			s.set(ctx, u, name, val)
 		}
+	}
+	if s.storage != nil {
+		return kv
 	}
 	return nil
 }
