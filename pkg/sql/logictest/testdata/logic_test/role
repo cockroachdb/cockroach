@@ -1458,4 +1458,21 @@ hash6  $2a$10$  false
 
 # Reset cluster setting after test completion.
 statement ok
-SET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled = true
+RESET CLUSTER SETTING server.user_login.store_client_pre_hashed_passwords.enabled;
+
+subtest bcrypt_cost
+
+statement ok
+SET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt = 20
+
+statement ok
+CREATE USER hash7 WITH PASSWORD 'hello'
+
+# Check that the configured cost was embedded in the setting.
+query TT
+SELECT username, substr("hashedPassword", 1, 7) FROM system.users WHERE username = 'hash7'
+----
+hash7  $2a$20$
+
+statement ok
+RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.crdb_bcrypt;
