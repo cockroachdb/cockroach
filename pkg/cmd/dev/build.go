@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -34,6 +35,26 @@ const (
 type buildTarget struct {
 	fullName   string
 	isGoBinary bool
+}
+
+type bazelAqueryOutput struct {
+	Artifacts     []bazelAqueryArtifact
+	PathFragments []bazelAqueryPathFragment
+	Configuration []bazelAqueryConfiguration
+}
+
+type bazelAqueryArtifact struct {
+	PathFragmentID int
+}
+
+type bazelAqueryConfiguration struct {
+	Mnemonic string
+}
+
+type bazelAqueryPathFragment struct {
+	ID       int
+	Label    string
+	ParentID int `json:",omitempty"`
 }
 
 // makeBuildCmd constructs the subcommand used to build the specified binaries.
@@ -331,13 +352,43 @@ func (d *dev) hoistGeneratedCode(ctx context.Context, workspace string, bazelBin
 			return err
 		}
 	}
-	// Enumerate generated .go files in the sandbox so we can hoist
-	// them out.
-	cockroachDir := filepath.Join(bazelBin, "go_path", "src", "github.com", "cockroachdb", "cockroach")
-	goFiles, err := d.os.ListFilesWithSuffix(cockroachDir, ".go")
+	// List the files in the built go_path. We do this by running
+	// `bazel aquery` and parsing the results. We should be able to just
+	// list all the .go files in the go_path and copy them directly, but
+	// https://github.com/bazelbuild/rules_go/issues/3041 is in the way.
+	jsonBlob, err := d.exec.CommandContextSilent(ctx, "bazel", "aquery", "--output=jsonproto", "//:go_path")
 	if err != nil {
 		return err
 	}
+	var aqueryOutput bazelAqueryOutput
+	if err := json.Unmarshal(jsonBlob, &aqueryOutput); err != nil {
+		return err
+	}
+	pathFragmentMap := make(map[int]bazelAqueryPathFragment)
+	for _, pathFragment := range aqueryOutput.PathFragments {
+		pathFragmentMap[pathFragment.ID] = pathFragment
+	}
+	var outputFiles []string
+	for _, artifact := range aqueryOutput.Artifacts {
+		fragment := pathFragmentMap[artifact.PathFragmentID]
+		var fullPath string
+		for {
+			fullPath = filepath.Join(fragment.Label, fullPath)
+			if fragment.ParentID == 0 {
+				break
+			}
+			fragment = pathFragmentMap[fragment.ParentID]
+		}
+		outputFiles = append(outputFiles, fullPath)
+	}
+	if len(aqueryOutput.Configuration) != 1 {
+		return fmt.Errorf("expected exactly one configuration in `bazel aquery` output; got %v", aqueryOutput.Configuration)
+	}
+	mnemonic := aqueryOutput.Configuration[0].Mnemonic
+	bazelBinPrefix := filepath.Join("bazel-out", mnemonic, "bin")
+	generatedPrefix := filepath.Join(bazelBinPrefix, "go_path", "src", "github.com", "cockroachdb", "cockroach")
+
+	// Parse out the list of checked-in generated files.
 	fileContents, err := d.os.ReadFile(filepath.Join(workspace, "build/bazelutil/checked_in_genfiles.txt"))
 	if err != nil {
 		return err
@@ -356,19 +407,24 @@ func (d *dev) hoistGeneratedCode(ctx context.Context, workspace string, bazelBin
 		renameMap[filepath.Join(dir, oldBasename)] = filepath.Join(dir, newBasename)
 	}
 
-	for _, file := range goFiles {
+	for _, file := range outputFiles {
+		if !strings.HasPrefix(file, generatedPrefix+"/") {
+			continue
+		}
+		relativeToBazelBin := strings.TrimPrefix(file, bazelBinPrefix+"/")
+		absPath := filepath.Join(bazelBin, relativeToBazelBin)
+		relPath := strings.TrimPrefix(file, generatedPrefix+"/")
 		// First case: generated Go code that's checked into tree.
-		relPath := strings.TrimPrefix(file, cockroachDir+"/")
 		dst, ok := renameMap[relPath]
 		if ok {
-			err := d.os.CopyFile(file, filepath.Join(workspace, dst))
+			err := d.os.CopyFile(absPath, filepath.Join(workspace, dst))
 			if err != nil {
 				return err
 			}
 			continue
 		}
 		// Otherwise, just copy the file to the same place in the workspace.
-		err := d.os.CopyFile(file, filepath.Join(workspace, relPath))
+		err := d.os.CopyFile(absPath, filepath.Join(workspace, relPath))
 		if err != nil {
 			return err
 		}
