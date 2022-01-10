@@ -1122,7 +1122,9 @@ message HotRangesResponse {
   ];
 }
 
+// HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
 message HotRangesResponseV2 {
+  // HotRange message describes a single hot range, ie its QPS, node ID it belongs to, etc.
   message HotRange {
     // range_id indicates Range ID that's identified as hot range
     int32 range_id = 1 [
@@ -1156,6 +1158,8 @@ message HotRangesResponseV2 {
       (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
     ];
+    // schema_name provides the name of schema (if exists) for table in current range
+    string schema_name = 9;
   }
   // ranges contain list of hot ranges info that has highest number of QPS
   repeated HotRange ranges = 1;
