@@ -3243,6 +3243,14 @@ type EvalPlanner interface {
 	// DecodeGist exposes gist functionality to the builtin functions.
 	DecodeGist(gist string) ([]string, error)
 
+	// CreateSessionRevivalToken creates a token that can be used to log in
+	// as the current user, in bytes form.
+	CreateSessionRevivalToken() (*DBytes, error)
+
+	// ValidateSessionRevivalToken checks if the given bytes are a valid
+	// session revival token.
+	ValidateSessionRevivalToken(token *DBytes) (*DBool, error)
+
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
 	//
