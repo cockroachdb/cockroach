@@ -246,7 +246,7 @@ func TestCanReadSystemNamespaceWhenNamedNamespace2(t *testing.T) {
 				       ) AS d
 				  FROM ns_table
                )
-SELECT crdb_internal.unsafe_upsert_descriptor(id, d)
+SELECT crdb_internal.unsafe_upsert_descriptor(id, d, true)
   FROM updated;
 `, keys.NamespaceTableID)
 
