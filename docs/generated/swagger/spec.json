@@ -1018,6 +1018,12 @@
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/util/metric"
     },
+    "RangeID": {
+      "type": "integer",
+      "format": "int64",
+      "title": "A RangeID is a unique ID associated to a Raft consensus group.",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
     "RangeProblems": {
       "type": "object",
       "title": "RangeProblems describes issues reported by a range. For internal use only.",
@@ -1769,6 +1775,46 @@
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
     },
+    "hotRangeInfo": {
+      "description": "Hot range details",
+      "type": "object",
+      "properties": {
+        "database_name": {
+          "type": "string",
+          "x-go-name": "DatabaseName"
+        },
+        "index_name": {
+          "type": "string",
+          "x-go-name": "IndexName"
+        },
+        "leaseholder_node_id": {
+          "$ref": "#/definitions/NodeID"
+        },
+        "node_id": {
+          "$ref": "#/definitions/NodeID"
+        },
+        "qps": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "QPS"
+        },
+        "range_id": {
+          "$ref": "#/definitions/RangeID"
+        },
+        "replica_node_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/NodeID"
+          },
+          "x-go-name": "ReplicaNodeIDs"
+        },
+        "table_name": {
+          "type": "string",
+          "x-go-name": "TableName"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
     "hotRangesResponse": {
       "type": "object",
       "title": "Response struct for listHotRanges.",
@@ -1778,15 +1824,12 @@
           "type": "string",
           "x-go-name": "Next"
         },
-        "ranges_by_node_id": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "$ref": "#/definitions/rangeDescriptorInfo"
-            }
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/hotRangeInfo"
           },
-          "x-go-name": "RangesByNodeID"
+          "x-go-name": "Ranges"
         },
         "response_error": {
           "type": "array",
