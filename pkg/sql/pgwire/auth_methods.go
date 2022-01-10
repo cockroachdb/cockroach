@@ -95,6 +95,19 @@ type AuthMethod = func(
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error)
 
+var _ AuthMethod = authPassword
+var _ AuthMethod = authScram
+var _ AuthMethod = authCert
+var _ AuthMethod = authCertPassword
+var _ AuthMethod = authCertScram
+var _ AuthMethod = authTrust
+var _ AuthMethod = authReject
+
+// authPassword is the AuthMethod constructor for HBA method
+// "password": authenticate using a cleartext password received from
+// the client.
+// It is also the fallback constructor for HBA method "cert-password",
+// when the SQL client does not provide a TLS client certificate.
 func authPassword(
 	_ context.Context,
 	c AuthConn,
@@ -116,6 +129,8 @@ func authPassword(
 	return b, nil
 }
 
+// passwordAuthenticator is the authenticator function for the
+// behavior constructed by authPassword().
 func passwordAuthenticator(
 	ctx context.Context,
 	systemIdentity security.SQLUsername,
@@ -189,6 +204,12 @@ func passwordString(pwdData []byte) (string, error) {
 	return string(pwdData[:len(pwdData)-1]), nil
 }
 
+// authScram is the AuthMethod constructor for HBA method
+// "scram-sha-256": authenticate using a 5-way SCRAM handshake with
+// the client.
+// It is also the fallback constructor for HBA method
+// "cert-scram-sha-256", when the SQL client does not provide a TLS
+// client certificate.
 func authScram(
 	ctx context.Context,
 	c AuthConn,
@@ -210,6 +231,8 @@ func authScram(
 	return b, nil
 }
 
+// passwordAuthenticator is the authenticator function for the
+// behavior constructed by authScram().
 func scramAuthenticator(
 	ctx context.Context,
 	systemIdentity security.SQLUsername,
@@ -359,6 +382,11 @@ func scramAuthenticator(
 	return nil // auth success!
 }
 
+// authCert is the AuthMethod constructor for HBA method "cert":
+// authenticate using TLS client certificates.
+// It is also the fallback constructor for HBA methods "cert-password"
+// and "cert-scram-sha-256" when the SQL client provides a TLS client
+// certificate.
 func authCert(
 	_ context.Context,
 	_ AuthConn,
@@ -391,6 +419,11 @@ func authCert(
 	return b, nil
 }
 
+// authCertPassword is the AuthMethod constructor for HBA method
+// "cert-password": authenticate EITHER using a TLS client cert OR a
+// valid cleartext password (if transmitted over TLS, the password is
+// encrypted by the TLS transport).
+// TLS client cert authn is used iff the client presents a TLS client cert.
 func authCertPassword(
 	ctx context.Context,
 	c AuthConn,
@@ -410,6 +443,10 @@ func authCertPassword(
 	return fn(ctx, c, tlsState, execCfg, entry, identMap)
 }
 
+// authCertPassword is the AuthMethod constructor for HBA method
+// "cert-scram-sha-256": authenticate EITHER using a TLS client cert
+// OR a valid SCRAM exchange.
+// TLS client cert authn is used iff the client presents a TLS client cert.
 func authCertScram(
 	ctx context.Context,
 	c AuthConn,
@@ -429,6 +466,8 @@ func authCertScram(
 	return fn(ctx, c, tlsState, execCfg, entry, identMap)
 }
 
+// authTrust is the AuthMethod constructor for HBA method "trust":
+// always allow the client, do not perform authentication.
 func authTrust(
 	_ context.Context,
 	_ AuthConn,
@@ -445,6 +484,8 @@ func authTrust(
 	return b, nil
 }
 
+// authReject is the AuthMethod constructor for HBA method "reject":
+// never allow the client.
 func authReject(
 	_ context.Context,
 	_ AuthConn,
