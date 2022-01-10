@@ -38,7 +38,7 @@ type BuildCtx interface {
 	PrivilegeChecker
 	DescriptorReader
 	NameResolver
-	NodeEnqueuerAndChecker
+	TargetEnqueuerAndChecker
 	TableElementIDGenerator
 
 	// WithNewSourceElementID wraps BuilderStateWithNewSourceElementID in a
@@ -119,12 +119,10 @@ type AuthorizationAccessor interface {
 // its internal state to anything that ends up using it and only allowing
 // state changes via the provided methods.
 type BuilderState interface {
+	scpb.ElementStatusIterator
 
-	// AddNode adds a node into the NodeAccumulator.
-	AddNode(status, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata)
-
-	// ForEachNode iterates over the accumulated notes in the NodeAccumulator.
-	ForEachNode(fn func(status, targetStatus scpb.Status, elem scpb.Element))
+	// AddElementStatus adds an element into the BuilderState.
+	AddElementStatus(currentStatus, targetStatus scpb.Status, elem scpb.Element, meta scpb.TargetMetadata)
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog
@@ -225,9 +223,9 @@ type NameResolver interface {
 	) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor, catalog.Index)
 }
 
-// NodeEnqueuerAndChecker exposes convenient methods for enqueuing and checking
-// nodes in the NodeAccumulator.
-type NodeEnqueuerAndChecker interface {
+// TargetEnqueuerAndChecker exposes convenient methods for enqueuing and checking
+// nodes in the BuilderState.
+type TargetEnqueuerAndChecker interface {
 	// EnqueueAdd adds a node with a PUBLIC target status.
 	// Panics if the element is already present.
 	EnqueueAdd(elem scpb.Element)
@@ -240,9 +238,9 @@ type NodeEnqueuerAndChecker interface {
 	// panicking if the element is already present.
 	EnqueueDropIfNotExists(elem scpb.Element)
 
-	// HasNode returns true iff the builder state has a node matching the provided
-	// filter function.
-	HasNode(filter func(status, targetStatus scpb.Status, elem scpb.Element) bool) bool
+	// HasElementStatus returns true iff the builder state has an element matching
+	// the provided filter function.
+	HasElementStatus(filter func(currentStatus, targetStatus scpb.Status, elem scpb.Element) bool) bool
 
 	// HasTarget returns true iff the builder state has a node with an equal element
 	// and the same target status, regardless of node status.

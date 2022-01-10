@@ -295,10 +295,11 @@ type AddIndexPartitionInfo struct {
 // LogEvent logs an event for a given descriptor.
 type LogEvent struct {
 	mutationOp
-	DescID       descpb.ID
-	Metadata     scpb.ElementMetadata
-	Element      *scpb.ElementProto
-	TargetStatus scpb.Status
+	TargetMetadata scpb.TargetMetadata
+	Authorization  scpb.Authorization
+	Statement      string
+	Element        scpb.ElementProto
+	TargetStatus   scpb.Status
 }
 
 // SetColumnName makes a column only to allocate
@@ -350,8 +351,9 @@ type AddJobReference struct {
 // declarative schema changer post-commit phases.
 type CreateDeclarativeSchemaChangerJob struct {
 	mutationOp
-	JobID jobspb.JobID
-	State scpb.State
+	JobID       jobspb.JobID
+	TargetState scpb.TargetState
+	Current     []scpb.Status
 }
 
 // UpdateSchemaChangerJob is used to update the progress and payload of the
@@ -359,6 +361,6 @@ type CreateDeclarativeSchemaChangerJob struct {
 type UpdateSchemaChangerJob struct {
 	mutationOp
 	JobID           jobspb.JobID
-	Statuses        []scpb.Status
+	Current         []scpb.Status
 	IsNonCancelable bool
 }

@@ -52,6 +52,9 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		"kv.queue.process.guaranteed_time_budget":                {"17s", "20s"},
 		"sql.txn_stats.sample_rate":                              {.23, .55},
 		"cluster.organization":                                   {"foobar", "bazbax"},
+		// Include a system-only setting to verify that we don't try to change its
+		// value (which would cause a panic in test builds).
+		"kv.snapshot_rebalance.max_rate": {1024, 2048},
 	}
 	fakeTenant := roachpb.MakeTenantID(2)
 	systemTable := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
@@ -73,9 +76,12 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		}
 	}
 	checkSettingsValuesMatch := func(a, b *cluster.Settings) error {
-		for _, k := range settings.Keys() {
-			s, ok := settings.Lookup(k, settings.LookupForLocalAccess)
+		for _, k := range settings.Keys(false /* forSystemTenant */) {
+			s, ok := settings.Lookup(k, settings.LookupForLocalAccess, false /* forSystemTenant */)
 			require.True(t, ok)
+			if s.Class() == settings.SystemOnly {
+				continue
+			}
 			if av, bv := s.String(&a.SV), s.String(&b.SV); av != bv {
 				return errors.Errorf("values do not match for %s: %s != %s", k, av, bv)
 			}
@@ -87,18 +93,19 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	}
 	copySettingsFromSystemToFakeTenant()
 	s0 := tc.Server(0)
-	fakeSettings := cluster.MakeTestingClusterSettings()
-	sw := settingswatcher.New(s0.Clock(), fakeCodec, fakeSettings,
+	tenantSettings := cluster.MakeTestingClusterSettings()
+	tenantSettings.SV.SetNonSystemTenant()
+	sw := settingswatcher.New(s0.Clock(), fakeCodec, tenantSettings,
 		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
 		tc.Stopper())
 	require.NoError(t, sw.Start(ctx))
-	require.NoError(t, checkSettingsValuesMatch(s0.ClusterSettings(), fakeSettings))
+	require.NoError(t, checkSettingsValuesMatch(s0.ClusterSettings(), tenantSettings))
 	for k, v := range toSet {
 		tdb.Exec(t, "SET CLUSTER SETTING "+k+" = $1", v[1])
 	}
 	copySettingsFromSystemToFakeTenant()
 	testutils.SucceedsSoon(t, func() error {
-		return checkSettingsValuesMatch(s0.ClusterSettings(), fakeSettings)
+		return checkSettingsValuesMatch(s0.ClusterSettings(), tenantSettings)
 	})
 }
 
@@ -133,14 +140,14 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 
 	expect := func(setting, value string) {
 		t.Helper()
-		s, ok := settings.Lookup(setting, settings.LookupForLocalAccess)
+		s, ok := settings.Lookup(setting, settings.LookupForLocalAccess, settings.ForSystemTenant)
 		require.True(t, ok)
 		require.Equal(t, value, s.String(&st.SV))
 	}
 
 	expectSoon := func(setting, value string) {
 		t.Helper()
-		s, ok := settings.Lookup(setting, settings.LookupForLocalAccess)
+		s, ok := settings.Lookup(setting, settings.LookupForLocalAccess, settings.ForSystemTenant)
 		require.True(t, ok)
 		testutils.SucceedsSoon(t, func() error {
 			if actual := s.String(&st.SV); actual != value {
@@ -189,7 +196,7 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 	expectSoon("i1", "10")
 
 	// Verify that version cannot be overridden.
-	version, ok := settings.Lookup("version", settings.LookupForLocalAccess)
+	version, ok := settings.Lookup("version", settings.LookupForLocalAccess, settings.ForSystemTenant)
 	require.True(t, ok)
 	versionValue := version.String(&st.SV)
 

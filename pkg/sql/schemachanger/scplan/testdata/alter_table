@@ -21,9 +21,10 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       PgAttributeNum: 2
       TableID: 54
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        column:
+        Column:
           columnId: 2
           familyName: primary
           nullable: true
@@ -33,12 +34,10 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-      Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -56,9 +55,9 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
@@ -168,9 +167,10 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       PgAttributeNum: 2
       TableID: 54
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        column:
+        Column:
           columnId: 2
           defaultExpr: 123:::INT8
           familyName: primary
@@ -181,12 +181,10 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-      Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -204,9 +202,9 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
@@ -318,9 +316,10 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
       PgAttributeNum: 2
       TableID: 54
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        column:
+        Column:
           columnId: 2
           defaultExpr: 123:::INT8
           familyName: primary
@@ -331,12 +330,10 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-      Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 8
     *scop.MakeAddedColumnDeleteOnly
       ColumnID: 3
@@ -350,9 +347,10 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
       PgAttributeNum: 3
       TableID: 54
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        column:
+        Column:
           columnId: 3
           defaultExpr: 456:::INT8
           familyName: primary
@@ -363,13 +361,11 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-      Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
-        TargetMetadata:
-          SourceElementID: 1
-          StatementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
+      TargetMetadata:
+        SourceElementID: 1
+        StatementID: 1
+        SubWorkID: 1
       TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -388,9 +384,9 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
@@ -514,9 +510,10 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       PgAttributeNum: 2
       TableID: 54
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        column:
+        Column:
           columnId: 2
           computerExpr: i + 1:::INT8
           familyName: primary
@@ -527,12 +524,10 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-      Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -550,9 +545,9 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
 PostCommitPhase stage 1 of 4 with 3 MutationType ops
@@ -669,9 +664,10 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
       PgAttributeNum: 2
       TableID: 54
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        column:
+        Column:
           columnId: 2
           familyName: primary
           nullable: true
@@ -681,12 +677,10 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-      Metadata:
-        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -710,9 +704,10 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
       PgAttributeNum: 3
       TableID: 55
     *scop.LogEvent
-      DescID: 55
+      Authorization:
+        UserName: root
       Element:
-        column:
+        Column:
           columnId: 3
           familyName: primary
           nullable: true
@@ -722,13 +717,11 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
-      Metadata:
-        Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
-        TargetMetadata:
-          SourceElementID: 1
-          StatementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
+      TargetMetadata:
+        SourceElementID: 1
+        StatementID: 1
+        SubWorkID: 1
       TargetStatus: 8
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -750,9 +743,9 @@ PreCommitPhase stage 1 of 1 with 9 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
         - statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8

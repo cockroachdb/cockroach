@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -251,8 +250,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var ts scpb.State
-		var targetSlice []*scpb.Target
+		var cs scpb.CurrentState
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -260,16 +258,18 @@ func TestSchemaChanger(t *testing.T) {
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
 
-			// Corresponds to:
-			//
-			//  ALTER TABLE foo ADD COLUMN j INT;
-			//
+			stmts := []scpb.Statement{
+				{
+					Statement: "ALTER TABLE foo ADD COLUMN j INT",
+				},
+			}
 			metadata := &scpb.TargetMetadata{
 				StatementID:     0,
 				SubWorkID:       1,
-				SourceElementID: 1}
-			targetSlice = []*scpb.Target{
-				scpb.NewTarget(
+				SourceElementID: 1,
+			}
+			targets := []scpb.Target{
+				scpb.MakeTarget(
 					scpb.Status_PUBLIC,
 					&scpb.PrimaryIndex{
 						TableID:             fooTable.GetID(),
@@ -280,24 +280,27 @@ func TestSchemaChanger(t *testing.T) {
 						Unique:              true,
 						Inverted:            false,
 					},
-					metadata),
-				scpb.NewTarget(
+					metadata,
+				),
+				scpb.MakeTarget(
 					scpb.Status_PUBLIC,
 					&scpb.IndexName{
 						TableID: fooTable.GetID(),
 						IndexID: 2,
 						Name:    "new_primary_key",
 					},
-					metadata),
-				scpb.NewTarget(
+					metadata,
+				),
+				scpb.MakeTarget(
 					scpb.Status_PUBLIC,
 					&scpb.ColumnName{
 						TableID:  fooTable.GetID(),
 						ColumnID: 2,
 						Name:     "j",
 					},
-					metadata),
-				scpb.NewTarget(
+					metadata,
+				),
+				scpb.MakeTarget(
 					scpb.Status_PUBLIC,
 					&scpb.Column{
 						TableID:        fooTable.GetID(),
@@ -306,8 +309,9 @@ func TestSchemaChanger(t *testing.T) {
 						Nullable:       true,
 						PgAttributeNum: 2,
 					},
-					metadata),
-				scpb.NewTarget(
+					metadata,
+				),
+				scpb.MakeTarget(
 					scpb.Status_ABSENT,
 					&scpb.PrimaryIndex{
 						TableID:             fooTable.GetID(),
@@ -317,107 +321,65 @@ func TestSchemaChanger(t *testing.T) {
 						Unique:              true,
 						Inverted:            false,
 					},
-					metadata),
-				scpb.NewTarget(
+					metadata,
+				),
+				scpb.MakeTarget(
 					scpb.Status_ABSENT,
 					&scpb.IndexName{
 						TableID: fooTable.GetID(),
 						IndexID: 1,
 						Name:    "primary",
 					},
-					metadata),
+					metadata,
+				),
 			}
-
-			nodes := scpb.State{
-				Nodes: []*scpb.Node{
-					{
-						Target: targetSlice[0],
-						Status: scpb.Status_ABSENT,
-					},
-					{
-						Target: targetSlice[1],
-						Status: scpb.Status_ABSENT,
-					},
-					{
-						Target: targetSlice[2],
-						Status: scpb.Status_ABSENT,
-					},
-					{
-						Target: targetSlice[3],
-						Status: scpb.Status_ABSENT,
-					},
-					{
-						Target: targetSlice[4],
-						Status: scpb.Status_PUBLIC,
-					},
-					{
-						Target: targetSlice[5],
-						Status: scpb.Status_PUBLIC,
-					},
-				},
-				Statements: []*scpb.Statement{
-					{},
-				},
+			current := []scpb.Status{
+				scpb.Status_ABSENT,
+				scpb.Status_ABSENT,
+				scpb.Status_ABSENT,
+				scpb.Status_ABSENT,
+				scpb.Status_PUBLIC,
+				scpb.Status_PUBLIC,
+			}
+			initial := scpb.CurrentState{
+				TargetState: scpb.TargetState{Statements: stmts, Targets: targets},
+				Current:     current,
 			}
 
 			for _, phase := range []scop.Phase{
 				scop.StatementPhase,
 				scop.PreCommitPhase,
 			} {
-				sc := sctestutils.MakePlan(t, nodes, phase)
+				sc := sctestutils.MakePlan(t, initial, phase)
 				stages := sc.StagesForCurrentPhase()
 				for _, s := range stages {
 					exDeps := ti.newExecDeps(txn, descriptors)
-					require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
-					ts = s.After
+					require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
+					cs = scpb.CurrentState{TargetState: initial.TargetState, Current: s.After}
 				}
 			}
 			return nil
 		}))
-		var after scpb.State
+		var after scpb.CurrentState
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
+			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
-				after = s.After
+				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
+				after = scpb.CurrentState{TargetState: cs.TargetState, Current: s.After}
 			}
 			return nil
 		}))
-		require.Equal(t, scpb.State{
-			Nodes: []*scpb.Node{
-				{
-					Target: targetSlice[0],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: targetSlice[1],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: targetSlice[2],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: targetSlice[3],
-					Status: scpb.Status_PUBLIC,
-				},
-				{
-					Target: targetSlice[4],
-					Status: scpb.Status_ABSENT,
-				},
-				{
-					Target: targetSlice[5],
-					Status: scpb.Status_ABSENT,
-				},
-			},
-
-			Statements: []*scpb.Statement{
-				{},
-			},
-		}, after)
+		require.Equal(t, []scpb.Status{
+			scpb.Status_PUBLIC,
+			scpb.Status_PUBLIC,
+			scpb.Status_PUBLIC,
+			scpb.Status_PUBLIC,
+			scpb.Status_ABSENT,
+			scpb.Status_ABSENT,
+		}, after.Current)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 	t.Run("with builder", func(t *testing.T) {
@@ -426,7 +388,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE DATABASE db`)
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
-		var ts scpb.State
+		var cs scpb.CurrentState
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -434,18 +396,18 @@ func TestSchemaChanger(t *testing.T) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
 				require.Len(t, parsed, 1)
-				outputNodes, err := scbuild.Build(ctx, buildDeps, scpb.State{}, parsed[0].AST.(*tree.AlterTable))
+				initial, err := scbuild.Build(ctx, buildDeps, scpb.CurrentState{}, parsed[0].AST.(*tree.AlterTable))
 				require.NoError(t, err)
 
 				for _, phase := range []scop.Phase{
 					scop.StatementPhase,
 					scop.PreCommitPhase,
 				} {
-					sc := sctestutils.MakePlan(t, outputNodes, phase)
+					sc := sctestutils.MakePlan(t, initial, phase)
 					for _, s := range sc.StagesForCurrentPhase() {
 						exDeps := ti.newExecDeps(txn, descriptors)
-						require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
-						ts = s.After
+						require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
+						cs = scpb.CurrentState{TargetState: initial.TargetState, Current: s.After}
 					}
 				}
 			})
@@ -454,10 +416,10 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			sc := sctestutils.MakePlan(t, ts, scop.PostCommitPhase)
+			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn, descriptors)
-				require.NoError(t, scgraphviz.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops()), sc))
+				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
 			}
 			return nil
 		}))
@@ -542,7 +504,7 @@ func (noopPartitioner) AddPartitioning(
 type noopEventLogger struct{}
 
 func (noopEventLogger) LogEvent(
-	ctx context.Context, descID descpb.ID, metadata scpb.ElementMetadata, event eventpb.EventPayload,
+	_ context.Context, _ descpb.ID, _ eventpb.CommonSQLEventDetails, _ eventpb.EventPayload,
 ) error {
 	return nil
 }

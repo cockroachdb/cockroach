@@ -36,9 +36,9 @@ import (
 func enqueue(b BuildCtx, targetStatus scpb.Status, elem scpb.Element) {
 	switch targetStatus {
 	case scpb.Status_PUBLIC:
-		b.AddNode(scpb.Status_ABSENT, targetStatus, elem, b.TargetMetadata())
+		b.AddElementStatus(scpb.Status_ABSENT, targetStatus, elem, b.TargetMetadata())
 	case scpb.Status_ABSENT:
-		b.AddNode(scpb.Status_PUBLIC, targetStatus, elem, b.TargetMetadata())
+		b.AddElementStatus(scpb.Status_PUBLIC, targetStatus, elem, b.TargetMetadata())
 	}
 }
 
