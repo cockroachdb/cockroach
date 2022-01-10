@@ -48,6 +48,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_lib_pq//:pq",
+        "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//require",
     ],
 )
