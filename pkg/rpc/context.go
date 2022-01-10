@@ -743,6 +743,48 @@ func (a internalClientAdapter) GossipSubscription(
 	return gsAdapter, nil
 }
 
+type tenantSettingsClientAdapter struct {
+	respStreamClientAdapter
+}
+
+// roachpb.Internal_TenantSettingsServer methods.
+func (a tenantSettingsClientAdapter) Recv() (*roachpb.TenantSettingsEvent, error) {
+	e, err := a.recvInternal()
+	if err != nil {
+		return nil, err
+	}
+	return e.(*roachpb.TenantSettingsEvent), nil
+}
+
+// roachpb.Internal_TenantSettingsServer methods.
+func (a tenantSettingsClientAdapter) Send(e *roachpb.TenantSettingsEvent) error {
+	return a.sendInternal(e)
+}
+
+var _ roachpb.Internal_TenantSettingsClient = tenantSettingsClientAdapter{}
+var _ roachpb.Internal_TenantSettingsServer = tenantSettingsClientAdapter{}
+
+// TenantSettings is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) TenantSettings(
+	ctx context.Context, args *roachpb.TenantSettingsRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_TenantSettingsClient, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	gsAdapter := tenantSettingsClientAdapter{
+		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
+	}
+
+	go func() {
+		defer cancel()
+		err := a.server.TenantSettings(args, gsAdapter)
+		if err == nil {
+			err = io.EOF
+		}
+		gsAdapter.errC <- err
+	}()
+
+	return gsAdapter, nil
+}
+
 var _ roachpb.InternalClient = internalClientAdapter{}
 
 // IsLocal returns true if the given InternalClient is local.
