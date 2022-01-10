@@ -308,10 +308,13 @@ func newJoinReader(
 	jr.colIdxMap = catalog.ColumnIDToOrdinalMap(cols)
 	columnTypes := catalog.ColumnTypes(cols)
 
-	columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
-	indexCols := make([]uint32, len(columnIDs))
-	for i, columnID := range columnIDs {
-		indexCols[i] = uint32(columnID)
+	columns := jr.desc.IndexFullColumns(jr.index)
+	indexCols := make([]uint32, len(columns))
+	for i, col := range columns {
+		if col == nil {
+			continue
+		}
+		indexCols[i] = uint32(col.GetID())
 	}
 
 	// Add all requested system columns to the output.
@@ -430,7 +433,7 @@ func newJoinReader(
 	jr.MemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
-	if err := jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType); err != nil {
+	if err := jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columns), rightCols, readerType); err != nil {
 		return nil, err
 	}
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
@@ -471,9 +474,12 @@ func (jr *joinReader) initJoinReaderStrategy(
 		// localityOptimizedSpanGenerator, which support looking up multiple spans
 		// per input row.
 		tableOrdToIndexOrd := util.FastIntMap{}
-		columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
-		for i, colID := range columnIDs {
-			tabOrd := jr.colIdxMap.GetDefault(colID)
+		columns := jr.desc.IndexFullColumns(jr.index)
+		for i, col := range columns {
+			if col == nil {
+				continue
+			}
+			tabOrd := jr.colIdxMap.GetDefault(col.GetID())
 			tableOrdToIndexOrd.Set(tabOrd, i)
 		}
 

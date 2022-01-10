@@ -215,14 +215,18 @@ func newInvertedJoiner(
 
 	// Initialize tableRow, indexRow, indexRowTypes, and indexRowToTableRowMap,
 	// a mapping from indexRow column ordinal to tableRow column ordinals.
-	indexColumnIDs, _ := catalog.FullIndexColumnIDs(ij.index)
+	indexColumns := ij.desc.IndexFullColumns(ij.index)
 	// Inverted joins are not used for mutations.
 	ij.tableRow = make(rowenc.EncDatumRow, len(ij.desc.PublicColumns()))
-	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
+	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumns)-1)
 	ij.indexRowTypes = make([]*types.T, len(ij.indexRow))
 	ij.indexRowToTableRowMap = make([]int, len(ij.indexRow))
 	indexRowIdx := 0
-	for _, colID := range indexColumnIDs {
+	for _, col := range indexColumns {
+		if col == nil {
+			continue
+		}
+		colID := col.GetID()
 		// Do not include the inverted column in the map.
 		if colID == ij.invertedColID {
 			continue
@@ -308,8 +312,11 @@ func newInvertedJoiner(
 	// here. For now, we do the simple thing, since we have no idea whether
 	// such workloads actually occur in practice.
 	allIndexCols := util.MakeFastIntSet()
-	for _, colID := range indexColumnIDs {
-		allIndexCols.Add(ij.colIdxMap.GetDefault(colID))
+	for _, col := range indexColumns {
+		if col == nil {
+			continue
+		}
+		allIndexCols.Add(ij.colIdxMap.GetDefault(col.GetID()))
 	}
 	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
 	// and so do not need to see in-progress schema changes.

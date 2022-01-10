@@ -433,12 +433,16 @@ func (z *zigzagJoiner) setupInfo(
 	indexOrdinal := spec.IndexOrdinals[side]
 	info.index = info.table.ActiveIndexes()[indexOrdinal]
 
-	var columnIDs []descpb.ColumnID
-	columnIDs, info.indexDirs = catalog.FullIndexColumnIDs(info.index)
-	info.indexTypes = make([]*types.T, len(columnIDs))
+	info.indexDirs = info.table.IndexFullColumnDirections(info.index)
+	columns := info.table.IndexFullColumns(info.index)
+	info.indexTypes = make([]*types.T, len(columns))
 	columnTypes := catalog.ColumnTypes(info.table.PublicColumns())
 	colIdxMap := catalog.ColumnIDToOrdinalMap(info.table.PublicColumns())
-	for i, columnID := range columnIDs {
+	for i, col := range columns {
+		if col == nil {
+			continue
+		}
+		columnID := col.GetID()
 		if info.index.GetType() == descpb.IndexDescriptor_INVERTED &&
 			columnID == info.index.InvertedColumnID() {
 			// Inverted key columns have type Bytes.
@@ -458,7 +462,7 @@ func (z *zigzagJoiner) setupInfo(
 
 	// Add the fixed columns.
 	for i := 0; i < len(info.fixedValues); i++ {
-		neededCols.Add(colIdxMap.GetDefault(columnIDs[i]))
+		neededCols.Add(colIdxMap.GetDefault(columns[i].GetID()))
 	}
 
 	// Add the equality columns.

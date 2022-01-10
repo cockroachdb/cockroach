@@ -377,10 +377,9 @@ func (rf *cFetcher) Init(
 		table.orderedColIdxMap.vals = make(descpb.ColumnIDs, 0, nCols)
 		table.orderedColIdxMap.ords = make([]int, 0, nCols)
 	}
-	colDescriptors := tableArgs.cols
-	for i := range colDescriptors {
+	for _, col := range tableArgs.cols {
 		//gcassert:bce
-		id := colDescriptors[i].GetID()
+		id := col.GetID()
 		table.orderedColIdxMap.vals = append(table.orderedColIdxMap.vals, id)
 		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
 	}
@@ -408,7 +407,7 @@ func (rf *cFetcher) Init(
 			nonSystemColOffset = 0
 		}
 		for idx := nonSystemColOffset; idx < nCols; idx++ {
-			col := colDescriptors[idx].GetID()
+			colID := tableArgs.cols[idx].GetID()
 			// Set up extra metadata for system columns, if this is a system
 			// column.
 			//
@@ -416,7 +415,7 @@ func (rf *cFetcher) Init(
 			// but we don't want to include them in that set because the
 			// handling of system columns is separate from the standard value
 			// decoding process.
-			switch colinfo.GetSystemColumnKindFromColumnID(col) {
+			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
 			case descpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
 				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
@@ -430,26 +429,27 @@ func (rf *cFetcher) Init(
 
 	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc.GetID(), table.index.GetID()))
 
-	var indexColumnIDs []descpb.ColumnID
-	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)
+	table.indexColumnDirs = table.desc.IndexFullColumnDirections(table.index)
+	fullColumns := table.desc.IndexFullColumns(table.index)
 
-	compositeColumnIDs := util.MakeFastIntSet()
-	for i := 0; i < table.index.NumCompositeColumns(); i++ {
-		id := table.index.GetCompositeColumnID(i)
-		compositeColumnIDs.Add(int(id))
-	}
+	compositeColumnIDs := table.index.CollectCompositeColumnIDs()
 
-	nIndexCols := len(indexColumnIDs)
+	nIndexCols := len(fullColumns)
 	if cap(table.indexColOrdinals) >= nIndexCols {
 		table.indexColOrdinals = table.indexColOrdinals[:nIndexCols]
 	} else {
 		table.indexColOrdinals = make([]int, nIndexCols)
 	}
 	indexColOrdinals := table.indexColOrdinals
-	_ = indexColOrdinals[len(indexColumnIDs)-1]
+	_ = indexColOrdinals[len(fullColumns)-1]
 	needToDecodeDecimalKey := false
-	for i, id := range indexColumnIDs {
-		colIdx, ok := tableArgs.ColIdxMap.Get(id)
+	for i, col := range fullColumns {
+		if col == nil {
+			//gcassert:bce
+			indexColOrdinals[i] = -1
+			continue
+		}
+		colIdx, ok := tableArgs.ColIdxMap.Get(col.GetID())
 		if ok {
 			//gcassert:bce
 			indexColOrdinals[i] = colIdx
@@ -457,7 +457,7 @@ func (rf *cFetcher) Init(
 			needToDecodeDecimalKey = needToDecodeDecimalKey || tableArgs.typs[colIdx].Family() == types.DecimalFamily
 			// A composite column might also have a value encoding which must be
 			// decoded. Others can be removed from neededValueColsByIdx.
-			if compositeColumnIDs.Contains(int(id)) {
+			if compositeColumnIDs.Contains(col.GetID()) {
 				table.compositeIndexColOrdinals.Add(colIdx)
 			} else {
 				table.neededValueColsByIdx.Remove(colIdx)
@@ -495,7 +495,7 @@ func (rf *cFetcher) Init(
 			id := table.index.GetKeySuffixColumnID(i)
 			colIdx, ok := tableArgs.ColIdxMap.Get(id)
 			if ok {
-				if compositeColumnIDs.Contains(int(id)) {
+				if compositeColumnIDs.Contains(id) {
 					table.compositeIndexColOrdinals.Add(colIdx)
 					table.neededValueColsByIdx.Remove(colIdx)
 				}
@@ -504,18 +504,14 @@ func (rf *cFetcher) Init(
 	}
 
 	// Prepare our index key vals slice.
-	table.keyValTypes = colinfo.GetColumnTypesFromColDescs(
-		colDescriptors, indexColumnIDs, table.keyValTypes,
-	)
+	table.keyValTypes = getColumnTypesFromCols(fullColumns, table.keyValTypes)
 	if table.index.NumKeySuffixColumns() > 0 {
 		// Unique secondary indexes have a value that is the
 		// primary index key.
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		table.extraTypes = colinfo.GetColumnTypesFromColDescs(
-			colDescriptors, table.index.IndexDesc().KeySuffixColumnIDs, table.extraTypes,
-		)
+		table.extraTypes = getColumnTypesFromCols(table.desc.IndexKeySuffixColumns(table.index), table.extraTypes)
 		nExtraColumns := table.index.NumKeySuffixColumns()
 		if cap(table.extraValColOrdinals) >= nExtraColumns {
 			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
@@ -566,6 +562,21 @@ func (rf *cFetcher) Init(
 	rf.accountingHelper.Init(allocator, rf.table.typs)
 
 	return nil
+}
+
+func getColumnTypesFromCols(cols []catalog.Column, outTypes []*types.T) []*types.T {
+	if cap(outTypes) < len(cols) {
+		outTypes = make([]*types.T, len(cols))
+	} else {
+		outTypes = outTypes[:len(cols)]
+	}
+	for i, col := range cols {
+		if col == nil {
+			continue
+		}
+		outTypes[i] = col.GetType()
+	}
+	return outTypes
 }
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
