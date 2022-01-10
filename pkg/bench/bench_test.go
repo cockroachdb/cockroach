@@ -1222,9 +1222,9 @@ func BenchmarkIndexJoin(b *testing.B) {
 				 FAMILY "primary" (k, v, extra)
 		 )
 		`
-		// We'll insert 1000 rows with random values below 1000 in the index. We'll
-		// then query the index with a query that retrieves all the data (but the
-		// optimizer doesn't know that).
+		// We'll insert 1000 rows with random values below 1000 in the index.
+		// We'll then force scanning of the secondary index which will require
+		// performing an index join to get 'extra' column.
 		insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
 
 		db.Exec(b, create)
@@ -1232,7 +1232,7 @@ func BenchmarkIndexJoin(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, "select * from bench.tidx where v < 1000")
+			db.Exec(b, "select * from bench.tidx@idx where v < 1000")
 		}
 	})
 }
