@@ -327,7 +327,7 @@ DROP INDEX t_secondary CASCADE;
 ALTER TABLE t DROP COLUMN b;
 INSERT INTO t SELECT a + 1 FROM t;
 
-statement error pgcode 23505 duplicate key value got decoding error: column-id "2" does not exist
+statement error pgcode 23505 duplicate key value got decoding error: column does not exist
 UPSERT INTO t SELECT a + 1 FROM t;
 
 statement ok

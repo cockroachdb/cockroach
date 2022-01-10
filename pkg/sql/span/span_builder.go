@@ -70,15 +70,14 @@ func MakeBuilder(
 		neededFamilies: nil,
 	}
 
-	var columnIDs descpb.ColumnIDs
-	columnIDs, s.indexColDirs = catalog.FullIndexColumnIDs(index)
-	if cap(s.indexColTypes) < len(columnIDs) {
-		s.indexColTypes = make([]*types.T, len(columnIDs))
+	s.indexColDirs = s.table.IndexFullColumnDirections(index)
+	columns := s.table.IndexFullColumns(index)
+	if cap(s.indexColTypes) < len(columns) {
+		s.indexColTypes = make([]*types.T, len(columns))
 	} else {
-		s.indexColTypes = s.indexColTypes[:len(columnIDs)]
+		s.indexColTypes = s.indexColTypes[:len(columns)]
 	}
-	for i, colID := range columnIDs {
-		col, _ := table.FindColumnWithID(colID)
+	for i, col := range columns {
 		// TODO (rohany): do I need to look at table columns with mutations here as well?
 		if col != nil && col.Public() {
 			s.indexColTypes[i] = col.GetType()

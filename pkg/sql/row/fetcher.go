@@ -361,28 +361,33 @@ func (rf *Fetcher) Init(
 		rowenc.MakeIndexKeyPrefix(codec, table.desc.GetID(), table.index.GetID()),
 	)
 
-	var indexColumnIDs []descpb.ColumnID
-	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)
+	table.indexColumnDirs = table.desc.IndexFullColumnDirections(table.index)
+	fullColumns := table.desc.IndexFullColumns(table.index)
 
 	table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
 	neededIndexCols := 0
-	nIndexCols := len(indexColumnIDs)
+	nIndexCols := len(fullColumns)
 	if cap(table.indexColIdx) >= nIndexCols {
 		table.indexColIdx = table.indexColIdx[:nIndexCols]
 	} else {
 		table.indexColIdx = make([]int, nIndexCols)
 	}
-	for i, id := range indexColumnIDs {
+	for i, col := range fullColumns {
+		if col == nil {
+			table.indexColIdx[i] = -1
+			continue
+		}
+		id := col.GetID()
 		colIdx, ok := table.colIdxMap.Get(id)
 		if ok {
 			table.indexColIdx[i] = colIdx
-			if table.neededCols.Contains(int(id)) {
+			if table.neededCols.Contains(int(col.GetID())) {
 				neededIndexCols++
 				table.neededValueColsByIdx.Remove(colIdx)
 			}
 		} else {
 			table.indexColIdx[i] = -1
-			if table.neededCols.Contains(int(id)) {
+			if table.neededCols.Contains(int(col.GetID())) {
 				return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
 			}
 		}
@@ -421,7 +426,7 @@ func (rf *Fetcher) Init(
 	}
 
 	// Prepare our index key vals slice.
-	table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs, table.keyValTypes)
+	table.keyValTypes, err = getColumnTypes(fullColumns, table.keyValTypes)
 	if err != nil {
 		return err
 	}
@@ -437,8 +442,9 @@ func (rf *Fetcher) Init(
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.IndexDesc().KeySuffixColumnIDs, table.extraTypes)
-		nExtraColumns := table.index.NumKeySuffixColumns()
+		keySuffixCols := table.desc.IndexKeySuffixColumns(table.index)
+		table.extraTypes, err = getColumnTypes(keySuffixCols, table.extraTypes)
+		nExtraColumns := len(keySuffixCols)
 		if cap(table.extraVals) >= nExtraColumns {
 			table.extraVals = table.extraVals[:nExtraColumns]
 		} else {
@@ -451,6 +457,21 @@ func (rf *Fetcher) Init(
 
 	rf.numKeysPerRow, err = table.desc.KeysPerRow(table.index.GetID())
 	return err
+}
+
+func getColumnTypes(columns []catalog.Column, outTypes []*types.T) ([]*types.T, error) {
+	if cap(outTypes) < len(columns) {
+		outTypes = make([]*types.T, len(columns))
+	} else {
+		outTypes = outTypes[:len(columns)]
+	}
+	for i, col := range columns {
+		if col == nil || !col.Public() {
+			return nil, fmt.Errorf("column does not exist")
+		}
+		outTypes[i] = col.GetType()
+	}
+	return outTypes, nil
 }
 
 // GetTable returns the table that this Fetcher was initialized with.
