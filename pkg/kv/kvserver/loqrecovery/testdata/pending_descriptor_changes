@@ -1,0 +1,279 @@
+# Tests verifying handling of pending descriptor changes from raft log
+
+# Check that ranges with pending descriptor changes where the change removes current replica are
+# unsafe to proceed with.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 2}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 14
+  DescriptorUpdates:  # pending replica updates in the descriptor would make it unsafe to proceed
+  - Type: 2
+    Replicas:
+    - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 10
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+ERROR: loss of quorum recovery error
+range has unapplied descriptor change that removes current replica
+  r2: /{Table/1-Max}
+
+
+# Check that ranges with pending descriptor with split or merge are blocking plan creation
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2  # replica with uncommitted descriptor updates
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11  # this is preferred replica with higher applied index
+  RaftCommittedIndex: 14
+  DescriptorUpdates:
+  - { Type: 0, RangeID: 3, StartKey: /Table/2, EndKey: /Max}
+  - { Type: 1, RangeID: 3, StartKey: /Table/2, EndKey: /Max}
+- StoreID: 2
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10    # applied index takes precedence over store ID so this replica loses
+  RaftCommittedIndex: 10   # committed index while higher, should not confuse planner and use applied index
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+ERROR: loss of quorum recovery error
+range has unapplied split operation
+  r2, /{Table/1-Max} rhs r3, /{Table/2-Max}
+range has unapplied merge operation
+  r2, /{Table/1-Max} with r3, /{Table/2-Max}
+
+
+# Check that ranges with pending descriptor changes where the change removes other replicas are
+# considered safe to proceed with.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 14
+  DescriptorUpdates:
+  - Type: 2  # pending descriptor update where replicas 2 3 are replaced with 4 which is considered safe
+    Replicas:
+    - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+make-plan
+----
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 14
+  NextReplicaID: 15
+- RangeID: 2
+  StartKey: /Table/1
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 14
+  NextReplicaID: 15
+
+
+# Check that if descriptor didn't lose quorum, we should not fail if raft log contains future changes
+# that we think is unsafe. We should leave descriptor as-it.
+replication-data
+- StoreID: 1
+  RangeID: 1  # healthy range to maintain keyspace coverage
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2  # range which still has quorum, but unsafe changes for descriptor in raft log
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 14
+  DescriptorUpdates:
+  - Type: 2  # pending descriptor update where replicas 1 is replaced with 5 which is unsafe
+    Replicas:
+    - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+- StoreID: 2
+  RangeID: 1  # healthy range to maintain keyspace coverage
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 10  # this descriptor doesn't know the changes yet, but it maintains quorum
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+[]
+
+
+# Check that if non survivor replica has pending changes, it doesn't prevent recovery from
+# proceeding.
+replication-data
+- StoreID: 1
+  RangeID: 1  # this range lost quorum and other replica is not up to date with descriptor
+              # but it shouldn't prevent this descriptor from becoming designated as survivor
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 6}
+  RangeAppliedIndex: 15
+  RaftCommittedIndex: 15
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 15  # This descriptor didn't apply the changes yet
+  DescriptorUpdates:
+  - Type: 2  # Pending descriptor update where replica 2 is replaced with 6 which is unsafe
+    Replicas:
+    - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+    - { NodeID: 6, StoreID: 6, ReplicaID: 6}
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 17
+  NextReplicaID: 18
