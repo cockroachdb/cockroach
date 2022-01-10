@@ -13,6 +13,7 @@ package ts_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"io"
 	"reflect"
 	"sort"
@@ -291,6 +292,45 @@ func TestServerQueryStarvation(t *testing.T) {
 		Queries:    queries,
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestServerMemoryCap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	tsDB := ts.NewDB(s.DB(), s.ClusterSettings())
+	monitor := &mon.BytesMonitor{}
+
+	MiB := 1024 * 1024
+	GiB := MiB * 1024
+	tcs := []struct {
+		poolSize              int64
+		expectedTsDBWorkerMax int64
+		clusterConfigOverride int64
+	}{
+		// Default target is 1/128 of pool size.
+		{poolSize: int64(2 * GiB), expectedTsDBWorkerMax: int64(64 * MiB)},
+		{poolSize: int64(32 * GiB), expectedTsDBWorkerMax: int64(256 * MiB)},
+		{poolSize: int64(48 * GiB), expectedTsDBWorkerMax: int64(256 * MiB)},
+		{poolSize: int64(64 * GiB), expectedTsDBWorkerMax: int64(512 * MiB)},
+		// In these cases, we override the ratio to half the size expected above.
+		{poolSize: int64(32 * GiB), expectedTsDBWorkerMax: int64(128 * MiB), clusterConfigOverride: 256},
+		{poolSize: int64(64 * GiB), expectedTsDBWorkerMax: int64(256 * MiB), clusterConfigOverride: 256},
+	}
+
+	for _, tc := range tcs {
+		t.Run(fmt.Sprintf("%d pool should have %d worker max memory", tc.poolSize, tc.expectedTsDBWorkerMax),
+			func(t *testing.T) {
+				if tc.clusterConfigOverride > 0 {
+					_, err := db.Exec(fmt.Sprintf("set cluster setting server.ts.ratio_of_sql_memory_pool = %d", tc.clusterConfigOverride))
+					require.NoError(t, err)
+				}
+				s := ts.MakeServer(s.AmbientCtx(), tsDB, nil, ts.ServerConfig{}, tc.poolSize, monitor, s.ClusterSettings(), s.Stopper())
+				require.Equal(t, tc.expectedTsDBWorkerMax, s.GetQueryWorkerMax())
+			})
 	}
 }
 

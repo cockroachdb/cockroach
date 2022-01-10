@@ -12,11 +12,14 @@ package ts
 
 import (
 	"context"
+	"github.com/cockroachdb/errors"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,6 +48,24 @@ const (
 	// command.
 	dumpBatchSize = 100
 )
+
+var TSDBRatioOfSQLMemoryPool = func() *settings.IntSetting {
+	s := settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"server.ts.ratio_of_sql_memory_pool",
+		"sets the target memory allocation to the tsdb as a fraction of the SQL memory pool "+
+			"(a setting of 128 sets the memory pool to be 1/128 of the SQL mem pool). "+
+			"Set to zero to disable memory growth for the tsdb and cap at 64MiB. This setting is experimental.",
+		128,
+		func(i int64) error {
+			if i < 0 {
+				return errors.New("value should be non-negative.")
+			}
+			return nil
+		},
+	)
+	return s
+}()
 
 // ClusterNodeCountFn is a function that returns the number of nodes active on
 // the cluster.
@@ -104,9 +125,13 @@ func MakeServer(
 	db *DB,
 	nodeCountFn ClusterNodeCountFn,
 	cfg ServerConfig,
+	memoryPoolSize int64,
+	memoryMonitor *mon.BytesMonitor,
+	settings *cluster.Settings,
 	stopper *stop.Stopper,
 ) Server {
 	ambient.AddLogTag("ts-srv", nil)
+	ctx := ambient.AnnotateCtx(context.Background())
 
 	// Override default values from configuration.
 	queryWorkerMax := queryWorkerMax
@@ -114,40 +139,54 @@ func MakeServer(
 		queryWorkerMax = cfg.QueryWorkerMax
 	}
 	queryMemoryMax := queryMemoryMax
+	targetMemRatio := TSDBRatioOfSQLMemoryPool.Get(&settings.SV)
+	if targetMemRatio > 0 {
+		// Double size until we hit 1/128 of the memory pool setting. Our
+		// typical default here is 64 MiB which corresponds to a pool of 2 GiB
+		// which corresponds to 8 GiB of system memory (assuming a default
+		// setting of 25% for the pool).
+		memoryCap := memoryPoolSize / targetMemRatio
+		for queryMemoryMax <= memoryCap/2 {
+			queryMemoryMax = queryMemoryMax * 2
+		}
+		log.Infof(ctx, "ts: setting query memory max to %d bytes", queryMemoryMax)
+	}
 	if cfg.QueryMemoryMax != 0 {
 		queryMemoryMax = cfg.QueryMemoryMax
 	}
 	workerSem := quotapool.NewIntPool("ts.Server worker", uint64(queryWorkerMax))
 	stopper.AddCloser(workerSem.Closer("stopper"))
-	return Server{
+	s := Server{
 		AmbientContext: ambient,
 		db:             db,
 		stopper:        stopper,
 		nodeCountFn:    nodeCountFn,
-		workerMemMonitor: mon.NewUnlimitedMonitor(
-			context.Background(),
+		workerMemMonitor: mon.NewMonitorInheritWithLimit(
 			"timeseries-workers",
-			mon.MemoryResource,
-			nil,
-			nil,
-			// Begin logging messages if we exceed our planned memory usage by
-			// more than double.
 			queryMemoryMax*2,
-			db.st,
+			memoryMonitor,
 		),
-		resultMemMonitor: mon.NewUnlimitedMonitor(
-			context.Background(),
+		resultMemMonitor: mon.NewMonitorInheritWithLimit(
 			"timeseries-results",
-			mon.MemoryResource,
-			nil,
-			nil,
 			math.MaxInt64,
-			db.st,
+			memoryMonitor,
 		),
 		queryMemoryMax: queryMemoryMax,
 		queryWorkerMax: queryWorkerMax,
 		workerSem:      workerSem,
 	}
+
+	s.workerMemMonitor.Start(ctx, memoryMonitor, mon.BoundAccount{})
+	stopper.AddCloser(stop.CloserFn(func() {
+		s.workerMemMonitor.Stop(ctx)
+	}))
+
+	s.resultMemMonitor.Start(ambient.AnnotateCtx(context.Background()), memoryMonitor, mon.BoundAccount{})
+	stopper.AddCloser(stop.CloserFn(func() {
+		s.resultMemMonitor.Stop(ctx)
+	}))
+
+	return s
 }
 
 // RegisterService registers the GRPC service.
@@ -445,4 +484,15 @@ func dumpTimeseriesAllSources(
 		}
 	}
 	return nil
+}
+
+// GetQueryWorkerMax is used by tests to verify the memory caps.
+func (s *Server) GetQueryWorkerMax() int64 {
+	return s.queryMemoryMax
+}
+
+// GetQueryMemoryMax returns the soft memory limit on all running
+// queries.
+func (s *Server) GetQueryMemoryMax() int64 {
+	return s.queryMemoryMax
 }
