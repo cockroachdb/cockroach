@@ -121,6 +121,7 @@ ALL_TESTS = [
     "//pkg/kv/kvclient/kvstreamer:kvstreamer_test",
     "//pkg/kv/kvclient/rangecache:rangecache_test",
     "//pkg/kv/kvclient/rangefeed/rangefeedbuffer:rangefeedbuffer_test",
+    "//pkg/kv/kvclient/rangefeed/rangefeedcache:rangefeedcache_test",
     "//pkg/kv/kvclient/rangefeed:rangefeed_test",
     "//pkg/kv/kvnemesis:kvnemesis_test",
     "//pkg/kv/kvprober:kvprober_test",
