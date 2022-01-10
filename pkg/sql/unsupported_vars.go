@@ -86,7 +86,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"default_transaction_deferrable",
 	// "default_transaction_isolation",
 	// "default_transaction_read_only",
-	"default_with_oids",
+	// "default_with_oids",
 	"dynamic_library_path",
 	"effective_cache_size",
 	"enable_bitmapscan",

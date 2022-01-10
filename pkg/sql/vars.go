@@ -1039,6 +1039,9 @@ var varGen = map[string]sessionVar{
 	// be changed to `on`.
 	`backslash_quote`: makeCompatStringVar(`backslash_quote`, `safe_encoding`),
 
+	// See https://www.postgresql.org/docs/9.5/runtime-config-compatible.html
+	`default_with_oids`: makeCompatBoolVar(`default_with_oids`, false, false),
+
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
 	`max_identifier_length`: {
