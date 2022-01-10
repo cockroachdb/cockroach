@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1455,6 +1456,11 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
 	return &cpy
+}
+
+// Timestamp is part of rangefeedbuffer.Event.
+func (e *RangeFeedValue) Timestamp() hlc.Timestamp {
+	return e.Value.Timestamp
 }
 
 // MakeReplicationChanges returns a slice of changes of the given type with an
