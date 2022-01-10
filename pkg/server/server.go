@@ -553,13 +553,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.AmbientCtx, st, nodeDialer, grpcServer.Server, stopper,
 	)
 
-	tsDB := ts.NewDB(db, cfg.Settings)
-	registry.AddMetricStruct(tsDB.Metrics())
-	nodeCountFn := func() int64 {
-		return nodeLiveness.Metrics().LiveNodes.Value()
-	}
-	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
-
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
@@ -608,6 +601,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	stopper.AddCloser(stop.CloserFn(func() {
 		kvMemoryMonitor.Stop(ctx)
 	}))
+
+	tsDB := ts.NewDB(db, cfg.Settings)
+	registry.AddMetricStruct(tsDB.Metrics())
+	nodeCountFn := func() int64 {
+		return nodeLiveness.Metrics().LiveNodes.Value()
+	}
+	sTS := ts.MakeServer(
+		cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig,
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor, stopper,
+	)
 
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:       cfg.DefaultZoneConfig.AsSpanConfig(),
