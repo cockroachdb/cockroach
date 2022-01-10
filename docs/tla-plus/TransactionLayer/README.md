@@ -26,10 +26,10 @@ Tansaction1 has 2 case :
 Thus we have 2 initial state because of 2 cases of transaction-1.  
 
 ## Use CRDB's strategy to handle these three transactions. 
-### 5 state transitions are defined in specification to handle transactions. It mainly includes:  
+### 4 state transitions are defined in specification to handle transactions. It mainly includes:  
 - Begin a transaction and record information to transaction record(**BeginTransaction**).  
 - Using write pipeline to execute commands in every transations(**PipeLineWrite**).  
-- When all commands in a transaction is completed, its status should be changed to "staging"(**StartParallelCommit**), then check whether all inflight write have successfully persisted, if it is true, its status should be changed to "completed"(**CheckInflightAndCommit**).  
+- When all commands in a transaction is completed, its status should be changed to "staging", then check whether all inflight write have successfully persisted, if it is true, its status should be changed to "completed"(**CommitTransaction**).  
 - The write intent of the committed transaction can be persisted to MVCC data at any time(**CleanIntentWrite**).  
 
 ### In the pipelinewrite section, transaction conflicts may occur, The processing logic is as follows:  
@@ -49,9 +49,9 @@ Thus we have 2 initial state because of 2 cases of transaction-1.
 
 ## Check invariants and properties during and at the end of the run.  
 There are many invariants and properties, and the most important one is:  
-***Strategy of handling conflict is correct.***
-  
-Because of serializable isolation level, the transaction execution result shall be consistent with the result executed in ascending timestamp order.
+***Strategy of handling conflict is correct.***  
+Because of SSI, the result should be one of the six sort order(123,132,231,213,321,312) execution results of three transactions.  
+Further more, we can use timestamp to choose which one is expected in these six sort order execution results.  
 Thus, transactions are sorted in ascending timestamp order.
 
 E.g.,three transactions and timestamp when them end(if all "committed") are as follows:  
