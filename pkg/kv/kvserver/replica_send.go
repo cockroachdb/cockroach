@@ -158,7 +158,7 @@ func (r *Replica) sendWithRangeID(
 		} else if le := (&roachpb.NotLeaseHolderError{}); errors.As(err, &le) {
 			// When a lease acquisition is short-circuited by the breaker, it will return an opaque
 			// NotLeaseholderError, which we replace with the breaker's error.
-			rErr = roachpb.NewError(brErr)
+			rErr = roachpb.NewError(errors.CombineErrors(brErr, le))
 		}
 	}()
 	// NB: having this below the defer allows the defer to potentially annotate

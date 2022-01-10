@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/errors/errorspb"
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
 	"github.com/cockroachdb/redact"
-	"github.com/gogo/protobuf/proto"
 )
 
 // ClientVisibleRetryError is to be implemented by errors visible by
@@ -655,62 +654,6 @@ func (e *AmbiguousResultError) message(_ *Error) string {
 		return fmt.Sprintf("result is ambiguous (%v)", e.WrappedErr)
 	}
 	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
-}
-
-// var _ errors.SafeFormatter = (*ReplicaUnavailableError)(nil)
-var _ fmt.Formatter = (*ReplicaUnavailableError)(nil)
-
-// SafeFormatError implements errors.SafeFormatter.
-// TODO(tbg): giving up, this always gives me infinite recursion. It doesn't
-// seem as though redact.Sprint checks for SafeFormatError first, instead
-// it calls Error(), so I can't implement Error() via `redact.Sprint`. Ask Raphael.
-// func (e *ReplicaUnavailableError) SafeFormatError(p errors.Printer) error {
-// 	p.Printf("replica %s unable to serve request to %s", e.Replica, e.Desc)
-// 	return nil
-// }
-
-// Format implements fmt.Formatter.
-func (e *ReplicaUnavailableError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
-
-func (e *ReplicaUnavailableError) Error() string {
-	return fmt.Sprintf("replica %s unable to serve request to %s", e.Replica, e.Desc)
-	//return redact.Sprint(e).StripMarkers()
-}
-
-func (e *ReplicaUnavailableError) String() string {
-	return e.Error()
-}
-
-func NewReplicaUnavailableError(desc *RangeDescriptor, replDesc ReplicaDescriptor) error {
-	return &ReplicaUnavailableError{
-		Desc:    *desc,
-		Replica: replDesc,
-	}
-}
-
-func init() {
-	typeKey := errors.GetTypeKey((*ReplicaUnavailableError)(nil))
-	errors.RegisterLeafEncoder(typeKey, encodeReplicaUnavailableError)
-	errors.RegisterLeafDecoder(typeKey, decodeReplicaUnavailableError)
-}
-
-func encodeReplicaUnavailableError(
-	_ context.Context, ierr error,
-) (msgPrefix string, safeDetails []string, payload proto.Message) {
-	err := *ierr.(*ReplicaUnavailableError)
-	// TODO(tbg): should I be doing anything with the first two args?
-	return "", []string{}, &err
-}
-
-func decodeReplicaUnavailableError(
-	// TODO(tbg): should I be doing anything with msgPrefix and safeDetails?
-	ctx context.Context,
-	msgPrefix string,
-	safeDetails []string,
-	payload proto.Message,
-) error {
-	err := payload.(*ReplicaUnavailableError)
-	return err
 }
 
 // Type is part of the ErrorDetailInterface.

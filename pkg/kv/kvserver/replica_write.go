@@ -414,7 +414,7 @@ func rangeUnavailableError(
 	var _ redact.SafeFormatter = desc
 	var _ redact.SafeFormatter = replDesc
 
-	err := roachpb.NewReplicaUnavailableError(desc, replDesc)
+	err := error(roachpb.NewReplicaUnavailableError(desc, replDesc))
 	err = errors.Wrapf(
 		err,
 		"raft status: %+v", redact.Safe(rs), // raft status contains no PII

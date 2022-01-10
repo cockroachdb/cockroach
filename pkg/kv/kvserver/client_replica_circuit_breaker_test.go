@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -276,7 +277,7 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 	// An argument can be made that in such a case it is likely that the cluster
 	// is unavailable in its entirety.
 	runCircuitBreakerTest(t, "liveness-unavailable", func(t *testing.T, ctx context.Context, tc *circuitBreakerTest) {
-		t.Skip("test fails since requests to liveness range do not trip the breaker")
+		skip.IgnoreLint(t, "See: https://github.com/cockroachdb/cockroach/issues/74616")
 		// Up-replicate liveness range and move lease to n2.
 		tc.AddVotersOrFatal(t, keys.NodeLivenessPrefix, tc.Target(n2))
 		tc.TransferRangeLeaseOrFatal(t, tc.LookupRangeOrFatal(t, keys.NodeLivenessPrefix), tc.Target(n2))

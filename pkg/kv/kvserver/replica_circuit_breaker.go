@@ -47,7 +47,6 @@ type replicaCircuitBreaker struct {
 	r       replicaInCircuitBreaker
 	st      *cluster.Settings
 	wrapped *circuit.Breaker
-	wrapErr func(err error) error
 }
 
 func (br *replicaCircuitBreaker) enabled() bool {
@@ -135,7 +134,7 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 			const probeTimeout = 10 * time.Second
 			err := contextutil.RunWithTimeout(ctx, "probe", probeTimeout, func(ctx context.Context) error {
 				if err := checkShouldUntripBreaker(ctx, br.r); err != nil {
-					return errors.Wrapf(br.r.rangeUnavailableError(), "%s", err)
+					return errors.CombineErrors(br.r.rangeUnavailableError(), err)
 				}
 				return nil
 			})

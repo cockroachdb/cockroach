@@ -1167,6 +1167,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.go",
 			":!*.pb.gw.go",
 			":!kv/kvclient/kvcoord/lock_spans_over_budget_error.go",
+			":!roachpb/replica_unavailable_error.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
