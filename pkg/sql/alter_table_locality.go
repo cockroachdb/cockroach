@@ -80,9 +80,11 @@ func (p *planner) AlterTableLocality(
 	}
 
 	if !dbDesc.IsMultiRegion() {
-		return nil, pgerror.Newf(
+		return nil, errors.WithHint(pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"cannot alter a table's LOCALITY if its database is not multi-region enabled",
+		),
+			"database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>",
 		)
 	}
 

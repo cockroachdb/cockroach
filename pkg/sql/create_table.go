@@ -1290,9 +1290,11 @@ func NewTableDesc(
 
 	if n.Locality != nil && regionConfig == nil &&
 		!opts.bypassLocalityOnNonMultiRegionDatabaseCheck {
-		return nil, pgerror.Newf(
+		return nil, errors.WithHint(pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"cannot set LOCALITY on a table in a database that is not multi-region enabled",
+		),
+			"database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>",
 		)
 	}
 
