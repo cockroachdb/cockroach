@@ -266,10 +266,12 @@ type columnCache struct {
 type indexColumnCache struct {
 	all       []catalog.Column
 	key       []catalog.Column
+	keyDirs   []descpb.IndexDescriptor_Direction
 	stored    []catalog.Column
 	keySuffix []catalog.Column
 	composite []catalog.Column
 	full      []catalog.Column
+	fullDirs  []descpb.IndexDescriptor_Direction
 }
 
 // newColumnCache returns a fresh fully-populated columnCache struct for the
@@ -373,6 +375,11 @@ func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) ind
 	if !idx.Unique {
 		ic.full = append(ic.full, ic.keySuffix...)
 	}
+	ic.fullDirs = make([]descpb.IndexDescriptor_Direction, len(ic.full))
+	// Only copy key column directions, key suffix directions will remain at their
+	// default value of ASC.
+	copy(ic.fullDirs, idx.KeyColumnDirections)
+	ic.keyDirs = ic.fullDirs[:len(ic.key)]
 	return ic
 }
 
