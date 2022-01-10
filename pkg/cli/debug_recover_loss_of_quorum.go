@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/hintdetail"
 	"github.com/spf13/cobra"
 )
 
@@ -257,6 +258,7 @@ var debugRecoverPlanOpts struct {
 	outputFileName string
 	deadStoreIDs   []int
 	confirmAction  confirmActionFlag
+	force          bool
 }
 
 func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
@@ -295,28 +297,63 @@ Discarded live replicas: %d
 		_, _ = fmt.Fprintf(stderr, "%s\n\n", deadStoreMsg)
 	}
 
-	if len(plan.Updates) == 0 {
-		_, _ = fmt.Fprintf(stderr, "No recoverable ranges found.\n")
-		return nil
+	planningErr := report.Error()
+	if planningErr != nil {
+		// Need to warn user before they make a decision that ignoring
+		// inconsistencies is a really bad idea.
+		_, _ = fmt.Fprintf(stderr,
+			"Found replica inconsistencies:\n\n%s\n\nOnly proceed as a last resort!\n",
+			hintdetail.FlattenDetails(planningErr))
+	}
+
+	if debugRecoverPlanOpts.confirmAction == allNo {
+		return errors.New("abort")
 	}
 
 	switch debugRecoverPlanOpts.confirmAction {
 	case prompt:
-		_, _ = fmt.Fprintf(stderr, "Proceed with plan creation [y/N] ")
-		reader := bufio.NewReader(os.Stdin)
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return errors.Wrap(err, "failed to read user input")
+		opts := "y/N"
+		if planningErr != nil {
+			opts = "f/N"
 		}
-		_, _ = fmt.Fprintf(stderr, "\n")
-		if len(line) < 1 || (line[0] != 'y' && line[0] != 'Y') {
-			_, _ = fmt.Fprint(stderr, "Aborted at user request\n")
-			return nil
+		done := false
+		for !done {
+			_, _ = fmt.Fprintf(stderr, "Proceed with plan creation [%s] ", opts)
+			reader := bufio.NewReader(os.Stdin)
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return errors.Wrap(err, "failed to read user input")
+			}
+			line = strings.ToLower(strings.TrimSpace(line))
+			if len(line) == 0 {
+				line = "n"
+			}
+			switch line {
+			case "y":
+				// We ignore y if we have errors. In that case you can only force or
+				// abandon attempt.
+				if planningErr != nil {
+					continue
+				}
+				done = true
+			case "f":
+				done = true
+			case "n":
+				return errors.New("abort")
+			}
 		}
 	case allYes:
-		// All actions enabled by default.
+		if planningErr != nil && !debugRecoverPlanOpts.force {
+			return errors.Errorf(
+				"can not create plan because of errors and no --force flag is given")
+		}
 	default:
-		return errors.New("Aborted by --confirm option")
+		return errors.New("Unexpected CLI error. Try using different --confirm option value.")
+	}
+
+	if len(plan.Updates) == 0 {
+		_, _ = fmt.Fprintln(stderr, "Found no ranges in need of recovery, nothing to do.")
+		return nil
 	}
 
 	var writer io.Writer = os.Stdout
