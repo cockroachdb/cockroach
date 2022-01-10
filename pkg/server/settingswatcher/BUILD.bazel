@@ -47,6 +47,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
