@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -121,6 +122,9 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// resulting in an error from RefreshRange.
 	var resp roachpb.RefreshRangeResponse
 	_, err := RefreshRange(ctx, db, CommandArgs{
+		EvalCtx: (&MockEvalCtx{
+			ClusterSettings: cluster.MakeTestingClusterSettings(),
+		}).EvalContext(),
 		Args: &roachpb.RefreshRangeRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    k,
@@ -193,6 +197,9 @@ func TestRefreshRangeError(t *testing.T) {
 		// 2, therefore the refresh should fail.
 		var resp roachpb.RefreshRangeResponse
 		_, err := RefreshRange(ctx, db, CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				ClusterSettings: cluster.MakeTestingClusterSettings(),
+			}).EvalContext(),
 			Args: &roachpb.RefreshRangeRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    k,
@@ -254,6 +261,9 @@ func TestRefreshRangeTimestampBounds(t *testing.T) {
 	} {
 		var resp roachpb.RefreshRangeResponse
 		_, err := RefreshRange(ctx, db, CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				ClusterSettings: cluster.MakeTestingClusterSettings(),
+			}).EvalContext(),
 			Args: &roachpb.RefreshRangeRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    k,
