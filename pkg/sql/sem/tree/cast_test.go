@@ -61,6 +61,7 @@ import (
 //     WHERE
 //       c.castsource NOT IN (SELECT t FROM ignored_types)
 //       AND c.casttarget NOT IN (SELECT t FROM ignored_types)
+//     ORDER BY 1, 2
 //   ) TO pg_cast_dump.csv WITH CSV DELIMITER '|' HEADER;
 //
 func TestCastsVolatilityMatchesPostgres(t *testing.T) {
