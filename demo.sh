@@ -7,13 +7,13 @@ roachprod create -n 5 local
 
 roachprod put local cockroach
 roachprod start local:1-5
-sleep 20
+sleep 60
 roachprod run local:1 -- ./cockroach workload init kv --splits 100
 roachprod run local:1 -- ./cockroach workload run kv --max-rate 100 --read-percent 0 --duration=10s {pgurl:1-5}
 
 roachprod stop local:1,2
 
-roachprod run local:1 -- ./cockroach workload run kv --max-rate 100 --read-percent 0 --tolerate-errors --duration=60s {pgurl:3-5}
+roachprod run local:1 -- ./cockroach workload run kv --max-rate 100 --read-percent 0 --tolerate-errors --duration=600s {pgurl:3-5} 2> errors.txt
 
 # TODO: problem ranges should highlight circ breakers
 # TODO: careful with whole-cluster restarts (or restarts of nodes that are required for quorum); is there any KV access in the start path that wll fatal the node on a hard error (such as an open circuit breaker error from somewhere?)
