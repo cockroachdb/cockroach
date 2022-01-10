@@ -27,7 +27,7 @@ type Props = {
 // where app and database are route params, to the new StatementDetails route.
 export function RedirectToStatementDetails({ match }: Props) {
   const linkProps = {
-    statement: getMatchParamByName(match, statementAttr),
+    statementFingerprintID: getMatchParamByName(match, statementAttr),
     app: getMatchParamByName(match, appAttr),
     implicitTxn: getMatchParamByName(match, implicitTxnAttr) === "true",
     database: getMatchParamByName(match, databaseAttr),

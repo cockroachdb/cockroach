@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "@reduxjs/toolkit";
-import { RouteComponentProps, match as Match } from "react-router-dom";
+import { RouteComponentProps } from "react-router-dom";
 import { Location } from "history";
 import _ from "lodash";
 import { AppState } from "../store";
@@ -20,19 +20,19 @@ import {
   FixLong,
   flattenStatementStats,
   getMatchParamByName,
-  implicitTxnAttr,
   statementAttr,
   databaseAttr,
-  StatementStatistics,
-  statementKey,
   aggregatedTsAttr,
   aggregationIntervalAttr,
+  StatementStatistics,
+  statementKey,
   queryByName,
 } from "../util";
 import { AggregateStatistics } from "../statementsTable";
 import { Fraction } from "./statementDetails";
 
 interface StatementDetailsData {
+  statementFingerprintID: string;
   nodeId: number;
   summary: string;
   aggregatedTs: number;
@@ -52,6 +52,7 @@ function coalesceNodeStats(
     const key = statementKey(stmt);
     if (!(key in statsKey)) {
       statsKey[key] = {
+        statementFingerprintID: stmt.statement_fingerprint_id?.toString(),
         nodeId: stmt.node_id,
         summary: stmt.statement_summary,
         aggregatedTs: stmt.aggregated_ts,
@@ -68,6 +69,7 @@ function coalesceNodeStats(
   return Object.keys(statsKey).map(key => {
     const stmt = statsKey[key];
     return {
+      aggregatedFingerprintID: stmt.statementFingerprintID,
       label: stmt.nodeId.toString(),
       summary: stmt.summary,
       aggregatedTs: stmt.aggregatedTs,
@@ -98,31 +100,24 @@ function fractionMatching(
   return { numerator, denominator };
 }
 
-function filterByRouterParamsPredicate(
-  match: Match<any>,
+function filterByExecStatKey(
   location: Location,
   internalAppNamePrefix: string,
+  statementFingerprintID: string,
 ): (stat: ExecutionStatistics) => boolean {
-  const statement = getMatchParamByName(match, statementAttr);
-  const implicitTxn = getMatchParamByName(match, implicitTxnAttr) === "true";
-  const database =
-    queryByName(location, databaseAttr) === "(unset)"
-      ? ""
-      : queryByName(location, databaseAttr);
   const apps = queryByName(location, appAttr)
     ? queryByName(location, appAttr).split(",")
     : null;
+
   // If the aggregatedTs is unset, we will aggregate across the current date range.
   const aggregatedTs = queryByName(location, aggregatedTsAttr);
   const aggInterval = queryByName(location, aggregationIntervalAttr);
 
   const filterByKeys = (stmt: ExecutionStatistics) =>
-    stmt.statement === statement &&
+    stmt.statement_fingerprint_id?.toString() === statementFingerprintID &&
     (aggregatedTs == null || stmt.aggregated_ts.toString() === aggregatedTs) &&
     (aggInterval == null ||
-      stmt.aggregation_interval.toString() === aggInterval) &&
-    stmt.implicit_txn === implicitTxn &&
-    (stmt.database === database || database === null);
+      stmt.aggregation_interval.toString() === aggInterval);
 
   if (!apps) {
     return filterByKeys;
@@ -152,15 +147,25 @@ export const selectStatement = createSelector(
 
     const internalAppNamePrefix = sqlStatsState.data?.internal_app_name_prefix;
     const flattened = flattenStatementStats(statements);
-    const results = _.filter(
-      flattened,
-      filterByRouterParamsPredicate(
-        props.match,
+    const statementFingerprintID = getMatchParamByName(
+      props.match,
+      statementAttr,
+    );
+    const results = flattened.filter(
+      filterByExecStatKey(
         props.location,
         internalAppNamePrefix,
+        statementFingerprintID,
       ),
     );
-    const statement = getMatchParamByName(props.match, statementAttr);
+
+    // We expect a single result to be returned. The key used to retrieve results is specific per:
+    // - statement fingerprint id
+    // - aggregation timestamp
+    // - aggregation period
+    // see the `statementKey` function in appStats.ts for implementation.
+    const statement = results[0].statement;
+
     return {
       statement,
       stats: combineStatementStats(results.map(s => s.stats)),
