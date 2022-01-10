@@ -41,6 +41,7 @@ default_transaction_isolation                         serializable
 default_transaction_priority                          normal
 default_transaction_read_only                         off
 default_transaction_use_follower_reads                off
+default_with_oids                                     off
 disable_partially_distributed_plans                   off
 disable_plan_gists                                    off
 disallow_full_table_scans                             off
