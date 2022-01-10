@@ -21,6 +21,7 @@ proto_library(
         "local_only_session_data.proto",
         "session_data.proto",
         "session_migration.proto",
+        "session_revival_token.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
@@ -29,6 +30,7 @@ proto_library(
         "//pkg/util/timeutil/pgdate:pgdate_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
     ],
 )
 

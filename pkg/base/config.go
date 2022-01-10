@@ -231,6 +231,10 @@ type Config struct {
 	// The flag exists mostly for the benefit of tests, and for
 	// `cockroach start-single-node`.
 	AutoInitializeCluster bool
+
+	// AllowSessionRevival is true if the cluster is allowed to create session
+	// revival tokens and use them to authenticate a session.
+	AllowSessionRevival bool
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time
