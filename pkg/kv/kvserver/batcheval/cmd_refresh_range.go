@@ -15,9 +15,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+)
+
+// refreshRangeTBIEnabled controls whether we use a TBI during ranged refreshes.
+var refreshRangeTBIEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.refresh_range.time_bound_iterators.enabled",
+	"use time-bound iterators when performing ranged transaction refreshes",
+	util.ConstantWithMetamorphicTestBool("kv.refresh_range.time_bound_iterators_enabled", true),
 )
 
 func init() {
@@ -50,40 +64,71 @@ func RefreshRange(
 		return result.Result{}, errors.AssertionFailedf("empty RefreshFrom: %s", args)
 	}
 
-	// Iterate over values until we discover any value written after the
-	// original timestamp, but before or at the current timestamp. Note that we
-	// iterate inconsistently, meaning that intents - including our own - are
-	// collected separately and the callback is only invoked on the latest
-	// committed version. Note also that we include tombstones, which must be
-	// considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	intents, err := storage.MVCCIterate(
-		ctx, reader, args.Key, args.EndKey, refreshTo,
-		storage.MVCCScanOptions{
-			Inconsistent: true,
-			Tombstones:   true,
-		},
-		func(kv roachpb.KeyValue) error {
-			if ts := kv.Value.Timestamp; refreshFrom.Less(ts) {
-				return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, kv.Key, ts)
-			}
-			return nil
-		})
-	if err != nil {
-		return result.Result{}, err
-	}
+	tbi := refreshRangeTBIEnabled.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	return result.Result{}, refreshRange(reader, tbi, args.Span(), refreshFrom, refreshTo, h.Txn.ID)
+}
 
-	// Check if any intents which are not owned by this transaction were written
-	// at or beneath the refresh timestamp.
-	for _, i := range intents {
-		// Ignore our own intents.
-		if i.Txn.ID == h.Txn.ID {
-			continue
+// refreshRange iterates over the specified key span until it discovers a value
+// written after the refreshFrom timestamp but before or at the refreshTo
+// timestamp. The iteration observes MVCC tombstones, which must be considered
+// as conflicts during a refresh. The iteration also observes intents, and any
+// intent that is not owned by the specified txn ID is considered a conflict.
+//
+// If such a conflict is found, the function returns an error. Otherwise, no
+// error is returned.
+func refreshRange(
+	reader storage.Reader,
+	timeBoundIterator bool,
+	span roachpb.Span,
+	refreshFrom, refreshTo hlc.Timestamp,
+	txnID uuid.UUID,
+) error {
+	// Construct an incremental iterator with the desired time bounds. Incremental
+	// iterators will emit MVCC tombstones by default and will emit intents when
+	// configured to do so (see IntentPolicy).
+	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
+		EnableTimeBoundIteratorOptimization: timeBoundIterator,
+		EndKey:                              span.EndKey,
+		StartTime:                           refreshFrom, // exclusive
+		EndTime:                             refreshTo,   // inclusive
+		IntentPolicy:                        storage.MVCCIncrementalIterIntentPolicyEmit,
+	})
+	defer iter.Close()
+
+	var meta enginepb.MVCCMetadata
+	iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
 		}
-		// Return an error if an intent was written to the span.
-		return result.Result{}, roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
-			i.Key, i.Txn.WriteTimestamp)
-	}
 
-	return result.Result{}, nil
+		key := iter.Key()
+		if !key.IsValue() {
+			// Found an intent. Check whether it is owned by this transaction.
+			// If so, proceed with iteration. Otherwise, return an error.
+			if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", key)
+			}
+			if meta.Txn.ID == txnID {
+				// Ignore the transaction's own intent and skip past the corresponding
+				// provisional key-value. To do this, scan to the timestamp immediately
+				// before (i.e. the key immediately after) the provisional key.
+				iter.SeekGE(storage.MVCCKey{
+					Key:       key.Key,
+					Timestamp: meta.Timestamp.ToTimestamp().Prev(),
+				})
+				continue
+			}
+			return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
+				key.Key, meta.Txn.WriteTimestamp)
+		}
+
+		// If a committed value is found, return an error.
+		return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+			key.Key, key.Timestamp)
+	}
+	return nil
 }
