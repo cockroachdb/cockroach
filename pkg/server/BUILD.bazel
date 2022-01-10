@@ -105,6 +105,7 @@ go_library(
         "//pkg/server/settingswatcher",
         "//pkg/server/status",
         "//pkg/server/status/statuspb",
+        "//pkg/server/systemconfigwatcher",
         "//pkg/server/telemetry",
         "//pkg/server/tracedumper",
         "//pkg/settings",

@@ -29,6 +29,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/server/systemconfigwatcher/systemconfigwatchertest",
         "//pkg/sql",
         "//pkg/sql/distsql",
         "//pkg/sql/tests",

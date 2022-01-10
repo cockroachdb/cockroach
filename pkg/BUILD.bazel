@@ -183,6 +183,7 @@ ALL_TESTS = [
     "//pkg/server/serverpb:serverpb_test",
     "//pkg/server/settingswatcher:settingswatcher_test",
     "//pkg/server/status:status_test",
+    "//pkg/server/systemconfigwatcher:systemconfigwatcher_test",
     "//pkg/server/telemetry:telemetry_test",
     "//pkg/server/tracedumper:tracedumper_test",
     "//pkg/server:server_test",

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -48,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -148,6 +148,8 @@ type SQLServer struct {
 	spanconfigSQLWatcher    *spanconfigsqlwatcher.SQLWatcher
 	settingsWatcher         *settingswatcher.SettingsWatcher
 
+	systemConfigWatcher *systemconfigwatcher.Cache
+
 	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
 	pgL net.Listener
 	// connManager is the connection manager to use to set up additional
@@ -228,7 +230,7 @@ type sqlServerArgs struct {
 	nodeDescs kvcoord.NodeDescStore
 
 	// Used by the executor config.
-	systemConfigProvider config.SystemConfigProvider
+	systemConfigWatcher *systemconfigwatcher.Cache
 
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
@@ -498,7 +500,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	hydratedTablesCache := hydratedtables.NewCache(cfg.Settings)
 	cfg.registry.AddMetricStruct(hydratedTablesCache.Metrics())
 
-	gcJobNotifier := gcjobnotifier.New(cfg.Settings, cfg.systemConfigProvider, codec, cfg.stopper)
+	gcJobNotifier := gcjobnotifier.New(cfg.Settings, cfg.systemConfigWatcher, codec, cfg.stopper)
 
 	var compactEngineSpanFunc tree.CompactEngineSpanFunc
 	if !codec.ForSystemTenant() {
@@ -641,7 +643,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		DB:                      cfg.db,
 		Gossip:                  cfg.gossip,
 		NodeLiveness:            cfg.nodeLiveness,
-		SystemConfig:            cfg.systemConfigProvider,
+		SystemConfig:            cfg.systemConfigWatcher,
 		MetricsRecorder:         cfg.recorder,
 		DistSender:              cfg.distSender,
 		RPCContext:              cfg.rpcContext,
@@ -970,6 +972,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		spanconfigSQLTranslator: spanConfig.sqlTranslator,
 		spanconfigSQLWatcher:    spanConfig.sqlWatcher,
 		settingsWatcher:         settingsWatcher,
+		systemConfigWatcher:     cfg.systemConfigWatcher,
 	}, nil
 }
 
@@ -1147,6 +1150,9 @@ func (s *SQLServer) preStart(
 	}
 
 	if err := s.settingsWatcher.Start(ctx); err != nil {
+		return errors.Wrap(err, "initializing settings")
+	}
+	if err := s.systemConfigWatcher.Start(ctx, s.stopper); err != nil {
 		return errors.Wrap(err, "initializing settings")
 	}
 
