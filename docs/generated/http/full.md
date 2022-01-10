@@ -3128,7 +3128,7 @@ of ranges currently considered “hot” by the node(s).
 
 
 
-
+HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
 
 
 | Field | Type | Label | Description | Support status |
@@ -3143,7 +3143,7 @@ of ranges currently considered “hot” by the node(s).
 <a name="cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.HotRange"></a>
 #### HotRangesResponseV2.HotRange
 
-
+HotRange message describes a single hot range, ie its QPS, node ID it belongs to, etc.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -3155,6 +3155,7 @@ of ranges currently considered “hot” by the node(s).
 | index_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | index_name indicates the index name for current range | [reserved](#support-status) |
 | replica_node_ids | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) | repeated | replica_node_ids specifies the list of node ids that contain replicas with current hot range | [reserved](#support-status) |
 | leaseholder_node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | leaseholder_node_id indicates on Node ID that contains replica that is a leaseholder | [reserved](#support-status) |
+| schema_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | schema_name provides the name of schema (if exists) for table in current range | [reserved](#support-status) |
 
 
 
