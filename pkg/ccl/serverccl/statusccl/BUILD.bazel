@@ -46,6 +46,7 @@ go_test(
         "//pkg/sql/idxusage",
         "//pkg/sql/sqlstats",
         "//pkg/sql/tests",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -54,6 +55,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
