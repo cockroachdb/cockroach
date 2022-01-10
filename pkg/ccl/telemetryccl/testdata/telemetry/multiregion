@@ -384,6 +384,14 @@ IMPORT INTO t7 CSV DATA ('nodelocal://0/t7/export*.csv')
 sql.multiregion.import
 
 # Test for locality optimized search counter.
+
+# Lower the closed timestamp subsystem so system config info is transmitted
+# rapidly.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms';
+----
+
 feature-allowlist
 sql.plan.opt.locality-optimized-search
 ----
@@ -391,6 +399,12 @@ sql.plan.opt.locality-optimized-search
 exec
 USE survive_region;
 CREATE TABLE t8 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+# Sleep a large multiple of the closed timestamp target duration to ensure
+# that a fresh system config has made its way to the optimizer.
+exec
+SELECT pg_sleep(.05);
 ----
 
 feature-usage
