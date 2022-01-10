@@ -450,6 +450,14 @@ func (ts *TestServer) TsDB() *ts.DB {
 	return nil
 }
 
+// TsServer returns the ts.TsServer instance used by the TestServer.
+func (ts *TestServer) TsServer() *ts.Server {
+	if ts != nil {
+		return ts.tsServer
+	}
+	return nil
+}
+
 // DB returns the client.DB instance used by the TestServer.
 func (ts *TestServer) DB() *kv.DB {
 	if ts != nil {
