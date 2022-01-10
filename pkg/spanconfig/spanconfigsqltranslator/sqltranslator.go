@@ -54,60 +54,91 @@ func New(
 	}
 }
 
-// Translate is part of the spanconfig.SQLTranslator interface.
-func (s *SQLTranslator) Translate(
-	ctx context.Context, ids descpb.IDs,
-) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error) {
+func (s *SQLTranslator) translate(
+	ctx context.Context, ids descpb.IDs, txn *kv.Txn, descsCol *descs.Collection,
+) ([]roachpb.SpanConfigEntry, error) {
 	var entries []roachpb.SpanConfigEntry
+	// We're in a retryable closure, so clear any entries from previous
+	// attempts.
+	entries = entries[:0]
+
+	// For every ID we want to translate, first expand it to descendant leaf
+	// IDs that have span configurations associated for them. We also
+	// de-duplicate leaf IDs to not generate redundant entries.
+	seen := make(map[descpb.ID]struct{})
+	var leafIDs descpb.IDs
+	for _, id := range ids {
+		descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, txn, descsCol)
+		if err != nil {
+			return nil, err
+		}
+		for _, descendantLeafID := range descendantLeafIDs {
+			if _, found := seen[descendantLeafID]; !found {
+				seen[descendantLeafID] = struct{}{}
+				leafIDs = append(leafIDs, descendantLeafID)
+			}
+		}
+	}
+
+	pseudoTableEntries, err := s.maybeGeneratePseudoTableEntries(ctx, txn, ids)
+	if err != nil {
+		return nil, err
+	}
+	entries = append(entries, pseudoTableEntries...)
+
+	// For every unique leaf ID, generate span configurations.
+	for _, leafID := range leafIDs {
+		translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, translatedEntries...)
+	}
+	return entries, nil
+}
+
+// FullTranslate implements the SQLTranslator interface.
+func (s *SQLTranslator) FullTranslate(
+	ctx context.Context,
+) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error) {
 	// txn used to translate the IDs, so that we can get its commit timestamp
 	// later.
 	var translateTxn *kv.Txn
-	if err := sql.DescsTxn(ctx, s.execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-	) error {
-		// We're in a retryable closure, so clear any entries from previous
-		// attempts.
-		entries = entries[:0]
-
-		// For every ID we want to translate, first expand it to descendant leaf
-		// IDs that have span configurations associated for them. We also
-		// de-duplicate leaf IDs to not generate redundant entries.
-		seen := make(map[descpb.ID]struct{})
-		var leafIDs descpb.IDs
-		for _, id := range ids {
-			descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, txn, descsCol)
-			if err != nil {
-				return err
-			}
-			for _, descendantLeafID := range descendantLeafIDs {
-				if _, found := seen[descendantLeafID]; !found {
-					seen[descendantLeafID] = struct{}{}
-					leafIDs = append(leafIDs, descendantLeafID)
-				}
-			}
-		}
-
-		pseudoTableEntries, err := s.maybeGeneratePseudoTableEntries(ctx, txn, ids)
+	var entries []roachpb.SpanConfigEntry
+	if err := sql.DescsTxn(ctx, s.execCfg, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+		var err error
+		entries, err = s.translate(ctx, descpb.IDs{keys.RootNamespaceID}, txn, descsCol)
 		if err != nil {
 			return err
-		}
-		entries = append(entries, pseudoTableEntries...)
-
-		// For every unique leaf ID, generate span configurations.
-		for _, leafID := range leafIDs {
-			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol)
-			if err != nil {
-				return err
-			}
-			entries = append(entries, translatedEntries...)
 		}
 		translateTxn = txn
 		return nil
 	}); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-
 	return entries, translateTxn.CommitTimestamp(), nil
+}
+
+// IncrementalTranslate implements the SQLTranslator interface.
+func (s *SQLTranslator) IncrementalTranslate(
+	ctx context.Context, updates []spanconfig.DescriptorUpdate,
+) ([]roachpb.SpanConfigEntry, error) {
+	var allIDs descpb.IDs
+	for _, update := range updates {
+		allIDs = append(allIDs, update.ID)
+	}
+
+	var entries []roachpb.SpanConfigEntry
+	if err := sql.DescsTxn(ctx, s.execCfg, func(ctx context.Context, txn *kv.Txn,
+		descsCol *descs.Collection) error {
+		var err error
+		entries, err = s.translate(ctx, allIDs, txn, descsCol)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return entries, nil
 }
 
 // descLookupFlags is the set of look up flags used when fetching descriptors.

@@ -13,7 +13,6 @@ package spanconfig
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -98,32 +97,31 @@ type KVSubscriber interface {
 //
 // 		Table/5{3-4}                  num_replicas=7 num_voters=5
 type SQLTranslator interface {
-	// Translate generates the span configuration state given a list of
-	// {descriptor, named zone} IDs. Entries are unique, and are omitted for IDs
-	// that don't exist. The timestamp at which the translation is valid is also
-	// returned.
+	// IncrementalTranslate generates the span configuration state given a list of
+	// DescriptorUpdates. A DescriptorUpdate is the unit of what the SQLWatcher
+	// emits. Entries are unique, and are omitted for IDs that don't exist. The
+	// translation is transaction scoped and is valid as of the transactions
+	// commit timestamp.
 	//
-	// For every ID we first descend the zone configuration hierarchy with the
-	// ID as the root to accumulate IDs of all leaf objects. Leaf objects are
-	// tables and named zones (other than RANGE DEFAULT) which have actual span
-	// configurations associated with them (as opposed to non-leaf nodes that
-	// only serve to hold zone configurations for inheritance purposes). Then,
-	// for each one of these accumulated IDs, we generate <span, config> tuples
-	// by following up the inheritance chain to fully hydrate the span
-	// configuration. Translate also accounts for and negotiates subzone spans.
-	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
-}
+	// For every ID in the DescriptorUpdate we first descend the zone
+	// configuration hierarchy with the ID as the root to accumulate IDs of all
+	// leaf objects. Leaf objects are tables and named zones (other than RANGE
+	// DEFAULT) which have actual span configurations associated with them (as
+	// opposed to non-leaf nodes that only serve to hold zone configurations for
+	// inheritance purposes). Then, for each one of these accumulated IDs, we
+	// generate <span, config> tuples by following up the inheritance chain to
+	// fully hydrate the span configuration. Translate also accounts for and
+	// negotiates subzone spans.
+	IncrementalTranslate(ctx context.Context, updates []DescriptorUpdate) ([]roachpb.SpanConfigEntry, error)
 
-// FullTranslate translates the entire SQL zone configuration state to the span
-// configuration state. The timestamp at which such a translation is valid is
-// also returned.
-func FullTranslate(
-	ctx context.Context, s SQLTranslator,
-) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error) {
-	// As RANGE DEFAULT is the root of all zone configurations (including other
-	// named zones for the system tenant), we can construct the entire span
-	// configuration state by starting from RANGE DEFAULT.
-	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
+	// FullTranslate generates the span configuration state by starting from the
+	// id corresponding to the RANGE DEFAULT zone configuration, and descending
+	// the zone configuration hierarchy as explained above. As RANGE DEFAULT is
+	// the root of all zone configurations (including other named zones for the
+	// system tenant), we can construct the entire span configuration state by
+	// starting from RANGE DEFAULT.
+	// The timestamp at which such a translation is valid is also returned.
+	FullTranslate(ctx context.Context) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
 }
 
 // SQLWatcher watches for events on system.zones and system.descriptors.

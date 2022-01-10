@@ -181,7 +181,7 @@ func (f *fullReconciler) reconcile(
 	// Translate the entire SQL state to ensure KV reflects the most up-to-date
 	// view of things.
 	var entries []roachpb.SpanConfigEntry
-	entries, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, f.sqlTranslator)
+	entries, reconciledUpUntil, err = f.sqlTranslator.FullTranslate(ctx)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
@@ -328,11 +328,6 @@ func (r *incrementalReconciler) reconcile(
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
 			}
 
-			var allIDs descpb.IDs
-			for _, update := range descriptorUpdates {
-				allIDs = append(allIDs, update.ID)
-			}
-
 			// TODO(irfansharif): Would it be easier to just have the translator
 			// return the set of missing table IDs? We're using two transactions
 			// here, somewhat wastefully. An alternative would be to have a
@@ -343,7 +338,7 @@ func (r *incrementalReconciler) reconcile(
 				return err
 			}
 
-			entries, _, err := r.sqlTranslator.Translate(ctx, allIDs)
+			entries, err := r.sqlTranslator.IncrementalTranslate(ctx, descriptorUpdates)
 			if err != nil {
 				return err
 			}

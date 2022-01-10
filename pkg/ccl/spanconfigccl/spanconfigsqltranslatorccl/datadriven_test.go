@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -114,6 +115,7 @@ func TestDataDriven(t *testing.T) {
 				// Parse the args to get the object ID we're looking to
 				// translate.
 				var objID descpb.ID
+				descType := catalog.Any
 				switch {
 				case d.HasArg("named-zone"):
 					var zone string
@@ -132,15 +134,21 @@ func TestDataDriven(t *testing.T) {
 						var tbName string
 						d.ScanArgs(t, "table", &tbName)
 						objID = tenant.LookupTableByName(ctx, dbName, tbName).GetID()
+						descType = catalog.Table
 					} else {
 						objID = tenant.LookupDatabaseByName(ctx, dbName).GetID()
+						descType = catalog.Database
 					}
 				default:
 					d.Fatalf(t, "insufficient/improper args (%v) provided to translate", d.CmdArgs)
 				}
 
 				sqlTranslator := tenant.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
-				entries, _, err := sqlTranslator.Translate(ctx, descpb.IDs{objID})
+				descUpdates := []spanconfig.DescriptorUpdate{{
+					ID:             objID,
+					DescriptorType: descType,
+				}}
+				entries, err := sqlTranslator.IncrementalTranslate(ctx, descUpdates)
 				require.NoError(t, err)
 				sort.Slice(entries, func(i, j int) bool {
 					return entries[i].Span.Key.Compare(entries[j].Span.Key) < 0
@@ -155,7 +163,7 @@ func TestDataDriven(t *testing.T) {
 
 			case "full-translate":
 				sqlTranslator := tenant.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
-				entries, _, err := spanconfig.FullTranslate(ctx, sqlTranslator)
+				entries, _, err := sqlTranslator.FullTranslate(ctx)
 				require.NoError(t, err)
 
 				sort.Slice(entries, func(i, j int) bool {
