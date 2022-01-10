@@ -106,8 +106,6 @@ var _ AuthMethod = authReject
 // authPassword is the AuthMethod constructor for HBA method
 // "password": authenticate using a cleartext password received from
 // the client.
-// It is also the fallback constructor for HBA method "cert-password",
-// when the SQL client does not provide a TLS client certificate.
 func authPassword(
 	_ context.Context,
 	c AuthConn,
@@ -421,9 +419,13 @@ func authCert(
 
 // authCertPassword is the AuthMethod constructor for HBA method
 // "cert-password": authenticate EITHER using a TLS client cert OR a
-// valid cleartext password (if transmitted over TLS, the password is
-// encrypted by the TLS transport).
+// password exchange.
+//
 // TLS client cert authn is used iff the client presents a TLS client cert.
+// Otherwise, the password authentication protocol is chosen
+// depending on the format of the stored credentials: SCRAM is preferred
+// if possible, otherwise fallback to cleartext.
+// See the documentation for authAutoDetectPasswordProtocol() below.
 func authCertPassword(
 	ctx context.Context,
 	c AuthConn,
@@ -434,13 +436,58 @@ func authCertPassword(
 ) (*AuthBehaviors, error) {
 	var fn AuthMethod
 	if len(tlsState.PeerCertificates) == 0 {
-		c.LogAuthInfof(ctx, "no client certificate, proceeding with password authentication")
-		fn = authPassword
+		// We don't call c.LogAuthInfo here; this is done in
+		// authAutoDetectPasswordProtocol() below.
+		fn = authAutoDetectPasswordProtocol
 	} else {
 		c.LogAuthInfof(ctx, "client presented certificate, proceeding with certificate validation")
 		fn = authCert
 	}
 	return fn(ctx, c, tlsState, execCfg, entry, identMap)
+}
+
+// authAutoDetectPasswordProtocol is the AuthMethod constructor used
+// for HBA method "cert-password" when the SQL client does not provide
+// a TLS client certificate.
+//
+// It uses the effective format of the stored hash password to decide
+// the hash protocol: if the stored hash uses the SCRAM encoding,
+// SCRAM-SHA-256 is used (which is a safer handshake); otherwise,
+// cleartext password authentication is used.
+func authAutoDetectPasswordProtocol(
+	_ context.Context,
+	c AuthConn,
+	_ tls.ConnectionState,
+	execCfg *sql.ExecutorConfig,
+	_ *hba.Entry,
+	_ *identmap.Conf,
+) (*AuthBehaviors, error) {
+	b := &AuthBehaviors{}
+	b.SetRoleMapper(UseProvidedIdentity)
+	b.SetAuthenticator(func(
+		ctx context.Context,
+		systemIdentity security.SQLUsername,
+		clientConnection bool,
+		pwRetrieveFn PasswordRetrievalFn,
+	) error {
+		// Request information about the password hash.
+		expired, hashedPassword, err := pwRetrieveFn(ctx)
+		// The authenticator function needs a closure to retrieve the same information.
+		// Memoize it.
+		newpwfn := func(ctx context.Context) (bool, security.PasswordHash, error) { return expired, hashedPassword, err }
+
+		// Was the password using the SCRAM hash encoding?
+		if err == nil && hashedPassword.Method() == security.HashSCRAMSHA256 {
+			// Yes: use a SCRAM-SHA-256 exchange.
+			c.LogAuthInfof(ctx, "no client cert but SCRAM credentials found, proceeding with SCRAM-SHA-256")
+			return scramAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+		} else {
+			// No: use cleartext password authentication.
+			c.LogAuthInfof(ctx, "no client cert nor SCRAM credentials; requesting cleartext password")
+			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c)
+		}
+	})
+	return b, nil
 }
 
 // authCertPassword is the AuthMethod constructor for HBA method
