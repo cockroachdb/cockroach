@@ -752,7 +752,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
 	r.traceMessageSends(msgApps, "sending msgApp")
-	r.sendRaftMessages(ctx, msgApps)
+	r.sendRaftMessagesRaftMuLocked(ctx, msgApps)
 
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed on the underlying DB.
@@ -862,7 +862,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
 	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
-	r.sendRaftMessages(ctx, otherMsgs)
+	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
 	applicationStart := timeutil.Now()
@@ -1010,7 +1010,7 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	}
 
 	now := r.store.Clock().NowAsClockTimestamp()
-	if r.maybeQuiesceLocked(ctx, now, livenessMap) {
+	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, now, livenessMap) {
 		return false, nil
 	}
 
@@ -1207,7 +1207,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	return true
 }
 
-func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Message) {
+func (r *Replica) sendRaftMessagesRaftMuLocked(ctx context.Context, messages []raftpb.Message) {
 	var lastAppResp raftpb.Message
 	for _, message := range messages {
 		drop := false
@@ -1275,19 +1275,19 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 		}
 
 		if !drop {
-			r.sendRaftMessage(ctx, message)
+			r.sendRaftMessageRaftMuLocked(ctx, message)
 		}
 	}
 	if lastAppResp.Index > 0 {
-		r.sendRaftMessage(ctx, lastAppResp)
+		r.sendRaftMessageRaftMuLocked(ctx, lastAppResp)
 	}
 }
 
-// sendRaftMessage sends a Raft message.
-func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
+// sendRaftMessageRaftMuLocked sends a Raft message.
+func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Message) {
 	r.mu.RLock()
-	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
-	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.raftMu.lastToReplica)
+	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.raftMu.lastFromReplica)
 	var startKey roachpb.RKey
 	if msg.Type == raftpb.MsgApp && r.mu.internalRaftGroup != nil {
 		// When the follower is potentially an uninitialized replica waiting for

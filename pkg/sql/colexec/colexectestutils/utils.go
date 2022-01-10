@@ -1653,7 +1653,7 @@ func (c *chunkingBatchSource) Init(context.Context) {
 	c.batch = c.allocator.NewMemBatchWithMaxCapacity(c.typs)
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
-		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls())
+		c.batch.ColVec(i).SetNulls(*c.cols[i].Nulls())
 	}
 }
 
@@ -1675,8 +1675,7 @@ func (c *chunkingBatchSource) Next() coldata.Batch {
 		// responsible for updating those, so we iterate only up to len(c.typs)
 		// as per out initialization.
 		c.batch.ColVec(i).SetCol(c.cols[i].Window(c.curIdx, lastIdx).Col())
-		nullsSlice := c.cols[i].Nulls().Slice(c.curIdx, lastIdx)
-		c.batch.ColVec(i).SetNulls(&nullsSlice)
+		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls().Slice(c.curIdx, lastIdx))
 	}
 	c.batch.SetLength(lastIdx - c.curIdx)
 	c.curIdx = lastIdx

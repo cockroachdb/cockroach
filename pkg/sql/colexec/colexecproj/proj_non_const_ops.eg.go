@@ -137,7 +137,7 @@ func (p projBitandInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -247,7 +247,7 @@ func (p projBitandInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -357,7 +357,7 @@ func (p projBitandInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -467,7 +467,7 @@ func (p projBitandInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -577,7 +577,7 @@ func (p projBitandInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -687,7 +687,7 @@ func (p projBitandInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -797,7 +797,7 @@ func (p projBitandInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -907,7 +907,7 @@ func (p projBitandInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1017,7 +1017,7 @@ func (p projBitandInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1139,7 +1139,7 @@ func (p projBitandDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1261,7 +1261,7 @@ func (p projBitorInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1371,7 +1371,7 @@ func (p projBitorInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1481,7 +1481,7 @@ func (p projBitorInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1591,7 +1591,7 @@ func (p projBitorInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1701,7 +1701,7 @@ func (p projBitorInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1811,7 +1811,7 @@ func (p projBitorInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1921,7 +1921,7 @@ func (p projBitorInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2031,7 +2031,7 @@ func (p projBitorInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2141,7 +2141,7 @@ func (p projBitorInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2263,7 +2263,7 @@ func (p projBitorDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2385,7 +2385,7 @@ func (p projBitxorInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2495,7 +2495,7 @@ func (p projBitxorInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2605,7 +2605,7 @@ func (p projBitxorInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2715,7 +2715,7 @@ func (p projBitxorInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2825,7 +2825,7 @@ func (p projBitxorInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2935,7 +2935,7 @@ func (p projBitxorInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3045,7 +3045,7 @@ func (p projBitxorInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3155,7 +3155,7 @@ func (p projBitxorInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3265,7 +3265,7 @@ func (p projBitxorInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3387,7 +3387,7 @@ func (p projBitxorDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3523,7 +3523,7 @@ func (p projPlusDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3661,7 +3661,7 @@ func (p projPlusDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3799,7 +3799,7 @@ func (p projPlusDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -3935,7 +3935,7 @@ func (p projPlusDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4069,7 +4069,7 @@ func (p projPlusInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4203,7 +4203,7 @@ func (p projPlusInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4337,7 +4337,7 @@ func (p projPlusInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4475,7 +4475,7 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4622,7 +4622,7 @@ func (p projPlusInt16DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4765,7 +4765,7 @@ func (p projPlusInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -4899,7 +4899,7 @@ func (p projPlusInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5033,7 +5033,7 @@ func (p projPlusInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5171,7 +5171,7 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5318,7 +5318,7 @@ func (p projPlusInt32DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5461,7 +5461,7 @@ func (p projPlusInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5595,7 +5595,7 @@ func (p projPlusInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5729,7 +5729,7 @@ func (p projPlusInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -5867,7 +5867,7 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6014,7 +6014,7 @@ func (p projPlusInt64DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6151,7 +6151,7 @@ func (p projPlusFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6273,7 +6273,7 @@ func (p projPlusTimestampIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6395,7 +6395,7 @@ func (p projPlusIntervalTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6507,7 +6507,7 @@ func (p projPlusIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6634,7 +6634,7 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6786,7 +6786,7 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -6938,7 +6938,7 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7090,7 +7090,7 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7242,7 +7242,7 @@ func (p projPlusDatumInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7387,7 +7387,7 @@ func (p projMinusDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7525,7 +7525,7 @@ func (p projMinusDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7663,7 +7663,7 @@ func (p projMinusDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7799,7 +7799,7 @@ func (p projMinusDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -7933,7 +7933,7 @@ func (p projMinusInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8067,7 +8067,7 @@ func (p projMinusInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8201,7 +8201,7 @@ func (p projMinusInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8339,7 +8339,7 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8486,7 +8486,7 @@ func (p projMinusInt16DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8629,7 +8629,7 @@ func (p projMinusInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8763,7 +8763,7 @@ func (p projMinusInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8897,7 +8897,7 @@ func (p projMinusInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9035,7 +9035,7 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9182,7 +9182,7 @@ func (p projMinusInt32DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9325,7 +9325,7 @@ func (p projMinusInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9459,7 +9459,7 @@ func (p projMinusInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9593,7 +9593,7 @@ func (p projMinusInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9731,7 +9731,7 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -9878,7 +9878,7 @@ func (p projMinusInt64DatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10015,7 +10015,7 @@ func (p projMinusFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10133,7 +10133,7 @@ func (p projMinusTimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10251,7 +10251,7 @@ func (p projMinusTimestampIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10363,7 +10363,7 @@ func (p projMinusIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10490,7 +10490,7 @@ func (p projMinusIntervalDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10633,7 +10633,7 @@ func (p projMinusJSONBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10760,7 +10760,7 @@ func (p projMinusJSONInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -10880,7 +10880,7 @@ func (p projMinusJSONInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11000,7 +11000,7 @@ func (p projMinusJSONInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11127,7 +11127,7 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11270,7 +11270,7 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11421,7 +11421,7 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11572,7 +11572,7 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11724,7 +11724,7 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -11876,7 +11876,7 @@ func (p projMinusDatumInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12021,7 +12021,7 @@ func (p projMultDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12159,7 +12159,7 @@ func (p projMultDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12297,7 +12297,7 @@ func (p projMultDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12433,7 +12433,7 @@ func (p projMultDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12561,7 +12561,7 @@ func (p projMultDecimalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12705,7 +12705,7 @@ func (p projMultInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -12871,7 +12871,7 @@ func (p projMultInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13037,7 +13037,7 @@ func (p projMultInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13191,7 +13191,7 @@ func (p projMultInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13313,7 +13313,7 @@ func (p projMultInt16IntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13447,7 +13447,7 @@ func (p projMultInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13613,7 +13613,7 @@ func (p projMultInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13779,7 +13779,7 @@ func (p projMultInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -13933,7 +13933,7 @@ func (p projMultInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14055,7 +14055,7 @@ func (p projMultInt32IntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14189,7 +14189,7 @@ func (p projMultInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14355,7 +14355,7 @@ func (p projMultInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14521,7 +14521,7 @@ func (p projMultInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14675,7 +14675,7 @@ func (p projMultInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14797,7 +14797,7 @@ func (p projMultInt64IntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -14909,7 +14909,7 @@ func (p projMultFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15021,7 +15021,7 @@ func (p projMultFloat64IntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15123,7 +15123,7 @@ func (p projMultIntervalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15225,7 +15225,7 @@ func (p projMultIntervalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15327,7 +15327,7 @@ func (p projMultIntervalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15429,7 +15429,7 @@ func (p projMultIntervalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15541,7 +15541,7 @@ func (p projMultIntervalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15679,7 +15679,7 @@ func (p projDivDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15833,7 +15833,7 @@ func (p projDivDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -15987,7 +15987,7 @@ func (p projDivDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16139,7 +16139,7 @@ func (p projDivDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16289,7 +16289,7 @@ func (p projDivInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16439,7 +16439,7 @@ func (p projDivInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16589,7 +16589,7 @@ func (p projDivInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16743,7 +16743,7 @@ func (p projDivInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -16897,7 +16897,7 @@ func (p projDivInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17047,7 +17047,7 @@ func (p projDivInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17197,7 +17197,7 @@ func (p projDivInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17351,7 +17351,7 @@ func (p projDivInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17505,7 +17505,7 @@ func (p projDivInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17655,7 +17655,7 @@ func (p projDivInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17805,7 +17805,7 @@ func (p projDivInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -17959,7 +17959,7 @@ func (p projDivInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18107,7 +18107,7 @@ func (p projDivFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18235,7 +18235,7 @@ func (p projDivIntervalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18353,7 +18353,7 @@ func (p projDivIntervalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18489,7 +18489,7 @@ func (p projFloorDivDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18643,7 +18643,7 @@ func (p projFloorDivDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18797,7 +18797,7 @@ func (p projFloorDivDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -18949,7 +18949,7 @@ func (p projFloorDivDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19089,7 +19089,7 @@ func (p projFloorDivInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19219,7 +19219,7 @@ func (p projFloorDivInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19349,7 +19349,7 @@ func (p projFloorDivInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19493,7 +19493,7 @@ func (p projFloorDivInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19637,7 +19637,7 @@ func (p projFloorDivInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19767,7 +19767,7 @@ func (p projFloorDivInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19897,7 +19897,7 @@ func (p projFloorDivInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20041,7 +20041,7 @@ func (p projFloorDivInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20185,7 +20185,7 @@ func (p projFloorDivInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20315,7 +20315,7 @@ func (p projFloorDivInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20445,7 +20445,7 @@ func (p projFloorDivInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20589,7 +20589,7 @@ func (p projFloorDivInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20737,7 +20737,7 @@ func (p projFloorDivFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -20883,7 +20883,7 @@ func (p projModDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21037,7 +21037,7 @@ func (p projModDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21191,7 +21191,7 @@ func (p projModDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21343,7 +21343,7 @@ func (p projModDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21483,7 +21483,7 @@ func (p projModInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21613,7 +21613,7 @@ func (p projModInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21743,7 +21743,7 @@ func (p projModInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -21887,7 +21887,7 @@ func (p projModInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22031,7 +22031,7 @@ func (p projModInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22161,7 +22161,7 @@ func (p projModInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22291,7 +22291,7 @@ func (p projModInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22435,7 +22435,7 @@ func (p projModInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22579,7 +22579,7 @@ func (p projModInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22709,7 +22709,7 @@ func (p projModInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22839,7 +22839,7 @@ func (p projModInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -22983,7 +22983,7 @@ func (p projModInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23131,7 +23131,7 @@ func (p projModFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23269,7 +23269,7 @@ func (p projPowDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23407,7 +23407,7 @@ func (p projPowDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23545,7 +23545,7 @@ func (p projPowDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23681,7 +23681,7 @@ func (p projPowDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23827,7 +23827,7 @@ func (p projPowInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -23985,7 +23985,7 @@ func (p projPowInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24143,7 +24143,7 @@ func (p projPowInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24293,7 +24293,7 @@ func (p projPowInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24443,7 +24443,7 @@ func (p projPowInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24601,7 +24601,7 @@ func (p projPowInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24759,7 +24759,7 @@ func (p projPowInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -24909,7 +24909,7 @@ func (p projPowInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25059,7 +25059,7 @@ func (p projPowInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25217,7 +25217,7 @@ func (p projPowInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25375,7 +25375,7 @@ func (p projPowInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25525,7 +25525,7 @@ func (p projPowInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25657,7 +25657,7 @@ func (p projPowFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25781,7 +25781,7 @@ func (p projConcatBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -25905,7 +25905,7 @@ func (p projConcatJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26033,7 +26033,7 @@ func (p projConcatDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26167,7 +26167,7 @@ func (p projLShiftInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26301,7 +26301,7 @@ func (p projLShiftInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26435,7 +26435,7 @@ func (p projLShiftInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26569,7 +26569,7 @@ func (p projLShiftInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26703,7 +26703,7 @@ func (p projLShiftInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26837,7 +26837,7 @@ func (p projLShiftInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -26971,7 +26971,7 @@ func (p projLShiftInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27105,7 +27105,7 @@ func (p projLShiftInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27239,7 +27239,7 @@ func (p projLShiftInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27382,7 +27382,7 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27534,7 +27534,7 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27686,7 +27686,7 @@ func (p projLShiftDatumInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27829,7 +27829,7 @@ func (p projRShiftInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -27963,7 +27963,7 @@ func (p projRShiftInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28097,7 +28097,7 @@ func (p projRShiftInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28231,7 +28231,7 @@ func (p projRShiftInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28365,7 +28365,7 @@ func (p projRShiftInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28499,7 +28499,7 @@ func (p projRShiftInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28633,7 +28633,7 @@ func (p projRShiftInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28767,7 +28767,7 @@ func (p projRShiftInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -28901,7 +28901,7 @@ func (p projRShiftInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29044,7 +29044,7 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29196,7 +29196,7 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29348,7 +29348,7 @@ func (p projRShiftDatumInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29497,7 +29497,7 @@ func (p projJSONFetchValJSONBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29638,7 +29638,7 @@ func (p projJSONFetchValJSONInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29774,7 +29774,7 @@ func (p projJSONFetchValJSONInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -29910,7 +29910,7 @@ func (p projJSONFetchValJSONInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30069,7 +30069,7 @@ func (p projJSONFetchTextJSONBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30246,7 +30246,7 @@ func (p projJSONFetchTextJSONInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30418,7 +30418,7 @@ func (p projJSONFetchTextJSONInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30590,7 +30590,7 @@ func (p projJSONFetchTextJSONInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30743,7 +30743,7 @@ func (p projJSONFetchValPathJSONDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -30897,7 +30897,7 @@ func (p projJSONFetchTextPathJSONDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31063,7 +31063,7 @@ func (p projEQBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31203,7 +31203,7 @@ func (p projEQBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31339,7 +31339,7 @@ func (p projEQDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31489,7 +31489,7 @@ func (p projEQDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31639,7 +31639,7 @@ func (p projEQDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31793,7 +31793,7 @@ func (p projEQDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -31935,7 +31935,7 @@ func (p projEQDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32083,7 +32083,7 @@ func (p projEQInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32253,7 +32253,7 @@ func (p projEQInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32423,7 +32423,7 @@ func (p projEQInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32609,7 +32609,7 @@ func (p projEQInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32785,7 +32785,7 @@ func (p projEQInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -32945,7 +32945,7 @@ func (p projEQInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33115,7 +33115,7 @@ func (p projEQInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33285,7 +33285,7 @@ func (p projEQInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33471,7 +33471,7 @@ func (p projEQInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33647,7 +33647,7 @@ func (p projEQInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33807,7 +33807,7 @@ func (p projEQInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -33977,7 +33977,7 @@ func (p projEQInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34147,7 +34147,7 @@ func (p projEQInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34333,7 +34333,7 @@ func (p projEQInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34509,7 +34509,7 @@ func (p projEQInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34685,7 +34685,7 @@ func (p projEQFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -34887,7 +34887,7 @@ func (p projEQFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35089,7 +35089,7 @@ func (p projEQFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35291,7 +35291,7 @@ func (p projEQFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35471,7 +35471,7 @@ func (p projEQFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35627,7 +35627,7 @@ func (p projEQTimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35767,7 +35767,7 @@ func (p projEQIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -35903,7 +35903,7 @@ func (p projEQJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36041,7 +36041,7 @@ func (p projEQDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36185,7 +36185,7 @@ func (p projNEBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36325,7 +36325,7 @@ func (p projNEBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36461,7 +36461,7 @@ func (p projNEDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36611,7 +36611,7 @@ func (p projNEDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36761,7 +36761,7 @@ func (p projNEDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -36915,7 +36915,7 @@ func (p projNEDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37057,7 +37057,7 @@ func (p projNEDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37205,7 +37205,7 @@ func (p projNEInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37375,7 +37375,7 @@ func (p projNEInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37545,7 +37545,7 @@ func (p projNEInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37731,7 +37731,7 @@ func (p projNEInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -37907,7 +37907,7 @@ func (p projNEInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38067,7 +38067,7 @@ func (p projNEInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38237,7 +38237,7 @@ func (p projNEInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38407,7 +38407,7 @@ func (p projNEInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38593,7 +38593,7 @@ func (p projNEInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38769,7 +38769,7 @@ func (p projNEInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -38929,7 +38929,7 @@ func (p projNEInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39099,7 +39099,7 @@ func (p projNEInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39269,7 +39269,7 @@ func (p projNEInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39455,7 +39455,7 @@ func (p projNEInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39631,7 +39631,7 @@ func (p projNEInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -39807,7 +39807,7 @@ func (p projNEFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40009,7 +40009,7 @@ func (p projNEFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40211,7 +40211,7 @@ func (p projNEFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40413,7 +40413,7 @@ func (p projNEFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40593,7 +40593,7 @@ func (p projNEFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40749,7 +40749,7 @@ func (p projNETimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -40889,7 +40889,7 @@ func (p projNEIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41025,7 +41025,7 @@ func (p projNEJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41163,7 +41163,7 @@ func (p projNEDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41307,7 +41307,7 @@ func (p projLTBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41447,7 +41447,7 @@ func (p projLTBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41583,7 +41583,7 @@ func (p projLTDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41733,7 +41733,7 @@ func (p projLTDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -41883,7 +41883,7 @@ func (p projLTDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42037,7 +42037,7 @@ func (p projLTDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42179,7 +42179,7 @@ func (p projLTDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42327,7 +42327,7 @@ func (p projLTInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42497,7 +42497,7 @@ func (p projLTInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42667,7 +42667,7 @@ func (p projLTInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -42853,7 +42853,7 @@ func (p projLTInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43029,7 +43029,7 @@ func (p projLTInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43189,7 +43189,7 @@ func (p projLTInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43359,7 +43359,7 @@ func (p projLTInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43529,7 +43529,7 @@ func (p projLTInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43715,7 +43715,7 @@ func (p projLTInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -43891,7 +43891,7 @@ func (p projLTInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44051,7 +44051,7 @@ func (p projLTInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44221,7 +44221,7 @@ func (p projLTInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44391,7 +44391,7 @@ func (p projLTInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44577,7 +44577,7 @@ func (p projLTInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44753,7 +44753,7 @@ func (p projLTInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -44929,7 +44929,7 @@ func (p projLTFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45131,7 +45131,7 @@ func (p projLTFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45333,7 +45333,7 @@ func (p projLTFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45535,7 +45535,7 @@ func (p projLTFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45715,7 +45715,7 @@ func (p projLTFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -45871,7 +45871,7 @@ func (p projLTTimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46011,7 +46011,7 @@ func (p projLTIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46147,7 +46147,7 @@ func (p projLTJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46285,7 +46285,7 @@ func (p projLTDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46429,7 +46429,7 @@ func (p projLEBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46569,7 +46569,7 @@ func (p projLEBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46705,7 +46705,7 @@ func (p projLEDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -46855,7 +46855,7 @@ func (p projLEDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47005,7 +47005,7 @@ func (p projLEDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47159,7 +47159,7 @@ func (p projLEDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47301,7 +47301,7 @@ func (p projLEDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47449,7 +47449,7 @@ func (p projLEInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47619,7 +47619,7 @@ func (p projLEInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47789,7 +47789,7 @@ func (p projLEInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -47975,7 +47975,7 @@ func (p projLEInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48151,7 +48151,7 @@ func (p projLEInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48311,7 +48311,7 @@ func (p projLEInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48481,7 +48481,7 @@ func (p projLEInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48651,7 +48651,7 @@ func (p projLEInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -48837,7 +48837,7 @@ func (p projLEInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49013,7 +49013,7 @@ func (p projLEInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49173,7 +49173,7 @@ func (p projLEInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49343,7 +49343,7 @@ func (p projLEInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49513,7 +49513,7 @@ func (p projLEInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49699,7 +49699,7 @@ func (p projLEInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -49875,7 +49875,7 @@ func (p projLEInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50051,7 +50051,7 @@ func (p projLEFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50253,7 +50253,7 @@ func (p projLEFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50455,7 +50455,7 @@ func (p projLEFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50657,7 +50657,7 @@ func (p projLEFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50837,7 +50837,7 @@ func (p projLEFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -50993,7 +50993,7 @@ func (p projLETimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51133,7 +51133,7 @@ func (p projLEIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51269,7 +51269,7 @@ func (p projLEJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51407,7 +51407,7 @@ func (p projLEDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51551,7 +51551,7 @@ func (p projGTBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51691,7 +51691,7 @@ func (p projGTBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51827,7 +51827,7 @@ func (p projGTDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -51977,7 +51977,7 @@ func (p projGTDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52127,7 +52127,7 @@ func (p projGTDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52281,7 +52281,7 @@ func (p projGTDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52423,7 +52423,7 @@ func (p projGTDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52571,7 +52571,7 @@ func (p projGTInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52741,7 +52741,7 @@ func (p projGTInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -52911,7 +52911,7 @@ func (p projGTInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53097,7 +53097,7 @@ func (p projGTInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53273,7 +53273,7 @@ func (p projGTInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53433,7 +53433,7 @@ func (p projGTInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53603,7 +53603,7 @@ func (p projGTInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53773,7 +53773,7 @@ func (p projGTInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -53959,7 +53959,7 @@ func (p projGTInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54135,7 +54135,7 @@ func (p projGTInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54295,7 +54295,7 @@ func (p projGTInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54465,7 +54465,7 @@ func (p projGTInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54635,7 +54635,7 @@ func (p projGTInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54821,7 +54821,7 @@ func (p projGTInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -54997,7 +54997,7 @@ func (p projGTInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55173,7 +55173,7 @@ func (p projGTFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55375,7 +55375,7 @@ func (p projGTFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55577,7 +55577,7 @@ func (p projGTFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55779,7 +55779,7 @@ func (p projGTFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -55959,7 +55959,7 @@ func (p projGTFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56115,7 +56115,7 @@ func (p projGTTimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56255,7 +56255,7 @@ func (p projGTIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56391,7 +56391,7 @@ func (p projGTJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56529,7 +56529,7 @@ func (p projGTDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56673,7 +56673,7 @@ func (p projGEBoolBoolOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56813,7 +56813,7 @@ func (p projGEBytesBytesOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -56949,7 +56949,7 @@ func (p projGEDecimalInt16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57099,7 +57099,7 @@ func (p projGEDecimalInt32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57249,7 +57249,7 @@ func (p projGEDecimalInt64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57403,7 +57403,7 @@ func (p projGEDecimalFloat64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57545,7 +57545,7 @@ func (p projGEDecimalDecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57693,7 +57693,7 @@ func (p projGEInt16Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -57863,7 +57863,7 @@ func (p projGEInt16Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58033,7 +58033,7 @@ func (p projGEInt16Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58219,7 +58219,7 @@ func (p projGEInt16Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58395,7 +58395,7 @@ func (p projGEInt16DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58555,7 +58555,7 @@ func (p projGEInt32Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58725,7 +58725,7 @@ func (p projGEInt32Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -58895,7 +58895,7 @@ func (p projGEInt32Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59081,7 +59081,7 @@ func (p projGEInt32Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59257,7 +59257,7 @@ func (p projGEInt32DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59417,7 +59417,7 @@ func (p projGEInt64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59587,7 +59587,7 @@ func (p projGEInt64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59757,7 +59757,7 @@ func (p projGEInt64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -59943,7 +59943,7 @@ func (p projGEInt64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60119,7 +60119,7 @@ func (p projGEInt64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60295,7 +60295,7 @@ func (p projGEFloat64Int16Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60497,7 +60497,7 @@ func (p projGEFloat64Int32Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60699,7 +60699,7 @@ func (p projGEFloat64Int64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -60901,7 +60901,7 @@ func (p projGEFloat64Float64Op) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61081,7 +61081,7 @@ func (p projGEFloat64DecimalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61237,7 +61237,7 @@ func (p projGETimestampTimestampOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61377,7 +61377,7 @@ func (p projGEIntervalIntervalOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61513,7 +61513,7 @@ func (p projGEJSONJSONOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -61651,7 +61651,7 @@ func (p projGEDatumDatumOp) Next() coldata.Batch {
 			// If $hasNulls is true, union _outNulls with the set of input Nulls.
 			// If $hasNulls is false, then there are no input Nulls. _outNulls is
 			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+			projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
