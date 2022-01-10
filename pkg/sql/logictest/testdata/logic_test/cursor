@@ -385,3 +385,26 @@ BEGIN
 # Ensure that a cursor fails if selecting a non-existant column from a table.
 statement error column \"teeth\" does not exist
 DECLARE foo CURSOR FOR SELECT teeth FROM a
+
+# Test that schema changes cannot be created in the same transaction as open
+# cursors.
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 1;
+FETCH foo
+
+statement error cannot run schema change in a transaction with open DECLARE cursors
+ALTER TABLE a ADD COLUMN c INT
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT 1;
+CLOSE foo
+
+# Cursor is closed; make sure schema change is allowed again.
+
+statement ok
+ALTER TABLE a ADD COLUMN c INT
