@@ -665,6 +665,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
 		TraceCollector:          traceCollector,
 		TenantUsageServer:       cfg.tenantUsageServer,
+		AllowSessionRevival:     cfg.AllowSessionRevival,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,

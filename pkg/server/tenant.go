@@ -168,6 +168,7 @@ func StartTenant(
 		args.rpcContext, args.stopper,
 	)
 	args.sqlStatusServer = tenantStatusServer
+	args.AllowSessionRevival = true
 	s, err := newSQLServer(ctx, args)
 	tenantStatusServer.sqlServer = s
 
