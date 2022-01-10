@@ -45,6 +45,7 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/log",

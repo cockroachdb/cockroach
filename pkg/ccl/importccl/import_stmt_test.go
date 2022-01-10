@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -7190,6 +7191,42 @@ func TestDetachedImport(t *testing.T) {
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
+}
+
+func TestImportRowErrorLargeRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			return
+		}
+		_, err := w.Write([]byte("firstrowvalue\nsecondrow,is,notok,"))
+		require.NoError(t, err)
+		// Write 8MB field as the last field of the second
+		// row.
+		bigData := randutil.RandBytes(rng, 8<<20)
+		_, err = w.Write(bigData)
+		require.NoError(t, err)
+		_, err = w.Write([]byte("\n"))
+		require.NoError(t, err)
+	}))
+	defer srv.Close()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	connDB := tc.Conns[0]
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(connDB)
+	// Our input file has an 8MB row
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.raft.command.max_size = '4MiB'`)
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+	sqlDB.Exec(t, "CREATE TABLE simple (s string)")
+	defer sqlDB.Exec(t, "DROP table simple")
+
+	importIntoQuery := `IMPORT INTO simple CSV DATA ($1)`
+	// Without truncation this would fail with:
+	// pq: job 715036628973879297: could not mark as reverting: job-update: command is too large: 33561185 bytes (max: 4194304)
+	sqlDB.ExpectErr(t, ".*error parsing row 2: expected 1 fields, got 4.*-- TRUNCATED", importIntoQuery, srv.URL)
 }
 
 func TestImportJobEventLogging(t *testing.T) {
