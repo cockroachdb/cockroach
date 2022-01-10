@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -100,8 +101,10 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 					// RangeFeed happily forwards any closed timestamps it receives as
 					// soon as there are no outstanding intents under them.
 					// Changefeeds don't care about these at all, so throw them out.
+					log.Infof(ctx, "KVF: Skipping resolved ts %s@%s", t.Span, t.ResolvedTS)
 					continue
 				}
+				log.Infof(ctx, "KVF: Emitting resolved ts %s@%s", t.Span, t.ResolvedTS)
 				if err := p.memBuf.Add(
 					ctx,
 					kvevent.MakeResolvedEvent(t.Span, t.ResolvedTS, jobspb.ResolvedSpan_NONE),
