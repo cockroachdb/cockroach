@@ -13,6 +13,7 @@ package execinfrapb
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -181,6 +182,13 @@ func (eh *ExprHelper) Init(
 		// Bind IndexedVars to our eh.Vars.
 		eh.Vars.Rebind(eh.Expr)
 		return nil
+	}
+	distResolver, ok := semaCtx.TypeResolver.(*descs.DistSQLTypeResolver)
+	if ok {
+		err := distResolver.HydrateTypeSlice(evalCtx.Context, types)
+		if err != nil {
+			return err
+		}
 	}
 	var err error
 	eh.Expr, err = DeserializeExpr(expr.Expr, semaCtx, evalCtx, &eh.Vars)

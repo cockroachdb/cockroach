@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
