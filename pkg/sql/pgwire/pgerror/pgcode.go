@@ -106,6 +106,11 @@ func ComputeDefaultCode(err error) pgcode.Code {
 	if errors.IsUnimplementedError(err) {
 		return pgcode.FeatureNotSupported
 	}
+	if i := interface {
+		PGCodeRangeUnavailable()
+	}(nil); errors.HasInterface(err, &i) {
+		return pgcode.RangeUnavailable
+	}
 	return pgcode.Code{}
 }
 

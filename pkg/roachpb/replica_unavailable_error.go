@@ -42,6 +42,13 @@ func (e *ReplicaUnavailableError) String() string {
 	return e.Error()
 }
 
+// PGCodeRangeUnavailable is a marker interface that tells `pgcode.ComputeDefaultCode`
+// to use a PG error code of `pgcode.RangeUnavailable`.
+//
+// TODO(tbg): this is a workaround due to the import cycle bitarray -> pgerror
+// -> roachpb -> bitarray that is not trivial to break.
+func (e *ReplicaUnavailableError) PGCodeRangeUnavailable() {}
+
 // NewReplicaUnavailableError initializes a new *ReplicaUnavailableError. It is
 // provided with the range descriptor known to the replica, and the relevant
 // replica descriptor within.

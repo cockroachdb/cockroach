@@ -233,6 +233,14 @@ func NewDependentObjectErrorf(format string, args ...interface{}) error {
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
+//
+// TODO(tbg): this only ever seems to be returned in this code path:
+// https://github.com/cockroachdb/cockroach/blob/0ac8ab9046d01e8f89d953c439e738bd3e7f75e1/pkg/sql/physicalplan/replicaoracle/oracle.go#L261-L265
+// which doesn't seem too useful. Consider using this as well for:
+// - https://github.com/cockroachdb/cockroach/issues/74616
+// - https://github.com/cockroachdb/cockroach/issues/74503
+// though this error would certainly have to move elsewhere for that to
+// work due to import cycles.
 func NewRangeUnavailableError(rangeID roachpb.RangeID, origErr error) error {
 	return pgerror.Wrapf(origErr, pgcode.RangeUnavailable, "key range id:%d is unavailable", rangeID)
 }
