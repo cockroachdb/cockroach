@@ -31,7 +31,6 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/distsql",
-        "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

@@ -222,7 +222,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					assert.Truef(t, highestID <= 1, "unexpected mutation IDs %v", idsSeen)
 					// Block job 1 during the backfill.
 					s := p.Stages[idx]
-					stmt := p.Initial.Statements[0].Statement
+					stmt := p.TargetState.Statements[0].Statement
 					if stmt != stmt1 || s.Type() != scop.BackfillType {
 						return nil
 					}

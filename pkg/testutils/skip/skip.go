@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -133,6 +134,14 @@ func UnderMetamorphic(t SkippableTest, args ...interface{}) {
 	t.Helper()
 	if util.IsMetamorphicBuild() {
 		t.Skip(append([]interface{}{"disabled under metamorphic"}, args...))
+	}
+}
+
+// UnderNonTestBuild skips this test if the build does not have the crdb_test
+// tag.
+func UnderNonTestBuild(t SkippableTest) {
+	if !buildutil.CrdbTestBuild {
+		t.Skip("crdb_test tag required for this test")
 	}
 }
 

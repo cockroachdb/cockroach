@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scstage",
+    srcs = [
+        "build.go",
+        "stage.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan/internal/scgraph",
+        "//pkg/sql/schemachanger/screl",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

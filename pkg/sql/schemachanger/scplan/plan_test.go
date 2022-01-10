@@ -25,12 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scstage"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -94,7 +94,7 @@ func TestPlanDataDriven(t *testing.T) {
 				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
 					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
-					var state scpb.State
+					var state scpb.CurrentState
 					for i := range stmts {
 						state, err = scbuild.Build(ctx, deps, state, stmts[i].AST)
 						require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestPlanDataDriven(t *testing.T) {
 				})
 
 				if d.Cmd == "ops" {
-					return marshalOps(t, plan.Stages)
+					return marshalOps(t, plan.TargetState, plan.Stages)
 				}
 				return marshalDeps(t, &plan)
 			case "unimplemented":
@@ -117,7 +117,7 @@ func TestPlanDataDriven(t *testing.T) {
 					stmt := stmts[0]
 					alter, ok := stmt.AST.(*tree.AlterTable)
 					require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-					_, err = scbuild.Build(ctx, deps, scpb.State{}, alter)
+					_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter)
 					require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				})
 				return ""
@@ -149,9 +149,13 @@ func validatePlan(t *testing.T, plan *scplan.Plan) {
 			}
 			expected[j] = s
 		}
-		e := marshalOps(t, expected)
-		truncatedPlan := sctestutils.MakePlan(t, stage.Before, stage.Phase)
-		a := marshalOps(t, truncatedPlan.Stages)
+		e := marshalOps(t, plan.TargetState, expected)
+		cs := scpb.CurrentState{
+			TargetState: plan.TargetState,
+			Current:     stage.Before,
+		}
+		truncatedPlan := sctestutils.MakePlan(t, cs, stage.Phase)
+		a := marshalOps(t, plan.TargetState, truncatedPlan.Stages)
 		require.Equalf(t, e, a, "plan mismatch when re-planning %d stage(s) later", i)
 	}
 }
@@ -173,13 +177,13 @@ func indentText(input string, tab string) string {
 // marshalDeps marshals dependencies in scplan.Plan to a string.
 func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 	var sortedDeps []string
-	err := plan.Graph.ForEachNode(func(n *scpb.Node) error {
+	err := plan.Graph.ForEachNode(func(n *screl.Node) error {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			var deps strings.Builder
 			fmt.Fprintf(&deps, "- from: [%s, %s]\n",
-				screl.ElementString(de.From().Element()), de.From().Status)
+				screl.ElementString(de.From().Element()), de.From().CurrentStatus)
 			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
-				screl.ElementString(de.To().Element()), de.To().Status)
+				screl.ElementString(de.To().Element()), de.To().CurrentStatus)
 			fmt.Fprintf(&deps, "  kind: %s\n", de.Kind())
 			fmt.Fprintf(&deps, "  rule: %s\n", de.Name())
 			sortedDeps = append(sortedDeps, deps.String())
@@ -200,19 +204,22 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 }
 
 // marshalOps marshals operations in scplan.Plan to a string.
-func marshalOps(t *testing.T, stages []scstage.Stage) string {
+func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) string {
 	var sb strings.Builder
 	for _, stage := range stages {
 		sb.WriteString(stage.String())
 		sb.WriteString("\n  transitions:\n")
 		var transitionsBuf strings.Builder
-		for i := range stage.Before.Nodes {
-			before, after := stage.Before.Nodes[i], stage.After.Nodes[i]
+		for i, before := range stage.Before {
+			after := stage.After[i]
 			if before == after {
 				continue
 			}
-			_, _ = fmt.Fprintf(&transitionsBuf, "%s -> %s\n",
-				screl.NodeString(before), after.Status)
+			n := &screl.Node{
+				Target:        &ts.Targets[i],
+				CurrentStatus: before,
+			}
+			_, _ = fmt.Fprintf(&transitionsBuf, "%s -> %s\n", screl.NodeString(n), after)
 		}
 		sb.WriteString(indentText(transitionsBuf.String(), "    "))
 		ops := stage.Ops()

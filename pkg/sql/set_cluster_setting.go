@@ -82,7 +82,7 @@ func (p *planner) SetClusterSetting(
 ) (planNode, error) {
 	name := strings.ToLower(n.Name)
 	st := p.EvalContext().Settings
-	v, ok := settings.Lookup(name, settings.LookupForLocalAccess)
+	v, ok := settings.Lookup(name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -86,7 +86,9 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	var pqErr *pq.Error
 	ok := errors.As(err, &pqErr)
 	require.True(t, ok, "expected err to be a *pq.Error but is of type %T. error is: %v", err)
-	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege.String()), pqErr.Code, "err %v has unexpected code", err)
+	if !strings.Contains(pqErr.Message, "unknown cluster setting") {
+		t.Errorf("unexpected error: %v", err)
+	}
 }
 
 func TestTenantCanUseEnterpriseFeatures(t *testing.T) {

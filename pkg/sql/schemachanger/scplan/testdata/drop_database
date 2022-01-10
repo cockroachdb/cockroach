@@ -337,9 +337,9 @@ PreCommitPhase stage 1 of 1 with 56 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP DATABASE db1 CASCADE
 PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
@@ -368,184 +368,173 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
     [[Database:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 57
+      Authorization:
+        UserName: root
       Element:
-        sequence:
+        Sequence:
           sequenceId: 57
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 57
     *scop.LogEvent
-      DescID: 60
+      Authorization:
+        UserName: root
       Element:
-        table:
+        Table:
           tableId: 60
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 60
     *scop.DrainDescriptorName
       TableID: 55
     *scop.LogEvent
-      DescID: 55
+      Authorization:
+        UserName: root
       Element:
-        schema:
+        Schema:
           dependentObjects:
           - 57
           - 60
           schemaId: 55
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 55
     *scop.LogEvent
-      DescID: 58
+      Authorization:
+        UserName: root
       Element:
-        sequence:
+        Sequence:
           sequenceId: 58
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 6
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 58
     *scop.LogEvent
-      DescID: 59
+      Authorization:
+        UserName: root
       Element:
-        table:
+        Table:
           tableId: 59
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 6
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 59
     *scop.LogEvent
-      DescID: 61
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 61
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 8
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 8
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 61
     *scop.LogEvent
-      DescID: 62
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 62
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 9
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 62
     *scop.LogEvent
-      DescID: 63
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 63
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 10
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 63
     *scop.LogEvent
-      DescID: 64
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 64
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 10
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 64
     *scop.LogEvent
-      DescID: 67
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 67
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 12
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 67
     *scop.LogEvent
-      DescID: 65
+      Authorization:
+        UserName: root
       Element:
-        type:
+        Type:
           typeId: 65
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 6
+        SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 65
     *scop.LogEvent
-      DescID: 66
+      Authorization:
+        UserName: root
       Element:
-        type:
+        Type:
           typeId: 66
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 6
+        SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 66
     *scop.DrainDescriptorName
       TableID: 56
     *scop.LogEvent
-      DescID: 56
+      Authorization:
+        UserName: root
       Element:
-        schema:
+        Schema:
           dependentObjects:
           - 58
           - 59
@@ -557,31 +546,28 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
           - 66
           - 67
           schemaId: 56
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 56
     *scop.DrainDescriptorName
       TableID: 54
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        database:
+        Database:
           databaseId: 54
           dependentObjects:
           - 55
           - 56
-      Metadata:
-        Statement: DROP DATABASE db1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP DATABASE db1 CASCADE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForDatabase
       DatabaseID: 54

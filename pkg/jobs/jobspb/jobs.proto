@@ -493,7 +493,8 @@ message TypeSchemaChangeProgress {
 
 // TypeSchemaChangeDetails is the job detail information for the new schema change job.
 message NewSchemaChangeDetails {
-  repeated cockroach.sql.schemachanger.scpb.Target targets = 1;
+
+  cockroach.sql.schemachanger.scpb.TargetState target_state = 5 [(gogoproto.nullable) = false];
 
   // BackfillProgress stores the progress for index backfills which may
   // be ongoing.
@@ -539,15 +540,10 @@ message BackfillProgress {
 
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {
-  // Tracks the current status of nodes in an ordered manner for
-  // keeping track of progress.
-  repeated cockroach.sql.schemachanger.scpb.Status states = 1;
-  // Statements for the schema changes which this job is currently
-  // running work for. A transaction can have multiple statements
-  // for example associated.
-  repeated cockroach.sql.schemachanger.scpb.Statement statements = 2;
-  // Authorization information for the schema change.
-  cockroach.sql.schemachanger.scpb.Authorization authorization = 3;
+
+  // Current tracks the current state of elements in the same order as in the job
+  // details.
+  repeated cockroach.sql.schemachanger.scpb.Status current = 1;
 }
 
 // AutoSpanConfigReconciliationDetails is the job detail information for the

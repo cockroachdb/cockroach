@@ -98,3 +98,21 @@ query B
 SHOW CLUSTER SETTING sql.defaults.stub_catalog_tables.enabled
 ----
 true
+
+skipif config 3node-tenant
+statement ok
+SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
+
+skipif config 3node-tenant
+query T
+SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
+----
+10 MiB
+
+onlyif config 3node-tenant
+statement error unknown cluster setting
+SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
+
+onlyif config 3node-tenant
+statement error unknown setting
+SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate

@@ -119,7 +119,9 @@ func (p *planner) ShowClusterSetting(
 ) (planNode, error) {
 	name := strings.ToLower(n.Name)
 	st := p.ExecCfg().Settings
-	val, ok := settings.Lookup(name, settings.LookupForLocalAccess)
+	val, ok := settings.Lookup(
+		name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
+	)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}

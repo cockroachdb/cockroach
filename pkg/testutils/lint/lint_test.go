@@ -1049,7 +1049,7 @@ func TestLint(t *testing.T) {
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
 			":!sql/types/types_jsonpb.go",
-			":!sql/schemachanger/scgraphviz/graphviz.go",
+			":!sql/schemachanger/scplan/internal/scgraphviz/graphviz.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1509,6 +1509,7 @@ func TestLint(t *testing.T) {
 				case strings.HasSuffix(s, "protoutil"):
 				case strings.HasSuffix(s, "testutils"):
 				case strings.HasSuffix(s, "syncutil"):
+				case strings.HasSuffix(s, "buildutil"):
 				case strings.HasSuffix(s, settingsPkgPrefix):
 				default:
 					t.Errorf("%s <- please don't add CRDB dependencies to settings pkg", s)
