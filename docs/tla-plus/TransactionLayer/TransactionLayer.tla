@@ -1,4 +1,4 @@
----- MODULE TransactionLayer----
+--------------------------------- MODULE TransactionLayer---------------------------------------------------
 
 EXTENDS Naturals, FiniteSets, Sequences, TLC
 
@@ -43,7 +43,7 @@ vars == <<Unchangedvars,MVCCData,Record,System_ts,Read_result,Txn_exeid,Intent_w
 \* Keys in command.
 KEYS == {"A","B"}
 
-
+-----------------------------------------------------------------------------------------------------------------------------    
 \* Initiate txn1.
 \* in this case:
 \* op              key        value(useless if Read)
@@ -56,7 +56,7 @@ InitT1 == /\ op1 \in {Write} /\ op2 \in {Read} /\ op3 \in {Write, Read}
           /\ T1 = <<[op    |-> op1, key   |-> key1, value |-> 1],
                     [op    |-> op2, key   |-> key2, value |-> 2],
                     [op    |-> op3, key   |-> key3, value |-> 3]>>
-                    
+                  
 \* Initiate txn2.
 \* in this case:
 \* op              key        value(useless if Read)
@@ -106,7 +106,8 @@ Init == /\ InitTransactions
         /\ InitRecoed
         /\ InitSign
         /\ InitResult
-
+        
+-----------------------------------------------------------------------------------------------------------------------------    
 \* Return the minimum value from a set, or undefined if the set is empty.
 Min(s) == CHOOSE x \in s : \A y \in s : x <= y
 \* Return the maximum value from a set, or undefined if the set is empty.
@@ -134,6 +135,8 @@ BeginTransaction(tid) ==
                   /\ Record' = SthIndexAdd(Record,tid,newT)
                   /\ System_ts' = System_ts + 1
                   /\ UNCHANGED <<Unchangedvars,MVCCData,Read_result,Txn_exeid,Intent_write,Tscache>>
+                  
+                  
 \* Execute next command of a txn.
 PipeLineWrite(tid) == 
            /\ Record[tid].status = "pending"
@@ -342,22 +345,16 @@ PipeLineWrite(tid) ==
                                                  
                  /\ UNCHANGED <<Unchangedvars>>
 
-\* Commit a txn.               
+\* Start to commit a txn.               
 StartParallelCommit(tid) == 
-            \* All commands have been executed.
-            /\ Txn_exeid[tid] = Cardinality(DOMAIN Record[tid].command) + 1
-            \* Change txn's status from "pending" to "staging"
-            /\ Record[tid].status = "pending" 
             /\ Record' = [Record EXCEPT ![tid].status = "staging"]
             /\ UNCHANGED <<Unchangedvars,MVCCData,System_ts,Read_result,Txn_exeid,Intent_write,Tscache>>
 
 \* Check whether all inflight write have been persisted. 
 CheckInflightAndCommit(tid) ==
-            /\ Record[tid].status = "staging"
             /\ \/ \* If all inflight write have been persisted.
                   /\ Record' = [Record EXCEPT ![tid].status = "committed"]
                   /\ UNCHANGED <<System_ts,Read_result,Txn_exeid>>
-                  
                   
                \* For convenience, we assume that all inflight writes will be persisted. 
                \* You can remove (**) below to add failure scenarios.
@@ -371,7 +368,14 @@ CheckInflightAndCommit(tid) ==
                   /\ Read_result' = [Read_result EXCEPT ![tid] = <<>>]
                   /\ System_ts' = System_ts + 1 *)
             /\ UNCHANGED <<Unchangedvars,MVCCData,Intent_write,Tscache>>
-
+            
+CommitTransaction(tid) == 
+        \/ /\ Record[tid].status = "pending" 
+           \* All commands have been executed.
+           /\ Txn_exeid[tid] = Cardinality(DOMAIN Record[tid].command) + 1
+           /\ StartParallelCommit(tid)
+        \/ /\ Record[tid].status = "staging"
+           /\ CheckInflightAndCommit(tid)
 
 \* Move the value from intent write to MVCCData.
 CleanIntentWrite(k) == 
@@ -387,20 +391,54 @@ CleanIntentWrite(k) ==
 Next == 
         \/ \E tid \in 1..3 : BeginTransaction(tid)
         \/ \E tid \in DOMAIN Record : PipeLineWrite(tid)
-        \/ \E tid \in DOMAIN Record : StartParallelCommit(tid)
-        \/ \E tid \in DOMAIN Record : CheckInflightAndCommit(tid)
+        \/ \E tid \in DOMAIN Record : CommitTransaction(tid)
         \/ \E k \in KEYS : CleanIntentWrite(k)
-        
-       
+     
+-----------------------------------------------------------------------------------------------------------------------------     
 
                                         
-\* Use SerializeedTxn, SerializedRead and lenth of SerializeedTxn to verify its correctness.
-\* To verify its correctness, we verify:
-\* 1.The read value is the most recently written value.
-\* 2.The last written value determines the current value of MVCCData. 
-CheckInv(SerializedTxn,SerializedRead,num) == 
-                 /\ \A index \in 1..num : Assert(
-                                          LET Item == SerializedTxn[index]
+
+\* Return txn's command if committed.    
+GetTxn(i) == IF Record[i].status = "committed" THEN Record[i].command 
+             ELSE IF Record[i].status = "aborted" THEN <<>>
+             ELSE Assert(FALSE,"error status")
+\* Get lenth of txn's commands if committed.             
+GetTxnLen(i,t) ==
+             LET committedSetNum == Cardinality({m \in 1..3 : Record[m].status = "committed"})
+             IN IF /\ Record[i].status = "committed" 
+                   /\ t <= committedSetNum
+                THEN Len(Record[i].command)
+                ELSE 0
+                
+RECURSIVE GetSerializedTxn(_,_)
+GetSerializedTxn(Result,Set) ==
+       IF {id \in Set : Record[id].status = "committed"} /= {}
+       THEN LET nextTxnid == CHOOSE x \in Set : \A y \in Set : /\ Record[x].status = "committed"
+                                                               /\ Record[y].status = "committed" => Record[x].ts <= Record[y].ts
+            IN GetSerializedTxn(Result \o Record[nextTxnid].command, Set \ {nextTxnid})
+       ELSE Result
+       
+RECURSIVE GetSerializedRead(_,_)
+GetSerializedRead(Result,Set) ==
+       IF {id \in Set : Record[id].status = "committed"} /= {}
+       THEN LET nextTxnid == CHOOSE x \in Set : \A y \in Set : /\ Record[x].status = "committed"
+                                                               /\ Record[y].status = "committed" => Record[x].ts <= Record[y].ts
+            IN GetSerializedRead(Result \o Read_result[nextTxnid], Set \ {nextTxnid})
+       ELSE Result
+       
+\* verify its correctness.      
+invCorrect ==\* When all txns are terminated and all intent write is written to MVCCData, check its correctness.
+             /\ Cardinality({id \in DOMAIN Record : Record[id].status = "committed"}) +
+                Cardinality({id \in DOMAIN Record : Record[id].status = "aborted"}) = 3
+             /\ \A k \in KEYS : Intent_write[k] = Nil 
+           =>   LET  SerializedTxn == GetSerializedTxn(<<>>,1..3)                                             
+                     SerializedRead == GetSerializedRead(<<>>,1..3)
+                     num == Len(SerializedTxn) 
+                IN  
+                \* To verify its correctness, we verify:
+                \* 1.The read value is the most recently written value.
+                \* 2.The last written value determines the current value of MVCCData. 
+                 /\ \A index \in 1..num : LET Item == SerializedTxn[index]
                                           IN \/ /\ Item.op = Write
                                                 /\ (~ \E i \in (index+1)..num : /\ SerializedTxn[i].op  = Write
                                                                                 /\ SerializedTxn[i].key = Item.key)
@@ -417,77 +455,11 @@ CheckInv(SerializedTxn,SerializedRead,num) ==
                                                       \* With written before, read recently written value.
                                                       \/ /\ samekeyW /= {}
                                                          /\ thisR = SerializedTxn[CHOOSE x \in samekeyW : \A y \in samekeyW : x >= y].value
-                                                  ,<<index,SerializedTxn,SerializedRead>>)
-\* Return txn's command if committed.    
-GetTxn(i) == IF Record[i].status = "committed" THEN Record[i].command 
-             ELSE IF Record[i].status = "aborted" THEN <<>>
-             ELSE Assert(FALSE,"error status")
-\* Get lenth of txn's commands if committed.             
-GetTxnLen(i,t) ==
-             LET committedSetNum == Cardinality({m \in 1..3 : Record[m].status = "committed"})
-             IN IF /\ Record[i].status = "committed" 
-                   /\ t <= committedSetNum
-                THEN Len(Record[i].command)
-                ELSE 0
-
-\* verify its correctness.      
-invCorrect ==\* When all txns are terminated and all intent write is written to MVCCData, check its correctness.
-             /\ Cardinality({id \in DOMAIN Record : Record[id].status = "committed"}) +
-                Cardinality({id \in DOMAIN Record : Record[id].status = "aborted"}) = 3
-             /\ \A k \in KEYS : Intent_write[k] = Nil 
-           =>   LET  \* Sort 3 txns
-                     \* 1.The committed txn precedes the aborted txn.
-                     \* 2.If the two txn status are the same, the smaller ts is in front.
-                     txn1 == CHOOSE x \in 1..3 : \A y \in 1..3 : IF Record[x].status /=  Record[y].status
-                                                                 THEN Record[x].status = "committed"
-                                                                 ELSE Record[x].ts <= Record[y].ts
-                                                                 
-                     txn3 == CHOOSE x \in 1..3 : \A y \in 1..3 : IF Record[x].status /=  Record[y].status
-                                                                 THEN Record[x].status = "aborted"
-                                                                 ELSE Record[x].ts >= Record[y].ts
-                                                                 
-                     txn2 == CHOOSE X \in 1..3 \ ({txn1} \union {txn3}) : TRUE
-                     
-                     
-                     TL1 == GetTxnLen(txn1,1)
-                     TL2 == GetTxnLen(txn2,2)
-                     TL3 == GetTxnLen(txn3,3)
-                     sumTxnLen  == TL1 + TL2 + TL3
-                     Txns == <<GetTxn(txn1),GetTxn(txn2),GetTxn(txn3)>>
-                     \* SerializedTxn is committed txns' in ts order.
-                     SerializedTxn == [i \in 1..sumTxnLen |-> IF i \in 1..TL1 THEN Txns[1][i]
-                                                               ELSE IF i \in TL1 + 1 .. TL1 + TL2 THEN Txns[2][i - TL1]
-                                                               ELSE Txns[3][i - TL1 - TL2]]
-                                                            
-                     RL1 == Len(Read_result[txn1]) 
-                     RL2 == Len(Read_result[txn2])
-                     RL3 == Len(Read_result[txn3])                                     
-                     sumReadLen == RL1 + RL2 + RL3 
-                     \* SerializedRead is committed txns' Read_result in ts order.
-                     SerializedRead == [i \in 1..sumReadLen |-> IF i \in 1..RL1 THEN Read_result[txn1][i]
-                                                                 ELSE IF i \in RL1 + 1 .. RL1 + RL2 THEN Read_result[txn2][i - RL1]
-                                                                 ELSE Read_result[txn3][i - RL1 - RL2]]
-                
-                IN  \* You can use the following statement to view an example. 
-                    \* /\ Assert(\E i \in 1..3: Record[i].status = "aborted",<<SerializedTxn,SerializedRead,Len(SerializedTxn)>>)
-                    
-                    /\ CheckInv(SerializedTxn,SerializedRead,Len(SerializedTxn))
-    
            
 \* The ts of two txns cannot be equal.    
 invTs == ~ \E i,j \in DOMAIN Record : /\ i /= j
                                       /\ Record[i].ts = Record[j].ts
  
- 
-         
-                               
-invOthers == 
-          \* If a txn is committed, all commands of it have been executed.
-          /\ \A i \in DOMAIN Record : Record[i].status = "committed" => Txn_exeid[i] = Len(Transactions[i]) + 1 
-          \* Without txn committed, MVCCData has no other values.
-          /\ ~ /\ \A i \in DOMAIN Record : Record[i].status /= "committed" 
-               /\ \E k \in KEYS : Len(MVCCData[k]) /= 1 
-          
 invType ==  /\ \A i \in DOMAIN Record :  /\ Record[i].status \in {"pending","staging","aborted","committed"} 
                                          /\ Record[i].attempt \in 0..MaxAttempt + 1
                                          /\ Txn_exeid[i] \in 1..Len(Transactions[i]) + 1
@@ -504,20 +476,25 @@ invMVCCData == \* Data must be written by comitted txn.
            => LET comSet == {i \in 1..3 : Record[i].status = "committed"}
                   tsSet  == {Record[i].ts : i \in comSet} \union {0}
                   MVCCDataSet == [k \in KEYS |-> {MVCCData[k][i].ts : i \in 1..Len(MVCCData[k])}]
-              IN Assert(
-                  \A k \in KEYS : \A ele \in MVCCDataSet[k] : ele \in tsSet 
-                  ,"error MVCCData")
+              IN  \A k \in KEYS : \A ele \in MVCCDataSet[k] : ele \in tsSet 
+                 
            
-
+invOthers == 
+          \* If a txn is committed, all commands of it have been executed.
+          /\ \A i \in DOMAIN Record : Record[i].status = "committed" => Txn_exeid[i] = Len(Transactions[i]) + 1 
+          \* Without txn committed, MVCCData has no other values.
+          /\ ~ /\ \A i \in DOMAIN Record : Record[i].status /= "committed" 
+               /\ \E k \in KEYS : Len(MVCCData[k]) /= 1
                                
 TxnInv == /\ invCorrect 
           /\ invTs
-          /\ invOthers
           /\ invType
           /\ invMVCCData
+          /\ invOthers
           
+-----------------------------------------------------------------------------------------------------------------------------          
 \* In a txn, when reads a value, the value must be the same as the value of the most recent operation on the key.
-\* On the other word : if most recent operation in same txn is Read, two result of read should be equal.
+\* On the other word : If most recent operation in same txn is Read, two result of read should be equal.
 \* If most recent operation in same txn is Write, the read operation should read the written value.
 ReadProperty == 
        \A i \in 1..3: (Len(Read_result'[i]) > Len(Read_result[i]))
@@ -542,11 +519,19 @@ ReadProperty ==
                                    
                                 IN 
                                    /\ Assert(Cardinality(ReadIndexSet) = 1 ,ReadIndexSet)
-                                   /\ (Cardinality(sKeySet) > 0) =>
-                                       \/ /\ cmd.op = Write
-                                          /\ Assert(cmd.value = thisReadResult,"do not equal")
-                                       \/ /\ cmd.op = Read 
-                                          /\ Assert(Rr[LastReadResultIndex] = thisReadResult,"do not equal")
+                                   /\ \/ /\ Cardinality(sKeySet) > 0 
+                                         /\ \/ /\ cmd.op = Write
+                                               /\ Assert(cmd.value = thisReadResult,"do not equal")
+                                            \/ /\ cmd.op = Read 
+                                               /\ Assert(Rr[LastReadResultIndex] = thisReadResult,"do not equal")
+                                      \/ /\ Cardinality(sKeySet) = 0
+                                         /\ (thisReadResult /= 0) =>
+                                             \/ /\ thisReadResult \in {1,2,3}
+                                                /\ Record[1].status = "committed"
+                                             \/ /\ thisReadResult \in {4,5,6,7}
+                                                /\ Record[2].status = "committed"
+                                             \/ /\ thisReadResult \in {8,9,10,11}
+                                                /\ Record[3].status = "committed"
                                           
 \* After the Write operation, the content of the Write_intent will be modified accordingly                              
 WriteProperty == 
@@ -570,11 +555,8 @@ Properties ==
     /\ [][\A k \in KEYS: Tscache'[k] >= Tscache[k]]_Tscache
     \* System_ts increases monotonically.
     /\ [][System_ts' > System_ts]_System_ts
-    \* Finally, the status of all txns is "committed" or "aborted"
-    /\ <>(\A i \in DOMAIN Record: \/ Record[i].status = "committed"
-                                  \/ Record[i].status = "aborted")
-                                  
-==================================
+                
+==============================================================================================================================
 
 
 
