@@ -207,3 +207,52 @@ ok defaultdb
 subtest end
 
 subtest end
+
+subtest autodetect
+
+set_hba
+host all foo all cert-password
+host all abc all cert-password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all foo all cert-password
+# host all abc all cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
+host   all      root all     cert-password
+host   all      foo  all     cert-password
+host   all      abc  all     cert-password
+
+# Foo uses a bcrypt hash.
+connect user=foo password=abc
+----
+ok defaultdb
+
+# Assert the conn used a cleartext handshake.
+authlog 4
+.*client_connection_end
+----
+72 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+73 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+74 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+75 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+
+connect user=abc password=abc
+----
+ok defaultdb
+
+# Assert the conn used a SCRAM handshake.
+authlog 4
+.*client_connection_end
+----
+79 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+80 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+81 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+82 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+
+subtest end
