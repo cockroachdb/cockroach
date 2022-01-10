@@ -82,6 +82,10 @@ func HasInactiveDescriptorError(err error) bool {
 // found with the given id.
 var ErrDescriptorNotFound = errors.New("descriptor not found")
 
+// ErrReferencedDescriptorNotFound is like ErrDescriptorNotFound but for
+// descriptors referenced within another descriptor.
+var ErrReferencedDescriptorNotFound = errors.New("referenced descriptor not found")
+
 // ErrDescriptorWrongType is returned to signal that a descriptor was found but
 // that it wasn't of the expected type.
 var ErrDescriptorWrongType = errors.New("unexpected descriptor type")

@@ -365,7 +365,7 @@ func (vdg *validationDescGetterImpl) GetDatabaseDescriptor(
 ) (DatabaseDescriptor, error) {
 	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
-		return nil, WrapDatabaseDescRefErr(id, ErrDescriptorNotFound)
+		return nil, WrapDatabaseDescRefErr(id, ErrReferencedDescriptorNotFound)
 	}
 	return AsDatabaseDescriptor(desc)
 }
@@ -374,7 +374,7 @@ func (vdg *validationDescGetterImpl) GetDatabaseDescriptor(
 func (vdg *validationDescGetterImpl) GetSchemaDescriptor(id descpb.ID) (SchemaDescriptor, error) {
 	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
-		return nil, WrapSchemaDescRefErr(id, ErrDescriptorNotFound)
+		return nil, WrapSchemaDescRefErr(id, ErrReferencedDescriptorNotFound)
 	}
 	return AsSchemaDescriptor(desc)
 }
@@ -383,7 +383,7 @@ func (vdg *validationDescGetterImpl) GetSchemaDescriptor(id descpb.ID) (SchemaDe
 func (vdg *validationDescGetterImpl) GetTableDescriptor(id descpb.ID) (TableDescriptor, error) {
 	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
-		return nil, WrapTableDescRefErr(id, ErrDescriptorNotFound)
+		return nil, WrapTableDescRefErr(id, ErrReferencedDescriptorNotFound)
 	}
 	return AsTableDescriptor(desc)
 }
@@ -392,7 +392,7 @@ func (vdg *validationDescGetterImpl) GetTableDescriptor(id descpb.ID) (TableDesc
 func (vdg *validationDescGetterImpl) GetTypeDescriptor(id descpb.ID) (TypeDescriptor, error) {
 	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
-		return nil, WrapTypeDescRefErr(id, ErrDescriptorNotFound)
+		return nil, WrapTypeDescRefErr(id, ErrReferencedDescriptorNotFound)
 	}
 	return AsTypeDescriptor(desc)
 }
