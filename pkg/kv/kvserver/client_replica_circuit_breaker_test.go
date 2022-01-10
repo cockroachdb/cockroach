@@ -233,7 +233,8 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 	// leases have lots of special casing internally, this is easy to get wrong.
 	runCircuitBreakerTest(t, "follower-quorum-loss", func(t *testing.T, ctx context.Context, tc *circuitBreakerTest) {
 		// Get lease to n2 so that we can lose it without taking down the system ranges.
-		tc.TransferRangeLeaseOrFatal(t, tc.LookupRangeOrFatal(t, tc.ScratchRange(t)), tc.Target(n2))
+		desc := tc.LookupRangeOrFatal(t, tc.ScratchRange(t))
+		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(n2))
 		resumeHeartbeats := tc.ExpireAllLeases(t, keepHeartbeats)
 		tc.StopServer(n2) // lose quorum and leaseholder
 		resumeHeartbeats()
@@ -246,7 +247,10 @@ func TestReplicaCircuitBreaker(t *testing.T) {
 
 		// Bring n2 back and service should be restored.
 		tc.SetSlowThreshold(0) // reset
+		tBegin := timeutil.Now()
 		require.NoError(t, tc.RestartServer(n2))
+		t.Logf("TBG post %s", timeutil.Since(tBegin))
+		tc.GetFirstStoreFromServer(t, n1).GetReplicaIfExists(desc.RangeID).Campaign(ctx)
 		tc.UntripsSoon(t, tc.Read, n1)
 		require.NoError(t, tc.Write(n1))
 	})

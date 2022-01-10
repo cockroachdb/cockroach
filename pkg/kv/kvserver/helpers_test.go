@@ -222,7 +222,6 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 	)
 }
 
-// Breaker returns the circuit breaker sitting in the Replica's write path.
 func (r *Replica) Breaker() *circuit2.Breaker {
 	return r.breaker.wrapped
 }
@@ -233,6 +232,13 @@ func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, reader)
+}
+
+func (r *Replica) Campaign(ctx context.Context) {
+	r.withRaftGroup(true /* mayCampaignOnWake */, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+		r.Campaign()
+		return true, nil
+	})
 }
 
 func (r *Replica) RaftLock() {
