@@ -434,6 +434,16 @@ func (desc *wrapper) IndexKeyColumns(idx catalog.Index) []catalog.Column {
 	return nil
 }
 
+// IndexKeyColumnDirections implements the TableDescriptor interface.
+func (desc *wrapper) IndexKeyColumnDirections(
+	idx catalog.Index,
+) []descpb.IndexDescriptor_Direction {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.keyDirs
+	}
+	return nil
+}
+
 // IndexKeySuffixColumns implements the TableDescriptor interface.
 func (desc *wrapper) IndexKeySuffixColumns(idx catalog.Index) []catalog.Column {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
@@ -446,6 +456,16 @@ func (desc *wrapper) IndexKeySuffixColumns(idx catalog.Index) []catalog.Column {
 func (desc *wrapper) IndexFullColumns(idx catalog.Index) []catalog.Column {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
 		return ic.full
+	}
+	return nil
+}
+
+// IndexFullColumnDirections implements the TableDescriptor interface.
+func (desc *wrapper) IndexFullColumnDirections(
+	idx catalog.Index,
+) []descpb.IndexDescriptor_Direction {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.fullDirs
 	}
 	return nil
 }
