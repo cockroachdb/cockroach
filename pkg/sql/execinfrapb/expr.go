@@ -13,6 +13,7 @@ package execinfrapb
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -169,6 +170,13 @@ func DeserializeExpr(
 func (eh *ExprHelper) Init(
 	expr Expression, types []*types.T, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) error {
+	distResolver, ok := semaCtx.TypeResolver.(*descs.DistSQLTypeResolver)
+	if ok {
+		err := distResolver.HydrateTypeSlice(evalCtx.Context, types)
+		if err != nil {
+			return err
+		}
+	}
 	if expr.Empty() {
 		return nil
 	}

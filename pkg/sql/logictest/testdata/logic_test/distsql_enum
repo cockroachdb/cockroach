@@ -1,4 +1,4 @@
-# LogicTest: 5node-default-configs
+# LogicTest: 5node
 
 # Regression test for nested tuple enum hydration (#74189)
 statement ok
@@ -31,3 +31,61 @@ WITH w (col)
 ----
 hello     ("(hello,0)",0)
 
+# Regression test for nested tuple enum hydration (#74189)
+statement ok
+CREATE TABLE t1 (x INT PRIMARY KEY, y greeting); INSERT INTO t1(x, y) VALUES (0,'hello');
+CREATE TABLE t2 (x INT PRIMARY KEY, y greeting); INSERT INTO t2(x, y) VALUES (0,'hello');
+
+# split into ranges
+
+statement ok
+ALTER TABLE t1 SPLIT AT VALUES(0),(10),(20);
+ALTER TABLE t2 SPLIT AT VALUES(0),(10),(20);
+ALTER TABLE t1 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 10), (ARRAY[3], 20);
+ALTER TABLE t2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 10), (ARRAY[3], 20);
+
+# Tickle stats to force lookup join
+statement ok
+ALTER TABLE t1 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE t2 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+query T nodeidx=1
+EXPLAIN (VEC)
+SELECT x from t1 WHERE EXISTS (SELECT x FROM t2 WHERE t1.x=t2.x AND t2.y='hello')
+----
+│
+├ Node 1
+│ └ *colrpc.Outbox
+│   └ *rowexec.joinReader
+│     └ *colfetcher.ColBatchScan
+├ Node 2
+│ └ *colexec.ParallelUnorderedSynchronizer
+│   ├ *colrpc.Inbox
+│   ├ *rowexec.joinReader
+│   │ └ *colfetcher.ColBatchScan
+│   └ *colrpc.Inbox
+└ Node 3
+  └ *colrpc.Outbox
+    └ *rowexec.joinReader
+      └ *colfetcher.ColBatchScan
+
+query I nodeidx=1
+SELECT x from t1 WHERE EXISTS (SELECT x FROM t2 WHERE t1.x=t2.x AND t2.y='hello')
+----
+0
