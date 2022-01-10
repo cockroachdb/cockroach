@@ -328,3 +328,19 @@ func (c connExCursorAccessor) addCursor(s string, cursor *sqlCursor) error {
 func (c connExCursorAccessor) list() map[string]*sqlCursor {
 	return c.ex.extraTxnState.sqlCursors.list()
 }
+
+// checkNoConflictingCursors returns an error if the input schema changing
+// statement conflicts with any open SQL cursors in the current planner.
+func (p *planner) checkNoConflictingCursors(stmt tree.Statement) error {
+	// TODO(jordan): this is stricter than Postgres is. Postgres permits
+	// concurrent schema changes within a transaction where a cursor is already
+	// open if the open cursors do not depend on schema objects being changed.
+	// We could improve this by matching the memo metadata's list of dependent
+	// schema objects in each open cursor with the objects being changed in the
+	// schema change.
+	if len(p.sqlCursors.list()) > 0 {
+		return unimplemented.NewWithIssue(74608, "cannot run schema change "+
+			"in a transaction with open DECLARE cursors")
+	}
+	return nil
+}

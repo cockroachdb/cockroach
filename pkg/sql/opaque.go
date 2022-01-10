@@ -48,6 +48,9 @@ func buildOpaque(
 
 	var plan planNode
 	if tree.CanModifySchema(stmt) {
+		if err := p.checkNoConflictingCursors(stmt); err != nil {
+			return nil, err
+		}
 		scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
 		if err != nil {
 			return nil, err
