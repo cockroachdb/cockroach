@@ -1375,6 +1375,13 @@ func (n *Node) GossipSubscription(
 	}
 }
 
+// TenantSettings implements the roachpb.InternalServer interface.
+func (n *Node) TenantSettings(
+	args *roachpb.TenantSettingsRequest, stream roachpb.Internal_TenantSettingsServer,
+) error {
+	return errors.AssertionFailedf("not implemented")
+}
+
 // Join implements the roachpb.InternalServer service. This is the
 // "connectivity" API; individual CRDB servers are passed in a --join list and
 // the join targets are addressed through this API.
