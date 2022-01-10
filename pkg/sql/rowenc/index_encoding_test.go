@@ -87,7 +87,7 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 func decodeIndex(
 	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, index catalog.Index, key []byte,
 ) ([]tree.Datum, error) {
-	types, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().KeyColumnIDs, nil)
+	types, err := getColumnTypes(tableDesc.IndexKeyColumns(index))
 	if err != nil {
 		return nil, err
 	}
@@ -663,7 +663,7 @@ func ExtractIndexKey(
 	}
 
 	// Extract the values for index.KeyColumnIDs.
-	indexTypes, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().KeyColumnIDs, nil)
+	indexTypes, err := getColumnTypes(tableDesc.IndexKeyColumns(index))
 	if err != nil {
 		return nil, err
 	}
@@ -675,7 +675,7 @@ func ExtractIndexKey(
 	}
 
 	// Extract the values for index.KeySuffixColumnIDs
-	extraTypes, err := colinfo.GetColumnTypes(tableDesc, index.IndexDesc().KeySuffixColumnIDs, nil)
+	extraTypes, err := getColumnTypes(tableDesc.IndexKeySuffixColumns(index))
 	if err != nil {
 		return nil, err
 	}
@@ -727,4 +727,15 @@ func ExtractIndexKey(
 	indexKey, _, err := EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colMap, decodedValues, indexKeyPrefix)
 	return indexKey, err
+}
+
+func getColumnTypes(columns []catalog.Column) ([]*types.T, error) {
+	outTypes := make([]*types.T, len(columns))
+	for i, col := range columns {
+		if !col.Public() {
+			return nil, fmt.Errorf("column-id \"%d\" does not exist", col.GetID())
+		}
+		outTypes[i] = col.GetType()
+	}
+	return outTypes, nil
 }
