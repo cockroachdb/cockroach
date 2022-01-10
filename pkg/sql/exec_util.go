@@ -1245,6 +1245,10 @@ type ExecutorConfig struct {
 	// SystemIDChecker is used to check whether an ID is part of the
 	// system database.
 	SystemIDChecker *catalog.SystemIDChecker
+
+	// AllowSessionRevival is true if the cluster is allowed to create session
+	// revival tokens and use them to authenticate a session.
+	AllowSessionRevival bool
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
