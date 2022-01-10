@@ -136,6 +136,10 @@ func (u updater) Set(ctx context.Context, key, rawValue string, vt string) error
 // ResetRemaining sets all settings not updated by the updater to their default values.
 func (u updater) ResetRemaining(ctx context.Context) {
 	for k, v := range registry {
+		if u.sv.NonSystemTenant() && v.Class() == SystemOnly {
+			// Don't try to reset system settings on a non-system tenant.
+			continue
+		}
 		if _, ok := u.m[k]; !ok {
 			v.setToDefault(ctx, u.sv)
 		}

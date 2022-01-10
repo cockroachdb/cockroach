@@ -128,7 +128,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	rf, err := s.f.RangeFeed(ctx, "settings", []roachpb.Span{settingsTableSpan}, now, func(
 		ctx context.Context, kv *roachpb.RangeFeedValue,
 	) {
-		setting, val, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
+		name, val, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
 			Key:   kv.Key,
 			Value: kv.Value,
 		})
@@ -136,19 +136,32 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
 			return
 		}
+
+		if !s.codec.ForSystemTenant() {
+			setting, ok := settings.Lookup(name, settings.LookupForLocalAccess, s.codec.ForSystemTenant())
+			if !ok {
+				log.Warningf(ctx, "unknown setting %s, skipping update", log.Safe(name))
+				return
+			}
+			if setting.Class() != settings.TenantWritable {
+				log.Warningf(ctx, "ignoring read-only setting %s", log.Safe(name))
+				return
+			}
+		}
+
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		_, hasOverride := s.mu.overrides[setting]
+		_, hasOverride := s.mu.overrides[name]
 		if tombstone {
 			// This event corresponds to a deletion.
-			delete(s.mu.values, setting)
+			delete(s.mu.values, name)
 			if !hasOverride {
-				s.setDefault(ctx, u, setting)
+				s.setDefault(ctx, u, name)
 			}
 		} else {
-			s.mu.values[setting] = val
+			s.mu.values[name] = val
 			if !hasOverride {
-				s.set(ctx, u, setting, val)
+				s.set(ctx, u, name, val)
 			}
 		}
 	}, rangefeed.WithInitialScan(func(ctx context.Context) {
@@ -218,7 +231,7 @@ func (s *SettingsWatcher) set(ctx context.Context, u settings.Updater, key strin
 
 // setDefault sets a setting to its default value.
 func (s *SettingsWatcher) setDefault(ctx context.Context, u settings.Updater, key string) {
-	setting, ok := settings.Lookup(key, settings.LookupForLocalAccess)
+	setting, ok := settings.Lookup(key, settings.LookupForLocalAccess, s.codec.ForSystemTenant())
 	if !ok {
 		log.Warningf(ctx, "failed to find setting %s, skipping update", log.Safe(key))
 		return

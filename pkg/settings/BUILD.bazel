@@ -22,6 +22,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/settings",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -35,6 +36,7 @@ go_test(
     deps = [
         ":settings",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
