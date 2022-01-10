@@ -25,31 +25,15 @@ func BenchmarkCoverageChecks(b *testing.B) {
 				b.Run(fmt.Sprintf("numSpans=%d", numSpans), func(b *testing.B) {
 					for _, baseFiles := range []int{0, 10, 100, 1000, 10000} {
 						b.Run(fmt.Sprintf("numFiles=%d", baseFiles), func(b *testing.B) {
-							b.StopTimer()
 							ctx := context.Background()
 							backups := MockBackupChain(numBackups, numSpans, baseFiles, r)
 							b.ResetTimer()
 
-							b.Run("checkCoverage", func(b *testing.B) {
-								b.ResetTimer()
-								for i := 0; i < b.N; i++ {
-									if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
-										b.Fatal(err)
-									}
+							for i := 0; i < b.N; i++ {
+								if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
+									b.Fatal(err)
 								}
-							})
-							b.Run("makeImportSpans", func(b *testing.B) {
-								b.ResetTimer()
-								for i := 0; i < b.N; i++ {
-									_, ts, err := makeImportSpans(backups[numBackups-1].Spans, backups, nil, nil, errOnMissingRange)
-									if err != nil {
-										b.Fatal(err)
-									}
-									if got, expected := ts, backups[len(backups)-1].EndTime; !got.Equal(expected) {
-										b.Fatal(expected, got)
-									}
-								}
-							})
+							}
 						})
 					}
 				})
@@ -67,28 +51,16 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 				b.Run(fmt.Sprintf("numFiles=%d", baseFiles), func(b *testing.B) {
 					for _, numSpans := range []int{10, 100} {
 						b.Run(fmt.Sprintf("numSpans=%d", numSpans), func(b *testing.B) {
-							b.StopTimer()
 							ctx := context.Background()
 							backups := MockBackupChain(numBackups, numSpans, baseFiles, r)
 							b.ResetTimer()
-							b.Run("simple", func(b *testing.B) {
-								for i := 0; i < b.N; i++ {
-									if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
-										b.Fatal(err)
-									}
-									cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil)
-									b.ReportMetric(float64(len(cov)), "coverSize")
+							for i := 0; i < b.N; i++ {
+								if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
+									b.Fatal(err)
 								}
-							})
-							b.Run("coveringMerge", func(b *testing.B) {
-								for i := 0; i < b.N; i++ {
-									cov, _, err := makeImportSpans(backups[numBackups-1].Spans, backups, nil, nil, errOnMissingRange)
-									if err != nil {
-										b.Fatal(err)
-									}
-									b.ReportMetric(float64(len(cov)), "coverSize")
-								}
-							})
+								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, nil)
+								b.ReportMetric(float64(len(cov)), "coverSize")
+							}
 						})
 					}
 				})

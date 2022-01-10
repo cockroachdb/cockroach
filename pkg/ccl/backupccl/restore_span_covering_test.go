@@ -67,6 +67,18 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []BackupManifes
 	return backups
 }
 
+// checkRestoreCovering verifies that a covering actually uses every span of
+// every file in the passed backups that overlaps with any part of the passed
+// spans. It does by constructing a map from every file name to a SpanGroup that
+// contains the overlap of that file span with every required span, and then
+// iterating through the partitions of the cover and removing that partition's
+// span from the group for every file specified by that partition, and then
+// checking that all the groups are empty, indicating no needed span was missed.
+// It also checks that each file that the cover has an expected number of
+// partitions (i.e. isn't just one big partition of all files), by comparing its
+// length to the number of files a file's end key was greater than any prior end
+// key when walking files in order by start key in the backups. This check is
+// thus sensitive to ordering; the coverage correctness check however is not.
 func checkRestoreCovering(
 	backups []BackupManifest, spans roachpb.Spans, cov []execinfrapb.RestoreSpanEntry,
 ) error {
