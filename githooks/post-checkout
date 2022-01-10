@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-if [ "$1" != "$2" ]; then # previous ref != new ref.
+# previous ref != new ref && COCKROACHDB_DISABLE_POST_CHECKOUT_HOOK is not set
+if [ "$1" != "$2" ] && [ -z "${COCKROACH_DISABLE_POST_CHECKOUT_HOOK}" ]; then
   git clean -fd "pkg/**.pb.go" "pkg/**.pb.gw.go" "pkg/**.eg.go" "pkg/**.og.go" "pkg/**generated.go"
   exec git submodule update --init --recursive
 fi
