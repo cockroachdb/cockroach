@@ -147,6 +147,21 @@ percentage of physical memory (e.g. .25). If left unspecified, defaults to 25% o
 physical memory.`,
 	}
 
+	TSDBMem = FlagInfo{
+		Name: "max-tsdb-memory",
+		Description: `
+Maximum memory capacity available to store temporary data for use by the
+time-series database to display metrics in the DB Console. Accepts numbers
+interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
+percentage of physical memory (e.g. 0.01). If left unspecified, defaults to
+1% of physical memory or 64MiB whichever is greater. It maybe necessary to
+manually increase this value on a cluster with hundreds of nodes where
+individual nodes have very limited memory available. This can constrain
+the ability of the DB Console to process time-series queries used to render
+metrics for the entire cluster. This capacity constraint does not affect
+SQL query execution.`,
+	}
+
 	SQLTempStorage = FlagInfo{
 		Name: "max-disk-temp-storage",
 		Description: `
