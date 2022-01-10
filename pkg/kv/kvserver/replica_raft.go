@@ -489,8 +489,8 @@ func (r *Replica) handleRaftReady(
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
-// handleRaftReadyLocked is the same as handleRaftReady but requires that the
-// replica's raftMu be held.
+// handleRaftReadyRaftMuLocked is the same as handleRaftReady but requires that
+// the replica's raftMu be held.
 //
 // The returned string is nonzero whenever an error is returned to give a
 // non-sensitive cue as to what happened.
@@ -979,11 +979,13 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked(ctx, livenessMap) {
+
+	now := r.store.Clock().NowAsClockTimestamp()
+	if r.maybeQuiesceLocked(ctx, now, livenessMap) {
 		return false, nil
 	}
 
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx)
+	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, now)
 
 	// For followers, we update lastUpdateTimes when we step a message from them
 	// into the local Raft group. The leader won't hit that path, so we update
