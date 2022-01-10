@@ -1,6 +1,12 @@
 # LogicTest: multiregion-9node-3region-3azs
 # TODO(#69265): enable multiregion-9node-3region-3azs-tenant.
 
+# Set the closed timestamp interval to be short to shorten the amount of time
+# we need to wait for the system config to propagate.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
+
 statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
 USE multi_region_test_db
@@ -187,7 +193,7 @@ ALTER TABLE history INJECT STATISTICS '[
 
 # Regression test for #63735. Ensure that we choose locality optimized anti
 # joins for the foreign key checks.
-query T
+query T retry
 EXPLAIN INSERT
 INTO
   history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)

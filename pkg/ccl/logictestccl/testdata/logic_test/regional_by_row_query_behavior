@@ -2,6 +2,12 @@
 # TODO(#69265): enable multiregion-9node-3region-3azs-tenant and/or revert
 # the commit that split these changes out.
 
+# Set the closed timestamp interval to be short to shorten the amount of time
+# we need to wait for the system config to propagate.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
+
 statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE;
 USE multi_region_test_db
@@ -20,7 +26,7 @@ CREATE TABLE regional_by_row_table (
 ) LOCALITY REGIONAL BY ROW
 
 # Do a REGEXP replace of the enums as these may not be static.
-query T
+query T retry
 SELECT regexp_replace(info, '@\d+', '@<enum_val>', 'g') FROM
 [EXPLAIN (OPT, CATALOG) SELECT * FROM regional_by_row_table]
 ----
