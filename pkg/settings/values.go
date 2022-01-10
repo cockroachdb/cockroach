@@ -14,12 +14,14 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // MaxSettings is the maximum number of settings that the system supports.
 // Exported for tests.
-const MaxSettings = 512
+const MaxSettings = 511
 
 // Values is a container that stores values for all registered settings.
 // Each setting is assigned a unique slot (up to MaxSettings).
@@ -27,6 +29,8 @@ const MaxSettings = 512
 // uninitialized slot index is used).
 type Values struct {
 	container valuesContainer
+
+	nonSystemTenant bool
 
 	overridesMu struct {
 		syncutil.Mutex
@@ -48,17 +52,53 @@ type Values struct {
 	opaque interface{}
 }
 
+const numSlots = MaxSettings + 1
+
 type valuesContainer struct {
-	intVals     [MaxSettings]int64
-	genericVals [MaxSettings]atomic.Value
+	intVals     [numSlots]int64
+	genericVals [numSlots]atomic.Value
+
+	// If forbidden[slot] is true, that setting is not allowed to be used from the
+	// current context (i.e. it is a SystemOnly setting and the container is for a
+	// tenant). Reading or writing such a setting causes panics in test builds.
+	forbidden [numSlots]bool
 }
 
 func (c *valuesContainer) setGenericVal(slot slotIdx, newVal interface{}) {
+	if !c.checkForbidden(slot) {
+		return
+	}
 	c.genericVals[slot].Store(newVal)
 }
 
-func (c *valuesContainer) setInt64Val(slot slotIdx, newVal int64) bool {
+func (c *valuesContainer) setInt64Val(slot slotIdx, newVal int64) (changed bool) {
+	if !c.checkForbidden(slot) {
+		return false
+	}
 	return atomic.SwapInt64(&c.intVals[slot], newVal) != newVal
+}
+
+func (c *valuesContainer) getInt64(slot slotIdx) int64 {
+	c.checkForbidden(slot)
+	return atomic.LoadInt64(&c.intVals[slot])
+}
+
+func (c *valuesContainer) getGeneric(slot slotIdx) interface{} {
+	c.checkForbidden(slot)
+	return c.genericVals[slot].Load()
+}
+
+// checkForbidden checks if the setting in the given slot is allowed to be used
+// from the current context. If not, it panics in test builds and returns false
+// in non-test builds.
+func (c *valuesContainer) checkForbidden(slot slotIdx) bool {
+	if c.forbidden[slot] {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("attempted to set forbidden setting %s", slotTable[slot].Key()))
+		}
+		return false
+	}
+	return true
 }
 
 type testOpaqueType struct{}
@@ -78,6 +118,23 @@ func (sv *Values) Init(ctx context.Context, opaque interface{}) {
 	}
 }
 
+// SetNonSystemTenant marks this container as pertaining to a non-system tenant,
+// after which use of SystemOnly values is disallowed.
+func (sv *Values) SetNonSystemTenant() {
+	sv.nonSystemTenant = true
+	for slot, setting := range slotTable {
+		if setting != nil && setting.Class() == SystemOnly {
+			sv.container.forbidden[slot] = true
+		}
+	}
+}
+
+// NonSystemTenant returns true if this container is for a non-system tenant
+// (i.e. SetNonSystemTenant() was called).
+func (sv *Values) NonSystemTenant() bool {
+	return sv.nonSystemTenant
+}
+
 // Opaque returns the argument passed to Init.
 func (sv *Values) Opaque() interface{} {
 	return sv.opaque
@@ -90,14 +147,6 @@ func (sv *Values) settingChanged(ctx context.Context, slot slotIdx) {
 	for _, fn := range funcs {
 		fn(ctx)
 	}
-}
-
-func (c *valuesContainer) getInt64(slot slotIdx) int64 {
-	return atomic.LoadInt64(&c.intVals[slot])
-}
-
-func (c *valuesContainer) getGeneric(slot slotIdx) interface{} {
-	return c.genericVals[slot].Load()
 }
 
 func (sv *Values) setInt64(ctx context.Context, slot slotIdx, newVal int64) {

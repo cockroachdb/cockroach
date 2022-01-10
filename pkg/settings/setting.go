@@ -22,6 +22,12 @@ import (
 // multiple "instances" (values) for each setting (e.g. for multiple test
 // servers in the same process).
 type Setting interface {
+	// Class returns the scope of the setting in multi-tenant scenarios.
+	Class() Class
+
+	// Key returns the name of the specific cluster setting.
+	Key() string
+
 	// Typ returns the short (1 char) string denoting the type of setting.
 	Typ() string
 
@@ -29,9 +35,6 @@ type Setting interface {
 	// It's used when materializing results for `SHOW CLUSTER SETTINGS` or `SHOW
 	// CLUSTER SETTING <setting-name>`.
 	String(sv *Values) string
-
-	// Key returns the name of the specific cluster setting.
-	Key() string
 
 	// Description contains a helpful text explaining what the specific cluster
 	// setting is for.
@@ -41,9 +44,6 @@ type Setting interface {
 	// Reserved settings are still accessible to users, but they don't get listed
 	// out when retrieving all settings.
 	Visibility() Visibility
-
-	// Class returns the scope of the setting in multi-tenant scenarios.
-	Class() Class
 }
 
 // NonMaskedSetting is the exported interface of non-masked settings.
