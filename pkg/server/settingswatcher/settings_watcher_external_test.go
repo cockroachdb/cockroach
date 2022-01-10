@@ -11,12 +11,14 @@
 package settingswatcher_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -47,6 +49,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
+	const systemOnlySetting = "kv.snapshot_rebalance.max_rate"
 	toSet := map[string][]interface{}{
 		"sql.defaults.experimental_hash_sharded_indexes.enabled": {true, false},
 		"kv.queue.process.guaranteed_time_budget":                {"17s", "20s"},
@@ -54,7 +57,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		"cluster.organization":                                   {"foobar", "bazbax"},
 		// Include a system-only setting to verify that we don't try to change its
 		// value (which would cause a panic in test builds).
-		"kv.snapshot_rebalance.max_rate": {1024, 2048},
+		systemOnlySetting: {1024, 2048},
 	}
 	fakeTenant := roachpb.MakeTenantID(2)
 	systemTable := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
@@ -62,10 +65,28 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	fakeTenantPrefix := keys.MakeTenantPrefix(fakeTenant)
 
 	db := tc.Server(0).DB()
-
-	copySettingsFromSystemToFakeTenant := func() {
+	getSourceClusterRows := func() []kv.KeyValue {
 		rows, err := db.Scan(ctx, systemTable, systemTable.PrefixEnd(), 0 /* maxRows */)
 		require.NoError(t, err)
+		return rows
+	}
+	filterSystemOnly := func(rows []kv.KeyValue) (filtered []kv.KeyValue) {
+		for _, row := range rows {
+			if !bytes.Contains(row.Key, []byte(systemOnlySetting)) {
+				filtered = append(filtered, row)
+			}
+		}
+		return filtered
+	}
+	copySettingsFromSystemToFakeTenant := func() int {
+		_, err := db.DelRange(
+			ctx,
+			fakeTenantPrefix,
+			fakeTenantPrefix.PrefixEnd(),
+			false,
+		)
+		require.NoError(t, err)
+		rows := getSourceClusterRows()
 		for _, row := range rows {
 			rem, _, err := keys.DecodeTenantPrefix(row.Key)
 			require.NoError(t, err)
@@ -74,6 +95,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 			row.Value.Timestamp = hlc.Timestamp{}
 			require.NoError(t, db.Put(ctx, tenantKey, row.Value))
 		}
+		return len(rows)
 	}
 	checkSettingsValuesMatch := func(a, b *cluster.Settings) error {
 		for _, k := range settings.Keys(false /* forSystemTenant */) {
@@ -88,6 +110,30 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		}
 		return nil
 	}
+	checkStoredValuesMatch := func(expected []roachpb.KeyValue) error {
+		got := filterSystemOnly(getSourceClusterRows())
+		if len(got) != len(expected) {
+			return errors.Errorf("expected %d rows, got %d", len(expected), len(got))
+		}
+		for i, kv := range got {
+			rem, _, err := keys.DecodeTenantPrefix(kv.Key)
+			require.NoError(t, err)
+			tenantKey := append(fakeTenantPrefix, rem...)
+			if !tenantKey.Equal(expected[i].Key) {
+				return errors.Errorf("mismatched key %d: %v expected, got %d", i, expected[i].Key, tenantKey)
+			}
+			// Look past the checksum because it uses the key too.
+			const checksumLen = 4
+			if !bytes.Equal(
+				kv.Value.RawBytes[checksumLen:],
+				expected[i].Value.RawBytes[checksumLen:],
+			) {
+				return errors.Errorf("mismatched value %d: %q expected, got %q",
+					i, kv.Value.RawBytes, expected[i].Value.RawBytes)
+			}
+		}
+		return nil
+	}
 	for k, v := range toSet {
 		tdb.Exec(t, "SET CLUSTER SETTING "+k+" = $1", v[0])
 	}
@@ -95,9 +141,10 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	s0 := tc.Server(0)
 	tenantSettings := cluster.MakeTestingClusterSettings()
 	tenantSettings.SV.SetNonSystemTenant()
+	storage := &fakeStorage{}
 	sw := settingswatcher.New(s0.Clock(), fakeCodec, tenantSettings,
 		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
-		s0.Stopper())
+		s0.Stopper(), storage)
 	require.NoError(t, sw.Start(ctx))
 	require.NoError(t, checkSettingsValuesMatch(s0.ClusterSettings(), tenantSettings))
 	for k, v := range toSet {
@@ -107,6 +154,61 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return checkSettingsValuesMatch(s0.ClusterSettings(), tenantSettings)
 	})
+	// Shorten the closed timestamp duration as a cheeky way to check the
+	// checkpointing code while also speeding up the test.
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	copySettingsFromSystemToFakeTenant()
+	testutils.SucceedsSoon(t, func() error {
+		return checkStoredValuesMatch(storage.getKVs())
+	})
+
+	// Unset and set.
+	for k := range toSet {
+		tdb.Exec(t, "SET CLUSTER SETTING "+k+" = DEFAULT")
+	}
+	copySettingsFromSystemToFakeTenant()
+	testutils.SucceedsSoon(t, func() error {
+		return checkStoredValuesMatch(storage.getKVs())
+	})
+
+	for k, v := range toSet {
+		tdb.Exec(t, "SET CLUSTER SETTING "+k+" = $1", v[1])
+	}
+	copySettingsFromSystemToFakeTenant()
+	testutils.SucceedsSoon(t, func() error {
+		return checkStoredValuesMatch(storage.getKVs())
+	})
+
+	// Make sure we're not spinning writing updates.
+	before := storage.getNumWrites()
+	<-time.After(20 * time.Millisecond) // two of the resolve intervals
+	require.Equal(t, before, storage.getNumWrites())
+}
+
+type fakeStorage struct {
+	syncutil.Mutex
+	kvs       []roachpb.KeyValue
+	numWrites int
+}
+
+func (f *fakeStorage) SnapshotKVs(ctx context.Context, kvs []roachpb.KeyValue) {
+	f.Lock()
+	defer f.Unlock()
+	f.kvs = kvs
+	f.numWrites++
+}
+
+func (f *fakeStorage) getKVs() []roachpb.KeyValue {
+	f.Lock()
+	defer f.Unlock()
+	return f.kvs
+}
+
+func (f *fakeStorage) getNumWrites() int {
+	f.Lock()
+	defer f.Unlock()
+	return f.numWrites
 }
 
 var _ = settings.RegisterStringSetting(settings.TenantWritable, "str.foo", "desc", "")
@@ -135,7 +237,7 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	f, err := rangefeed.NewFactory(stopper, kvDB, st, &rangefeed.TestingKnobs{})
 	require.NoError(t, err)
-	w := settingswatcher.NewWithOverrides(ts.Clock(), keys.SystemSQLCodec, st, f, stopper, m)
+	w := settingswatcher.NewWithOverrides(ts.Clock(), keys.SystemSQLCodec, st, f, stopper, m, nil)
 	require.NoError(t, w.Start(ctx))
 
 	expect := func(setting, value string) {
