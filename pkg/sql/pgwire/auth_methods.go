@@ -111,64 +111,74 @@ func authPassword(
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
-		// First step: send a cleartext authentication request to the client.
-		if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
-			return err
-		}
-
-		// While waiting for the client response, concurrently
-		// load the credentials from storage (or cache).
-		// Note: if this fails, we can't return the error right away,
-		// because we need to consume the client response first. This
-		// will be handled below.
-		expired, hashedPassword, pwRetrievalErr := pwRetrieveFn(ctx)
-
-		// Wait for the password response from the client.
-		pwdData, err := c.GetPwdData()
-		if err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-			if pwRetrievalErr != nil {
-				return errors.CombineErrors(err, pwRetrievalErr)
-			}
-			return err
-		}
-		// Now process the password retrieval error, if any.
-		if pwRetrievalErr != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, pwRetrievalErr)
-			return pwRetrievalErr
-		}
-
-		// Extract the password response from the client.
-		password, err := passwordString(pwdData)
-		if err != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-			return err
-		}
-
-		// Expiration check.
-		//
-		// NB: This check is advisory and could be omitted; the retrieval
-		// function ensures that the returned hashedPassword is
-		// security.MissingPasswordHash when the credentials have expired,
-		// so the credential check below would fail anyway.
-		if expired {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
-			return errExpiredPassword
-		} else if hashedPassword.Method() == security.HashMissingPassword {
-			c.LogAuthInfof(ctx, "user has no password defined")
-			// NB: the failure reason will be automatically handled by the fallback
-			// in auth.go (and report CREDENTIALS_INVALID).
-		}
-
-		// Now check the cleartext password against the retrieved credentials.
-		return security.UserAuthPasswordHook(
-			false /*insecure*/, password, hashedPassword,
-		)(ctx, systemIdentity, clientConnection)
+		return passwordAuthenticator(ctx, systemIdentity, clientConnection, pwRetrieveFn, c)
 	})
 	return b, nil
 }
 
 var errExpiredPassword = errors.New("password is expired")
+
+func passwordAuthenticator(
+	ctx context.Context,
+	systemIdentity security.SQLUsername,
+	clientConnection bool,
+	pwRetrieveFn PasswordRetrievalFn,
+	c AuthConn,
+) error {
+	// First step: send a cleartext authentication request to the client.
+	if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
+		return err
+	}
+
+	// While waiting for the client response, concurrently
+	// load the credentials from storage (or cache).
+	// Note: if this fails, we can't return the error right away,
+	// because we need to consume the client response first. This
+	// will be handled below.
+	expired, hashedPassword, pwRetrievalErr := pwRetrieveFn(ctx)
+
+	// Wait for the password response from the client.
+	pwdData, err := c.GetPwdData()
+	if err != nil {
+		c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+		if pwRetrievalErr != nil {
+			return errors.CombineErrors(err, pwRetrievalErr)
+		}
+		return err
+	}
+	// Now process the password retrieval error, if any.
+	if pwRetrievalErr != nil {
+		c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, pwRetrievalErr)
+		return pwRetrievalErr
+	}
+
+	// Extract the password response from the client.
+	password, err := passwordString(pwdData)
+	if err != nil {
+		c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+		return err
+	}
+
+	// Expiration check.
+	//
+	// NB: This check is advisory and could be omitted; the retrieval
+	// function ensures that the returned hashedPassword is
+	// security.MissingPasswordHash when the credentials have expired,
+	// so the credential check below would fail anyway.
+	if expired {
+		c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
+		return errExpiredPassword
+	} else if hashedPassword.Method() == security.HashMissingPassword {
+		c.LogAuthInfof(ctx, "user has no password defined")
+		// NB: the failure reason will be automatically handled by the fallback
+		// in auth.go (and report CREDENTIALS_INVALID).
+	}
+
+	// Now check the cleartext password against the retrieved credentials.
+	return security.UserAuthPasswordHook(
+		false /*insecure*/, password, hashedPassword,
+	)(ctx, systemIdentity, clientConnection)
+}
 
 func passwordString(pwdData []byte) (string, error) {
 	// Make a string out of the byte array.
@@ -194,143 +204,154 @@ func authScram(
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
-		// First step: send a SCRAM authentication request to the client.
-		// We do this with an auth request with the request type SASL,
-		// and a payload containing the list of supported SCRAM methods.
-		//
-		// NB: SCRAM-SHA-256-PLUS is not supported, see
-		// https://github.com/cockroachdb/cockroach/issues/74300
-		// There is one nul byte to terminate the first string,
-		// then another nul byte to terminate the list.
-		const supportedMethods = "SCRAM-SHA-256\x00\x00"
-		if err := c.SendAuthRequest(authReqSASL, []byte(supportedMethods)); err != nil {
-			return err
-		}
-
-		// While waiting for the client response, concurrently
-		// load the credentials from storage (or cache).
-		// Note: if this fails, we can't return the error right away,
-		// because we need to consume the client response first. This
-		// will be handled below.
-		expired, hashedPassword, pwRetrievalErr := pwRetrieveFn(ctx)
-
-		scramServer, _ := scram.SHA256.NewServer(func(user string) (creds scram.StoredCredentials, err error) {
-			// NB: the username passed in the SCRAM exchange (the user
-			// parameter in this callback) is ignored by PostgreSQL servers;
-			// see auth-scram.c, read_client_first_message().
-			//
-			// Therefore, we can't assume that SQL client drivers populate anything
-			// useful there. So we ignore it too.
-
-			// We still need to check whether the credentials loaded above
-			// are valid. We place this check in this callback because it
-			// only needs to happen after the SCRAM handshake actually needs
-			// to know the credentials.
-			if expired {
-				c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
-				return creds, errExpiredPassword
-			} else if hashedPassword.Method() != security.HashSCRAMSHA256 {
-				const credentialsNotSCRAM = "user password hash not in SCRAM format"
-				c.LogAuthInfof(ctx, credentialsNotSCRAM)
-				return creds, errors.New(credentialsNotSCRAM)
-			}
-
-			// The method check above ensures this cast is always valid.
-			return security.GetSCRAMStoredCredentials(hashedPassword), nil
-		})
-
-		handshake := scramServer.NewConversation()
-
-		initial := true
-		for {
-			if handshake.Done() {
-				break
-			}
-
-			// Receive a response from the client.
-			resp, err := c.GetPwdData()
-			if err != nil {
-				c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-				if pwRetrievalErr != nil {
-					return errors.CombineErrors(err, pwRetrievalErr)
-				}
-				return err
-			}
-			// Now process the password retrieval error, if any.
-			if pwRetrievalErr != nil {
-				c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, pwRetrievalErr)
-				return pwRetrievalErr
-			}
-
-			var input []byte
-			if initial {
-				// Quoth postgres, backend/auth.go:
-				//
-				// The first SASLInitialResponse message is different from the others.
-				// It indicates which SASL mechanism the client selected, and contains
-				// an optional Initial Client Response payload. The subsequent
-				// SASLResponse messages contain just the SASL payload.
-				//
-				rb := pgwirebase.ReadBuffer{Msg: resp}
-				reqMethod, err := rb.GetString()
-				if err != nil {
-					c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-					return err
-				}
-				if reqMethod != "SCRAM-SHA-256" {
-					c.LogAuthInfof(ctx, "client requests unknown scram method %q", reqMethod)
-					err := unimplemented.NewWithIssue(74300, "channel binding not supported")
-					// We need to manually report the unimplemented error because it is not
-					// passed through to the client as-is (authn errors are hidden behind
-					// a generic "authn failed" error).
-					sqltelemetry.RecordError(ctx, err, &execCfg.Settings.SV)
-					return err
-				}
-				inputLen, err := rb.GetUint32()
-				if err != nil {
-					c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-					return err
-				}
-				// PostgreSQL ignores input from clients that pass -1 as length,
-				// but does not treat it as invalid.
-				if inputLen < math.MaxUint32 {
-					input, err = rb.GetBytes(int(inputLen))
-					if err != nil {
-						c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
-						return err
-					}
-				}
-				initial = false
-			} else {
-				input = resp
-			}
-
-			// Feed the client message to the state machine.
-			got, err := handshake.Step(string(input))
-			if err != nil {
-				c.LogAuthInfof(ctx, "scram handshake error: %v", err)
-				break
-			}
-			// Decide which response to send to the client.
-			reqType := authReqSASLContinue
-			if handshake.Done() {
-				// This is the last message.
-				reqType = authReqSASLFin
-			}
-			// Send the response to the client.
-			if err := c.SendAuthRequest(reqType, []byte(got)); err != nil {
-				return err
-			}
-		}
-
-		// Did authentication succeed?
-		if !handshake.Valid() {
-			return security.NewErrPasswordUserAuthFailed(systemIdentity)
-		}
-
-		return nil // auth success!
+		return scramAuthenticator(ctx, systemIdentity, clientConnection, pwRetrieveFn, c, execCfg)
 	})
 	return b, nil
+}
+
+func scramAuthenticator(
+	ctx context.Context,
+	systemIdentity security.SQLUsername,
+	clientConnection bool,
+	pwRetrieveFn PasswordRetrievalFn,
+	c AuthConn,
+	execCfg *sql.ExecutorConfig,
+) error {
+	// First step: send a SCRAM authentication request to the client.
+	// We do this with an auth request with the request type SASL,
+	// and a payload containing the list of supported SCRAM methods.
+	//
+	// NB: SCRAM-SHA-256-PLUS is not supported, see
+	// https://github.com/cockroachdb/cockroach/issues/74300
+	// There is one nul byte to terminate the first string,
+	// then another nul byte to terminate the list.
+	const supportedMethods = "SCRAM-SHA-256\x00\x00"
+	if err := c.SendAuthRequest(authReqSASL, []byte(supportedMethods)); err != nil {
+		return err
+	}
+
+	// While waiting for the client response, concurrently
+	// load the credentials from storage (or cache).
+	// Note: if this fails, we can't return the error right away,
+	// because we need to consume the client response first. This
+	// will be handled below.
+	expired, hashedPassword, pwRetrievalErr := pwRetrieveFn(ctx)
+
+	scramServer, _ := scram.SHA256.NewServer(func(user string) (creds scram.StoredCredentials, err error) {
+		// NB: the username passed in the SCRAM exchange (the user
+		// parameter in this callback) is ignored by PostgreSQL servers;
+		// see auth-scram.c, read_client_first_message().
+		//
+		// Therefore, we can't assume that SQL client drivers populate anything
+		// useful there. So we ignore it too.
+
+		// We still need to check whether the credentials loaded above
+		// are valid. We place this check in this callback because it
+		// only needs to happen after the SCRAM handshake actually needs
+		// to know the credentials.
+		if expired {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
+			return creds, errExpiredPassword
+		} else if hashedPassword.Method() != security.HashSCRAMSHA256 {
+			const credentialsNotSCRAM = "user password hash not in SCRAM format"
+			c.LogAuthInfof(ctx, credentialsNotSCRAM)
+			return creds, errors.New(credentialsNotSCRAM)
+		}
+
+		// The method check above ensures this cast is always valid.
+		return security.GetSCRAMStoredCredentials(hashedPassword), nil
+	})
+
+	handshake := scramServer.NewConversation()
+
+	initial := true
+	for {
+		if handshake.Done() {
+			break
+		}
+
+		// Receive a response from the client.
+		resp, err := c.GetPwdData()
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			if pwRetrievalErr != nil {
+				return errors.CombineErrors(err, pwRetrievalErr)
+			}
+			return err
+		}
+		// Now process the password retrieval error, if any.
+		if pwRetrievalErr != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, pwRetrievalErr)
+			return pwRetrievalErr
+		}
+
+		var input []byte
+		if initial {
+			// Quoth postgres, backend/auth.go:
+			//
+			// The first SASLInitialResponse message is different from the others.
+			// It indicates which SASL mechanism the client selected, and contains
+			// an optional Initial Client Response payload. The subsequent
+			// SASLResponse messages contain just the SASL payload.
+			//
+			rb := pgwirebase.ReadBuffer{Msg: resp}
+			reqMethod, err := rb.GetString()
+			if err != nil {
+				c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+				return err
+			}
+			if reqMethod != "SCRAM-SHA-256" {
+				c.LogAuthInfof(ctx, "client requests unknown scram method %q", reqMethod)
+				err := unimplemented.NewWithIssue(74300, "channel binding not supported")
+				// We need to manually report the unimplemented error because it is not
+				// passed through to the client as-is (authn errors are hidden behind
+				// a generic "authn failed" error).
+				sqltelemetry.RecordError(ctx, err, &execCfg.Settings.SV)
+				return err
+			}
+			inputLen, err := rb.GetUint32()
+			if err != nil {
+				c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+				return err
+			}
+			// PostgreSQL ignores input from clients that pass -1 as length,
+			// but does not treat it as invalid.
+			if inputLen < math.MaxUint32 {
+				input, err = rb.GetBytes(int(inputLen))
+				if err != nil {
+					c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+					return err
+				}
+			}
+			initial = false
+		} else {
+			input = resp
+		}
+
+		// Feed the client message to the state machine.
+		got, err := handshake.Step(string(input))
+		if err != nil {
+			c.LogAuthInfof(ctx, "scram handshake error: %v", err)
+			break
+		}
+		// Decide which response to send to the client.
+		reqType := authReqSASLContinue
+		if handshake.Done() {
+			// This is the last message.
+			reqType = authReqSASLFin
+		}
+		// Send the response to the client.
+		if err := c.SendAuthRequest(reqType, []byte(got)); err != nil {
+			return err
+		}
+	}
+
+	// Did authentication succeed?
+	if !handshake.Valid() {
+		return security.NewErrPasswordUserAuthFailed(systemIdentity)
+	}
+
+	return nil // auth success!
 }
 
 func authCert(
