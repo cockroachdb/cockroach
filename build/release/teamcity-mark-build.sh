@@ -31,3 +31,30 @@ mark_build() {
   gcloud container images add-tag "${gcr_repository}:${TC_BUILD_BRANCH}" "${gcr_repository}:latest-${release_branch}-${build_label}-build"
   tc_end_block "Push new docker image tag"
 }
+
+# Publish potential release metadata to a stable location.
+publish_qualify_metadata() {
+  gcs_bucket="release-automation-dev"
+  google_credentials=$GOOGLE_RELEASE_AUTOMATION_CREDENTIALS_DEV
+  if [[ -z "${DRY_RUN}" ]] ; then
+    gcs_bucket="release-automation-prod"
+    google_credentials=$GOOGLE_RELEASE_AUTOMATION_CREDENTIALS_PROD
+  fi
+
+  tc_start_block "Metadata"
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  metadata_file="artifacts/metadata.json"
+  mkdir -p artifacts
+  cat > "$metadata_file" << EOF
+{
+  "sha": "$BUILD_VCS_NUMBER",
+  "timestamp": "$timestamp",
+  "tag": "$TC_BUILD_BRANCH"
+}
+EOF
+  # Run jq to pretty print and validate JSON
+  jq . "$metadata_file"
+  log_into_gcloud
+  gsutil cp "$metadata_file" "gs://$gcs_bucket/release-qualification/$BUILD_VCS_NUMBER.json"
+  tc_end_block "Metadata"
+}
