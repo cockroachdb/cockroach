@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/lib/pq"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
 )
 
@@ -430,6 +431,8 @@ var (
 	showSQL = flag.Bool("show-sql", false,
 		"print the individual SQL statement/queries before processing",
 	)
+
+	showDiff          = flag.Bool("show-diff", false, "generate a diff for expectation mismatches when possible")
 	printErrorSummary = flag.Bool("error-summary", false,
 		"print a per-error summary of failing queries at the end of testing, "+
 			"when -allow-prepare-fail is set",
@@ -2982,11 +2985,15 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	resultsMatch := func() error {
 		makeError := func() error {
-			var buf bytes.Buffer
-			fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
+			var expFormatted strings.Builder
+			var actFormatted strings.Builder
 			for _, line := range query.expectedResultsRaw {
-				fmt.Fprintf(&buf, "    %s\n", line)
+				fmt.Fprintf(&expFormatted, "    %s\n", line)
 			}
+			for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
+				fmt.Fprintf(&actFormatted, "    %s\n", line)
+			}
+
 			sortMsg := ""
 			if query.sorter != nil {
 				// We performed an order-insensitive comparison of "actual" vs "expected"
@@ -2995,11 +3002,23 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				// rows in the order in which the query returned them.
 				sortMsg = " -> ignore the following ordering of rows"
 			}
-			fmt.Fprintf(&buf, "but found (query options: %q%s) :\n", query.rawOpts, sortMsg)
-			for _, line := range t.formatValues(actualResultsRaw, query.valsPerLine) {
-				fmt.Fprintf(&buf, "    %s\n", line)
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, "%s: %s\nexpected:\n%s", query.pos, query.sql, expFormatted.String())
+			fmt.Fprintf(&buf, "but found (query options: %q%s) :\n%s", query.rawOpts, sortMsg, actFormatted.String())
+			if *showDiff {
+				if diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+					A:        difflib.SplitLines(expFormatted.String()),
+					B:        difflib.SplitLines(actFormatted.String()),
+					FromFile: "Expected",
+					FromDate: "",
+					ToFile:   "Actual",
+					ToDate:   "",
+					Context:  1,
+				}); err == nil {
+					fmt.Fprintf(&buf, "\nDiff:\n%s", diff)
+				}
 			}
-			return errors.Newf("%s", buf.String())
+			return errors.Newf("%s\n", buf.String())
 		}
 		if len(query.expectedResults) != len(actualResults) {
 			return makeError()
