@@ -38,7 +38,7 @@ var replicaCircuitBreakersEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.replica_circuit_breakers.enabled",
 	"fail-fast requests to unavailable replicas",
-	true,
+	false,
 )
 
 type replicaCircuitBreaker struct {

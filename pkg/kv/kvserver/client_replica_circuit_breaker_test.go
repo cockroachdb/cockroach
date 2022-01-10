@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -394,6 +395,9 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	}
 	tc := testcluster.StartTestCluster(t, 2, args)
 	tc.Stopper().AddCloser(stop.CloserFn(reg.CloseAllStickyInMemEngines))
+
+	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.replica_circuit_breakers.enabled = true`)
+	require.NoError(t, err)
 
 	k := tc.ScratchRange(t)
 	atomic.StoreInt64(&rangeID, int64(tc.LookupRangeOrFatal(t, k).RangeID))
