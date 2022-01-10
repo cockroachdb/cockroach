@@ -11,14 +11,21 @@
 package loqrecovery
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNothing(t *testing.T) {
+	fmt.Printf("start := %s\n", keys.RangeDescriptorKey(roachpb.RKeyMin))
+
+}
 
 func TestQuorumRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()

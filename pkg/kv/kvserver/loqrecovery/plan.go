@@ -339,7 +339,7 @@ func checkKeyspaceCovering(replicas []rankedReplicas) error {
 		if err != nil {
 			return err
 		}
-		if !r.IsVoterNewConfig() {
+		if !r.IsVoterNewConfig() || rankedDescriptors.survivor().HasUncommittedDescriptors {
 			continue
 		}
 		switch {
