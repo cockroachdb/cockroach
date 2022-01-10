@@ -143,7 +143,7 @@ load(
 go_download_sdk(
     name = "go_sdk",
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/{}"],
-    version = "1.17.3",
+    version = "1.17.6",
 )
 
 go_rules_dependencies()
