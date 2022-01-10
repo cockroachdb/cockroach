@@ -294,6 +294,32 @@ func TestServerQueryStarvation(t *testing.T) {
 	}
 }
 
+func TestServerMemoryCap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	MiB := 1024 * 1024
+	GiB := MiB * 1024
+	tcs := []struct {
+		poolSize              int64
+		expectedTsDBWorkerMax int64
+	}{
+		{poolSize: int64(2 * GiB), expectedTsDBWorkerMax: int64(64 * MiB)},
+		{poolSize: int64(32 * GiB), expectedTsDBWorkerMax: int64(256 * MiB)},
+		{poolSize: int64(48 * GiB), expectedTsDBWorkerMax: int64(512 * MiB)},
+	}
+
+	for _, tc := range tcs {
+		t.Run(fmt.Sprintf("%d pool should have %d worker max memory", tc.poolSize, tc.expectedTsDBWorkerMax),
+			func(t *testing.T) {
+				s, _, _ := serverutils.StartServer(t, base.TestServerArgs{SQLMemoryPoolSize: tc.poolSize})
+				defer s.Stopper().Stop(context.Background())
+
+				tsServer := s.(*server.TestServer).TsServer()
+				require.Equal(t, tc.expectedTsDBWorkerMax, tsServer.GetQueryWorkerMax())
+			})
+	}
+}
+
 // TestServerQueryMemoryManagement verifies that queries succeed under
 // constrained memory requirements.
 func TestServerQueryMemoryManagement(t *testing.T) {

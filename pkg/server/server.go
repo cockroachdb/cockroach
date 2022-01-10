@@ -555,7 +555,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nodeCountFn := func() int64 {
 		return nodeLiveness.Metrics().LiveNodes.Value()
 	}
-	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
+	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, cfg.MemoryPoolSize, stopper)
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)

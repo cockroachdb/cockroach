@@ -104,6 +104,7 @@ func MakeServer(
 	db *DB,
 	nodeCountFn ClusterNodeCountFn,
 	cfg ServerConfig,
+	memoryPoolSize int64,
 	stopper *stop.Stopper,
 ) Server {
 	ambient.AddLogTag("ts-srv", nil)
@@ -114,6 +115,13 @@ func MakeServer(
 		queryWorkerMax = cfg.QueryWorkerMax
 	}
 	queryMemoryMax := queryMemoryMax
+	// Double size until we hit 1/128 of the memory pool setting. Our
+	// typical default here is 64 MiB which corresponds to a pool of 8 GiB
+	// which corresponds to 32 GiB of system memory (assuming a default
+	// setting of 25% for the pool).
+	for queryMemoryMax < memoryPoolSize/128 {
+		queryMemoryMax *= 2
+	}
 	if cfg.QueryMemoryMax != 0 {
 		queryMemoryMax = cfg.QueryMemoryMax
 	}
@@ -445,4 +453,9 @@ func dumpTimeseriesAllSources(
 		}
 	}
 	return nil
+}
+
+// getQueryWorkerMax is used by tests to verify the memory caps.
+func (s *Server) GetQueryWorkerMax() int64 {
+	return s.queryMemoryMax
 }
