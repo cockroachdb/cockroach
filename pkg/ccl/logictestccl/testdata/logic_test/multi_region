@@ -16,11 +16,17 @@ ap-southeast-2  {ap-az1,ap-az2,ap-az3}
 ca-central-1    {ca-az1,ca-az2,ca-az3}
 us-east-1       {us-az1,us-az2,us-az3}
 
-statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled\nHINT: database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>
 CREATE TABLE regional_by_table_table (pk int) LOCALITY REGIONAL BY TABLE
 
-statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled\nHINT: database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>
 CREATE TABLE global_table (pk int) LOCALITY GLOBAL
+
+statement ok
+CREATE TABLE non_mr (i int)
+
+statement error cannot alter a table's LOCALITY if its database is not multi-region enabled\nHINT: database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>
+ALTER TABLE non_mr SET LOCALITY REGIONAL BY ROW
 
 statement ok
 CREATE DATABASE region_test_db PRIMARY REGION "ap-southeast-2" SURVIVE ZONE FAILURE
@@ -100,9 +106,9 @@ JOIN system.namespace parent ON (e."parentID" = parent.id)
 WHERE e.name='crdb_internal_region'
 ----
 parentSchemaID  db_name                                       enum_name
-64              multi_region_test_db                          crdb_internal_region
-68              multi_region_test_explicit_primary_region_db  crdb_internal_region
-60              region_test_db                                crdb_internal_region
+65              multi_region_test_db                          crdb_internal_region
+69              multi_region_test_explicit_primary_region_db  crdb_internal_region
+61              region_test_db                                crdb_internal_region
 
 query TTTT colnames
 SHOW ENUMS FROM region_test_db.public
