@@ -928,7 +928,7 @@ test-targets := \
 
 go-targets-ccl := \
 	$(COCKROACH) \
-	bin/workload \
+	bin/workload bin/roachprod bin/roachtest \
 	go-install \
 	bench benchshort \
 	check test testshort testslow testrace testraceslow testdeadlock testbuild \
