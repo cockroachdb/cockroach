@@ -993,6 +993,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, s.batchFlowCoordinator)
+			s.releasables = append(s.releasables, s.batchFlowCoordinator)
 		} else {
 			// We need to use the row receiving output.
 			if input != nil {
@@ -1021,6 +1022,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 			)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, f)
+			// NOTE: we don't append f to s.releasables because addFlowCoordinator
+			// adds the FlowCoordinator to FlowBase.processors, which ensures that
+			// it is later released in FlowBase.Cleanup.
 			s.addFlowCoordinator(f)
 		}
 
