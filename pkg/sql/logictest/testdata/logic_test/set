@@ -530,6 +530,24 @@ SET standard_conforming_strings='true'
 statement ok
 SET standard_conforming_strings='on'
 
+subtest default_with_oids_test
+
+query T
+SHOW default_with_oids
+----
+off
+
+statement ok
+SET default_with_oids = 'false'
+
+query T
+SHOW default_with_oids
+----
+off
+
+statement error invalid value for parameter "default_with_oids": "true"
+SET default_with_oids = 'true'
+
 subtest backslash_quote_test
 
 statement ok
