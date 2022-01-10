@@ -52,9 +52,6 @@ import (
 //        if !ok { ... }
 //        [code using iter.Key() and iter.Value()]
 //    }
-//    if err := iter.Error(); err != nil {
-//      ...
-//    }
 //
 // Note regarding the correctness of the time-bound iterator optimization:
 //
@@ -145,9 +142,7 @@ type MVCCIncrementalIterOptions struct {
 	EnableTimeBoundIteratorOptimization bool
 	EndKey                              roachpb.Key
 	// Keys visible by the MVCCIncrementalIterator must be within (StartTime,
-	// EndTime]. Note that if {Min,Max}TimestampHints are specified in
-	// IterOptions, the timestamp hints interval should include the start and end
-	// time.
+	// EndTime].
 	StartTime hlc.Timestamp
 	EndTime   hlc.Timestamp
 
@@ -158,9 +153,6 @@ type MVCCIncrementalIterOptions struct {
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
 // specified reader and options. The timestamp hint range should not be more
 // restrictive than the start and end time range.
-// TODO(pbardea): Add validation here and in C++ implementation that the
-//  timestamp hints are not more restrictive than incremental iterator's
-//  (startTime, endTime] interval.
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
