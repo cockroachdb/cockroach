@@ -43,7 +43,7 @@ ok
 
 make-plan
 ----
-ERROR: Key space covering is not complete. Discovered following inconsistencies:
+ERROR: loss of quorum recovery error
 range overlap /{Min-Table/3}
   r1: /{Min-Table/3}
   r3: /{Min-Table/3}
@@ -80,7 +80,7 @@ ok
 
 make-plan
 ----
-ERROR: Key space covering is not complete. Discovered following inconsistencies:
+ERROR: loss of quorum recovery error
 range gap /Table/{3-4}
   r1: /{Min-Table/3}
   r3: /{Table/4-Max}
@@ -136,7 +136,7 @@ ok
 
 make-plan
 ----
-ERROR: Key space covering is not complete. Discovered following inconsistencies:
+ERROR: loss of quorum recovery error
 range overlap /Table/{1-3}
   r1: /{Min-Table/10}
   r3: /Table/{1-3}
@@ -167,7 +167,7 @@ ok
 
 make-plan
 ----
-ERROR: Key space covering is not complete. Discovered following inconsistencies:
+ERROR: loss of quorum recovery error
 range gap /{Min-Table/1}
   r0: /Min
   r1: /Table/{1-99}
@@ -187,8 +187,7 @@ ok
 
 make-plan
 ----
-ERROR: Key space covering is not complete. Discovered following inconsistencies:
+ERROR: loss of quorum recovery error
 range gap /M{in-ax}
   r0: /Min
   r0: /Max{-}
-
