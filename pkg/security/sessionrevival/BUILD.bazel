@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sessionrevival",
+    srcs = ["session_revival.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/sessionrevival",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
+        "@com_github_gogo_protobuf//types",
+    ],
+)

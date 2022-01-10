@@ -6328,6 +6328,36 @@ table's zone configuration this will return NULL.`,
 		},
 	),
 
+	"crdb_internal.create_session_revival_token": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return evalCtx.Planner.CreateSessionRevivalToken()
+			},
+			Info:       `Generate a token that can be used to create a new session for the current user.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	"crdb_internal.validate_session_revival_token": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"token", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				token := tree.MustBeDBytes(args[0])
+				return evalCtx.Planner.ValidateSessionRevivalToken(&token)
+			},
+			Info:       `Generate a token that can be used to create a new session for the current user.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.check_password_hash_format": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,

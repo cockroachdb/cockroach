@@ -3131,3 +3131,55 @@ NULL  NULL  NULL
 
 statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
 SELECT hmac('dog', 'key', 'made up alg')
+
+skipif config 3node-tenant
+statement error session revival tokens are not supported on this cluster
+select crdb_internal.create_session_revival_token()
+
+onlyif config 3node-tenant
+statement error cannot create token for root user
+select crdb_internal.create_session_revival_token()
+
+user testuser
+
+statement ok
+CREATE TABLE token_payload(algorithm STRING, "expiresAt" TIMESTAMPTZ, "issuedAt" TIMESTAMPTZ, "user" STRING)
+
+# create_session_revival_token requires tenant-signing certs, so only work
+# in 3node-tenant. The token can't be tested for validity here, but we can
+# verify that the information in the token makes sense.
+onlyif config 3node-tenant
+query TTBBBBB
+WITH
+  a AS (SELECT crdb_internal.create_session_revival_token() AS token),
+  b AS (
+    SELECT
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sessiondatapb.SessionRevivalToken',
+        a.token
+      ) AS json_token
+    FROM a
+  ),
+  c AS (
+    SELECT
+      (json_populate_record(
+        NULL::token_payload,
+        crdb_internal.pb_to_json(
+          'cockroach.sql.sessiondatapb.SessionRevivalToken.Payload',
+          decode(b.json_token->>'payload', 'base64')
+        )
+      )).*
+    FROM b
+  )
+SELECT
+  algorithm,
+  "user",
+  "expiresAt" > now(),
+  "expiresAt" < (now() + INTERVAL '11 minutes'),
+  "expiresAt" > "issuedAt",
+  crdb_internal.validate_session_revival_token(a.token),
+  crdb_internal.validate_session_revival_token(a.token || 'abc'::bytes)
+FROM
+  c, a;
+----
+Ed25519  testuser  true  true  true  true  false
