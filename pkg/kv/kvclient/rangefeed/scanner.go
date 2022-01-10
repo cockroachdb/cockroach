@@ -38,7 +38,9 @@ func (f *RangeFeed) runInitialScan(
 
 		// Mark the data as occurring at the initial timestamp, which is the
 		// timestamp at which it was read.
-		v.Value.Timestamp = f.initialTimestamp
+		if !f.useRowTimestampInInitialScan {
+			v.Value.Timestamp = f.initialTimestamp
+		}
 
 		// Supply the value from the scan as also the previous value to avoid
 		// indicating that the value was previously deleted.
