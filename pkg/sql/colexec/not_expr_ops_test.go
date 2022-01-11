@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -115,19 +116,12 @@ func TestNotExprSelOp(t *testing.T) {
 			outputTuples: colexectestutils.Tuples{{false}, {false}, {false}, {false}},
 			selExpr:      "NOT",
 		},
-		// The below test incorrectly fails despite the underlying selection logic being accurate.
-		// The reason for the failure is the NullInjection aspect of the test engine which assumes that
-		// if the input containing non-null values produces a certain output (e.g. A) then overwriting the
-		// input with all NULLs should lead to a different output (e.g. B) and it incorrectly assumes that
-		// it must always be the case that A != B. However, as can be seen from the below test a NOT EXPR
-		// selection over an input containing only TRUE values produces an empty tuple which is the same
-		// output that would be produced if the input contained only NULLs (i.e. A == B in this case)
-		// {
-		// 	desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with only TRUE",
-		// 	inputTuples:  colexectestutils.Tuples{{true}, {true}, {true}, {true}},
-		// 	outputTuples: colexectestutils.Tuples{},
-		// 	selExpr:      "NOT",
-		// },
+		{
+			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with only TRUE",
+			inputTuples:  colexectestutils.Tuples{{true}, {true}, {true}, {true}},
+			outputTuples: colexectestutils.Tuples{},
+			selExpr:      "NOT",
+		},
 		{
 			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with only one FALSE and rest TRUE",
 			inputTuples:  colexectestutils.Tuples{{true}, {false}, {true}, {true}},
@@ -165,6 +159,6 @@ func TestNotExprSelOp(t *testing.T) {
 		opConstructor := func(sources []colexecop.Operator) (colexecop.Operator, error) {
 			return NewNotExprSelOp(sources[0], 0), nil
 		}
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
+		colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{{types.Bool}}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 	}
 }
