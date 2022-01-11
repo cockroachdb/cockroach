@@ -91,7 +91,7 @@ go_library(
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/tracing",
         "//pkg/workload",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_fraugster_parquet_go//:parquet-go",

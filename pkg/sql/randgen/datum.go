@@ -13,13 +13,11 @@ package randgen
 import (
 	"bytes"
 	"math"
-	"math/big"
 	"math/bits"
 	"math/rand"
 	"time"
 	"unicode"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogen"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -345,11 +343,9 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 		date, _ := pgdate.MakeDateFromPGEpoch(rng.Int31n(simpleRange))
 		datum = tree.NewDDate(date)
 	case types.DecimalFamily:
-		datum = &tree.DDecimal{
-			Decimal: apd.Decimal{
-				Coeff: *big.NewInt(rng.Int63n(simpleRange)),
-			},
-		}
+		dd := &tree.DDecimal{}
+		dd.SetInt64(rng.Int63n(simpleRange))
+		datum = dd
 	case types.IntFamily:
 		datum = tree.NewDInt(tree.DInt(rng.Intn(simpleRange)))
 	case types.IntervalFamily:

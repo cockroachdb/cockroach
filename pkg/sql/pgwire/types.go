@@ -14,13 +14,12 @@ import (
 	"context"
 	"encoding/binary"
 	"math"
-	"math/big"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -418,7 +417,7 @@ func writeBinaryDecimal(b *writeBuffer, v *apd.Decimal) {
 	alloc := struct {
 		pgNum pgwirebase.PGNumeric
 
-		bigI big.Int
+		bigI apd.BigInt
 	}{
 		pgNum: pgwirebase.PGNumeric{
 			// Since we use 2000 as the exponent limits in tree.DecimalCtx, this

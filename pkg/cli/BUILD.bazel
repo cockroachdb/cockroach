@@ -208,7 +208,7 @@ go_library(
         "//pkg/workload/tpch",
         "//pkg/workload/workloadsql",
         "//pkg/workload/ycsb",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",

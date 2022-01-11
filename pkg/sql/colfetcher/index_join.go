@@ -280,7 +280,7 @@ func (s *ColIndexJoin) getRowSize(idx int) int64 {
 			rowSize += adjustMemEstimate(s.mem.byteLikeCols[i].ElemSize(idx))
 		}
 		for i := range s.mem.decimalCols {
-			rowSize += adjustMemEstimate(int64(tree.SizeOfDecimal(&s.mem.decimalCols[i][idx])))
+			rowSize += adjustMemEstimate(int64(s.mem.decimalCols[i][idx].Size()))
 		}
 		for i := range s.mem.datumCols {
 			memEstimate := int64(s.mem.datumCols[i].Get(idx).(tree.Datum).Size()) + memsize.DatumOverhead
