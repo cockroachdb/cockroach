@@ -235,6 +235,7 @@
 /pkg/roachpb/metadata*       @cockroachdb/kv-prs
 /pkg/roachpb/method*         @cockroachdb/kv-prs
 /pkg/roachpb/mocks*          @cockroachdb/kv-prs
+/pkg/roachpb/replica_*       @cockroachdb/kv-prs
 /pkg/roachpb/span*           @cockroachdb/kv-prs
 /pkg/roachpb/string_test.go  @cockroachdb/kv-prs
 /pkg/roachpb/tenant*         @cockroachdb/kv-prs

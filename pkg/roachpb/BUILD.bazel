@@ -26,6 +26,7 @@ go_library(
         "metadata.go",
         "metadata_replicas.go",
         "method.go",
+        "replica_unavailable_error.go",
         "span_config.go",
         "span_group.go",
         "tenant.go",
@@ -58,6 +59,7 @@ go_library(
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_errors//extgrpc",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_golang_mock//gomock",  # keep
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@org_golang_google_grpc//metadata",  # keep
@@ -154,6 +156,7 @@ go_test(
         "merge_spans_test.go",
         "metadata_replicas_test.go",
         "metadata_test.go",
+        "replica_unavailable_error_test.go",
         "span_group_test.go",
         "tenant_test.go",
         "version_test.go",
