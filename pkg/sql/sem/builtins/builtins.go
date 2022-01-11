@@ -5393,7 +5393,7 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
-	// Returns true iff the current user has the specified role option.
+	// Returns true if the current user has the specified role option.
 	// Note: it would be a privacy leak to extend this to check arbitrary usernames.
 	"crdb_internal.has_role_option": makeBuiltin(
 		tree.FunctionProperties{

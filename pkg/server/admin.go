@@ -3099,10 +3099,40 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(
 		if err != nil {
 			return userName, err
 		}
+
 		if !hasViewActivity {
 			return userName, status.Errorf(
 				codes.PermissionDenied, "this operation requires the %s role option",
 				roleoption.VIEWACTIVITY)
+		}
+	}
+	return userName, nil
+}
+
+func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermission(
+	ctx context.Context,
+) (userName security.SQLUsername, err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return userName, err
+	}
+	if !isAdmin {
+		hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return userName, err
+		}
+
+		if !hasViewActivity {
+			hasViewActivity, err = c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return userName, err
+			}
+
+			if !hasViewActivity {
+				return userName, status.Errorf(
+					codes.PermissionDenied, "this operation requires the %s role option",
+					roleoption.VIEWACTIVITY)
+			}
 		}
 	}
 	return userName, nil
