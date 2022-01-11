@@ -110,41 +110,16 @@ func TestIndexUsageStatisticsSubsystem(t *testing.T) {
 		},
 	}
 
-	statsProcessedSignal := make(chan struct{})
-	onStatsIngested := func(_ roachpb.IndexUsageKey) {
-		statsProcessedSignal <- struct{}{}
-	}
-	waitForStatsIngested := func() {
-		statsProcessed := 0
-		var timer timeutil.Timer
-		timer.Reset(time.Second)
-		for statsProcessed < len(testInputs) {
-			select {
-			case <-statsProcessedSignal:
-				statsProcessed++
-			case <-timer.C:
-				timer.Read = true
-				t.Fatalf("expected stats ingestion to complete, but it didn't.")
-			}
-		}
-	}
-
 	localIndexUsage := NewLocalIndexUsageStats(&Config{
 		ChannelSize: 10,
 		Setting:     cluster.MakeTestingClusterSettings(),
-		Knobs: &TestingKnobs{
-			OnIndexUsageStatsProcessedCallback: onStatsIngested,
-		},
 	})
 
-	localIndexUsage.Start(ctx, stopper)
 	defer stopper.Stop(ctx)
 
 	for _, input := range testInputs {
-		localIndexUsage.record(ctx, input)
+		localIndexUsage.insertIndexUsage(input.key, input.usageTyp)
 	}
-
-	waitForStatsIngested()
 
 	t.Run("point lookup", func(t *testing.T) {
 		actualEntryCount := 0
