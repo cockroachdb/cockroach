@@ -163,7 +163,7 @@ func colIsPrimaryKey(
 		FROM (
 			SELECT DISTINCT column_name
 				FROM information_schema.statistics
-			WHERE index_name = 'primary'
+			WHERE (index_name = 'primary' OR index_name LIKE '%pkey%')
 				AND table_schema = $1
 				AND table_name = $2
 				AND storing = 'NO'
