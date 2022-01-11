@@ -1403,7 +1403,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 		}
 		lease, _ := replica2.GetLease()
 		if lease.Replica.NodeID != replica2.NodeID() {
-			return errors.Errorf("expected lease transfer to node2: %s", &lease)
+			return errors.Errorf("expected lease transfer to node2: %s", lease)
 		}
 		return nil
 	})
@@ -1479,7 +1479,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			r := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(expirationKey))
 			if l, _ := r.GetLease(); l.Replica.StoreID != tc.Target(1).StoreID {
-				return errors.Errorf("expected lease to transfer to replica 2: got %s", &l)
+				return errors.Errorf("expected lease to transfer to replica 2: got %s", l)
 			}
 		}
 		return nil
