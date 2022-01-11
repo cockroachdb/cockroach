@@ -1039,6 +1039,7 @@ unreserved_keyword ::=
 	| 'NOLOGIN'
 	| 'NOMODIFYCLUSTERSETTING'
 	| 'NONVOTERS'
+	| 'NOSQLLOGIN'
 	| 'NOVIEWACTIVITY'
 	| 'NOVIEWACTIVITYREDACTED'
 	| 'NOWAIT'
@@ -1150,6 +1151,7 @@ unreserved_keyword ::=
 	| 'SNAPSHOT'
 	| 'SPLIT'
 	| 'SQL'
+	| 'SQLLOGIN'
 	| 'START'
 	| 'STATEMENTS'
 	| 'STATISTICS'
@@ -2370,6 +2372,8 @@ role_option ::=
 	| 'NOCANCELQUERY'
 	| 'MODIFYCLUSTERSETTING'
 	| 'NOMODIFYCLUSTERSETTING'
+	| 'SQLLOGIN'
+	| 'NOSQLLOGIN'
 	| password_clause
 	| valid_until_clause
 
