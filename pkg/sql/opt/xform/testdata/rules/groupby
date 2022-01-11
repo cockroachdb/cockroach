@@ -1757,14 +1757,14 @@ memo (optimized, ~27KB, required=[presentation: w:12] [ordering: +13,+1])
  ├── G10: (filters G19)
  ├── G11: (filters)
  ├── G12: (project G8 G20 x)
- │    ├── [ordering: +1]
+ │    ├── [ordering: +1 opt(14)]
  │    │    ├── best: (project G8="[ordering: +1]" G20 x)
  │    │    └── cost: 1074.34
  │    └── []
  │         ├── best: (project G8 G20 x)
  │         └── cost: 1074.34
  ├── G13: (project G8 G20 x)
- │    ├── [ordering: +1]
+ │    ├── [ordering: +1 opt(15)]
  │    │    ├── best: (project G8="[ordering: +1]" G20 x)
  │    │    └── cost: 1074.34
  │    └── []
