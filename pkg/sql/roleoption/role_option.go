@@ -56,6 +56,8 @@ const (
 	MODIFYCLUSTERSETTING
 	NOMODIFYCLUSTERSETTING
 	DEFAULTSETTINGS
+	SQLLOGIN
+	NOSQLLOGIN
 )
 
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
@@ -80,6 +82,8 @@ var toSQLStmts = map[Option]string{
 	NOCANCELQUERY:          `DELETE FROM system.role_options WHERE username = $1 AND option = 'CANCELQUERY'`,
 	MODIFYCLUSTERSETTING:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'MODIFYCLUSTERSETTING')`,
 	NOMODIFYCLUSTERSETTING: `DELETE FROM system.role_options WHERE username = $1 AND option = 'MODIFYCLUSTERSETTING'`,
+	SQLLOGIN:               `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOSQLLOGIN'`,
+	NOSQLLOGIN:             `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOSQLLOGIN')`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -110,6 +114,8 @@ var ByName = map[string]Option{
 	"MODIFYCLUSTERSETTING":   MODIFYCLUSTERSETTING,
 	"NOMODIFYCLUSTERSETTING": NOMODIFYCLUSTERSETTING,
 	"DEFAULTSETTINGS":        DEFAULTSETTINGS,
+	"SQLLOGIN":               SQLLOGIN,
+	"NOSQLLOGIN":             NOSQLLOGIN,
 }
 
 // ToOption takes a string and returns the corresponding Option.

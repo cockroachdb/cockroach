@@ -146,7 +146,7 @@ func (s *authenticationServer) UserLogin(
 	username, _ := security.MakeSQLUsernameFromUserInput(req.Username, security.UsernameValidation)
 
 	// Verify the provided username/password pair.
-	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
+	verified, expired, err := s.verifyPasswordDBConsole(ctx, username, req.Password)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
 	}
@@ -255,7 +255,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
-	exists, canLogin, _, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -266,8 +266,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed creating session for username")
 	}
-
-	if !exists || !canLogin {
+	if !exists || !canLoginDBConsole {
 		return nil, errWebAuthenticationFailure
 	}
 
@@ -418,7 +417,7 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
-	exists, canLogin, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, canLoginSQL, _, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -428,7 +427,37 @@ func (s *authenticationServer) verifyPassword(
 	if err != nil {
 		return false, false, err
 	}
-	if !exists || !canLogin {
+	if !exists || !canLoginSQL {
+		return false, false, nil
+	}
+	hashedPassword, err := pwRetrieveFn(ctx)
+	if err != nil {
+		return false, false, err
+	}
+
+	if validUntil != nil {
+		if validUntil.Time.Sub(timeutil.Now()) < 0 {
+			return false, true, nil
+		}
+	}
+
+	return security.CompareHashAndPassword(ctx, hashedPassword, password) == nil, false, nil
+}
+
+func (s *authenticationServer) verifyPasswordDBConsole(
+	ctx context.Context, username security.SQLUsername, password string,
+) (valid bool, expired bool, err error) {
+	exists, _, canLoginDBConsole, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+		ctx,
+		s.server.sqlServer.execCfg,
+		s.server.sqlServer.execCfg.InternalExecutor,
+		username,
+		"", /* databaseName */
+	)
+	if err != nil {
+		return false, false, err
+	}
+	if !exists || !canLoginDBConsole {
 		return false, false, nil
 	}
 	hashedPassword, err := pwRetrieveFn(ctx)
