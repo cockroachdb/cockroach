@@ -98,17 +98,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		return len(rows)
 	}
 	checkSettingsValuesMatch := func(a, b *cluster.Settings) error {
-		for _, k := range settings.Keys(false /* forSystemTenant */) {
-			s, ok := settings.Lookup(k, settings.LookupForLocalAccess, false /* forSystemTenant */)
-			require.True(t, ok)
-			if s.Class() == settings.SystemOnly {
-				continue
-			}
-			if av, bv := s.String(&a.SV), s.String(&b.SV); av != bv {
-				return errors.Errorf("values do not match for %s: %s != %s", k, av, bv)
-			}
-		}
-		return nil
+		return settingswatcher.CheckSettingsValuesMatch(t, a, b)
 	}
 	checkStoredValuesMatch := func(expected []roachpb.KeyValue) error {
 		got := filterSystemOnly(getSourceClusterRows())

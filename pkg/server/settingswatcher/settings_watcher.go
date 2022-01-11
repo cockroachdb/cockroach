@@ -47,9 +47,14 @@ type SettingsWatcher struct {
 	mu struct {
 		syncutil.Mutex
 
+		updater   settings.Updater
 		values    map[string]RawValue
 		overrides map[string]RawValue
 	}
+
+	// testingWatcherKnobs allows the client to inject testing knobs into
+	// the underlying rangefeedcache.Watcher.
+	testingWatcherKnobs *rangefeedcache.TestingKnobs
 }
 
 // Storage is used to write a snapshot of KVs out to disk for use upon restart.
@@ -102,15 +107,24 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		Key:    settingsTablePrefix,
 		EndKey: settingsTablePrefix.PrefixEnd(),
 	}
-	u := s.settings.MakeUpdater()
-	initialScanDone := make(chan struct{})
-	var initialScanErr error
+	s.resetUpdater()
+	var initialScan = struct {
+		ch   chan struct{}
+		done bool
+		err  error
+	}{
+		ch: make(chan struct{}),
+	}
 	noteUpdate := func(update rangefeedcache.Update) {
+		if update.Type != rangefeedcache.CompleteUpdate {
+			return
+		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if update.Type == rangefeedcache.CompleteUpdate {
-			u.ResetRemaining(ctx)
-			close(initialScanDone)
+		s.mu.updater.ResetRemaining(ctx)
+		if !initialScan.done {
+			initialScan.done = true
+			close(initialScan.ch)
 		}
 	}
 
@@ -121,7 +135,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		// Initialize the overrides. We want to do this before processing the
 		// settings table, otherwise we could see temporary transitions to the value
 		// in the table.
-		s.updateOverrides(ctx, u)
+		s.updateOverrides(ctx)
 
 		// Set up a worker to watch the monitor.
 		if err := s.stopper.RunAsyncTask(ctx, "setting-overrides", func(ctx context.Context) {
@@ -129,7 +143,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			for {
 				select {
 				case <-overridesCh:
-					s.updateOverrides(ctx, u)
+					s.updateOverrides(ctx)
 
 				case <-s.stopper.ShouldQuiesce():
 					return
@@ -146,12 +160,6 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	// number thought ought to be big enough. Note that if there is no underlying
 	// storage, we'll never produce any events in s.handleKV() so we can use a
 	// bufferSize of 0.
-	//
-	// TODO(ajwerner): Use rangefeedcache.Start and run the cache in a loop
-	// to deal with buffer overflows. On a fresh scan, there ought not be
-	// more settings values than there exists cluster settings, though we
-	// need to deal with the fact that new settings can be added in the next
-	// version and we can have retired values we don't know about.
 	var bufferSize int
 	if s.storage != nil {
 		bufferSize = settings.MaxSettings * 3
@@ -161,7 +169,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		// Only record the update to the buffer if we're writing to storage.
 		if s.storage == nil ||
 			// and the update has some new information to write.
-			(update.Type == rangefeedcache.PartialUpdate && len(update.Events) == 0) {
+			(update.Type == rangefeedcache.IncrementalUpdate && len(update.Events) == 0) {
 			return
 		}
 		eventKVs := rangefeedbuffer.EventsToKVs(update.Events,
@@ -169,7 +177,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		switch update.Type {
 		case rangefeedcache.CompleteUpdate:
 			snapshot = eventKVs
-		case rangefeedcache.PartialUpdate:
+		case rangefeedcache.IncrementalUpdate:
 			snapshot = rangefeedbuffer.MergeKVs(snapshot, eventKVs)
 		}
 		s.storage.SnapshotKVs(ctx, snapshot)
@@ -181,34 +189,32 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		[]roachpb.Span{settingsTableSpan},
 		false, // withPrevValue
 		func(ctx context.Context, kv *roachpb.RangeFeedValue) rangefeedbuffer.Event {
-			return s.handleKV(ctx, kv, u)
+			return s.handleKV(ctx, kv)
 		},
 		func(ctx context.Context, update rangefeedcache.Update) {
 			noteUpdate(update)
 			maybeUpdateSnapshot(update)
 		},
-		nil, // knobs
+		s.testingWatcherKnobs,
 	)
-	if err := s.stopper.RunAsyncTask(ctx, "setting", func(ctx context.Context) {
-		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
-		defer cancel()
-		err := c.Run(ctx)
-		select {
-		case <-initialScanDone:
-		default:
-			initialScanErr = err
-			close(initialScanDone)
+
+	// Kick off the rangefeedcache which will retry until the stopper stops.
+	if err := rangefeedcache.Start(ctx, s.stopper, c, func(err error) {
+		if !initialScan.done {
+			initialScan.err = err
+			initialScan.done = true
+			close(initialScan.ch)
+		} else {
+			s.resetUpdater()
 		}
 	}); err != nil {
 		return err // we're shutting down
 	}
+
 	// Wait for the initial scan before returning.
 	select {
-	case <-initialScanDone:
-		if initialScanErr != nil {
-			return initialScanErr
-		}
-		return nil
+	case <-initialScan.ch:
+		return initialScan.err
 
 	case <-s.stopper.ShouldQuiesce():
 		return errors.Wrap(stop.ErrUnavailable, "failed to retrieve initial cluster settings")
@@ -219,7 +225,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 }
 
 func (s *SettingsWatcher) handleKV(
-	ctx context.Context, kv *roachpb.RangeFeedValue, u settings.Updater,
+	ctx context.Context, kv *roachpb.RangeFeedValue,
 ) rangefeedbuffer.Event {
 	name, val, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
 		Key:   kv.Key,
@@ -249,12 +255,12 @@ func (s *SettingsWatcher) handleKV(
 		// This event corresponds to a deletion.
 		delete(s.mu.values, name)
 		if !hasOverride {
-			s.setDefault(ctx, u, name)
+			s.setDefaultLocked(ctx, name)
 		}
 	} else {
 		s.mu.values[name] = val
 		if !hasOverride {
-			s.set(ctx, u, name, val)
+			s.setLocked(ctx, name, val)
 		}
 	}
 	if s.storage != nil {
@@ -266,7 +272,7 @@ func (s *SettingsWatcher) handleKV(
 const versionSettingKey = "version"
 
 // set the current value of a setting.
-func (s *SettingsWatcher) set(ctx context.Context, u settings.Updater, key string, val RawValue) {
+func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val RawValue) {
 	// The system tenant (i.e. the KV layer) does not use the SettingsWatcher
 	// to propagate cluster version changes (it uses the BumpClusterVersion
 	// RPC). However, non-system tenants (i.e. SQL pods) (asynchronously) get
@@ -283,13 +289,13 @@ func (s *SettingsWatcher) set(ctx context.Context, u settings.Updater, key strin
 		return
 	}
 
-	if err := u.Set(ctx, key, val.Value, val.Type); err != nil {
+	if err := s.mu.updater.Set(ctx, key, val.Value, val.Type); err != nil {
 		log.Warningf(ctx, "failed to set setting %s to %s: %v", log.Safe(key), val.Value, err)
 	}
 }
 
-// setDefault sets a setting to its default value.
-func (s *SettingsWatcher) setDefault(ctx context.Context, u settings.Updater, key string) {
+// setDefaultLocked sets a setting to its default value.
+func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key string) {
 	setting, ok := settings.Lookup(key, settings.LookupForLocalAccess, s.codec.ForSystemTenant())
 	if !ok {
 		log.Warningf(ctx, "failed to find setting %s, skipping update", log.Safe(key))
@@ -303,12 +309,12 @@ func (s *SettingsWatcher) setDefault(ctx context.Context, u settings.Updater, ke
 		Value: ws.EncodedDefault(),
 		Type:  ws.Typ(),
 	}
-	s.set(ctx, u, key, val)
+	s.setLocked(ctx, key, val)
 }
 
 // updateOverrides updates the overrides map and updates any settings
 // accordingly.
-func (s *SettingsWatcher) updateOverrides(ctx context.Context, u settings.Updater) {
+func (s *SettingsWatcher) updateOverrides(ctx context.Context) {
 	newOverrides := s.overridesMonitor.Overrides()
 
 	s.mu.Lock()
@@ -325,7 +331,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context, u settings.Update
 		}
 		// A new override was added or an existing override has changed.
 		s.mu.overrides[key] = val
-		s.set(ctx, u, key, val)
+		s.setLocked(ctx, key, val)
 	}
 
 	// Clean up any overrides that were removed.
@@ -336,10 +342,16 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context, u settings.Update
 			// Reset the setting to the value in the settings table (or the default
 			// value).
 			if val, ok := s.mu.values[key]; ok {
-				s.set(ctx, u, key, val)
+				s.setLocked(ctx, key, val)
 			} else {
-				s.setDefault(ctx, u, key)
+				s.setDefaultLocked(ctx, key)
 			}
 		}
 	}
+}
+
+func (s *SettingsWatcher) resetUpdater() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.updater = s.settings.MakeUpdater()
 }
