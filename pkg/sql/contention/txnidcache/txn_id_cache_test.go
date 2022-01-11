@@ -13,6 +13,7 @@ package txnidcache_test
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -43,17 +45,20 @@ func TestTransactionIDCache(t *testing.T) {
 
 	appName := "txnIDCacheTest"
 	expectedTxnIDToUUIDMapping := make(map[uuid.UUID]roachpb.TransactionFingerprintID)
+	injector := runtimeHookInjector{}
+
+	injector.set(func(
+		sessionData *sessiondata.SessionData,
+		txnID uuid.UUID,
+		txnFingerprintID roachpb.TransactionFingerprintID,
+	) {
+		if strings.Contains(sessionData.ApplicationName, appName) {
+			expectedTxnIDToUUIDMapping[txnID] = txnFingerprintID
+		}
+	})
 
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeTxnStatsRecorded: func(
-			sessionData *sessiondata.SessionData,
-			txnID uuid.UUID,
-			txnFingerprintID roachpb.TransactionFingerprintID,
-		) {
-			if strings.Contains(sessionData.ApplicationName, appName) {
-				expectedTxnIDToUUIDMapping[txnID] = txnFingerprintID
-			}
-		},
+		BeforeTxnStatsRecorded: injector.hook,
 	}
 
 	testServer, sqlConn, kvDB := serverutils.StartServer(t, params)
@@ -170,20 +175,90 @@ func TestTransactionIDCache(t *testing.T) {
 	txnIDCache := sqlServer.GetTxnIDCache()
 
 	txnIDCache.(*txnidcache.Cache).FlushActiveWritersForTest()
-	testutils.SucceedsWithin(t, func() error {
-		for txnID, expectedTxnFingerprintID := range expectedTxnIDToUUIDMapping {
-			actualTxnFingerprintID, ok := txnIDCache.Lookup(txnID)
-			if !ok {
-				return errors.Newf("expected to find txn(%s) with fingerprintID: "+
-					"%d, but it was not found.",
-					txnID, expectedTxnFingerprintID,
-				)
-			}
-			if expectedTxnFingerprintID != actualTxnFingerprintID {
-				return errors.Newf("expected to find txn(%s) with fingerprintID: %d, but the actual fingerprintID is: %d", txnID, expectedTxnFingerprintID, actualTxnFingerprintID)
-			}
 
-		}
-		return nil
-	}, 3*time.Second)
+	t.Run("resolved_txn_id_cache_record", func(t *testing.T) {
+		testutils.SucceedsWithin(t, func() error {
+			for txnID, expectedTxnFingerprintID := range expectedTxnIDToUUIDMapping {
+				actualTxnFingerprintID, ok := txnIDCache.Lookup(txnID)
+				if !ok {
+					return errors.Newf("expected to find txn(%s) with fingerprintID: "+
+						"%d, but it was not found.",
+						txnID, expectedTxnFingerprintID,
+					)
+				}
+				if expectedTxnFingerprintID != actualTxnFingerprintID {
+					return errors.Newf("expected to find txn(%s) with fingerprintID: %d, but the actual fingerprintID is: %d", txnID, expectedTxnFingerprintID, actualTxnFingerprintID)
+				}
+			}
+			return nil
+		}, 3*time.Second)
+	})
+
+	t.Run("provisional_txn_id_cache_record", func(t *testing.T) {
+		callCaptured := uint32(0)
+
+		injector.set(func(
+			sessionData *sessiondata.SessionData,
+			txnID uuid.UUID,
+			txnFingerprintID roachpb.TransactionFingerprintID) {
+			if strings.Contains(sessionData.ApplicationName, appName) {
+				if txnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+					txnIDCache.(*txnidcache.Cache).FlushActiveWritersForTest()
+
+					testutils.SucceedsWithin(t, func() error {
+						existingTxnFingerprintID, ok := txnIDCache.Lookup(txnID)
+						if !ok {
+							return errors.Newf("expected provision txn fingerprint id to be found for "+
+								"txn(%s), but it was not", txnID)
+						}
+						if existingTxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+							return errors.Newf("expected a provision txn fingerprint id value be stored "+
+								"for txn(%s), but %d was found", txnID, existingTxnFingerprintID)
+						}
+						return nil
+					}, 3*time.Second)
+					atomic.AddUint32(&callCaptured, 1)
+				}
+			}
+		})
+
+		testConn.Exec(t, "BEGIN")
+		testConn.Exec(t, "SELECT 1")
+		testConn.Exec(t, "COMMIT")
+
+		require.Equal(t, uint32(1), atomic.LoadUint32(&callCaptured),
+			"expected to found provisional txn id cache record, "+
+				"but it was not found")
+	})
+}
+
+type runtimeHookInjector struct {
+	syncutil.RWMutex
+	op func(
+		sessionData *sessiondata.SessionData,
+		txnID uuid.UUID,
+		txnFingerprintID roachpb.TransactionFingerprintID,
+	)
+}
+
+func (s *runtimeHookInjector) hook(
+	sessionData *sessiondata.SessionData,
+	txnID uuid.UUID,
+	txnFingerprintID roachpb.TransactionFingerprintID,
+) {
+	s.RLock()
+	defer s.RUnlock()
+	s.op(sessionData, txnID, txnFingerprintID)
+}
+
+func (s *runtimeHookInjector) set(
+	op func(
+		sessionData *sessiondata.SessionData,
+		txnID uuid.UUID,
+		txnFingerprintID roachpb.TransactionFingerprintID,
+	),
+) {
+	s.Lock()
+	defer s.Unlock()
+	s.op = op
 }

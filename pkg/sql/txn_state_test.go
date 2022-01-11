@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -94,13 +95,14 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	txnStateMon.Start(tc.ctx, tc.mon, mon.BoundAccount{})
 
 	ts := txnState{
-		Ctx:           ctx,
-		connCtx:       tc.ctx,
-		cancel:        cancel,
-		sqlTimestamp:  timeutil.Now(),
-		priority:      roachpb.NormalUserPriority,
-		mon:           txnStateMon,
-		txnAbortCount: metric.NewCounter(MetaTxnAbort),
+		Ctx:              ctx,
+		connCtx:          tc.ctx,
+		cancel:           cancel,
+		sqlTimestamp:     timeutil.Now(),
+		priority:         roachpb.NormalUserPriority,
+		mon:              txnStateMon,
+		txnAbortCount:    metric.NewCounter(MetaTxnAbort),
+		txnIDCacheWriter: &dummyTxnIDCacheWriter{},
 	}
 	ts.mu.txn = kv.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
 
@@ -135,7 +137,11 @@ func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
 		1000, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	ts := txnState{mon: txnStateMon, connCtx: tc.ctx}
+	ts := txnState{
+		mon:              txnStateMon,
+		connCtx:          tc.ctx,
+		txnIDCacheWriter: &dummyTxnIDCacheWriter{},
+	}
 	return stateNoTxn{}, &ts
 }
 
@@ -691,3 +697,14 @@ func TestTransitions(t *testing.T) {
 		})
 	}
 }
+
+type dummyTxnIDCacheWriter struct{}
+
+// Record implements txnidcache.Writer interface.
+func (*dummyTxnIDCacheWriter) Record(_ txnidcache.ResolvedTxnID) {}
+
+// Flush implements txnidcache.Writer interface.
+func (*dummyTxnIDCacheWriter) Flush() {}
+
+// Close implements txnidcache.Writer interface.
+func (*dummyTxnIDCacheWriter) Close() {}

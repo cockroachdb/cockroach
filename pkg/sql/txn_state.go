@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -115,6 +117,10 @@ type txnState struct {
 	// testingForceRealTracingSpans is a test-only knob that forces the use of
 	// real (i.e. not no-op) tracing spans for every statement.
 	testingForceRealTracingSpans bool
+
+	// txnIDCacheWriter is a writer that allows the txnState writes to the
+	// transaction ID Cache.
+	txnIDCacheWriter txnidcache.Writer
 }
 
 // txnType represents the type of a SQL transaction.
@@ -213,6 +219,16 @@ func (ts *txnState) resetForNewSQLTxn(
 	}
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
+	}
+
+	txnID, ok := ts.tryGetCurrentTxnID()
+	if ok {
+		// We will come back to update the TxnFingerprintID once the transaction
+		// finishes execution.
+		ts.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
+			TxnID:            txnID,
+			TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+		})
 	}
 }
 
@@ -439,4 +455,16 @@ func (ts *txnState) consumeAdvanceInfo() advanceInfo {
 	adv := ts.adv
 	ts.adv = advanceInfo{}
 	return adv
+}
+
+func (ts *txnState) tryGetCurrentTxnID() (uuid.UUID, bool) {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	if ts.mu.txn == nil {
+		return uuid.UUID{}, false
+	}
+
+	id := ts.mu.txn
+	return id.ID(), true
 }

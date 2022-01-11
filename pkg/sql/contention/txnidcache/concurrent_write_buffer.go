@@ -113,6 +113,7 @@ func (c *ConcurrentWriteBuffer) flushMsgBlockToChannelRLocked() {
 
 func (c *ConcurrentWriteBuffer) flushMsgBlockToChannelWLocked() {
 	c.sink.push(c.msgBlock)
+	c.msgBlock = messageBlock{}
 	c.flushDone.Broadcast()
 	atomic.StoreInt64(&c.atomicIdx, 0)
 }
