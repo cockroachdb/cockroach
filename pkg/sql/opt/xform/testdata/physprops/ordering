@@ -2398,7 +2398,7 @@ distinct-on
       ├── project
       │    ├── columns: "lookup_join_const_col_@9":14!null a:1!null b:5!null
       │    ├── fd: ()-->(14), (1)==(5), (5)==(1)
-      │    ├── ordering: +(1|5) [actual: +1]
+      │    ├── ordering: +(1|5) opt(14) [actual: +1]
       │    ├── inner-join (lookup t44469_b@t44469_b_b_idx)
       │    │    ├── columns: a:1!null b:5!null
       │    │    ├── flags: force lookup join (into right side)
@@ -2448,3 +2448,114 @@ project
  │              └── k:1 > 0 [outer=(1)]
  └── projections
       └── 1 [as="?column?":6]
+
+# Regression test for #73968. Lookup join needs to simplify the ordering
+# required of its child.
+exec-ddl
+CREATE TABLE t73968 (
+  k INT PRIMARY KEY,
+  name STRING,
+  x STRING AS (CAST(k AS STRING)) VIRTUAL,
+  y STRING AS (lower(name)) VIRTUAL,
+
+  UNIQUE (y),
+  UNIQUE (x)
+);
+----
+
+exec-ddl
+ALTER TABLE t73968 INJECT STATISTICS e'[
+  {
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 1000000,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 1000000000
+  }
+]';
+----
+
+opt
+SELECT
+  t2.crdb_internal_mvcc_timestamp
+FROM
+  t73968 AS t1 JOIN t73968 AS t2 ON t1.name = t2.name
+      AND t1.y = t2.y
+      AND t1.x = t2.y
+      AND t1.k = t2.k
+      AND t1.x = t2.x
+ORDER BY
+  t2.x, t2.k
+LIMIT
+  56
+----
+project
+ ├── columns: crdb_internal_mvcc_timestamp:11  [hidden: k:7!null x:9!null]
+ ├── cardinality: [0 - 56]
+ ├── immutable
+ ├── key: (7)
+ ├── fd: (7)-->(9,11)
+ ├── ordering: +9,+7 [actual: +9]
+ └── limit
+      ├── columns: k:1!null name:2!null x:3!null k:7!null name:8!null x:9!null crdb_internal_mvcc_timestamp:11
+      ├── internal-ordering: +(3|9),+(1|7)
+      ├── cardinality: [0 - 56]
+      ├── immutable
+      ├── key: (7)
+      ├── fd: (1)-->(2,3), (7)-->(8,9,11), (2)==(8), (8)==(2), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      ├── ordering: +(3|9),+(1|7) [actual: +3]
+      ├── inner-join (lookup t73968)
+      │    ├── columns: k:1!null name:2!null x:3!null k:7!null name:8!null x:9!null crdb_internal_mvcc_timestamp:11
+      │    ├── key columns: [7] = [7]
+      │    ├── lookup columns are key
+      │    ├── immutable
+      │    ├── key: (7)
+      │    ├── fd: (1)-->(2,3), (7)-->(8,9,11), (2)==(8), (8)==(2), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      │    ├── ordering: +(3|9),+(1|7) [actual: +3]
+      │    ├── limit hint: 56.00
+      │    ├── inner-join (lookup t73968@t73968_x_key)
+      │    │    ├── columns: k:1!null name:2 x:3!null k:7!null x:9!null
+      │    │    ├── key columns: [3] = [9]
+      │    │    ├── lookup columns are key
+      │    │    ├── immutable
+      │    │    ├── key: (7)
+      │    │    ├── fd: (1)-->(2,3), (7)-->(9), (9)-->(7), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      │    │    ├── ordering: +(3|9) [actual: +3]
+      │    │    ├── limit hint: 200.00
+      │    │    ├── sort
+      │    │    │    ├── columns: k:1!null name:2 x:3!null
+      │    │    │    ├── immutable
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2,3)
+      │    │    │    ├── ordering: +3
+      │    │    │    ├── limit hint: 2100.00
+      │    │    │    └── project
+      │    │    │         ├── columns: x:3!null k:1!null name:2
+      │    │    │         ├── immutable
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: (1)-->(2,3)
+      │    │    │         ├── select
+      │    │    │         │    ├── columns: k:1!null name:2
+      │    │    │         │    ├── immutable
+      │    │    │         │    ├── key: (1)
+      │    │    │         │    ├── fd: (1)-->(2)
+      │    │    │         │    ├── scan t73968
+      │    │    │         │    │    ├── columns: k:1!null name:2
+      │    │    │         │    │    ├── computed column expressions
+      │    │    │         │    │    │    ├── x:3
+      │    │    │         │    │    │    │    └── k:1::STRING
+      │    │    │         │    │    │    └── y:4
+      │    │    │         │    │    │         └── lower(name:2)
+      │    │    │         │    │    ├── key: (1)
+      │    │    │         │    │    └── fd: (1)-->(2)
+      │    │    │         │    └── filters
+      │    │    │         │         └── k:1::STRING = lower(name:2) [outer=(1,2), immutable]
+      │    │    │         └── projections
+      │    │    │              └── k:1::STRING [as=x:3, outer=(1), immutable]
+      │    │    └── filters
+      │    │         └── k:1 = k:7 [outer=(1,7), fd=(1)==(7), (7)==(1)]
+      │    └── filters
+      │         ├── name:2 = name:8 [outer=(2,8), fd=(2)==(8), (8)==(2)]
+      │         └── k:7::STRING = lower(name:8) [outer=(7,8), immutable]
+      └── 56
