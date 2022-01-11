@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,8 +75,7 @@ type avgInt16HashAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount       int64
-	overloadHelper execgen.OverloadHelper
+	curCount int64
 }
 
 var _ AggregateFunc = &avgInt16HashAgg{}
@@ -85,9 +83,6 @@ var _ AggregateFunc = &avgInt16HashAgg{}
 func (a *avgInt16HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
 	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
@@ -104,9 +99,9 @@ func (a *avgInt16HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -124,9 +119,9 @@ func (a *avgInt16HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -194,8 +189,7 @@ type avgInt32HashAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount       int64
-	overloadHelper execgen.OverloadHelper
+	curCount int64
 }
 
 var _ AggregateFunc = &avgInt32HashAgg{}
@@ -203,9 +197,6 @@ var _ AggregateFunc = &avgInt32HashAgg{}
 func (a *avgInt32HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
 	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
@@ -222,9 +213,9 @@ func (a *avgInt32HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -242,9 +233,9 @@ func (a *avgInt32HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -312,8 +303,7 @@ type avgInt64HashAgg struct {
 	curSum apd.Decimal
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
-	curCount       int64
-	overloadHelper execgen.OverloadHelper
+	curCount int64
 }
 
 var _ AggregateFunc = &avgInt64HashAgg{}
@@ -321,9 +311,6 @@ var _ AggregateFunc = &avgInt64HashAgg{}
 func (a *avgInt64HashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
 	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
@@ -340,9 +327,9 @@ func (a *avgInt64HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
@@ -360,9 +347,9 @@ func (a *avgInt64HashAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}

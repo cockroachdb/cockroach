@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -264,7 +265,7 @@ func rehash(
 
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.Reduce(&v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
@@ -289,7 +290,7 @@ func rehash(
 
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.Reduce(&v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
@@ -315,7 +316,7 @@ func rehash(
 
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.Reduce(&v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
@@ -337,7 +338,7 @@ func rehash(
 
 						// In order for equal decimals to hash to the same value we need to
 						// remove the trailing zeroes if there are any.
-						tmpDec := &_overloadHelper.TmpDec1
+						var tmpDec apd.Decimal //gcassert:noescape
 						tmpDec.Reduce(&v)
 						b := []byte(tmpDec.String())
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
