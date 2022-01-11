@@ -61,6 +61,7 @@ const notFoundTenantID = 99
 
 func TestLongDBName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -88,6 +89,7 @@ func TestLongDBName(t *testing.T) {
 // deleted.
 func TestBackendDownRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -115,6 +117,7 @@ func TestBackendDownRetry(t *testing.T) {
 
 func TestFailedConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -165,6 +168,7 @@ func TestFailedConnection(t *testing.T) {
 
 func TestUnexpectedError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -201,13 +205,16 @@ func TestUnexpectedError(t *testing.T) {
 
 func TestProxyAgainstSecureCRDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -234,6 +241,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 
 func TestProxyTLSConf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Run("insecure", func(t *testing.T) {
 		ctx := context.Background()
@@ -314,6 +322,7 @@ func TestProxyTLSConf(t *testing.T) {
 
 func TestProxyTLSClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// NB: The leaktest call is an important part of this test. We're
 	// verifying that no goroutines are leaked, despite calling Close an
 	// underlying TCP connection (rather than the TLSConn that wraps it).
@@ -323,7 +332,9 @@ func TestProxyTLSClose(t *testing.T) {
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -362,13 +373,16 @@ func TestProxyTLSClose(t *testing.T) {
 
 func TestProxyModifyRequestParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
 	defer te.Close()
 
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
 	// Create some user with password authn.
@@ -415,13 +429,16 @@ func TestProxyModifyRequestParams(t *testing.T) {
 
 func TestInsecureProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -444,6 +461,7 @@ func TestInsecureProxy(t *testing.T) {
 
 func TestErroneousFrontend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -469,6 +487,7 @@ func TestErroneousFrontend(t *testing.T) {
 
 func TestErroneousBackend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -494,6 +513,7 @@ func TestErroneousBackend(t *testing.T) {
 
 func TestProxyRefuseConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -518,6 +538,7 @@ func TestProxyRefuseConn(t *testing.T) {
 
 func TestDenylistUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -590,6 +611,7 @@ func TestDenylistUpdate(t *testing.T) {
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlockWithIssue(t, 71365)
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -733,6 +755,7 @@ func TestDirectoryConnect(t *testing.T) {
 
 func TestClusterNameAndTenantFromParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
