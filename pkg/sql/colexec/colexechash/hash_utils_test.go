@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,9 +40,8 @@ func TestHashFunctionFamily(t *testing.T) {
 	}
 	numBuckets := uint64(16)
 	var (
-		cancelChecker     colexecutils.CancelChecker
-		overloadHelperVar execgen.OverloadHelper
-		datumAlloc        tree.DatumAlloc
+		cancelChecker colexecutils.CancelChecker
+		datumAlloc    tree.DatumAlloc
 	)
 	cancelChecker.Init(context.Background())
 
@@ -51,7 +49,7 @@ func TestHashFunctionFamily(t *testing.T) {
 		// We need +1 here because 0 is not a valid initial hash value.
 		initHash(buckets, nKeys, uint64(initHashValue+1))
 		for _, keysCol := range keys {
-			rehash(buckets, keysCol, nKeys, nil /* sel */, cancelChecker, &overloadHelperVar, &datumAlloc)
+			rehash(buckets, keysCol, nKeys, nil /* sel */, cancelChecker, &datumAlloc)
 		}
 		finalizeHash(buckets, nKeys, numBuckets)
 	}
