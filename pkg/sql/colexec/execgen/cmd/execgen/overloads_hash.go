@@ -91,7 +91,7 @@ func (decimalCustomizer) getHashAssignFunc() assignFunc {
 		return fmt.Sprintf(`
 			// In order for equal decimals to hash to the same value we need to
 			// remove the trailing zeroes if there are any.
-			tmpDec := &_overloadHelper.TmpDec1
+			var tmpDec apd.Decimal //gcassert:noescape
 			tmpDec.Reduce(&%[1]s)
 			b := []byte(tmpDec.String())`, vElem) +
 			fmt.Sprintf(hashByteSliceString, targetElem, "b")
