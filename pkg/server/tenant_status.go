@@ -19,6 +19,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"strconv"
 	"strings"
 
@@ -464,6 +467,73 @@ func (t *tenantStatusServer) CombinedStatementStats(
 
 	return getCombinedStatementStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
 		t.sqlServer.internalExecutor)
+}
+
+func (t *tenantStatusServer) Details(
+	ctx context.Context, req *serverpb.DetailsRequest,
+) (*serverpb.DetailsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	instanceID, local, err := t.parseInstanceID(req.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.Details(ctx, req)
+	}
+	localInstance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, t.sqlServer.SQLInstanceID())
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "local instance unavailable")
+	}
+	resp := &serverpb.DetailsResponse{
+		NodeID:     roachpb.NodeID(instanceID),
+		BuildInfo:  build.GetInfo(),
+		SQLAddress: util.MakeUnresolvedAddr("", localInstance.InstanceAddr),
+	}
+
+	return resp, nil
+}
+
+func (t *tenantStatusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponse, error) {
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	instances, err := t.sqlServer.sqlInstanceProvider.GetAllInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var resp serverpb.NodesResponse
+	for _, instance := range instances {
+		nodeStatus := statuspb.NodeStatus{
+			Desc: roachpb.NodeDescriptor{
+				NodeID:     roachpb.NodeID(instance.InstanceID),
+				SQLAddress: util.MakeUnresolvedAddr("", instance.InstanceAddr),
+			},
+		}
+		resp.Nodes = append(resp.Nodes, nodeStatus)
+	}
+
+	return &resp, err
 }
 
 // Statements implements the relevant endpoint on the StatusServer by

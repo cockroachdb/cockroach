@@ -29,5 +29,5 @@ requires the node to be live and operating properly. Retrieval of SQL data
 requires the cluster to be live.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: clierrorplus.MaybeDecorateError(runDebugZip),
+	RunE: clierrorplus.MaybeDecorateError(runDebugZipOnTenant),
 }

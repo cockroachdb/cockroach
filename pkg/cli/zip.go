@@ -139,6 +139,112 @@ func (zc *debugZipContext) forAllNodes(
 
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
+// TODO(rima): Add CPU profiles, hottest ranges, goroutines, heap profiles
+// and logs data once we decide best storage solution. Also, add code
+// with the scripts for interpreting pprof and hottest ranges.
+func runDebugZipOnTenant(cmd *cobra.Command, args []string) (retErr error) {
+	fmt.Println("Hello Rima for tenant")
+	if err := zipCtx.files.validate(); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	zr := zipCtx.newZipReporter("cluster")
+
+	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
+	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	if err != nil {
+		return s.fail(err)
+	}
+	defer finish()
+
+	status := serverpb.NewStatusClient(conn)
+	admin := serverpb.NewAdminClient(conn)
+	s.done()
+
+	s = zr.start("retrieving the node status to get the SQL address")
+	localInstanceDetails, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+	if err != nil {
+		return s.fail(err)
+	}
+	sqlAddr := localInstanceDetails.SQLAddress
+	if sqlAddr.IsEmpty() {
+		// No SQL address, return error
+		return s.fail(errors.Errorf("No SQL Address"))
+	}
+	s.done()
+
+	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
+
+	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
+	if err != nil {
+		return s.fail(err)
+	}
+
+	// We're going to use the SQL code, but in non-interactive mode.
+	// Override whatever terminal-driven defaults there may be out there.
+	cliCtx.IsInteractive = false
+	sqlExecCtx.TerminalOutput = false
+	sqlExecCtx.ShowTimes = false
+	// Use a streaming format to avoid accumulating all rows in RAM.
+	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
+
+	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
+	if err != nil {
+		_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
+	} else {
+		// Note: we're not printing "connection established" because the driver we're using
+		// does late binding.
+		defer func() { retErr = errors.CombineErrors(retErr, sqlConn.Close()) }()
+		s.progress("using SQL connection URL: %s", sqlConn.GetURL())
+		s.progress("able to construct SQL connection, Yay, we can move on to endpoints")
+		s.done()
+	}
+	name := args[0]
+	s = zr.start("creating output file %s", name)
+	out, err := os.Create(name)
+	if err != nil {
+		return s.fail(err)
+	}
+
+	z := newZipper(out)
+	defer func() {
+		cErr := z.close()
+		retErr = errors.CombineErrors(retErr, cErr)
+	}()
+	s.done()
+
+	timeout := 10 * time.Second
+	if cliCtx.cmdTimeout != 0 {
+		timeout = cliCtx.cmdTimeout
+	}
+
+	zc := debugZipContext{
+		clusterPrinter:   zr,
+		z:                z,
+		timeout:          timeout,
+		admin:            admin,
+		status:           status,
+		firstNodeSQLConn: sqlConn,
+		sem:              semaphore.New(zipCtx.concurrency),
+	}
+
+	sqlNodeList, err := zc.collectTenantData(ctx)
+	if err != nil {
+		return err
+	}
+
+	//Collect the per SQL node (aka SQL pod) data.
+	if err := zc.forAllNodes(ctx, sqlNodeList, func(ctx context.Context, sqlNode statuspb.NodeStatus) error {
+		return zc.collectPerSQLNodeData(ctx, sqlNode)
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
 func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	if err := zipCtx.files.validate(); err != nil {
 		return err

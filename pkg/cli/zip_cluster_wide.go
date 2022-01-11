@@ -33,6 +33,27 @@ const (
 	problemRangesName = reportsPrefix + "/problemranges"
 )
 
+// makeTenantZipRequests defines the zipRequests that are to be
+// performed just once for the entire cluster.
+func makeTenantZipRequests(
+	admin serverpb.AdminClient, status serverpb.StatusClient,
+) []zipRequest {
+	return []zipRequest{
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return admin.Events(ctx, &serverpb.EventsRequest{})
+			},
+			pathName: eventsName,
+		},
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return admin.Settings(ctx, &serverpb.SettingsRequest{})
+			},
+			pathName: settingsName,
+		},
+	}
+}
+
 // makeClusterWideZipRequests defines the zipRequests that are to be
 // performed just once for the entire cluster.
 func makeClusterWideZipRequests(
@@ -66,6 +87,42 @@ func makeClusterWideZipRequests(
 			pathName: problemRangesName,
 		},
 	}
+}
+
+// Tables containing tenant info that are collected using SQL
+// into a debug zip
+var debugZipTablesPerTenant = []string{
+	"crdb_internal.cluster_contention_events",
+	"crdb_internal.cluster_distsql_flows",
+	"crdb_internal.cluster_database_privileges",
+	"crdb_internal.cluster_queries",
+	"crdb_internal.cluster_sessions",
+	"crdb_internal.cluster_settings",
+	"crdb_internal.cluster_transactions",
+
+	"crdb_internal.default_privileges",
+
+	"crdb_internal.jobs",
+	"system.jobs",       // get the raw, restorable jobs records too.
+	"system.descriptor", // descriptors also contain job-like mutation state.
+	"system.namespace",
+	"system.scheduled_jobs",
+	"system.settings", // get the raw settings to determine what's explicitly set.
+
+	// The synthetic SQL CREATE statements for all tables.
+	// Note the "". to collect across all databases.
+	`"".crdb_internal.create_schema_statements`,
+	`"".crdb_internal.create_statements`,
+	// Ditto, for CREATE TYPE.
+	`"".crdb_internal.create_type_statements`,
+
+	"crdb_internal.regions",
+	"crdb_internal.schema_changes",
+	"crdb_internal.partitions",
+	"crdb_internal.zones",
+	"crdb_internal.invalid_objects",
+	"crdb_internal.index_usage_statistics",
+	"crdb_internal.table_indexes",
 }
 
 // Tables containing cluster-wide info that are collected using SQL
@@ -106,6 +163,38 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.invalid_objects",
 	"crdb_internal.index_usage_statistics",
 	"crdb_internal.table_indexes",
+}
+
+func (zc *debugZipContext) collectTenantData(ctx context.Context) ([]statuspb.NodeStatus, error) {
+	tenantZipRequests := makeTenantZipRequests(zc.admin, zc.status)
+
+	for _, r := range tenantZipRequests {
+		if err := zc.runZipRequest(ctx, zc.clusterPrinter, r); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, table := range debugZipTablesPerTenant {
+		query := fmt.Sprintf(`SELECT * FROM %s`, table)
+		if override, ok := customQuery[table]; ok {
+			query = override
+		}
+		if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, debugBase, table, query); err != nil {
+			return nil, errors.Wrapf(err, "fetching %s", table)
+		}
+	}
+
+	var nodes *serverpb.NodesResponse
+	s := zc.clusterPrinter.start("requesting nodes")
+	err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
+		var err error
+		nodes, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+		return err
+	})
+	if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodes, err); cErr != nil {
+		return nil, cErr
+	}
+	return nodes.Nodes, nil
 }
 
 // collectClusterData runs the data collection that only needs to

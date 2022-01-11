@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"net/url"
 	"os"
 	"sort"
@@ -29,6 +30,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+func makePerTenantNodeZipRequests(prefix, id string, status serverpb.StatusClient) []zipRequest {
+	return []zipRequest{
+		{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id})
+			},
+			pathName: prefix + "/details",
+		},
+	}
+}
 
 // makePreNodeZipRequests defines the zipRequests (API requests) that are to be
 // performed once per node.
@@ -55,6 +67,28 @@ func makePerNodeZipRequests(
 			pathName: prefix + "/enginestats",
 		},
 	}
+}
+
+// Tables collected from each SQL node for multitenant setup
+// using SQL
+var debugZipTablesPerTenantNode = []string{
+	"crdb_internal.feature_usage",
+
+	"crdb_internal.leases",
+
+	"crdb_internal.node_build_info",
+	"crdb_internal.node_contention_events",
+	"crdb_internal.node_distsql_flows",
+	"crdb_internal.node_inflight_trace_spans",
+	"crdb_internal.node_metrics",
+	"crdb_internal.node_queries",
+	"crdb_internal.node_runtime_info",
+	"crdb_internal.node_sessions",
+	"crdb_internal.node_statement_statistics",
+	"crdb_internal.node_transaction_statistics",
+	"crdb_internal.node_transactions",
+	"crdb_internal.node_txn_stats",
+	"crdb_internal.active_range_feeds",
 }
 
 // Tables collected from each node in a debug zip using SQL.
@@ -554,6 +588,55 @@ func (zc *debugZipContext) collectPerNodeData(
 			if err := zc.z.createJSON(s, name+".json", r); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func (zc *debugZipContext) collectPerSQLNodeData(ctx context.Context, node statuspb.NodeStatus) error {
+	sqlNodeID := base.SQLInstanceID(node.Desc.NodeID)
+	nodePrinter := zipCtx.newZipReporter("node %d", sqlNodeID)
+	id := fmt.Sprintf("%d", sqlNodeID)
+	prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
+
+	if !zipCtx.nodes.isIncluded(node.Desc.NodeID) {
+		if err := zc.z.createRaw(nodePrinter.start("skipping node"), prefix+".skipped",
+			[]byte(fmt.Sprintf("skipping excluded node %d\n", sqlNodeID))); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", node); err != nil {
+		return err
+	}
+
+	// Don't use sqlConn because that's only for is the node `debug
+	// zip` was pointed at, but here we want to connect to nodes
+	// individually to grab node- local SQL tables. Try to guess by
+	// replacing the host in the connection string; this may or may
+	// not work and if it doesn't, we let the invalid curSQLConn get
+	// used anyway so that anything that does *not* need it will
+	// still happen.
+	sqlAddr := node.Desc.CheckedSQLAddress()
+	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
+	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
+
+	for _, table := range debugZipTablesPerTenantNode {
+		query := fmt.Sprintf(`SELECT * FROM %s`, table)
+		if override, ok := customQuery[table]; ok {
+			query = override
+		}
+		if err := zc.dumpTableDataForZip(nodePrinter, curSQLConn, prefix, table, query); err != nil {
+			return errors.Wrapf(err, "fetching %s", table)
+		}
+	}
+
+	perNodeZipRequests := makePerTenantNodeZipRequests(prefix, id, zc.status)
+
+	for _, r := range perNodeZipRequests {
+		if err := zc.runZipRequest(ctx, nodePrinter, r); err != nil {
+			return err
 		}
 	}
 	return nil
