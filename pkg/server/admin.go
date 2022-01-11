@@ -3099,6 +3099,7 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(
 		if err != nil {
 			return userName, err
 		}
+
 		if !hasViewActivity {
 			return userName, status.Errorf(
 				codes.PermissionDenied, "this operation requires the %s role option",
@@ -3106,6 +3107,58 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(
 		}
 	}
 	return userName, nil
+}
+
+func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermission(
+	ctx context.Context,
+) (userName security.SQLUsername, err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return userName, err
+	}
+	if !isAdmin {
+		hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return userName, err
+		}
+
+		if !hasViewActivity {
+			hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return userName, err
+			}
+
+			if !hasViewActivityRedacted {
+				return userName, status.Errorf(
+					codes.PermissionDenied, "this operation requires the %s or %s role options",
+					roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+			}
+		}
+	}
+	return userName, nil
+}
+
+// This functions requires that the user contain the VIEWACTIVITY role, but does not
+// contain the VIEWACTIVITYREDACTED role.
+func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPermission(
+	ctx context.Context,
+) (userName security.SQLUsername, err error) {
+	userName, _, err = c.getUserAndRole(ctx)
+	if err != nil {
+		return userName, err
+	}
+
+	hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+	if err != nil {
+		return userName, err
+	}
+	if hasViewActivityRedacted {
+		return userName, status.Errorf(
+			codes.PermissionDenied, "this operation is not allowed for %s role options",
+			roleoption.VIEWACTIVITYREDACTED)
+	}
+
+	return c.requireViewActivityPermission(ctx)
 }
 
 func (c *adminPrivilegeChecker) getUserAndRole(
