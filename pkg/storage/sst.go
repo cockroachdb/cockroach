@@ -221,7 +221,7 @@ func CheckSSTConflicts(
 		// be used in transactions so we don't need to check.
 		if sstKey.Timestamp.LessEq(extKey.Timestamp) {
 			return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
-				sstKey.Timestamp, extKey.Timestamp.Next())
+				sstKey.Timestamp, extKey.Timestamp.Next(), sstKey.Key)
 		}
 
 		// If we are shadowing an existing key, we must update the stats accordingly
