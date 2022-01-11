@@ -14,22 +14,23 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
-const maxCount = 100
-
-func testRingBuffer(t *testing.T, count int) {
+func TestRingBuffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const operationCount = 100
 	var buffer Buffer
-	naiveBuffer := make([]interface{}, 0, count)
-	for elementIdx := 0; elementIdx < count; elementIdx++ {
+	naiveBuffer := make([]interface{}, 0, operationCount)
+	for i := 0; i < operationCount; i++ {
 		switch rand.Intn(4) {
 		case 0:
-			buffer.AddFirst(elementIdx)
-			naiveBuffer = append([]interface{}{elementIdx}, naiveBuffer...)
+			buffer.AddFirst(i)
+			naiveBuffer = append([]interface{}{i}, naiveBuffer...)
 		case 1:
-			buffer.AddLast(elementIdx)
-			naiveBuffer = append(naiveBuffer, elementIdx)
+			buffer.AddLast(i)
+			naiveBuffer = append(naiveBuffer, i)
 		case 2:
 			if len(naiveBuffer) > 0 {
 				buffer.RemoveFirst()
@@ -58,16 +59,8 @@ func testRingBuffer(t *testing.T, count int) {
 	}
 }
 
-func TestRingBuffer(t *testing.T) {
-	for count := 1; count <= maxCount; count++ {
-		t.Run("Parallel", func(t *testing.T) {
-			t.Parallel() // SAFE FOR TESTING
-			testRingBuffer(t, count)
-		})
-	}
-}
-
 func TestRingBufferCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	var b Buffer
 
 	require.Panics(t, func() { b.Reserve(-1) })
