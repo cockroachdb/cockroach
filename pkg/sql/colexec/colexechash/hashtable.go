@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -182,9 +181,8 @@ type HashTable struct {
 	// each other.
 	allowNullEquality bool
 
-	overloadHelper execgen.OverloadHelper
-	datumAlloc     tree.DatumAlloc
-	cancelChecker  colexecutils.CancelChecker
+	datumAlloc    tree.DatumAlloc
+	cancelChecker colexecutils.CancelChecker
 
 	BuildMode HashTableBuildMode
 	probeMode HashTableProbeMode
@@ -552,7 +550,7 @@ func (ht *HashTable) ComputeBuckets(buckets []uint64, keys []coldata.Vec, nKeys 
 	}
 
 	for i := range ht.keyCols {
-		rehash(buckets, keys[i], nKeys, sel, ht.cancelChecker, &ht.overloadHelper, &ht.datumAlloc)
+		rehash(buckets, keys[i], nKeys, sel, ht.cancelChecker, &ht.datumAlloc)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)
