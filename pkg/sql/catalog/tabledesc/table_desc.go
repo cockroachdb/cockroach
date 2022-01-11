@@ -470,14 +470,6 @@ func (desc *wrapper) IndexFullColumnDirections(
 	return nil
 }
 
-// IndexCompositeColumns implements the TableDescriptor interface.
-func (desc *wrapper) IndexCompositeColumns(idx catalog.Index) []catalog.Column {
-	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
-		return ic.composite
-	}
-	return nil
-}
-
 // IndexStoredColumns implements the TableDescriptor interface.
 func (desc *wrapper) IndexStoredColumns(idx catalog.Index) []catalog.Column {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
