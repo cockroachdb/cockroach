@@ -265,11 +265,11 @@ type columnCache struct {
 
 type indexColumnCache struct {
 	all       []catalog.Column
+	allDirs   []descpb.IndexDescriptor_Direction
 	key       []catalog.Column
 	keyDirs   []descpb.IndexDescriptor_Direction
 	stored    []catalog.Column
 	keySuffix []catalog.Column
-	composite []catalog.Column
 	full      []catalog.Column
 	fullDirs  []descpb.IndexDescriptor_Direction
 }
@@ -359,42 +359,39 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 
 // makeIndexColumnCache builds a cache of catalog.Column slices pertaining to
 // the columns referenced in an index.
-func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) indexColumnCache {
-	ic := indexColumnCache{
-		key:       filterColumnsByID(all, idx.KeyColumnIDs),
-		stored:    filterColumnsByID(all, idx.StoreColumnIDs),
-		keySuffix: filterColumnsByID(all, idx.KeySuffixColumnIDs),
-		composite: filterColumnsByID(all, idx.CompositeColumnIDs),
-	}
-	ic.all = make([]catalog.Column, 0, len(ic.key)+len(ic.keySuffix)+len(ic.stored))
-	ic.all = append(ic.all, ic.key...)
-	ic.all = append(ic.all, ic.keySuffix...)
-	ic.all = append(ic.all, ic.stored...)
-	ic.full = make([]catalog.Column, 0, len(ic.key)+len(ic.keySuffix))
-	ic.full = append(ic.full, ic.key...)
-	if !idx.Unique {
-		ic.full = append(ic.full, ic.keySuffix...)
-	}
-	ic.fullDirs = make([]descpb.IndexDescriptor_Direction, len(ic.full))
-	// Only copy key column directions, key suffix directions will remain at their
-	// default value of ASC.
-	copy(ic.fullDirs, idx.KeyColumnDirections)
-	ic.keyDirs = ic.fullDirs[:len(ic.key)]
-	return ic
-}
-
-// filterColumnsByID returns the subset of cols matching the desired ids.
-func filterColumnsByID(cols []catalog.Column, ids []descpb.ColumnID) []catalog.Column {
-	ret := make([]catalog.Column, len(ids))
-	for i, id := range ids {
-		for _, col := range cols {
-			if col.GetID() == id {
-				ret[i] = col
-				break
+func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) (ic indexColumnCache) {
+	nKey := len(idx.KeyColumnIDs)
+	nKeySuffix := len(idx.KeySuffixColumnIDs)
+	nStored := len(idx.StoreColumnIDs)
+	nAll := nKey + nKeySuffix + nStored
+	// Only copy key column directions, others will remain at ASC (default value).
+	ic.allDirs = append(make([]descpb.IndexDescriptor_Direction, 0, nAll), idx.KeyColumnDirections...)
+	ic.all = make([]catalog.Column, 0, nAll)
+	for _, ids := range [][]descpb.ColumnID{
+		idx.KeyColumnIDs,
+		idx.KeySuffixColumnIDs,
+		idx.StoreColumnIDs,
+	} {
+		for _, id := range ids {
+			for _, col := range all {
+				if col.GetID() == id {
+					ic.all = append(ic.all, col)
+					break
+				}
 			}
 		}
 	}
-	return ret
+	ic.key = ic.all[:nKey]
+	ic.keyDirs = ic.allDirs[:nKey]
+	ic.keySuffix = ic.all[nKey : nKey+nKeySuffix]
+	ic.stored = ic.all[nKey+nKeySuffix:]
+	nFull := nKey
+	if !idx.Unique {
+		nFull = nFull + nKeySuffix
+	}
+	ic.full = ic.all[:nFull]
+	ic.fullDirs = ic.allDirs[:nFull]
+	return ic
 }
 
 func lazyAllocAppendColumn(slice *[]catalog.Column, col catalog.Column, cap int) {
