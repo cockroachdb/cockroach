@@ -92,8 +92,7 @@ func (o *notExprProjOp) Next() coldata.Batch {
 
 type notExprSelBase struct {
 	colexecop.OneInputHelper
-	allocator *colmem.Allocator
-	inputIdx  int
+	inputIdx int
 }
 
 // notExprSelOp is an Operator that selects all the values in the input vector
