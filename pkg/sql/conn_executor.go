@@ -811,6 +811,7 @@ func (s *Server) newConnExecutor(
 		state: txnState{
 			mon:                          txnMon,
 			connCtx:                      ctx,
+			txnIDCacheWriter:             s.txnIDCache,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 		},
 		transitionCtx: transitionCtx{

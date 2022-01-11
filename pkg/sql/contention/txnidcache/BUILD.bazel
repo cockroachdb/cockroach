@@ -31,7 +31,6 @@ go_test(
         "txn_id_cache_test.go",
     ],
     deps = [
-        ":txnidcache",
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
@@ -46,6 +45,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

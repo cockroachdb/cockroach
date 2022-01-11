@@ -133,7 +133,7 @@ type ResolvedTxnID struct {
 }
 
 func (r *ResolvedTxnID) valid() bool {
-	return r.TxnFingerprintID != roachpb.InvalidTransactionFingerprintID
+	return r.TxnID != uuid.UUID{}
 }
 
 var (

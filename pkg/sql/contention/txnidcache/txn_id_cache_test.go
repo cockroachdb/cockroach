@@ -13,6 +13,7 @@ package txnidcache_test
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -42,17 +44,20 @@ func TestTransactionIDCache(t *testing.T) {
 
 	appName := "txnIDCacheTest"
 	expectedTxnIDToUUIDMapping := make(map[uuid.UUID]roachpb.TransactionFingerprintID)
+	injector := runtimeHookInjector{}
+
+	injector.setHook(func(
+		sessionData *sessiondata.SessionData,
+		txnID uuid.UUID,
+		txnFingerprintID roachpb.TransactionFingerprintID,
+	) {
+		if strings.Contains(sessionData.ApplicationName, appName) {
+			expectedTxnIDToUUIDMapping[txnID] = txnFingerprintID
+		}
+	})
 
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeTxnStatsRecorded: func(
-			sessionData *sessiondata.SessionData,
-			txnID uuid.UUID,
-			txnFingerprintID roachpb.TransactionFingerprintID,
-		) {
-			if strings.Contains(sessionData.ApplicationName, appName) {
-				expectedTxnIDToUUIDMapping[txnID] = txnFingerprintID
-			}
-		},
+		BeforeTxnStatsRecorded: injector.hook,
 	}
 
 	testServer, sqlConn, kvDB := serverutils.StartServer(t, params)
@@ -169,36 +174,109 @@ func TestTransactionIDCache(t *testing.T) {
 	txnIDCache := sqlServer.GetTxnIDCache()
 
 	txnIDCache.Flush()
-	testutils.SucceedsWithin(t, func() error {
-		for txnID, expectedTxnFingerprintID := range expectedTxnIDToUUIDMapping {
-			actualTxnFingerprintID, ok := txnIDCache.Lookup(txnID)
-			if !ok {
-				return errors.Newf("expected to find txn(%s) with fingerprintID: "+
-					"%d, but it was not found.",
-					txnID, expectedTxnFingerprintID,
-				)
+	t.Run("resolved_txn_id_cache_record", func(t *testing.T) {
+		testutils.SucceedsWithin(t, func() error {
+			for txnID, expectedTxnFingerprintID := range expectedTxnIDToUUIDMapping {
+				actualTxnFingerprintID, ok := txnIDCache.Lookup(txnID)
+				if !ok {
+					return errors.Newf("expected to find txn(%s) with fingerprintID: "+
+						"%d, but it was not found.",
+						txnID, expectedTxnFingerprintID,
+					)
+				}
+				if expectedTxnFingerprintID != actualTxnFingerprintID {
+					return errors.Newf("expected to find txn(%s) with fingerprintID: %d, but the actual fingerprintID is: %d", txnID, expectedTxnFingerprintID, actualTxnFingerprintID)
+				}
 			}
-			if expectedTxnFingerprintID != actualTxnFingerprintID {
-				return errors.Newf("expected to find txn(%s) with fingerprintID: %d, but the actual fingerprintID is: %d", txnID, expectedTxnFingerprintID, actualTxnFingerprintID)
+			return nil
+		}, 3*time.Second)
+
+		sizePreEviction := txnIDCache.Size()
+		testConn.Exec(t, "SET CLUSTER SETTING sql.contention.txn_id_cache.max_size = '10B'")
+
+		// Execute additional queries to ensure we are overflowing the size limit.
+		testConn.Exec(t, "SELECT 1")
+		txnIDCache.Flush()
+
+		testutils.SucceedsWithin(t, func() error {
+			sizePostEviction := txnIDCache.Size()
+			if sizePostEviction >= sizePreEviction {
+				return errors.Newf("expected txn id cache size to shrink below %d, "+
+					"but it has increased to %d", sizePreEviction, sizePostEviction)
 			}
+			return nil
+		}, 3*time.Second)
+	})
 
-		}
-		return nil
-	}, 3*time.Second)
+	t.Run("provisional_txn_id_cache_record", func(t *testing.T) {
+		testConn.Exec(t, "RESET CLUSTER SETTING sql.contention.txn_id_cache.max_size")
+		callCaptured := uint32(0)
 
-	sizePreEviction := txnIDCache.Size()
-	testConn.Exec(t, "SET CLUSTER SETTING sql.contention.txn_id_cache.max_size = '10B'")
+		injector.setHook(func(
+			sessionData *sessiondata.SessionData,
+			txnID uuid.UUID,
+			txnFingerprintID roachpb.TransactionFingerprintID) {
+			if strings.Contains(sessionData.ApplicationName, appName) {
+				if txnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+					txnIDCache.Flush()
 
-	// Execute additional queries to ensure we are overflowing the size limit.
-	testConn.Exec(t, "SELECT 1")
+					testutils.SucceedsWithin(t, func() error {
+						existingTxnFingerprintID, ok := txnIDCache.Lookup(txnID)
+						if !ok {
+							return errors.Newf("expected provision txn fingerprint id to be found for "+
+								"txn(%s), but it was not", txnID)
+						}
+						if existingTxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+							return errors.Newf("expected txn (%s) to have a provisional"+
+								"txn fingerprint id, but this txn already has a resolved "+
+								"txn fingerprint id: %d", txnID, existingTxnFingerprintID)
+						}
+						return nil
+					}, 3*time.Second)
+					atomic.StoreUint32(&callCaptured, 1)
+				}
+			}
+		})
 
-	txnIDCache.Flush()
-	testutils.SucceedsWithin(t, func() error {
-		sizePostEviction := txnIDCache.Size()
-		if sizePostEviction >= sizePreEviction {
-			return errors.Newf("expected txn id cache size to shrink below, "+
-				"but it has increased to %d", sizePreEviction, sizePostEviction)
-		}
-		return nil
-	}, 3*time.Second)
+		testConn.Exec(t, "BEGIN")
+		testConn.Exec(t, "SELECT 1")
+		testConn.Exec(t, "COMMIT")
+
+		require.NotZerof(t, atomic.LoadUint32(&callCaptured),
+			"expected to found provisional txn id cache record, "+
+				"but it was not found")
+	})
+}
+
+// runtimeHookInjector provides a way to dynamically inject a testing knobs
+// into a running cluster.
+type runtimeHookInjector struct {
+	syncutil.RWMutex
+	op func(
+		sessionData *sessiondata.SessionData,
+		txnID uuid.UUID,
+		txnFingerprintID roachpb.TransactionFingerprintID,
+	)
+}
+
+func (s *runtimeHookInjector) hook(
+	sessionData *sessiondata.SessionData,
+	txnID uuid.UUID,
+	txnFingerprintID roachpb.TransactionFingerprintID,
+) {
+	s.RLock()
+	defer s.RUnlock()
+	s.op(sessionData, txnID, txnFingerprintID)
+}
+
+func (s *runtimeHookInjector) setHook(
+	op func(
+		sessionData *sessiondata.SessionData,
+		txnID uuid.UUID,
+		txnFingerprintID roachpb.TransactionFingerprintID,
+	),
+) {
+	s.Lock()
+	defer s.Unlock()
+	s.op = op
 }
