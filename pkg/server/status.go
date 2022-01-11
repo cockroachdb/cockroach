@@ -162,6 +162,12 @@ func (b *baseStatusServer) getLocalSessions(
 	if err != nil {
 		return nil, err
 	}
+	if !hasViewActivity {
+		hasViewActivity, err = b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	reqUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
 	if err != nil {
@@ -301,8 +307,10 @@ func (b *baseStatusServer) checkCancelPrivilege(
 
 // hasViewActivityPermissions checks whether the session user has permissions to
 // view the activity on the server (which is the case when it is a superuser or
-// has VIEWACTIVITY permission) and returns an error if not.
-func (b *baseStatusServer) hasViewActivityPermissions(ctx context.Context) error {
+// has VIEWACTIVITY or VIEWACTIVITYREDACTED permission) and returns an error if not.
+func (b *baseStatusServer) hasViewActivityOrViewActivityRedactedPermissions(
+	ctx context.Context,
+) error {
 	sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 	if err != nil {
 		return err
@@ -311,8 +319,15 @@ func (b *baseStatusServer) hasViewActivityPermissions(ctx context.Context) error
 	if err != nil {
 		return err
 	}
+	if !hasViewActivity {
+		hasViewActivity, err = b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return err
+		}
+	}
+
 	if !isAdmin && !hasViewActivity {
-		// Only superusers and users with VIEWACTIVITY permission are allowed
+		// Only superusers and users with VIEWACTIVITY or VIEWACTIVITYREDACTED permission are allowed
 		// to view the activity on the server.
 		return status.Errorf(
 			codes.PermissionDenied,
@@ -329,7 +344,7 @@ func (b *baseStatusServer) ListLocalContentionEvents(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 
-	if err := b.hasViewActivityPermissions(ctx); err != nil {
+	if err := b.hasViewActivityOrViewActivityRedactedPermissions(ctx); err != nil {
 		return nil, err
 	}
 
@@ -344,7 +359,7 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 
-	if err := b.hasViewActivityPermissions(ctx); err != nil {
+	if err := b.hasViewActivityOrViewActivityRedactedPermissions(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2456,7 +2471,7 @@ func (s *statusServer) ListContentionEvents(
 	ctx = s.AnnotateCtx(ctx)
 
 	// Check permissions early to avoid fan-out to all nodes.
-	if err := s.hasViewActivityPermissions(ctx); err != nil {
+	if err := s.hasViewActivityOrViewActivityRedactedPermissions(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2501,7 +2516,7 @@ func (s *statusServer) ListDistSQLFlows(
 	ctx = s.AnnotateCtx(ctx)
 
 	// Check permissions early to avoid fan-out to all nodes.
-	if err := s.hasViewActivityPermissions(ctx); err != nil {
+	if err := s.hasViewActivityOrViewActivityRedactedPermissions(ctx); err != nil {
 		return nil, err
 	}
 
