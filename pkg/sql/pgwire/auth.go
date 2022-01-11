@@ -139,7 +139,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLogin, isSuperuser, validUntil, defaultSettings, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, isSuperuser, validUntil, defaultSettings, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -163,7 +163,7 @@ func (c *conn) handleAuthentication(
 		))
 	}
 
-	if !canLogin {
+	if !canLoginSQL {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_LOGIN_DISABLED, nil)
 		return connClose, sendError(pgerror.Newf(
 			pgcode.InvalidAuthorizationSpecification,
