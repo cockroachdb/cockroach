@@ -203,6 +203,6 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"wal_debug",
 	"work_mem",
 	"xmlbinary",
-	"xmloption",
+	// "xmloption",
 	"zero_damaged_pages",
 )

@@ -1042,6 +1042,9 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/9.5/runtime-config-compatible.html
 	`default_with_oids`: makeCompatBoolVar(`default_with_oids`, false, false),
 
+	// See https://www.postgresql.org/docs/current/datatype-xml.html.
+	`xmloption`: makeCompatStringVar(`xmloption`, `content`),
+
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
 	`max_identifier_length`: {

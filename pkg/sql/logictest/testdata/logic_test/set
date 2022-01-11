@@ -548,6 +548,24 @@ off
 statement error invalid value for parameter "default_with_oids": "true"
 SET default_with_oids = 'true'
 
+subtest xmloption_test
+
+query T
+SHOW xmloption
+----
+content
+
+statement ok
+SET xmloption = 'content'
+
+query T
+SHOW xmloption
+----
+content
+
+statement error invalid value for parameter "xmloption": "document"
+SET xmloption = 'document'
+
 subtest backslash_quote_test
 
 statement ok
