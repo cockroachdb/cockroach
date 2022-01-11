@@ -115,7 +115,7 @@ func (t *tenantStatusServer) ListSessions(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx, true); err != nil {
 		return nil, err
 	}
 	if t.sqlServer.SQLInstanceID() == 0 {
@@ -454,7 +454,7 @@ func (t *tenantStatusServer) CombinedStatementStats(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx, true); err != nil {
 		return nil, err
 	}
 
@@ -488,7 +488,7 @@ func (t *tenantStatusServer) Statements(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx, true); err != nil {
 		return nil, err
 	}
 
@@ -730,7 +730,7 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx, true); err != nil {
 		return nil, err
 	}
 
@@ -873,7 +873,7 @@ func (t *tenantStatusServer) TableIndexStats(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx, true); err != nil {
 		return nil, err
 	}
 

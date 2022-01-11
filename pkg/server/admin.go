@@ -3087,8 +3087,10 @@ func (c *adminPrivilegeChecker) requireAdminUser(
 	return userName, nil
 }
 
+// Check if the user has the VIEWACTIVITY role. If the Redacted option is accepted,
+// it also checks if the user has the VIEWACTIVITYREDACTED role.
 func (c *adminPrivilegeChecker) requireViewActivityPermission(
-	ctx context.Context,
+	ctx context.Context, acceptRedacted bool,
 ) (userName security.SQLUsername, err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
@@ -3099,10 +3101,20 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(
 		if err != nil {
 			return userName, err
 		}
+
 		if !hasViewActivity {
-			return userName, status.Errorf(
-				codes.PermissionDenied, "this operation requires the %s role option",
-				roleoption.VIEWACTIVITY)
+			if acceptRedacted {
+				hasViewActivity, err = c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+				if err != nil {
+					return userName, err
+				}
+			}
+
+			if !hasViewActivity {
+				return userName, status.Errorf(
+					codes.PermissionDenied, "this operation requires the %s role option",
+					roleoption.VIEWACTIVITY)
+			}
 		}
 	}
 	return userName, nil
