@@ -91,6 +91,12 @@ func (n Node) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
+func (n Node) TenantSettings(
+	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
+) error {
+	panic("unimplemented")
+}
+
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {

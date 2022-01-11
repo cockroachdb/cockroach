@@ -276,6 +276,12 @@ func (*internalServer) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
+func (*internalServer) TenantSettings(
+	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
+) error {
+	panic("unimplemented")
+}
+
 // TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
 // determine whether to apply the local server optimization.
 //

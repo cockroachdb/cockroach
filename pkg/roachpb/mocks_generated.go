@@ -176,6 +176,26 @@ func (mr *MockInternalClientMockRecorder) ResetQuorum(arg0, arg1 interface{}, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetQuorum", reflect.TypeOf((*MockInternalClient)(nil).ResetQuorum), varargs...)
 }
 
+// TenantSettings mocks base method.
+func (m *MockInternalClient) TenantSettings(arg0 context.Context, arg1 *TenantSettingsRequest, arg2 ...grpc.CallOption) (Internal_TenantSettingsClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "TenantSettings", varargs...)
+	ret0, _ := ret[0].(Internal_TenantSettingsClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TenantSettings indicates an expected call of TenantSettings.
+func (mr *MockInternalClientMockRecorder) TenantSettings(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TenantSettings", reflect.TypeOf((*MockInternalClient)(nil).TenantSettings), varargs...)
+}
+
 // TokenBucket mocks base method.
 func (m *MockInternalClient) TokenBucket(arg0 context.Context, arg1 *TokenBucketRequest, arg2 ...grpc.CallOption) (*TokenBucketResponse, error) {
 	m.ctrl.T.Helper()

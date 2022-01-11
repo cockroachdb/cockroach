@@ -208,3 +208,9 @@ func (m *mockInternalClient) UpdateSpanConfigs(
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
 	return nil, fmt.Errorf("unsupported UpdateSpanConfigs call")
 }
+
+func (m *mockInternalClient) TenantSettings(
+	context.Context, *roachpb.TenantSettingsRequest, ...grpc.CallOption,
+) (roachpb.Internal_TenantSettingsClient, error) {
+	return nil, fmt.Errorf("unsupported TenantSettings call")
+}
