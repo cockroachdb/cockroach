@@ -2062,6 +2062,13 @@ func (s *statusServer) HotRanges(
 	return response, nil
 }
 
+type hotRangeReportMeta struct {
+	dbName     string
+	tableName  string
+	indexNames map[uint32]string
+	parentID   uint32
+}
+
 func (s *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
@@ -2070,11 +2077,7 @@ func (s *statusServer) HotRangesV2(
 		return nil, err
 	}
 
-	dbNames := make(map[uint32]string)
-	tableNames := make(map[uint32]string)
-	indexNames := make(map[uint32]map[uint32]string)
-	parents := make(map[uint32]uint32)
-
+	rangeReportMetas := make(map[uint32]hotRangeReportMeta)
 	var descrs []catalog.Descriptor
 	if err = s.sqlServer.distSQLServer.CollectionFactory.Txn(
 		ctx, s.sqlServer.internalExecutor, s.db,
@@ -2089,17 +2092,20 @@ func (s *statusServer) HotRangesV2(
 
 	for _, desc := range descrs {
 		id := uint32(desc.GetID())
+		meta := hotRangeReportMeta{
+			indexNames: map[uint32]string{},
+		}
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
-			parents[id] = uint32(desc.GetParentID())
-			tableNames[id] = desc.GetName()
-			indexNames[id] = make(map[uint32]string)
+			meta.tableName = desc.GetName()
+			meta.parentID = uint32(desc.GetParentID())
 			for _, idx := range desc.AllIndexes() {
-				indexNames[id][uint32(idx.GetID())] = idx.GetName()
+				meta.indexNames[uint32(idx.GetID())] = idx.GetName()
 			}
 		case catalog.DatabaseDescriptor:
-			dbNames[id] = desc.GetName()
+			meta.dbName = desc.GetName()
 		}
+		rangeReportMetas[id] = meta
 	}
 
 	var ranges []*serverpb.HotRangesResponseV2_HotRange
@@ -2115,16 +2121,16 @@ func (s *statusServer) HotRangesV2(
 				if err != nil {
 					continue
 				}
-				parent := parents[tableID]
+				parent := rangeReportMetas[tableID].parentID
 				if parent != 0 {
-					tableName = tableNames[tableID]
-					dbName = dbNames[parent]
+					tableName = rangeReportMetas[tableID].tableName
+					dbName = rangeReportMetas[parent].dbName
 				} else {
-					dbName = dbNames[tableID]
+					dbName = rangeReportMetas[tableID].dbName
 				}
 				_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
 				if err == nil {
-					indexName = indexNames[tableID][idxID]
+					indexName = rangeReportMetas[tableID].indexNames[idxID]
 				}
 				for _, repl := range r.Desc.Replicas().Descriptors() {
 					replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
