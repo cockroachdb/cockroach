@@ -10,7 +10,7 @@ CREATE TABLE no_table_locality (
   FAMILY (pk, i)
 )
 
-statement error cannot alter a table's LOCALITY if its database is not multi-region enabled
+statement error cannot alter a table's LOCALITY if its database is not multi-region enabled\nHINT: database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>
 ALTER TABLE no_table_locality SET LOCALITY REGIONAL BY TABLE
 
 statement ok
