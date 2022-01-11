@@ -83,6 +83,9 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 
 type _OP_CONST_NAME struct {
 	projConstOpBase
+	// {{if .NeedsBinaryOverloadHelper}}
+	execgen.BinaryOverloadHelper
+	// {{end}}
 	// {{if _IS_CONST_LEFT}}
 	constArg _L_GO_TYPE
 	// {{else}}
@@ -91,12 +94,12 @@ type _OP_CONST_NAME struct {
 }
 
 func (p _OP_CONST_NAME) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// {{if .NeedsBinaryOverloadHelper}}
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
+	// {{end}}
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -269,7 +272,6 @@ func GetProjection_CONST_SIDEConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
-		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	// {{if _IS_CONST_LEFT}}
@@ -296,7 +298,7 @@ func GetProjection_CONST_SIDEConstOperator(
 						switch rightType.Width() {
 						// {{range .RightWidths}}
 						case _RIGHT_TYPE_WIDTH:
-							return &_OP_CONST_NAME{
+							op := &_OP_CONST_NAME{
 								projConstOpBase: projConstOpBase,
 								// {{if _IS_CONST_LEFT}}
 								// {{if eq $leftFamilyStr "typeconv.DatumVecCanonicalTypeFamily"}}
@@ -311,7 +313,11 @@ func GetProjection_CONST_SIDEConstOperator(
 								constArg: c.(_R_GO_TYPE),
 								// {{end}}
 								// {{end}}
-							}, nil
+							}
+							// {{if .NeedsBinaryOverloadHelper}}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							// {{end}}
+							return op, nil
 							// {{end}}
 						}
 						// {{end}}
@@ -338,7 +344,6 @@ func GetProjection_CONST_SIDEConstOperator(
 			case tree._NAME:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				// {{range .LeftFamilies}}
-				// {{$leftFamilyStr := .LeftCanonicalFamilyStr}}
 				case _LEFT_CANONICAL_TYPE_FAMILY:
 					switch leftType.Width() {
 					// {{range .LeftWidths}}

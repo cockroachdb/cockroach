@@ -50,12 +50,6 @@ type projBitandInt16ConstInt16Op struct {
 }
 
 func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -152,12 +146,6 @@ type projBitandInt16ConstInt32Op struct {
 }
 
 func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -254,12 +242,6 @@ type projBitandInt16ConstInt64Op struct {
 }
 
 func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -356,12 +338,6 @@ type projBitandInt32ConstInt16Op struct {
 }
 
 func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -458,12 +434,6 @@ type projBitandInt32ConstInt32Op struct {
 }
 
 func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -560,12 +530,6 @@ type projBitandInt32ConstInt64Op struct {
 }
 
 func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -662,12 +626,6 @@ type projBitandInt64ConstInt16Op struct {
 }
 
 func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -764,12 +722,6 @@ type projBitandInt64ConstInt32Op struct {
 }
 
 func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -866,12 +818,6 @@ type projBitandInt64ConstInt64Op struct {
 }
 
 func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -964,16 +910,15 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 
 type projBitandDatumConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1096,12 +1041,6 @@ type projBitorInt16ConstInt16Op struct {
 }
 
 func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1198,12 +1137,6 @@ type projBitorInt16ConstInt32Op struct {
 }
 
 func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1300,12 +1233,6 @@ type projBitorInt16ConstInt64Op struct {
 }
 
 func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1402,12 +1329,6 @@ type projBitorInt32ConstInt16Op struct {
 }
 
 func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1504,12 +1425,6 @@ type projBitorInt32ConstInt32Op struct {
 }
 
 func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1606,12 +1521,6 @@ type projBitorInt32ConstInt64Op struct {
 }
 
 func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1708,12 +1617,6 @@ type projBitorInt64ConstInt16Op struct {
 }
 
 func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1810,12 +1713,6 @@ type projBitorInt64ConstInt32Op struct {
 }
 
 func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -1912,12 +1809,6 @@ type projBitorInt64ConstInt64Op struct {
 }
 
 func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2010,16 +1901,15 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 
 type projBitorDatumConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2142,12 +2032,6 @@ type projBitxorInt16ConstInt16Op struct {
 }
 
 func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2244,12 +2128,6 @@ type projBitxorInt16ConstInt32Op struct {
 }
 
 func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2346,12 +2224,6 @@ type projBitxorInt16ConstInt64Op struct {
 }
 
 func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2448,12 +2320,6 @@ type projBitxorInt32ConstInt16Op struct {
 }
 
 func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2550,12 +2416,6 @@ type projBitxorInt32ConstInt32Op struct {
 }
 
 func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2652,12 +2512,6 @@ type projBitxorInt32ConstInt64Op struct {
 }
 
 func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2754,12 +2608,6 @@ type projBitxorInt64ConstInt16Op struct {
 }
 
 func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2856,12 +2704,6 @@ type projBitxorInt64ConstInt32Op struct {
 }
 
 func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -2958,12 +2800,6 @@ type projBitxorInt64ConstInt64Op struct {
 }
 
 func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3056,16 +2892,15 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 
 type projBitxorDatumConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3188,12 +3023,6 @@ type projPlusDecimalConstInt16Op struct {
 }
 
 func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3318,12 +3147,6 @@ type projPlusDecimalConstInt32Op struct {
 }
 
 func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3448,12 +3271,6 @@ type projPlusDecimalConstInt64Op struct {
 }
 
 func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3578,12 +3395,6 @@ type projPlusDecimalConstDecimalOp struct {
 }
 
 func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3704,12 +3515,6 @@ type projPlusInt16ConstInt16Op struct {
 }
 
 func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3830,12 +3635,6 @@ type projPlusInt16ConstInt32Op struct {
 }
 
 func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -3956,12 +3755,6 @@ type projPlusInt16ConstInt64Op struct {
 }
 
 func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4082,12 +3875,6 @@ type projPlusInt16ConstDecimalOp struct {
 }
 
 func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4212,16 +3999,15 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 
 type projPlusInt16ConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg int16
 }
 
 func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4362,12 +4148,6 @@ type projPlusInt32ConstInt16Op struct {
 }
 
 func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4488,12 +4268,6 @@ type projPlusInt32ConstInt32Op struct {
 }
 
 func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4614,12 +4388,6 @@ type projPlusInt32ConstInt64Op struct {
 }
 
 func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4740,12 +4508,6 @@ type projPlusInt32ConstDecimalOp struct {
 }
 
 func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -4870,16 +4632,15 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 
 type projPlusInt32ConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg int32
 }
 
 func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5020,12 +4781,6 @@ type projPlusInt64ConstInt16Op struct {
 }
 
 func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5146,12 +4901,6 @@ type projPlusInt64ConstInt32Op struct {
 }
 
 func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5272,12 +5021,6 @@ type projPlusInt64ConstInt64Op struct {
 }
 
 func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5398,12 +5141,6 @@ type projPlusInt64ConstDecimalOp struct {
 }
 
 func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5528,16 +5265,15 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 
 type projPlusInt64ConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg int64
 }
 
 func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5678,12 +5414,6 @@ type projPlusFloat64ConstFloat64Op struct {
 }
 
 func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5792,12 +5522,6 @@ type projPlusTimestampConstIntervalOp struct {
 }
 
 func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -5906,12 +5630,6 @@ type projPlusIntervalConstTimestampOp struct {
 }
 
 func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6020,12 +5738,6 @@ type projPlusIntervalConstIntervalOp struct {
 }
 
 func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6110,16 +5822,15 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 
 type projPlusIntervalConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg duration.Duration
 }
 
 func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6256,16 +5967,15 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 
 type projPlusDatumConstIntervalOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6400,16 +6110,15 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 
 type projPlusDatumConstInt16Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6544,16 +6253,15 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 
 type projPlusDatumConstInt32Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6688,16 +6396,15 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 
 type projPlusDatumConstInt64Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6836,12 +6543,6 @@ type projMinusDecimalConstInt16Op struct {
 }
 
 func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -6966,12 +6667,6 @@ type projMinusDecimalConstInt32Op struct {
 }
 
 func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7096,12 +6791,6 @@ type projMinusDecimalConstInt64Op struct {
 }
 
 func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7226,12 +6915,6 @@ type projMinusDecimalConstDecimalOp struct {
 }
 
 func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7352,12 +7035,6 @@ type projMinusInt16ConstInt16Op struct {
 }
 
 func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7478,12 +7155,6 @@ type projMinusInt16ConstInt32Op struct {
 }
 
 func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7604,12 +7275,6 @@ type projMinusInt16ConstInt64Op struct {
 }
 
 func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7730,12 +7395,6 @@ type projMinusInt16ConstDecimalOp struct {
 }
 
 func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -7860,16 +7519,15 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 
 type projMinusInt16ConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg int16
 }
 
 func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8010,12 +7668,6 @@ type projMinusInt32ConstInt16Op struct {
 }
 
 func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8136,12 +7788,6 @@ type projMinusInt32ConstInt32Op struct {
 }
 
 func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8262,12 +7908,6 @@ type projMinusInt32ConstInt64Op struct {
 }
 
 func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8388,12 +8028,6 @@ type projMinusInt32ConstDecimalOp struct {
 }
 
 func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8518,16 +8152,15 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 
 type projMinusInt32ConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg int32
 }
 
 func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8668,12 +8301,6 @@ type projMinusInt64ConstInt16Op struct {
 }
 
 func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8794,12 +8421,6 @@ type projMinusInt64ConstInt32Op struct {
 }
 
 func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -8920,12 +8541,6 @@ type projMinusInt64ConstInt64Op struct {
 }
 
 func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9046,12 +8661,6 @@ type projMinusInt64ConstDecimalOp struct {
 }
 
 func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9176,16 +8785,15 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 
 type projMinusInt64ConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg int64
 }
 
 func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9326,12 +8934,6 @@ type projMinusFloat64ConstFloat64Op struct {
 }
 
 func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9440,12 +9042,6 @@ type projMinusTimestampConstTimestampOp struct {
 }
 
 func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9546,12 +9142,6 @@ type projMinusTimestampConstIntervalOp struct {
 }
 
 func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9660,12 +9250,6 @@ type projMinusIntervalConstIntervalOp struct {
 }
 
 func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9750,16 +9334,15 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 
 type projMinusIntervalConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg duration.Duration
 }
 
 func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -9900,12 +9483,6 @@ type projMinusJSONConstBytesOp struct {
 }
 
 func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10028,12 +9605,6 @@ type projMinusJSONConstInt16Op struct {
 }
 
 func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10140,12 +9711,6 @@ type projMinusJSONConstInt32Op struct {
 }
 
 func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10252,12 +9817,6 @@ type projMinusJSONConstInt64Op struct {
 }
 
 func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10360,16 +9919,15 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 
 type projMinusDatumConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10488,16 +10046,15 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 
 type projMinusDatumConstIntervalOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10632,16 +10189,15 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 
 type projMinusDatumConstBytesOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10776,16 +10332,15 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 
 type projMinusDatumConstInt16Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -10920,16 +10475,15 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 
 type projMinusDatumConstInt32Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11064,16 +10618,15 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 
 type projMinusDatumConstInt64Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11212,12 +10765,6 @@ type projMultDecimalConstInt16Op struct {
 }
 
 func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11342,12 +10889,6 @@ type projMultDecimalConstInt32Op struct {
 }
 
 func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11472,12 +11013,6 @@ type projMultDecimalConstInt64Op struct {
 }
 
 func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11602,12 +11137,6 @@ type projMultDecimalConstDecimalOp struct {
 }
 
 func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11728,12 +11257,6 @@ type projMultDecimalConstIntervalOp struct {
 }
 
 func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -11842,12 +11365,6 @@ type projMultInt16ConstInt16Op struct {
 }
 
 func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12000,12 +11517,6 @@ type projMultInt16ConstInt32Op struct {
 }
 
 func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12158,12 +11669,6 @@ type projMultInt16ConstInt64Op struct {
 }
 
 func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12316,12 +11821,6 @@ type projMultInt16ConstDecimalOp struct {
 }
 
 func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12450,12 +11949,6 @@ type projMultInt16ConstIntervalOp struct {
 }
 
 func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12544,12 +12037,6 @@ type projMultInt32ConstInt16Op struct {
 }
 
 func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12702,12 +12189,6 @@ type projMultInt32ConstInt32Op struct {
 }
 
 func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -12860,12 +12341,6 @@ type projMultInt32ConstInt64Op struct {
 }
 
 func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13018,12 +12493,6 @@ type projMultInt32ConstDecimalOp struct {
 }
 
 func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13152,12 +12621,6 @@ type projMultInt32ConstIntervalOp struct {
 }
 
 func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13246,12 +12709,6 @@ type projMultInt64ConstInt16Op struct {
 }
 
 func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13404,12 +12861,6 @@ type projMultInt64ConstInt32Op struct {
 }
 
 func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13562,12 +13013,6 @@ type projMultInt64ConstInt64Op struct {
 }
 
 func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13720,12 +13165,6 @@ type projMultInt64ConstDecimalOp struct {
 }
 
 func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13854,12 +13293,6 @@ type projMultInt64ConstIntervalOp struct {
 }
 
 func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -13948,12 +13381,6 @@ type projMultFloat64ConstFloat64Op struct {
 }
 
 func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14062,12 +13489,6 @@ type projMultFloat64ConstIntervalOp struct {
 }
 
 func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14156,12 +13577,6 @@ type projMultIntervalConstInt16Op struct {
 }
 
 func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14250,12 +13665,6 @@ type projMultIntervalConstInt32Op struct {
 }
 
 func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14344,12 +13753,6 @@ type projMultIntervalConstInt64Op struct {
 }
 
 func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14438,12 +13841,6 @@ type projMultIntervalConstFloat64Op struct {
 }
 
 func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14532,12 +13929,6 @@ type projMultIntervalConstDecimalOp struct {
 }
 
 func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14646,12 +14037,6 @@ type projDivDecimalConstInt16Op struct {
 }
 
 func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14792,12 +14177,6 @@ type projDivDecimalConstInt32Op struct {
 }
 
 func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -14938,12 +14317,6 @@ type projDivDecimalConstInt64Op struct {
 }
 
 func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15084,12 +14457,6 @@ type projDivDecimalConstDecimalOp struct {
 }
 
 func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15226,12 +14593,6 @@ type projDivInt16ConstInt16Op struct {
 }
 
 func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15368,12 +14729,6 @@ type projDivInt16ConstInt32Op struct {
 }
 
 func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15510,12 +14865,6 @@ type projDivInt16ConstInt64Op struct {
 }
 
 func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15652,12 +15001,6 @@ type projDivInt16ConstDecimalOp struct {
 }
 
 func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15802,12 +15145,6 @@ type projDivInt32ConstInt16Op struct {
 }
 
 func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -15944,12 +15281,6 @@ type projDivInt32ConstInt32Op struct {
 }
 
 func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16086,12 +15417,6 @@ type projDivInt32ConstInt64Op struct {
 }
 
 func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16228,12 +15553,6 @@ type projDivInt32ConstDecimalOp struct {
 }
 
 func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16378,12 +15697,6 @@ type projDivInt64ConstInt16Op struct {
 }
 
 func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16520,12 +15833,6 @@ type projDivInt64ConstInt32Op struct {
 }
 
 func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16662,12 +15969,6 @@ type projDivInt64ConstInt64Op struct {
 }
 
 func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16804,12 +16105,6 @@ type projDivInt64ConstDecimalOp struct {
 }
 
 func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -16954,12 +16249,6 @@ type projDivFloat64ConstFloat64Op struct {
 }
 
 func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17084,12 +16373,6 @@ type projDivIntervalConstInt64Op struct {
 }
 
 func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17194,12 +16477,6 @@ type projDivIntervalConstFloat64Op struct {
 }
 
 func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17304,12 +16581,6 @@ type projFloorDivDecimalConstInt16Op struct {
 }
 
 func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17450,12 +16721,6 @@ type projFloorDivDecimalConstInt32Op struct {
 }
 
 func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17596,12 +16861,6 @@ type projFloorDivDecimalConstInt64Op struct {
 }
 
 func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17742,12 +17001,6 @@ type projFloorDivDecimalConstDecimalOp struct {
 }
 
 func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -17884,12 +17137,6 @@ type projFloorDivInt16ConstInt16Op struct {
 }
 
 func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18006,12 +17253,6 @@ type projFloorDivInt16ConstInt32Op struct {
 }
 
 func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18128,12 +17369,6 @@ type projFloorDivInt16ConstInt64Op struct {
 }
 
 func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18250,12 +17485,6 @@ type projFloorDivInt16ConstDecimalOp struct {
 }
 
 func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18400,12 +17629,6 @@ type projFloorDivInt32ConstInt16Op struct {
 }
 
 func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18522,12 +17745,6 @@ type projFloorDivInt32ConstInt32Op struct {
 }
 
 func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18644,12 +17861,6 @@ type projFloorDivInt32ConstInt64Op struct {
 }
 
 func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18766,12 +17977,6 @@ type projFloorDivInt32ConstDecimalOp struct {
 }
 
 func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -18916,12 +18121,6 @@ type projFloorDivInt64ConstInt16Op struct {
 }
 
 func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19038,12 +18237,6 @@ type projFloorDivInt64ConstInt32Op struct {
 }
 
 func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19160,12 +18353,6 @@ type projFloorDivInt64ConstInt64Op struct {
 }
 
 func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19282,12 +18469,6 @@ type projFloorDivInt64ConstDecimalOp struct {
 }
 
 func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19432,12 +18613,6 @@ type projFloorDivFloat64ConstFloat64Op struct {
 }
 
 func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19562,12 +18737,6 @@ type projModDecimalConstInt16Op struct {
 }
 
 func (p projModDecimalConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19708,12 +18877,6 @@ type projModDecimalConstInt32Op struct {
 }
 
 func (p projModDecimalConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -19854,12 +19017,6 @@ type projModDecimalConstInt64Op struct {
 }
 
 func (p projModDecimalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20000,12 +19157,6 @@ type projModDecimalConstDecimalOp struct {
 }
 
 func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20142,12 +19293,6 @@ type projModInt16ConstInt16Op struct {
 }
 
 func (p projModInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20264,12 +19409,6 @@ type projModInt16ConstInt32Op struct {
 }
 
 func (p projModInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20386,12 +19525,6 @@ type projModInt16ConstInt64Op struct {
 }
 
 func (p projModInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20508,12 +19641,6 @@ type projModInt16ConstDecimalOp struct {
 }
 
 func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20658,12 +19785,6 @@ type projModInt32ConstInt16Op struct {
 }
 
 func (p projModInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20780,12 +19901,6 @@ type projModInt32ConstInt32Op struct {
 }
 
 func (p projModInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -20902,12 +20017,6 @@ type projModInt32ConstInt64Op struct {
 }
 
 func (p projModInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21024,12 +20133,6 @@ type projModInt32ConstDecimalOp struct {
 }
 
 func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21174,12 +20277,6 @@ type projModInt64ConstInt16Op struct {
 }
 
 func (p projModInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21296,12 +20393,6 @@ type projModInt64ConstInt32Op struct {
 }
 
 func (p projModInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21418,12 +20509,6 @@ type projModInt64ConstInt64Op struct {
 }
 
 func (p projModInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21540,12 +20625,6 @@ type projModInt64ConstDecimalOp struct {
 }
 
 func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21690,12 +20769,6 @@ type projModFloat64ConstFloat64Op struct {
 }
 
 func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21820,12 +20893,6 @@ type projPowDecimalConstInt16Op struct {
 }
 
 func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -21950,12 +21017,6 @@ type projPowDecimalConstInt32Op struct {
 }
 
 func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22080,12 +21141,6 @@ type projPowDecimalConstInt64Op struct {
 }
 
 func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22210,12 +21265,6 @@ type projPowDecimalConstDecimalOp struct {
 }
 
 func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22336,12 +21385,6 @@ type projPowInt16ConstInt16Op struct {
 }
 
 func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22486,12 +21529,6 @@ type projPowInt16ConstInt32Op struct {
 }
 
 func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22636,12 +21673,6 @@ type projPowInt16ConstInt64Op struct {
 }
 
 func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22786,12 +21817,6 @@ type projPowInt16ConstDecimalOp struct {
 }
 
 func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -22920,12 +21945,6 @@ type projPowInt32ConstInt16Op struct {
 }
 
 func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23070,12 +22089,6 @@ type projPowInt32ConstInt32Op struct {
 }
 
 func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23220,12 +22233,6 @@ type projPowInt32ConstInt64Op struct {
 }
 
 func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23370,12 +22377,6 @@ type projPowInt32ConstDecimalOp struct {
 }
 
 func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23504,12 +22505,6 @@ type projPowInt64ConstInt16Op struct {
 }
 
 func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23654,12 +22649,6 @@ type projPowInt64ConstInt32Op struct {
 }
 
 func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23804,12 +22793,6 @@ type projPowInt64ConstInt64Op struct {
 }
 
 func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -23954,12 +22937,6 @@ type projPowInt64ConstDecimalOp struct {
 }
 
 func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24088,12 +23065,6 @@ type projPowFloat64ConstFloat64Op struct {
 }
 
 func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24202,12 +23173,6 @@ type projConcatBytesConstBytesOp struct {
 }
 
 func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24322,12 +23287,6 @@ type projConcatJSONConstJSONOp struct {
 }
 
 func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24434,16 +23393,15 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 
 type projConcatDatumConstDatumOp struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24566,12 +23524,6 @@ type projLShiftInt16ConstInt16Op struct {
 }
 
 func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24692,12 +23644,6 @@ type projLShiftInt16ConstInt32Op struct {
 }
 
 func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24818,12 +23764,6 @@ type projLShiftInt16ConstInt64Op struct {
 }
 
 func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -24944,12 +23884,6 @@ type projLShiftInt32ConstInt16Op struct {
 }
 
 func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25070,12 +24004,6 @@ type projLShiftInt32ConstInt32Op struct {
 }
 
 func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25196,12 +24124,6 @@ type projLShiftInt32ConstInt64Op struct {
 }
 
 func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25322,12 +24244,6 @@ type projLShiftInt64ConstInt16Op struct {
 }
 
 func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25448,12 +24364,6 @@ type projLShiftInt64ConstInt32Op struct {
 }
 
 func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25574,12 +24484,6 @@ type projLShiftInt64ConstInt64Op struct {
 }
 
 func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25696,16 +24600,15 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 
 type projLShiftDatumConstInt16Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25840,16 +24743,15 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 
 type projLShiftDatumConstInt32Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -25984,16 +24886,15 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 
 type projLShiftDatumConstInt64Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26132,12 +25033,6 @@ type projRShiftInt16ConstInt16Op struct {
 }
 
 func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26258,12 +25153,6 @@ type projRShiftInt16ConstInt32Op struct {
 }
 
 func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26384,12 +25273,6 @@ type projRShiftInt16ConstInt64Op struct {
 }
 
 func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26510,12 +25393,6 @@ type projRShiftInt32ConstInt16Op struct {
 }
 
 func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26636,12 +25513,6 @@ type projRShiftInt32ConstInt32Op struct {
 }
 
 func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26762,12 +25633,6 @@ type projRShiftInt32ConstInt64Op struct {
 }
 
 func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -26888,12 +25753,6 @@ type projRShiftInt64ConstInt16Op struct {
 }
 
 func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27014,12 +25873,6 @@ type projRShiftInt64ConstInt32Op struct {
 }
 
 func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27140,12 +25993,6 @@ type projRShiftInt64ConstInt64Op struct {
 }
 
 func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27262,16 +26109,15 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 
 type projRShiftDatumConstInt16Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27406,16 +26252,15 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 
 type projRShiftDatumConstInt32Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27550,16 +26395,15 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 
 type projRShiftDatumConstInt64Op struct {
 	projConstOpBase
+	execgen.BinaryOverloadHelper
 	constArg interface{}
 }
 
 func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27698,12 +26542,6 @@ type projJSONFetchValJSONConstBytesOp struct {
 }
 
 func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27838,12 +26676,6 @@ type projJSONFetchValJSONConstInt16Op struct {
 }
 
 func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -27966,12 +26798,6 @@ type projJSONFetchValJSONConstInt32Op struct {
 }
 
 func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28094,12 +26920,6 @@ type projJSONFetchValJSONConstInt64Op struct {
 }
 
 func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28222,12 +27042,6 @@ type projJSONFetchTextJSONConstBytesOp struct {
 }
 
 func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28398,12 +27212,6 @@ type projJSONFetchTextJSONConstInt16Op struct {
 }
 
 func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28562,12 +27370,6 @@ type projJSONFetchTextJSONConstInt32Op struct {
 }
 
 func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28726,12 +27528,6 @@ type projJSONFetchTextJSONConstInt64Op struct {
 }
 
 func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -28890,12 +27686,6 @@ type projJSONFetchValPathJSONConstDatumOp struct {
 }
 
 func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29018,12 +27808,6 @@ type projJSONFetchTextPathJSONConstDatumOp struct {
 }
 
 func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -29202,7 +27986,6 @@ func GetProjectionLConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
-		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
 	}
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	leftType, rightType := constType, inputTypes[colIdx]
@@ -29218,21 +28001,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitandInt16ConstInt16Op{
+							op := &projBitandInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitandInt16ConstInt32Op{
+							op := &projBitandInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitandInt16ConstInt64Op{
+							op := &projBitandInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -29240,21 +28026,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitandInt32ConstInt16Op{
+							op := &projBitandInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitandInt32ConstInt32Op{
+							op := &projBitandInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitandInt32ConstInt64Op{
+							op := &projBitandInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -29263,21 +28052,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitandInt64ConstInt16Op{
+							op := &projBitandInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitandInt64ConstInt32Op{
+							op := &projBitandInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitandInt64ConstInt64Op{
+							op := &projBitandInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29290,10 +28082,12 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projBitandDatumConstDatumOp{
+							op := &projBitandDatumConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -29307,21 +28101,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitorInt16ConstInt16Op{
+							op := &projBitorInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitorInt16ConstInt32Op{
+							op := &projBitorInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitorInt16ConstInt64Op{
+							op := &projBitorInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -29329,21 +28126,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitorInt32ConstInt16Op{
+							op := &projBitorInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitorInt32ConstInt32Op{
+							op := &projBitorInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitorInt32ConstInt64Op{
+							op := &projBitorInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -29352,21 +28152,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitorInt64ConstInt16Op{
+							op := &projBitorInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitorInt64ConstInt32Op{
+							op := &projBitorInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitorInt64ConstInt64Op{
+							op := &projBitorInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29379,10 +28182,12 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projBitorDatumConstDatumOp{
+							op := &projBitorDatumConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -29396,21 +28201,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitxorInt16ConstInt16Op{
+							op := &projBitxorInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitxorInt16ConstInt32Op{
+							op := &projBitxorInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitxorInt16ConstInt64Op{
+							op := &projBitxorInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -29418,21 +28226,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitxorInt32ConstInt16Op{
+							op := &projBitxorInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitxorInt32ConstInt32Op{
+							op := &projBitxorInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitxorInt32ConstInt64Op{
+							op := &projBitxorInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -29441,21 +28252,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projBitxorInt64ConstInt16Op{
+							op := &projBitxorInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projBitxorInt64ConstInt32Op{
+							op := &projBitxorInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projBitxorInt64ConstInt64Op{
+							op := &projBitxorInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29468,10 +28282,12 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projBitxorDatumConstDatumOp{
+							op := &projBitxorDatumConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -29486,30 +28302,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusDecimalConstInt16Op{
+							op := &projPlusDecimalConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projPlusDecimalConstInt32Op{
+							op := &projPlusDecimalConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusDecimalConstInt64Op{
+							op := &projPlusDecimalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusDecimalConstDecimalOp{
+							op := &projPlusDecimalConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29520,39 +28340,45 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusInt16ConstInt16Op{
+							op := &projPlusInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projPlusInt16ConstInt32Op{
+							op := &projPlusInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusInt16ConstInt64Op{
+							op := &projPlusInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt16ConstDecimalOp{
+							op := &projPlusInt16ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt16ConstDatumOp{
+							op := &projPlusInt16ConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				case 32:
@@ -29560,39 +28386,45 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusInt32ConstInt16Op{
+							op := &projPlusInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projPlusInt32ConstInt32Op{
+							op := &projPlusInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusInt32ConstInt64Op{
+							op := &projPlusInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt32ConstDecimalOp{
+							op := &projPlusInt32ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt32ConstDatumOp{
+							op := &projPlusInt32ConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				case -1:
@@ -29601,39 +28433,45 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusInt64ConstInt16Op{
+							op := &projPlusInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projPlusInt64ConstInt32Op{
+							op := &projPlusInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusInt64ConstInt64Op{
+							op := &projPlusInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt64ConstDecimalOp{
+							op := &projPlusInt64ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusInt64ConstDatumOp{
+							op := &projPlusInt64ConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -29646,10 +28484,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusFloat64ConstFloat64Op{
+							op := &projPlusFloat64ConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(float64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29662,10 +28501,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusTimestampConstIntervalOp{
+							op := &projPlusTimestampConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(time.Time),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29678,28 +28518,32 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusIntervalConstTimestampOp{
+							op := &projPlusIntervalConstTimestampOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusIntervalConstIntervalOp{
+							op := &projPlusIntervalConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusIntervalConstDatumOp{
+							op := &projPlusIntervalConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -29712,29 +28556,37 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPlusDatumConstIntervalOp{
+							op := &projPlusDatumConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPlusDatumConstInt16Op{
+							op := &projPlusDatumConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case 32:
-							return &projPlusDatumConstInt32Op{
+							op := &projPlusDatumConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case -1:
 						default:
-							return &projPlusDatumConstInt64Op{
+							op := &projPlusDatumConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -29749,30 +28601,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusDecimalConstInt16Op{
+							op := &projMinusDecimalConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMinusDecimalConstInt32Op{
+							op := &projMinusDecimalConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusDecimalConstInt64Op{
+							op := &projMinusDecimalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusDecimalConstDecimalOp{
+							op := &projMinusDecimalConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29783,39 +28639,45 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusInt16ConstInt16Op{
+							op := &projMinusInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMinusInt16ConstInt32Op{
+							op := &projMinusInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusInt16ConstInt64Op{
+							op := &projMinusInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt16ConstDecimalOp{
+							op := &projMinusInt16ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt16ConstDatumOp{
+							op := &projMinusInt16ConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				case 32:
@@ -29823,39 +28685,45 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusInt32ConstInt16Op{
+							op := &projMinusInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMinusInt32ConstInt32Op{
+							op := &projMinusInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusInt32ConstInt64Op{
+							op := &projMinusInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt32ConstDecimalOp{
+							op := &projMinusInt32ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt32ConstDatumOp{
+							op := &projMinusInt32ConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				case -1:
@@ -29864,39 +28732,45 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusInt64ConstInt16Op{
+							op := &projMinusInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMinusInt64ConstInt32Op{
+							op := &projMinusInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusInt64ConstInt64Op{
+							op := &projMinusInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt64ConstDecimalOp{
+							op := &projMinusInt64ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusInt64ConstDatumOp{
+							op := &projMinusInt64ConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -29909,10 +28783,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusFloat64ConstFloat64Op{
+							op := &projMinusFloat64ConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(float64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29925,19 +28800,21 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusTimestampConstTimestampOp{
+							op := &projMinusTimestampConstTimestampOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(time.Time),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusTimestampConstIntervalOp{
+							op := &projMinusTimestampConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(time.Time),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -29950,19 +28827,22 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusIntervalConstIntervalOp{
+							op := &projMinusIntervalConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusIntervalConstDatumOp{
+							op := &projMinusIntervalConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -29975,29 +28855,33 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusJSONConstBytesOp{
+							op := &projMinusJSONConstBytesOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusJSONConstInt16Op{
+							op := &projMinusJSONConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMinusJSONConstInt32Op{
+							op := &projMinusJSONConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusJSONConstInt64Op{
+							op := &projMinusJSONConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30010,47 +28894,59 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusDatumConstDatumOp{
+							op := &projMinusDatumConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusDatumConstIntervalOp{
+							op := &projMinusDatumConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					case types.BytesFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMinusDatumConstBytesOp{
+							op := &projMinusDatumConstBytesOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMinusDatumConstInt16Op{
+							op := &projMinusDatumConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case 32:
-							return &projMinusDatumConstInt32Op{
+							op := &projMinusDatumConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case -1:
 						default:
-							return &projMinusDatumConstInt64Op{
+							op := &projMinusDatumConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -30065,39 +28961,44 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultDecimalConstInt16Op{
+							op := &projMultDecimalConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMultDecimalConstInt32Op{
+							op := &projMultDecimalConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMultDecimalConstInt64Op{
+							op := &projMultDecimalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultDecimalConstDecimalOp{
+							op := &projMultDecimalConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultDecimalConstIntervalOp{
+							op := &projMultDecimalConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30108,39 +29009,44 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultInt16ConstInt16Op{
+							op := &projMultInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMultInt16ConstInt32Op{
+							op := &projMultInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMultInt16ConstInt64Op{
+							op := &projMultInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt16ConstDecimalOp{
+							op := &projMultInt16ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt16ConstIntervalOp{
+							op := &projMultInt16ConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -30148,39 +29054,44 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultInt32ConstInt16Op{
+							op := &projMultInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMultInt32ConstInt32Op{
+							op := &projMultInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMultInt32ConstInt64Op{
+							op := &projMultInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt32ConstDecimalOp{
+							op := &projMultInt32ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt32ConstIntervalOp{
+							op := &projMultInt32ConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -30189,39 +29100,44 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultInt64ConstInt16Op{
+							op := &projMultInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMultInt64ConstInt32Op{
+							op := &projMultInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMultInt64ConstInt64Op{
+							op := &projMultInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt64ConstDecimalOp{
+							op := &projMultInt64ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultInt64ConstIntervalOp{
+							op := &projMultInt64ConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30234,19 +29150,21 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultFloat64ConstFloat64Op{
+							op := &projMultFloat64ConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(float64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntervalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultFloat64ConstIntervalOp{
+							op := &projMultFloat64ConstIntervalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(float64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30258,39 +29176,44 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projMultIntervalConstInt16Op{
+							op := &projMultIntervalConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projMultIntervalConstInt32Op{
+							op := &projMultIntervalConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projMultIntervalConstInt64Op{
+							op := &projMultIntervalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultIntervalConstFloat64Op{
+							op := &projMultIntervalConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projMultIntervalConstDecimalOp{
+							op := &projMultIntervalConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30305,30 +29228,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projDivDecimalConstInt16Op{
+							op := &projDivDecimalConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projDivDecimalConstInt32Op{
+							op := &projDivDecimalConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projDivDecimalConstInt64Op{
+							op := &projDivDecimalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivDecimalConstDecimalOp{
+							op := &projDivDecimalConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30339,30 +29266,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projDivInt16ConstInt16Op{
+							op := &projDivInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projDivInt16ConstInt32Op{
+							op := &projDivInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projDivInt16ConstInt64Op{
+							op := &projDivInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivInt16ConstDecimalOp{
+							op := &projDivInt16ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -30370,30 +29301,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projDivInt32ConstInt16Op{
+							op := &projDivInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projDivInt32ConstInt32Op{
+							op := &projDivInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projDivInt32ConstInt64Op{
+							op := &projDivInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivInt32ConstDecimalOp{
+							op := &projDivInt32ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -30402,30 +29337,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projDivInt64ConstInt16Op{
+							op := &projDivInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projDivInt64ConstInt32Op{
+							op := &projDivInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projDivInt64ConstInt64Op{
+							op := &projDivInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivInt64ConstDecimalOp{
+							op := &projDivInt64ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30438,10 +29377,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivFloat64ConstFloat64Op{
+							op := &projDivFloat64ConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(float64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30454,19 +29394,21 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivIntervalConstInt64Op{
+							op := &projDivIntervalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.FloatFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projDivIntervalConstFloat64Op{
+							op := &projDivIntervalConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30481,30 +29423,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projFloorDivDecimalConstInt16Op{
+							op := &projFloorDivDecimalConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projFloorDivDecimalConstInt32Op{
+							op := &projFloorDivDecimalConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projFloorDivDecimalConstInt64Op{
+							op := &projFloorDivDecimalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivDecimalConstDecimalOp{
+							op := &projFloorDivDecimalConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30515,30 +29461,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projFloorDivInt16ConstInt16Op{
+							op := &projFloorDivInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projFloorDivInt16ConstInt32Op{
+							op := &projFloorDivInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projFloorDivInt16ConstInt64Op{
+							op := &projFloorDivInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivInt16ConstDecimalOp{
+							op := &projFloorDivInt16ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -30546,30 +29496,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projFloorDivInt32ConstInt16Op{
+							op := &projFloorDivInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projFloorDivInt32ConstInt32Op{
+							op := &projFloorDivInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projFloorDivInt32ConstInt64Op{
+							op := &projFloorDivInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivInt32ConstDecimalOp{
+							op := &projFloorDivInt32ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -30578,30 +29532,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projFloorDivInt64ConstInt16Op{
+							op := &projFloorDivInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projFloorDivInt64ConstInt32Op{
+							op := &projFloorDivInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projFloorDivInt64ConstInt64Op{
+							op := &projFloorDivInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivInt64ConstDecimalOp{
+							op := &projFloorDivInt64ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30614,10 +29572,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projFloorDivFloat64ConstFloat64Op{
+							op := &projFloorDivFloat64ConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(float64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30632,30 +29591,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projModDecimalConstInt16Op{
+							op := &projModDecimalConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projModDecimalConstInt32Op{
+							op := &projModDecimalConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projModDecimalConstInt64Op{
+							op := &projModDecimalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModDecimalConstDecimalOp{
+							op := &projModDecimalConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30666,30 +29629,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projModInt16ConstInt16Op{
+							op := &projModInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projModInt16ConstInt32Op{
+							op := &projModInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projModInt16ConstInt64Op{
+							op := &projModInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModInt16ConstDecimalOp{
+							op := &projModInt16ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -30697,30 +29664,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projModInt32ConstInt16Op{
+							op := &projModInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projModInt32ConstInt32Op{
+							op := &projModInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projModInt32ConstInt64Op{
+							op := &projModInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModInt32ConstDecimalOp{
+							op := &projModInt32ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -30729,30 +29700,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projModInt64ConstInt16Op{
+							op := &projModInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projModInt64ConstInt32Op{
+							op := &projModInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projModInt64ConstInt64Op{
+							op := &projModInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModInt64ConstDecimalOp{
+							op := &projModInt64ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30765,10 +29740,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projModFloat64ConstFloat64Op{
+							op := &projModFloat64ConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(float64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30783,30 +29759,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPowDecimalConstInt16Op{
+							op := &projPowDecimalConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projPowDecimalConstInt32Op{
+							op := &projPowDecimalConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projPowDecimalConstInt64Op{
+							op := &projPowDecimalConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowDecimalConstDecimalOp{
+							op := &projPowDecimalConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(apd.Decimal),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30817,30 +29797,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPowInt16ConstInt16Op{
+							op := &projPowInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projPowInt16ConstInt32Op{
+							op := &projPowInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projPowInt16ConstInt64Op{
+							op := &projPowInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowInt16ConstDecimalOp{
+							op := &projPowInt16ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -30848,30 +29832,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPowInt32ConstInt16Op{
+							op := &projPowInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projPowInt32ConstInt32Op{
+							op := &projPowInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projPowInt32ConstInt64Op{
+							op := &projPowInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowInt32ConstDecimalOp{
+							op := &projPowInt32ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -30880,30 +29868,34 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projPowInt64ConstInt16Op{
+							op := &projPowInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projPowInt64ConstInt32Op{
+							op := &projPowInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projPowInt64ConstInt64Op{
+							op := &projPowInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.DecimalFamily:
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowInt64ConstDecimalOp{
+							op := &projPowInt64ConstDecimalOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30916,10 +29908,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projPowFloat64ConstFloat64Op{
+							op := &projPowFloat64ConstFloat64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(float64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30935,10 +29928,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projConcatBytesConstBytesOp{
+							op := &projConcatBytesConstBytesOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.([]byte),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30951,10 +29945,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projConcatJSONConstJSONOp{
+							op := &projConcatJSONConstJSONOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -30967,10 +29962,12 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projConcatDatumConstDatumOp{
+							op := &projConcatDatumConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -30984,21 +29981,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projLShiftInt16ConstInt16Op{
+							op := &projLShiftInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projLShiftInt16ConstInt32Op{
+							op := &projLShiftInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projLShiftInt16ConstInt64Op{
+							op := &projLShiftInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -31006,21 +30006,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projLShiftInt32ConstInt16Op{
+							op := &projLShiftInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projLShiftInt32ConstInt32Op{
+							op := &projLShiftInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projLShiftInt32ConstInt64Op{
+							op := &projLShiftInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -31029,21 +30032,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projLShiftInt64ConstInt16Op{
+							op := &projLShiftInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projLShiftInt64ConstInt32Op{
+							op := &projLShiftInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projLShiftInt64ConstInt64Op{
+							op := &projLShiftInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -31055,21 +30061,27 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projLShiftDatumConstInt16Op{
+							op := &projLShiftDatumConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case 32:
-							return &projLShiftDatumConstInt32Op{
+							op := &projLShiftDatumConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case -1:
 						default:
-							return &projLShiftDatumConstInt64Op{
+							op := &projLShiftDatumConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -31083,21 +30095,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projRShiftInt16ConstInt16Op{
+							op := &projRShiftInt16ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projRShiftInt16ConstInt32Op{
+							op := &projRShiftInt16ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projRShiftInt16ConstInt64Op{
+							op := &projRShiftInt16ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case 32:
@@ -31105,21 +30120,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projRShiftInt32ConstInt16Op{
+							op := &projRShiftInt32ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projRShiftInt32ConstInt32Op{
+							op := &projRShiftInt32ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projRShiftInt32ConstInt64Op{
+							op := &projRShiftInt32ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				case -1:
@@ -31128,21 +30146,24 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projRShiftInt64ConstInt16Op{
+							op := &projRShiftInt64ConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projRShiftInt64ConstInt32Op{
+							op := &projRShiftInt64ConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projRShiftInt64ConstInt64Op{
+							op := &projRShiftInt64ConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -31154,21 +30175,27 @@ func GetProjectionLConstOperator(
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projRShiftDatumConstInt16Op{
+							op := &projRShiftDatumConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case 32:
-							return &projRShiftDatumConstInt32Op{
+							op := &projRShiftDatumConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						case -1:
 						default:
-							return &projRShiftDatumConstInt64Op{
+							op := &projRShiftDatumConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
-							}, nil
+							}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							return op, nil
 						}
 					}
 				}
@@ -31184,29 +30211,33 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchValJSONConstBytesOp{
+							op := &projJSONFetchValJSONConstBytesOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projJSONFetchValJSONConstInt16Op{
+							op := &projJSONFetchValJSONConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projJSONFetchValJSONConstInt32Op{
+							op := &projJSONFetchValJSONConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projJSONFetchValJSONConstInt64Op{
+							op := &projJSONFetchValJSONConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -31222,29 +30253,33 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchTextJSONConstBytesOp{
+							op := &projJSONFetchTextJSONConstBytesOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projJSONFetchTextJSONConstInt16Op{
+							op := &projJSONFetchTextJSONConstInt16Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						case 32:
-							return &projJSONFetchTextJSONConstInt32Op{
+							op := &projJSONFetchTextJSONConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						case -1:
 						default:
-							return &projJSONFetchTextJSONConstInt64Op{
+							op := &projJSONFetchTextJSONConstInt64Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -31260,10 +30295,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchValPathJSONConstDatumOp{
+							op := &projJSONFetchValPathJSONConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
@@ -31279,10 +30315,11 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchTextPathJSONConstDatumOp{
+							op := &projJSONFetchTextPathJSONConstDatumOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(json.JSON),
-							}, nil
+							}
+							return op, nil
 						}
 					}
 				}
