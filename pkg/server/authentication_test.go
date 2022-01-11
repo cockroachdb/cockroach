@@ -221,6 +221,7 @@ func TestVerifyPassword(t *testing.T) {
 		{"druidia", "12345", "", "", nil},
 
 		{"richardc", "12345", "NOLOGIN", "", nil},
+		{"richardc2", "12345", "NOSQLLOGIN", "", nil},
 		{"before_epoch", "12345", "", "VALID UNTIL '1969-01-01'", nil},
 		{"epoch", "12345", "", "VALID UNTIL '1970-01-01'", nil},
 		{"cockroach", "12345", "", "VALID UNTIL '2100-01-01'", nil},
@@ -242,37 +243,111 @@ func TestVerifyPassword(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
+		testName           string
 		username           string
 		password           string
 		shouldAuthenticate bool
-		expectedErrString  string
 	}{
-		{"azure_diamond", "hunter2", true, ""},
-		{"azure_diamond", "hunter", false, "crypto/bcrypt"},
-		{"azure_diamond", "", false, "crypto/bcrypt"},
-		{"azure_diamond", "🍦", false, "crypto/bcrypt"},
-		{"azure_diamond", "hunter2345", false, "crypto/bcrypt"},
-		{"azure_diamond", "shunter2", false, "crypto/bcrypt"},
-		{"azure_diamond", "12345", false, "crypto/bcrypt"},
-		{"azure_diamond", "*******", false, "crypto/bcrypt"},
-		{"druidia", "12345", true, ""},
-		{"druidia", "hunter2", false, "crypto/bcrypt"},
-		{"root", "", false, "crypto/bcrypt"},
-		{"", "", false, "does not exist"},
-		{"doesntexist", "zxcvbn", false, "does not exist"},
+		{"valid login", "azure_diamond", "hunter2", true},
+		{"wrong password", "azure_diamond", "hunter", false},
+		{"empty password", "azure_diamond", "", false},
+		{"wrong emoji password", "azure_diamond", "🍦", false},
+		{"correct password with suffix should fail", "azure_diamond", "hunter2345", false},
+		{"correct password with prefix should fail", "azure_diamond", "shunter2", false},
+		{"wrong password all numeric", "azure_diamond", "12345", false},
+		{"wrong password all stars", "azure_diamond", "*******", false},
+		{"valid login numeric password", "druidia", "12345", true},
+		{"wrong password matching other user", "druidia", "hunter2", false},
+		{"root with empty password should fail", "root", "", false},
+		{"empty username and password should fail", "", "", false},
+		{"username does not exist should fail", "doesntexist", "zxcvbn", false},
 
-		{"richardc", "12345", false,
-			"richardc does not have login privilege"},
-		{"before_epoch", "12345", false, ""},
-		{"epoch", "12345", false, ""},
-		{"cockroach", "12345", true, ""},
-		{"toolate", "12345", false, ""},
-		{"timelord", "12345", true, ""},
-		{"cthon98", "12345", true, ""},
+		{"user with NOLOGIN role option should fail", "richardc", "12345", false},
+		// This is the one test case where SQL and DB Console login outcomes differ.
+		{"user with NOSQLLOGIN role option should fail", "richardc2", "12345", false},
+		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", false},
+		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", false},
+		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", true},
+		{"user with VALID UNTIL 10 minutes ago should fail", "toolate", "12345", false},
+		{"user with VALID UNTIL future time in Shanghai time zone should succeed", "timelord", "12345", true},
+		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", true},
 	} {
-		t.Run("", func(t *testing.T) {
+		t.Run(tc.testName, func(t *testing.T) {
 			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			valid, expired, err := ts.authentication.verifyPassword(context.Background(), username, tc.password)
+			valid, expired, err := ts.authentication.verifyPasswordDBConsole(context.Background(), username, tc.password)
+			if err != nil {
+				t.Errorf(
+					"credentials %s/%s failed with error %s, wanted no error",
+					tc.username,
+					tc.password,
+					err,
+				)
+			}
+			if valid && !expired != tc.shouldAuthenticate {
+				t.Errorf(
+					"credentials %s/%s valid = %t, wanted %t",
+					tc.username,
+					tc.password,
+					valid,
+					tc.shouldAuthenticate,
+				)
+			}
+		})
+	}
+}
+
+func TestVerifyPasswordDBConsole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ts := s.(*TestServer)
+
+	if util.RaceEnabled {
+		// The default bcrypt cost makes this test approximately 30s slower when the
+		// race detector is on.
+		security.BcryptCost.Override(ctx, &ts.Cfg.Settings.SV, int64(bcrypt.MinCost))
+	}
+
+	for _, user := range []struct {
+		username  string
+		password  string
+		loginFlag string
+	}{
+		{"azure_diamond", "hunter2", ""},
+		{"richardc", "12345", "NOLOGIN"},
+		{"richardc2", "12345", "NOSQLLOGIN"},
+	} {
+		username := security.MakeSQLUsernameFromPreNormalizedString(user.username)
+		cmd := fmt.Sprintf(
+			"CREATE USER %s WITH PASSWORD '%s' %s",
+			username.SQLIdentifier(), user.password, user.loginFlag)
+
+		if _, err := db.Exec(cmd); err != nil {
+			t.Fatalf("failed to create user: %s", err)
+		}
+	}
+
+	for _, tc := range []struct {
+		testName           string
+		username           string
+		password           string
+		shouldAuthenticate bool
+	}{
+		{"valid login", "azure_diamond", "hunter2", true},
+		{"wrong password", "azure_diamond", "hunter", false},
+		{"empty password", "azure_diamond", "", false},
+
+		{"user with NOLOGIN role option should fail", "richardc", "12345", false},
+		// This is the one test case where SQL and DB Console login outcomes differ.
+		{"user with NOSQLLOGIN role option should succeed", "richardc2", "12345", true},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
+			valid, expired, err := ts.authentication.verifyPasswordDBConsole(context.Background(), username, tc.password)
 			if err != nil {
 				t.Errorf(
 					"credentials %s/%s failed with error %s, wanted no error",
