@@ -42,6 +42,7 @@ go_test(
         "row_decoder_external_test.go",
         "row_decoder_test.go",
         "settings_watcher_external_test.go",
+        "settings_watcher_test.go",
     ],
     embed = [":settingswatcher"],
     deps = [
@@ -49,6 +50,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",

@@ -50,6 +50,10 @@ type SettingsWatcher struct {
 		values    map[string]RawValue
 		overrides map[string]RawValue
 	}
+
+	// testingWatcherKnobs allows the client to inject testing knobs into
+	// the underlying rangefeedcache.Watcher.
+	testingWatcherKnobs *rangefeedcache.TestingKnobs
 }
 
 // Storage is used to write a snapshot of KVs out to disk for use upon restart.
@@ -103,14 +107,22 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		EndKey: settingsTablePrefix.PrefixEnd(),
 	}
 	u := s.settings.MakeUpdater()
-	initialScanDone := make(chan struct{})
-	var initialScanErr error
+	var initialScan = struct {
+		ch   chan struct{}
+		done bool
+		err  error
+	}{
+		ch: make(chan struct{}),
+	}
 	noteUpdate := func(update rangefeedcache.Update) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if update.Type == rangefeedcache.CompleteUpdate {
 			u.ResetRemaining(ctx)
-			close(initialScanDone)
+			if !initialScan.done {
+				initialScan.done = true
+				close(initialScan.ch)
+			}
 		}
 	}
 
@@ -146,12 +158,6 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	// number thought ought to be big enough. Note that if there is no underlying
 	// storage, we'll never produce any events in s.handleKV() so we can use a
 	// bufferSize of 0.
-	//
-	// TODO(ajwerner): Use rangefeedcache.Start and run the cache in a loop
-	// to deal with buffer overflows. On a fresh scan, there ought not be
-	// more settings values than there exists cluster settings, though we
-	// need to deal with the fact that new settings can be added in the next
-	// version and we can have retired values we don't know about.
 	var bufferSize int
 	if s.storage != nil {
 		bufferSize = settings.MaxSettings * 3
@@ -187,28 +193,26 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			noteUpdate(update)
 			maybeUpdateSnapshot(update)
 		},
-		nil, // knobs
+		s.testingWatcherKnobs,
 	)
-	if err := s.stopper.RunAsyncTask(ctx, "setting", func(ctx context.Context) {
-		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
-		defer cancel()
-		err := c.Run(ctx)
-		select {
-		case <-initialScanDone:
-		default:
-			initialScanErr = err
-			close(initialScanDone)
+
+	// Kick off the rangefeedcache which will retry until the stopper stops.
+	if err := rangefeedcache.Start(ctx, s.stopper, c, func(err error) {
+		if !initialScan.done {
+			initialScan.err = err
+			initialScan.done = true
+			close(initialScan.ch)
+		} else {
+			u = s.settings.MakeUpdater()
 		}
 	}); err != nil {
 		return err // we're shutting down
 	}
+
 	// Wait for the initial scan before returning.
 	select {
-	case <-initialScanDone:
-		if initialScanErr != nil {
-			return initialScanErr
-		}
-		return nil
+	case <-initialScan.ch:
+		return initialScan.err
 
 	case <-s.stopper.ShouldQuiesce():
 		return errors.Wrap(stop.ErrUnavailable, "failed to retrieve initial cluster settings")
