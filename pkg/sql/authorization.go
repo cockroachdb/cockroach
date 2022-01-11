@@ -766,3 +766,27 @@ func (p *planner) HasOwnershipOnSchema(
 
 	return hasOwnership, nil
 }
+
+func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error) {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return hasAdmin, err
+	}
+	if !hasAdmin {
+		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return hasViewActivity, err
+		}
+		if !hasViewActivity {
+			hasViewActivityRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return hasViewActivityRedacted, err
+			}
+			if !hasViewActivityRedacted {
+				return false, nil
+			}
+		}
+	}
+
+	return true, nil
+}
