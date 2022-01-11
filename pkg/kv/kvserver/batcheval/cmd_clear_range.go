@@ -97,8 +97,15 @@ func ClearRange(
 	// If the total size of data to be cleared is less than
 	// clearRangeBytesThreshold, clear the individual values with an iterator,
 	// instead of using a range tombstone (inefficient for small ranges).
-	if total := statsDelta.Total(); total < ClearRangeBytesThreshold {
-		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, ClearRangeBytesThreshold)
+	//
+	// However, don't do this if the stats contain estimates -- this can only
+	// happen when we're clearing an entire range and we're using the existing
+	// range stats. We've seen cases where these estimates are wildly inaccurate
+	// (even negative), and it's better to drop an unnecessary range tombstone
+	// than to submit a huge write batch that'll get rejected by Raft.
+	if statsDelta.ContainsEstimates != 0 && statsDelta.Total() < ClearRangeBytesThreshold {
+		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear",
+			statsDelta.Total(), ClearRangeBytesThreshold)
 		iter := readWriter.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			LowerBound: from,
 			UpperBound: to,
