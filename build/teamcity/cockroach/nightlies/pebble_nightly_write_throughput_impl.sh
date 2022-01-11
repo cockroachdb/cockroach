@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-#
-# This script runs the Pebble Nightly write-throughput benchmarks.
-#
-# It is run by the Pebble Nightly - AWS TeamCity build
-# configuration.
 
 set -eo pipefail
 
@@ -11,7 +6,7 @@ _dir="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Execute the common commands for the benchmark runs and import common
 # variables / constants.
-. "$_dir/teamcity-nightly-pebble-common.sh"
+. "$_dir/pebble_nightly_common.sh"
 
 # Run the write-throughput benchmark.
 #
@@ -28,6 +23,7 @@ if ! timeout -s INT 12h bin/roachtest run \
   --cockroach "true" \
   --workload "true" \
   --artifacts "$artifacts" \
+  --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --parallelism 2 \
   --teamcity \
   --cpu-quota=384 \
@@ -49,3 +45,4 @@ aws s3 sync ./write-throughput s3://pebble-benchmarks/write-throughput
 sync_data_dir
 
 exit "$exit_status"
+
