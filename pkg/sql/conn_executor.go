@@ -799,6 +799,7 @@ func (s *Server) newConnExecutor(
 	)
 
 	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
+	txnIDCacheWriter := s.txnIDCache.GetWriter()
 	ex := &connExecutor{
 		server:              s,
 		metrics:             srvMetrics,
@@ -811,6 +812,7 @@ func (s *Server) newConnExecutor(
 		state: txnState{
 			mon:                          txnMon,
 			connCtx:                      ctx,
+			txnIDCacheWriter:             txnIDCacheWriter,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 		},
 		transitionCtx: transitionCtx{
@@ -835,7 +837,7 @@ func (s *Server) newConnExecutor(
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
-		txnIDCacheWriter:          s.txnIDCache.GetWriter(),
+		txnIDCacheWriter:          txnIDCacheWriter,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
