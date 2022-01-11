@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -176,16 +175,14 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 // constant, except for the constant itself.
 type selConstOpBase struct {
 	colexecop.OneInputHelper
-	colIdx         int
-	overloadHelper execgen.OverloadHelper
+	colIdx int
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
 type selOpBase struct {
 	colexecop.OneInputHelper
-	col1Idx        int
-	col2Idx        int
-	overloadHelper execgen.OverloadHelper
+	col1Idx int
+	col2Idx int
 }
 
 // {{define "selConstOp"}}
@@ -195,12 +192,6 @@ type _OP_CONST_NAME struct {
 }
 
 func (p *_OP_CONST_NAME) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -232,12 +223,6 @@ type _OP_NAME struct {
 }
 
 func (p *_OP_NAME) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
