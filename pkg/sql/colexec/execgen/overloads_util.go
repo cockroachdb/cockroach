@@ -11,7 +11,7 @@
 package execgen
 
 import (
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -23,6 +23,9 @@ import (
 // `_overloadHelper` of this type must be declared before the inlined
 // overloaded code.
 type OverloadHelper struct {
+	// TODO(yuzefovich): remove these now that temporary apd.Decimal instances can
+	// be stack-allocated without any indirection to the heap. When doing so, make
+	// sure the stack variables don't escape by using gcassert:noescape.
 	TmpDec1, TmpDec2 apd.Decimal
 	BinFn            tree.TwoArgFn
 	EvalCtx          *tree.EvalContext

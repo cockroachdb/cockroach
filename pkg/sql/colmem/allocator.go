@@ -384,7 +384,7 @@ func sizeOfDecimals(decimals coldata.Decimals, startIdx int) int64 {
 	// Account for the allocated memory beyond the length of the slice.
 	size := int64(cap(decimals)-len(decimals)) * memsize.Decimal
 	for i := startIdx; i < decimals.Len(); i++ {
-		size += int64(tree.SizeOfDecimal(&decimals[i]))
+		size += int64(decimals[i].Size())
 	}
 	return size
 }
@@ -392,10 +392,6 @@ func sizeOfDecimals(decimals coldata.Decimals, startIdx int) int64 {
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
 // coldata.BatchSize() length.
 var SizeOfBatchSizeSelVector = int64(coldata.BatchSize()) * memsize.Int
-
-// decimalEstimate is our guess for how much space a single apd.Decimal element
-// will take up.
-const decimalEstimate = 50
 
 // EstimateBatchSizeBytes returns an estimated amount of bytes needed to
 // store a batch in memory that has column types vecTypes.
@@ -423,8 +419,12 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 			}
 		case types.DecimalFamily:
 			// Similar to byte arrays, we can't tell how much space is used
-			// to hold the arbitrary precision decimal objects.
-			acc += decimalEstimate
+			// to hold the arbitrary precision decimal objects because they
+			// can contain a variable-length portion. However, most values
+			// (those with a coefficient which can fit in a uint128) do not
+			// contain any indirection and are stored entirely inline, so we
+			// use the flat struct size as an estimate.
+			acc += memsize.Decimal
 		case types.JsonFamily:
 			numBytesVectors++
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -559,7 +559,7 @@ func (h *SetAccountingHelper) Init(allocator *Allocator, typs []*types.T) {
 			h.bytesLikeVecIdxs.Add(vecIdx)
 		case types.DecimalFamily:
 			h.varSizeVecIdxs.Add(vecIdx)
-			h.varSizeEstimatePerRow += decimalEstimate
+			h.varSizeEstimatePerRow += memsize.Decimal
 			numDecimalVecs++
 		case typeconv.DatumVecCanonicalTypeFamily:
 			estimate, isVarlen := tree.DatumTypeSize(typ)
@@ -659,7 +659,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) {
 		var newVarLengthDatumSize int64
 		for _, decimalVec := range h.decimalVecs {
 			d := decimalVec.Get(rowIdx)
-			newVarLengthDatumSize += int64(tree.SizeOfDecimal(&d))
+			newVarLengthDatumSize += int64(d.Size())
 		}
 		for _, datumVec := range h.datumVecs {
 			datumSize := datumVec.Get(rowIdx).(tree.Datum).Size()
