@@ -1697,13 +1697,13 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 			return nil
 		}
 		log.Infof(ctx, "received lease request (%s, %s)",
-			leaseReq.Span(), &leaseReq.Lease)
+			leaseReq.Span(), leaseReq.Lease)
 		if !reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) {
 			return nil
 		}
 		log.Infof(ctx,
 			"refusing lease request (%s, %s) because %+v held lease for LHS of split",
-			leaseReq.Span(), &leaseReq.Lease, forbiddenDesc)
+			leaseReq.Span(), leaseReq.Lease, forbiddenDesc)
 		return roachpb.NewError(&roachpb.NotLeaseHolderError{RangeID: args.Hdr.RangeID})
 	}
 
