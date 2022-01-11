@@ -958,8 +958,14 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return err
 		}
 		if !hasViewActivity {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
+			hasViewActivityRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return err
+			}
+			if !hasViewActivityRedacted {
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+			}
 		}
 
 		sqlStats, err := getSQLStats(p, "crdb_internal.node_statement_statistics")
@@ -1094,8 +1100,14 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return err
 		}
 		if !hasViewActivity {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
+			hasViewActivityRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return err
+			}
+			if !hasViewActivityRedacted {
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+			}
 		}
 		sqlStats, err := getSQLStats(p, "crdb_internal.node_transaction_statistics")
 		if err != nil {
@@ -1592,6 +1604,14 @@ func (p *planner) makeSessionsRequest(ctx context.Context) (serverpb.ListSession
 		}
 		if hasViewActivity {
 			req.Username = ""
+		} else {
+			hasViewActivityRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return serverpb.ListSessionsRequest{}, err
+			}
+			if hasViewActivityRedacted {
+				req.Username = ""
+			}
 		}
 	}
 	return req, nil
