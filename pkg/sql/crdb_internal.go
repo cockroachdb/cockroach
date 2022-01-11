@@ -963,13 +963,13 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   exec_node_ids       INT[] NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
-		if !hasViewActivity {
+		if !hasViewActivityOrViewActivityRedacted {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
+				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
 		}
 
 		sqlStats, err := getSQLStats(p, "crdb_internal.node_statement_statistics")
@@ -1099,14 +1099,15 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		hasViewActivityOrhasViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return err
 		}
-		if !hasViewActivity {
+		if !hasViewActivityOrhasViewActivityRedacted {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
+				"user %s does not have %s or %s privilege", p.User(), roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
 		}
+
 		sqlStats, err := getSQLStats(p, "crdb_internal.node_transaction_statistics")
 		if err != nil {
 			return err
@@ -1586,11 +1587,11 @@ func (p *planner) makeSessionsRequest(ctx context.Context) (serverpb.ListSession
 	if hasAdmin {
 		req.Username = ""
 	} else {
-		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		hasViewActivityOrhasViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return serverpb.ListSessionsRequest{}, err
 		}
-		if hasViewActivity {
+		if hasViewActivityOrhasViewActivityRedacted {
 			req.Username = ""
 		}
 	}

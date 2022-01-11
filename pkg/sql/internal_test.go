@@ -258,6 +258,7 @@ func TestQueryHasRoleOptionWithNoTxn(t *testing.T) {
 
 	stmts := `
 CREATE USER testuser VIEWACTIVITY;
+CREATE USER testuserredacted VIEWACTIVITYREDACTED;
 CREATE USER testadmin;
 GRANT admin TO testadmin`
 	if _, err := db.Exec(stmts); err != nil {
@@ -274,6 +275,9 @@ GRANT admin TO testadmin`
 		{"testuser", roleoption.VIEWACTIVITY.String(), true, ""},
 		{"testuser", roleoption.CREATEROLE.String(), false, ""},
 		{"testuser", "nonexistent", false, "unrecognized role option"},
+		{"testuserredacted", roleoption.VIEWACTIVITYREDACTED.String(), true, ""},
+		{"testuserredacted", roleoption.CREATEROLE.String(), false, ""},
+		{"testuserredacted", "nonexistent", false, "unrecognized role option"},
 		{"testadmin", roleoption.VIEWACTIVITY.String(), true, ""},
 		{"testadmin", roleoption.CREATEROLE.String(), true, ""},
 		{"testadmin", "nonexistent", false, "unrecognized role option"},
