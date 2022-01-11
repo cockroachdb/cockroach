@@ -16,7 +16,6 @@ go_library(
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
         "//pkg/sql/colexec/colexecutils",
-        "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
@@ -44,7 +43,6 @@ go_test(
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
         "//pkg/sql/colexec/colexecutils",
-        "//pkg/sql/colexec/execgen",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",

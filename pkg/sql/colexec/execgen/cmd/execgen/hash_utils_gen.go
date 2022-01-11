@@ -29,7 +29,7 @@ func genHashUtils(inputFileContents string, wr io.Writer) error {
 	s := r.Replace(inputFileContents)
 
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 4)
-	s = assignHash.ReplaceAllString(s, makeTemplateFunctionCall("Global.UnaryAssign", 4))
+	s = assignHash.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignHash", 4))
 
 	rehash := makeFunctionRegex("_REHASH_BODY", 7)
 	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "HasSel" $6 "HasNulls" $7}}`)

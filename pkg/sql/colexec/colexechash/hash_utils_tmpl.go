@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -95,13 +94,19 @@ func _REHASH_BODY(
 			continue
 		}
 		// {{end}}
+		// {{if not (eq .Global.VecMethod "JSON")}}
+		// {{/*
+		//     No need to decode the JSON value (which is done in Get) since
+		//     we'll be operating directly on the underlying []byte.
+		// */}}
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		v := keys.Get(selIdx)
+		// {{end}}
 		//gcassert:bce
 		p := uintptr(buckets[i])
-		_ASSIGN_HASH(p, v, _, keys)
+		_ASSIGN_HASH(p, v, keys, selIdx)
 		//gcassert:bce
 		buckets[i] = uint64(p)
 	}
@@ -122,12 +127,8 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
-	overloadHelper *execgen.OverloadHelper,
 	datumAlloc *tree.DatumAlloc,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
-	_overloadHelper := overloadHelper
 	switch col.CanonicalTypeFamily() {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:

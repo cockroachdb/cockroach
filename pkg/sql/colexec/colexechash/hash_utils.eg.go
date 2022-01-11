@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,12 +45,8 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
-	overloadHelper *execgen.OverloadHelper,
 	datumAlloc *tree.DatumAlloc,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
-	_overloadHelper := overloadHelper
 	switch col.CanonicalTypeFamily() {
 	case types.BoolFamily:
 		switch col.Type().Width() {
@@ -927,16 +922,12 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
 
-						scratch := _overloadHelper.ByteScratch[:0]
-						_b, _err := json.EncodeJSON(scratch, v)
-						if _err != nil {
-							colexecerror.ExpectedError(_err)
-						}
-						_overloadHelper.ByteScratch = _b
+						// Access the underlying []byte directly which allows us to skip
+						// decoding-encoding of the JSON object.
+						_b := keys.Bytes.Get(selIdx)
 
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
@@ -954,16 +945,12 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
 
-						scratch := _overloadHelper.ByteScratch[:0]
-						_b, _err := json.EncodeJSON(scratch, v)
-						if _err != nil {
-							colexecerror.ExpectedError(_err)
-						}
-						_overloadHelper.ByteScratch = _b
+						// Access the underlying []byte directly which allows us to skip
+						// decoding-encoding of the JSON object.
+						_b := keys.Bytes.Get(selIdx)
 
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
@@ -982,16 +969,12 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						//gcassert:bce
 						selIdx = sel[i]
-						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
 
-						scratch := _overloadHelper.ByteScratch[:0]
-						_b, _err := json.EncodeJSON(scratch, v)
-						if _err != nil {
-							colexecerror.ExpectedError(_err)
-						}
-						_overloadHelper.ByteScratch = _b
+						// Access the underlying []byte directly which allows us to skip
+						// decoding-encoding of the JSON object.
+						_b := keys.Bytes.Get(selIdx)
 
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
@@ -1006,16 +989,12 @@ func rehash(
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
-						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
 
-						scratch := _overloadHelper.ByteScratch[:0]
-						_b, _err := json.EncodeJSON(scratch, v)
-						if _err != nil {
-							colexecerror.ExpectedError(_err)
-						}
-						_overloadHelper.ByteScratch = _b
+						// Access the underlying []byte directly which allows us to skip
+						// decoding-encoding of the JSON object.
+						_b := keys.Bytes.Get(selIdx)
 
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
 						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
