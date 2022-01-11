@@ -37,9 +37,7 @@ var _ colexecop.Operator = &notExprProjOp{}
 
 // NewNotExprProjOp returns a new notExprProjOp.
 func NewNotExprProjOp(
-	allocator *colmem.Allocator,
-	input colexecop.Operator,
-	inputIdx, outputIdx int,
+	allocator *colmem.Allocator, input colexecop.Operator, inputIdx, outputIdx int,
 ) colexecop.Operator {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	base := notExprProjBase{
@@ -53,8 +51,9 @@ func NewNotExprProjOp(
 
 // projectOuput populates the output vector with the negated bool value of the
 // input vector for non-null values. For null value, it projects null.
-func projectOutput(idx int, inputNulls, outputNulls *coldata.Nulls,
-	inputVec coldata.Vec, outputBools coldata.Bools) {
+func projectOutput(
+	idx int, inputNulls, outputNulls *coldata.Nulls, inputVec coldata.Vec, outputBools coldata.Bools,
+) {
 	if inputNulls.NullAt(idx) {
 		outputNulls.SetNull(idx)
 	} else {
@@ -107,9 +106,7 @@ type notExprSelOp struct {
 var _ colexecop.Operator = &notExprSelOp{}
 
 // NewNotExprSelOp returns a new notExprSelOp.
-func NewNotExprSelOp(
-	input colexecop.Operator, inputIdx int,
-) colexecop.Operator {
+func NewNotExprSelOp(input colexecop.Operator, inputIdx int) colexecop.Operator {
 	base := notExprSelBase{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		inputIdx:       inputIdx,
