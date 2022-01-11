@@ -78,16 +78,17 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
 						if nulls.NullAt(selIdx) {
 							continue
 						}
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -101,7 +102,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -125,13 +125,14 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -145,7 +146,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
@@ -176,7 +176,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
@@ -196,7 +195,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -217,7 +215,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
@@ -234,7 +231,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
@@ -270,16 +266,17 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
 						if nulls.NullAt(selIdx) {
 							continue
 						}
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -295,7 +292,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -321,13 +317,14 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -343,7 +340,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
@@ -374,16 +370,17 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
 						if nulls.NullAt(selIdx) {
 							continue
 						}
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -395,7 +392,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -417,13 +413,14 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -435,7 +432,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		case 32:
@@ -463,16 +459,17 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
 						if nulls.NullAt(selIdx) {
 							continue
 						}
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -484,7 +481,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -506,13 +502,14 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -524,7 +521,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		case -1:
@@ -553,16 +549,17 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
 						if nulls.NullAt(selIdx) {
 							continue
 						}
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -574,7 +571,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -596,13 +592,14 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -614,7 +611,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
@@ -648,16 +644,17 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
 						if nulls.NullAt(selIdx) {
 							continue
 						}
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -671,7 +668,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -695,13 +691,14 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -715,7 +712,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
@@ -746,16 +742,17 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
 						if nulls.NullAt(selIdx) {
 							continue
 						}
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -766,7 +763,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -787,13 +783,14 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -804,7 +801,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
@@ -837,16 +833,17 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
 						if nulls.NullAt(selIdx) {
 							continue
 						}
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -859,7 +856,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -882,13 +878,14 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						selIdx = i
+						//gcassert:bce
 						v := keys.Get(selIdx)
 						//gcassert:bce
 						p := uintptr(buckets[i])
@@ -901,7 +898,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
@@ -935,7 +931,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
@@ -958,7 +953,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -982,7 +976,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
@@ -1002,7 +995,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
@@ -1033,7 +1025,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
@@ -1053,7 +1044,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			} else {
 				if sel != nil {
@@ -1074,7 +1064,6 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
@@ -1091,11 +1080,11 @@ func rehash(
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
-					cancelChecker.CheckEveryCall()
 				}
 			}
 		}
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", col.Type()))
 	}
+	cancelChecker.CheckEveryCall()
 }

@@ -78,7 +78,7 @@ func _REHASH_BODY(
 	_ = buckets[nKeys-1]
 	// {{if .HasSel}}
 	_ = sel[nKeys-1]
-	// {{else if .Sliceable}}
+	// {{else if .Global.Sliceable}}
 	_ = keys.Get(nKeys - 1)
 	// {{end}}
 	var selIdx int
@@ -99,7 +99,7 @@ func _REHASH_BODY(
 		//     No need to decode the JSON value (which is done in Get) since
 		//     we'll be operating directly on the underlying []byte.
 		// */}}
-		// {{if .Sliceable}}
+		// {{if and (not .HasSel) .Global.Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		v := keys.Get(selIdx)
@@ -110,7 +110,6 @@ func _REHASH_BODY(
 		//gcassert:bce
 		buckets[i] = uint64(p)
 	}
-	cancelChecker.CheckEveryCall()
 	// {{end}}
 
 	// {{/*
@@ -155,4 +154,5 @@ func rehash(
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", col.Type()))
 	}
+	cancelChecker.CheckEveryCall()
 }
