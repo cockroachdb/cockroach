@@ -26,7 +26,8 @@ func newLogEventOp(e scpb.Element, ts scpb.TargetState) *scop.LogEvent {
 			return &scop.LogEvent{
 				TargetMetadata: *protoutil.Clone(&t.Metadata).(*scpb.TargetMetadata),
 				Authorization:  *protoutil.Clone(&ts.Authorization).(*scpb.Authorization),
-				Statement:      ts.Statements[t.Metadata.StatementID].Statement,
+				Statement:      ts.Statements[t.Metadata.StatementID].RedactedStatement,
+				StatementTag:   ts.Statements[t.Metadata.StatementID].StatementTag,
 				Element:        *protoutil.Clone(&t.ElementProto).(*scpb.ElementProto),
 				TargetStatus:   t.TargetStatus,
 			}

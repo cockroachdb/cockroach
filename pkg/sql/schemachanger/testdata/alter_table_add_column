@@ -17,7 +17,7 @@ begin transaction #1
 ## PreCommitPhase stage 1 of 1 with 5 MutationType ops
 create job #1: "schema change job"
   descriptor IDs: [56]
-write *eventpb.AlterTable to event log for descriptor #56: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+write *eventpb.AlterTable to event log for descriptor #56: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
 upsert descriptor #56
   ...
      - columnIds:

@@ -28,14 +28,19 @@ func DropView(b BuildCtx, n *tree.DropView) {
 		buildCtx BuildCtx
 	}
 	views := make([]viewDropCtx, 0, len(n.Names))
-	for _, name := range n.Names {
-		_, view := b.ResolveView(name.ToUnresolvedObjectName(), ResolveParams{
+	for idx := range n.Names {
+		name := &n.Names[idx]
+		prefix, view := b.ResolveView(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
 		if view == nil {
+			b.MarkNameAsNonExistent(name)
 			continue
 		}
+		// Mutate the AST to have the fully resolved name from above, which will be
+		// used for both event logging and errors.
+		name.ObjectNamePrefix = prefix.NamePrefix()
 		if view.MaterializedView() && !n.IsMaterialized {
 			panic(errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", view.GetName()),
 				"use the corresponding MATERIALIZED VIEW command"))

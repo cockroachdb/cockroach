@@ -615,6 +615,8 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
           UserName: root
         Statements:
         - statement: DROP SCHEMA defaultdb.sc1 CASCADE
+          redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+          statementtag: DROP SCHEMA
 PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [[Sequence:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
@@ -638,7 +640,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         Sequence:
           sequenceId: 55
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 2
         SubWorkID: 1
@@ -651,7 +654,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         Table:
           tableId: 56
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 2
         SubWorkID: 1
@@ -664,7 +668,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         View:
           tableId: 57
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 4
         SubWorkID: 1
@@ -677,7 +682,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         View:
           tableId: 58
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 5
         SubWorkID: 1
@@ -690,7 +696,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         View:
           tableId: 59
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 6
         SubWorkID: 1
@@ -703,7 +710,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         View:
           tableId: 60
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 6
         SubWorkID: 1
@@ -716,7 +724,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         View:
           tableId: 63
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 8
         SubWorkID: 1
@@ -729,7 +738,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         Type:
           typeId: 61
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 2
         SubWorkID: 1
@@ -742,7 +752,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       Element:
         Type:
           typeId: 62
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 2
         SubWorkID: 1
@@ -767,7 +778,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
           - 62
           - 63
           schemaId: 54
-      Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      Statement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+      StatementTag: DROP SCHEMA
       TargetMetadata:
         SourceElementID: 1
         SubWorkID: 1

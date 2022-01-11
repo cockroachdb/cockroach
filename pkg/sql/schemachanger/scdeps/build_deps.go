@@ -35,6 +35,7 @@ func NewBuilderDependencies(
 	descsCollection *descs.Collection,
 	schemaResolver resolver.SchemaResolver,
 	authAccessor scbuild.AuthorizationAccessor,
+	astFormatter scbuild.AstFormatter,
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
@@ -48,6 +49,7 @@ func NewBuilderDependencies(
 		sessionData:     sessionData,
 		settings:        settings,
 		statements:      statements,
+		astFormatter:    astFormatter,
 	}
 }
 
@@ -60,6 +62,7 @@ type buildDeps struct {
 	sessionData     *sessiondata.SessionData
 	settings        *cluster.Settings
 	statements      []string
+	astFormatter    scbuild.AstFormatter
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -222,4 +225,8 @@ func (d *buildDeps) ClusterSettings() *cluster.Settings {
 // Statements implements the scbuild.Dependencies interface.
 func (d *buildDeps) Statements() []string {
 	return d.statements
+}
+
+func (d *buildDeps) AstFormatter() scbuild.AstFormatter {
+	return d.astFormatter
 }
