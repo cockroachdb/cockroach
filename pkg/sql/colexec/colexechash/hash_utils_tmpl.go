@@ -22,6 +22,7 @@
 package colexechash
 
 import (
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -41,6 +42,7 @@ var (
 	_ = coldataext.Hash
 	_ json.JSON
 	_ tree.Datum
+	_ apd.Context
 )
 
 // {{/*

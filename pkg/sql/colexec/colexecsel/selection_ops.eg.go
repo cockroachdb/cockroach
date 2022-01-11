@@ -629,9 +629,9 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -658,9 +658,9 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -683,9 +683,9 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -709,9 +709,9 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -771,9 +771,9 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -803,9 +803,9 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -829,9 +829,9 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -858,9 +858,9 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -917,9 +917,9 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -946,9 +946,9 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -971,9 +971,9 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -997,9 +997,9 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1059,9 +1059,9 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1091,9 +1091,9 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1117,9 +1117,9 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1146,9 +1146,9 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1205,9 +1205,9 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1234,9 +1234,9 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1259,9 +1259,9 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1285,9 +1285,9 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1347,9 +1347,9 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1379,9 +1379,9 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1405,9 +1405,9 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1434,9 +1434,9 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1493,11 +1493,11 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1524,11 +1524,11 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1551,11 +1551,11 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1579,11 +1579,11 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1643,11 +1643,11 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1677,11 +1677,11 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1705,11 +1705,11 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -1736,11 +1736,11 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult == 0
@@ -3413,9 +3413,9 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -3442,9 +3442,9 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -3467,9 +3467,9 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -3493,9 +3493,9 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -3555,9 +3555,9 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -3587,9 +3587,9 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -3613,9 +3613,9 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -3642,9 +3642,9 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -5077,9 +5077,9 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -5106,9 +5106,9 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -5131,9 +5131,9 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -5157,9 +5157,9 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -5219,9 +5219,9 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -5251,9 +5251,9 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -5277,9 +5277,9 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -5306,9 +5306,9 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -6741,9 +6741,9 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -6770,9 +6770,9 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -6795,9 +6795,9 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -6821,9 +6821,9 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -6883,9 +6883,9 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -6915,9 +6915,9 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -6941,9 +6941,9 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -6970,9 +6970,9 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -8597,11 +8597,11 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -8628,11 +8628,11 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -8655,11 +8655,11 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -8683,11 +8683,11 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult == 0
@@ -8747,11 +8747,11 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -8781,11 +8781,11 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -8809,11 +8809,11 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -8840,11 +8840,11 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult == 0
@@ -10507,9 +10507,9 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10536,9 +10536,9 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10561,9 +10561,9 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10587,9 +10587,9 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10649,9 +10649,9 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10681,9 +10681,9 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10707,9 +10707,9 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10736,9 +10736,9 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10795,9 +10795,9 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10824,9 +10824,9 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10849,9 +10849,9 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10875,9 +10875,9 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10937,9 +10937,9 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10969,9 +10969,9 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -10995,9 +10995,9 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11024,9 +11024,9 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11083,9 +11083,9 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11112,9 +11112,9 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11137,9 +11137,9 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11163,9 +11163,9 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11225,9 +11225,9 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11257,9 +11257,9 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11283,9 +11283,9 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11312,9 +11312,9 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11371,11 +11371,11 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11402,11 +11402,11 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11429,11 +11429,11 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11457,11 +11457,11 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11521,11 +11521,11 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11555,11 +11555,11 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11583,11 +11583,11 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -11614,11 +11614,11 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult != 0
@@ -13291,9 +13291,9 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -13320,9 +13320,9 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -13345,9 +13345,9 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -13371,9 +13371,9 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -13433,9 +13433,9 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -13465,9 +13465,9 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -13491,9 +13491,9 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -13520,9 +13520,9 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -14955,9 +14955,9 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -14984,9 +14984,9 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -15009,9 +15009,9 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -15035,9 +15035,9 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -15097,9 +15097,9 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -15129,9 +15129,9 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -15155,9 +15155,9 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -15184,9 +15184,9 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -16619,9 +16619,9 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -16648,9 +16648,9 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -16673,9 +16673,9 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -16699,9 +16699,9 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -16761,9 +16761,9 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -16793,9 +16793,9 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -16819,9 +16819,9 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -16848,9 +16848,9 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -18475,11 +18475,11 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -18506,11 +18506,11 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -18533,11 +18533,11 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -18561,11 +18561,11 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult != 0
@@ -18625,11 +18625,11 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -18659,11 +18659,11 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -18687,11 +18687,11 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -18718,11 +18718,11 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult != 0
@@ -20385,9 +20385,9 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20414,9 +20414,9 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20439,9 +20439,9 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20465,9 +20465,9 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20527,9 +20527,9 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20559,9 +20559,9 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20585,9 +20585,9 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20614,9 +20614,9 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20673,9 +20673,9 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20702,9 +20702,9 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20727,9 +20727,9 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20753,9 +20753,9 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20815,9 +20815,9 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20847,9 +20847,9 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20873,9 +20873,9 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20902,9 +20902,9 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20961,9 +20961,9 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -20990,9 +20990,9 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21015,9 +21015,9 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21041,9 +21041,9 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21103,9 +21103,9 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21135,9 +21135,9 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21161,9 +21161,9 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21190,9 +21190,9 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21249,11 +21249,11 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21280,11 +21280,11 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21307,11 +21307,11 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21335,11 +21335,11 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21399,11 +21399,11 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21433,11 +21433,11 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21461,11 +21461,11 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -21492,11 +21492,11 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult < 0
@@ -23169,9 +23169,9 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -23198,9 +23198,9 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -23223,9 +23223,9 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -23249,9 +23249,9 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -23311,9 +23311,9 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -23343,9 +23343,9 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -23369,9 +23369,9 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -23398,9 +23398,9 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -24833,9 +24833,9 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -24862,9 +24862,9 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -24887,9 +24887,9 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -24913,9 +24913,9 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -24975,9 +24975,9 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -25007,9 +25007,9 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -25033,9 +25033,9 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -25062,9 +25062,9 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -26497,9 +26497,9 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -26526,9 +26526,9 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -26551,9 +26551,9 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -26577,9 +26577,9 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -26639,9 +26639,9 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -26671,9 +26671,9 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -26697,9 +26697,9 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -26726,9 +26726,9 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -28353,11 +28353,11 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -28384,11 +28384,11 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -28411,11 +28411,11 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -28439,11 +28439,11 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult < 0
@@ -28503,11 +28503,11 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -28537,11 +28537,11 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -28565,11 +28565,11 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -28596,11 +28596,11 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult < 0
@@ -30263,9 +30263,9 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30292,9 +30292,9 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30317,9 +30317,9 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30343,9 +30343,9 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30405,9 +30405,9 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30437,9 +30437,9 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30463,9 +30463,9 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30492,9 +30492,9 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30551,9 +30551,9 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30580,9 +30580,9 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30605,9 +30605,9 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30631,9 +30631,9 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30693,9 +30693,9 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30725,9 +30725,9 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30751,9 +30751,9 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30780,9 +30780,9 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30839,9 +30839,9 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30868,9 +30868,9 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30893,9 +30893,9 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30919,9 +30919,9 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -30981,9 +30981,9 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31013,9 +31013,9 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31039,9 +31039,9 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31068,9 +31068,9 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31127,11 +31127,11 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31158,11 +31158,11 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31185,11 +31185,11 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31213,11 +31213,11 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31277,11 +31277,11 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31311,11 +31311,11 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31339,11 +31339,11 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -31370,11 +31370,11 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult <= 0
@@ -33047,9 +33047,9 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -33076,9 +33076,9 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -33101,9 +33101,9 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -33127,9 +33127,9 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -33189,9 +33189,9 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -33221,9 +33221,9 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -33247,9 +33247,9 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -33276,9 +33276,9 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -34711,9 +34711,9 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -34740,9 +34740,9 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -34765,9 +34765,9 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -34791,9 +34791,9 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -34853,9 +34853,9 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -34885,9 +34885,9 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -34911,9 +34911,9 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -34940,9 +34940,9 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -36375,9 +36375,9 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -36404,9 +36404,9 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -36429,9 +36429,9 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -36455,9 +36455,9 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -36517,9 +36517,9 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -36549,9 +36549,9 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -36575,9 +36575,9 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -36604,9 +36604,9 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -38231,11 +38231,11 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -38262,11 +38262,11 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -38289,11 +38289,11 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -38317,11 +38317,11 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult <= 0
@@ -38381,11 +38381,11 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -38415,11 +38415,11 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -38443,11 +38443,11 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -38474,11 +38474,11 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult <= 0
@@ -40141,9 +40141,9 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40170,9 +40170,9 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40195,9 +40195,9 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40221,9 +40221,9 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40283,9 +40283,9 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40315,9 +40315,9 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40341,9 +40341,9 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40370,9 +40370,9 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40429,9 +40429,9 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40458,9 +40458,9 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40483,9 +40483,9 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40509,9 +40509,9 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40571,9 +40571,9 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40603,9 +40603,9 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40629,9 +40629,9 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40658,9 +40658,9 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40717,9 +40717,9 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40746,9 +40746,9 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40771,9 +40771,9 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40797,9 +40797,9 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40859,9 +40859,9 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40891,9 +40891,9 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40917,9 +40917,9 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -40946,9 +40946,9 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -41005,11 +41005,11 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -41036,11 +41036,11 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -41063,11 +41063,11 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -41091,11 +41091,11 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -41155,11 +41155,11 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -41189,11 +41189,11 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -41217,11 +41217,11 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -41248,11 +41248,11 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult > 0
@@ -42925,9 +42925,9 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -42954,9 +42954,9 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -42979,9 +42979,9 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -43005,9 +43005,9 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -43067,9 +43067,9 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -43099,9 +43099,9 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -43125,9 +43125,9 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -43154,9 +43154,9 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -44589,9 +44589,9 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -44618,9 +44618,9 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -44643,9 +44643,9 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -44669,9 +44669,9 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -44731,9 +44731,9 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -44763,9 +44763,9 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -44789,9 +44789,9 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -44818,9 +44818,9 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -46253,9 +46253,9 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -46282,9 +46282,9 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -46307,9 +46307,9 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -46333,9 +46333,9 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -46395,9 +46395,9 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -46427,9 +46427,9 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -46453,9 +46453,9 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -46482,9 +46482,9 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -48109,11 +48109,11 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -48140,11 +48140,11 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -48167,11 +48167,11 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -48195,11 +48195,11 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult > 0
@@ -48259,11 +48259,11 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -48293,11 +48293,11 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -48321,11 +48321,11 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -48352,11 +48352,11 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult > 0
@@ -50019,9 +50019,9 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50048,9 +50048,9 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50073,9 +50073,9 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50099,9 +50099,9 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50161,9 +50161,9 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50193,9 +50193,9 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50219,9 +50219,9 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50248,9 +50248,9 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50307,9 +50307,9 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50336,9 +50336,9 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50361,9 +50361,9 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50387,9 +50387,9 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50449,9 +50449,9 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50481,9 +50481,9 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50507,9 +50507,9 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50536,9 +50536,9 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50595,9 +50595,9 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50624,9 +50624,9 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50649,9 +50649,9 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50675,9 +50675,9 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(p.constArg))
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50737,9 +50737,9 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50769,9 +50769,9 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50795,9 +50795,9 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50824,9 +50824,9 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg2))
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50883,11 +50883,11 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50914,11 +50914,11 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50941,11 +50941,11 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -50969,11 +50969,11 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(p.constArg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -51033,11 +51033,11 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -51067,11 +51067,11 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -51095,11 +51095,11 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -51126,11 +51126,11 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg2)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(&arg1, tmpDec)
+							cmpResult = tree.CompareDecimals(&arg1, &tmpDec)
 						}
 
 						cmp = cmpResult >= 0
@@ -52803,9 +52803,9 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -52832,9 +52832,9 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -52857,9 +52857,9 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -52883,9 +52883,9 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -52945,9 +52945,9 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -52977,9 +52977,9 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -53003,9 +53003,9 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -53032,9 +53032,9 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -54467,9 +54467,9 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -54496,9 +54496,9 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -54521,9 +54521,9 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -54547,9 +54547,9 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -54609,9 +54609,9 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -54641,9 +54641,9 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -54667,9 +54667,9 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -54696,9 +54696,9 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -56131,9 +56131,9 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -56160,9 +56160,9 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -56185,9 +56185,9 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -56211,9 +56211,9 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg))
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -56273,9 +56273,9 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -56305,9 +56305,9 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -56331,9 +56331,9 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -56360,9 +56360,9 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(arg1))
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -57987,11 +57987,11 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -58018,11 +58018,11 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -58045,11 +58045,11 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -58073,11 +58073,11 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &p.constArg)
+							cmpResult = tree.CompareDecimals(&tmpDec, &p.constArg)
 						}
 
 						cmp = cmpResult >= 0
@@ -58137,11 +58137,11 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -58171,11 +58171,11 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -58199,11 +58199,11 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
@@ -58230,11 +58230,11 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 						var cmpResult int
 
 						{
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							if _, err := tmpDec.SetFloat64(float64(arg1)); err != nil {
 								colexecerror.ExpectedError(err)
 							}
-							cmpResult = tree.CompareDecimals(tmpDec, &arg2)
+							cmpResult = tree.CompareDecimals(&tmpDec, &arg2)
 						}
 
 						cmp = cmpResult >= 0
