@@ -102,10 +102,43 @@ func CreateUserDefinedSchemaDescriptor(
 		return nil, nil, err
 	}
 
+	owner := user
+	if !n.AuthRole.Undefined() {
+		exists, err := RoleExists(ctx, execCfg, txn, authRole)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !exists {
+			return nil, nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist",
+				n.AuthRole)
+		}
+		owner = authRole
+	}
+
+	desc, privs, err := CreateSchemaDescriptorWithPrivileges(ctx, execCfg.DB, execCfg.Codec, db, schemaName, user, owner, allocateID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return desc, privs, nil
+}
+
+// CreateSchemaDescriptorWithPrivileges creates a new schema descriptor with
+// the provided name and privileges.
+func CreateSchemaDescriptorWithPrivileges(
+	ctx context.Context,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	db catalog.DatabaseDescriptor,
+	schemaName string,
+	user, owner security.SQLUsername,
+	allocateID bool,
+) (*schemadesc.Mutable, *descpb.PrivilegeDescriptor, error) {
 	// Create the ID.
 	var id descpb.ID
+	var err error
 	if allocateID {
-		id, err = catalogkv.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
+		id, err = catalogkv.GenerateUniqueDescID(ctx, kvDB, codec)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -120,19 +153,7 @@ func CreateUserDefinedSchemaDescriptor(
 		db.GetPrivileges(),
 	)
 
-	if !n.AuthRole.Undefined() {
-		exists, err := RoleExists(ctx, execCfg, txn, authRole)
-		if err != nil {
-			return nil, nil, err
-		}
-		if !exists {
-			return nil, nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist",
-				n.AuthRole)
-		}
-		privs.SetOwner(authRole)
-	} else {
-		privs.SetOwner(user)
-	}
+	privs.SetOwner(owner)
 
 	// Create the SchemaDescriptor.
 	desc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
