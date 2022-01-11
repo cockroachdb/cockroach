@@ -31,10 +31,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/redact"
 )
+
+// FormatAstAsRedactableString implements scbuild.AstFormatter
+func (p *planner) FormatAstAsRedactableString(
+	statement tree.Statement, annotations *tree.Annotations,
+) redact.RedactableString {
+	return formatStmtKeyAsRedactableString(p.getVirtualTabler(),
+		statement,
+		annotations)
+}
 
 // SchemaChange provides the planNode for the new schema changer.
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, bool, error) {
+
 	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
 	// When new schema changer is on we will not support it for explicit
@@ -51,6 +62,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p.ExecCfg().Codec,
 		p.Txn(),
 		p.Descriptors(),
+		p,
 		p,
 		p,
 		p.SessionData(),

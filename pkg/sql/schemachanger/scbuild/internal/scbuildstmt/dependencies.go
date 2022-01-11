@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/redact"
 )
 
 // BuildCtx wraps BuilderState and exposes various convenience methods for the
@@ -33,6 +34,7 @@ type BuildCtx interface {
 	Dependencies
 	BuilderState
 	EventLogState
+	TreeAnnotator
 
 	TreeContextBuilder
 	PrivilegeChecker
@@ -64,6 +66,8 @@ type Dependencies interface {
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
+
+	AstFormatter() AstFormatter
 }
 
 // CatalogReader should implement descriptor resolution, namespace lookups, and
@@ -265,4 +269,24 @@ type TableElementIDGenerator interface {
 	// NextIndexID returns the ID that should be used for any new index added to
 	// this table descriptor.
 	NextIndexID(tbl catalog.TableDescriptor) descpb.IndexID
+}
+
+// AstFormatter provides interfaces for formatting AST nodes.
+type AstFormatter interface {
+	// FormatAstAsRedactableString formats a tree.Statement into SQL with fully
+	// qualified names, where parts can be redacted.
+	FormatAstAsRedactableString(statement tree.Statement, annotations *tree.Annotations) redact.RedactableString
+}
+
+// TreeAnnotator provides interfaces to be able to modify the AST safely,
+// by providing a copy and support for adding annotations.
+type TreeAnnotator interface {
+
+	// SetUnresolvedNameAnnotation sets an annotation on an unresolved object name.
+	SetUnresolvedNameAnnotation(unresolvedName *tree.UnresolvedObjectName, ann interface{})
+
+	// MarkNameAsNonExistent indicates that a table name is non-existent
+	// in the AST, which will cause it to skip full namespace resolution
+	// validation.
+	MarkNameAsNonExistent(name *tree.TableName)
 }

@@ -982,7 +982,7 @@ query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog;
 ----
-1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW v1ev CASCADE", "User": "root", "ViewName": "test.public.v1ev"}
+1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW test.public.v1ev CASCADE", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.v1ev"}
 
 statement ok
 CREATE VIEW v1ev AS (SELECT name FROM T1EV);
@@ -1001,8 +1001,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE t1ev, t2ev CASCADE", "TableName": "test.public.t2ev", "User": "root"}
-1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE t1ev, t2ev CASCADE", "TableName": "test.public.t1ev", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t2ev", "Tag": "DROP TABLE", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t1ev", "Tag": "DROP TABLE", "User": "root"}
 
 statement ok
 CREATE TABLE fooev (i INT PRIMARY KEY);
@@ -1018,7 +1018,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE fooev ADD COLUMN j INT8", "TableName": "test.public.fooev", "User": "root"}
+1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.fooev ADD COLUMN j INT8", "TableName": "test.public.fooev", "Tag": "ALTER TABLE", "User": "root"}
 
 subtest names-with-escaped-chars
 
@@ -1065,8 +1065,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["'db1-a'.public", "'db1-a'.sc1", "'db1-a'.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "User": "root"}
-1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.public", "db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "User": "root"}
+1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["'db1-a'.public", "'db1-a'.sc1", "'db1-a'.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.public", "db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "Tag": "DROP DATABASE", "User": "root"}
 
 # Sanity: Dropping multiple objects in the builder or resolving any dependencies
 # should function fine.

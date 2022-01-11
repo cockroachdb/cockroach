@@ -29,11 +29,19 @@ func Build(
 	initial = initial.DeepCopy()
 	bs := newBuilderState(initial)
 	els := newEventLogState(dependencies, initial, n)
+	// TODO(fqazi): The optimizer can end up already modifying the statement above
+	// to fully resolve names. We need to take this into account for CTAS/CREATE
+	// VIEW statements.
+	an, err := newAstAnnotator(n)
+	if err != nil {
+		return scpb.CurrentState{}, err
+	}
 	b := buildCtx{
 		Context:       ctx,
 		Dependencies:  dependencies,
 		BuilderState:  bs,
 		EventLogState: els,
+		TreeAnnotator: an,
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -44,7 +52,10 @@ func Build(
 			}
 		}
 	}()
-	scbuildstmt.Process(b, n)
+	scbuildstmt.Process(b, an.GetStatement())
+	an.ValidateAnnotations()
+	els.statements[len(els.statements)-1].RedactedStatement =
+		string(els.astFormatter.FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 	ts := scpb.TargetState{
 		Targets:       make([]scpb.Target, len(bs.output)),
 		Statements:    els.statements,
@@ -71,6 +82,10 @@ type (
 	// AuthorizationAccessor contains all privilege checking operations required
 	// by the builder.
 	AuthorizationAccessor = scbuildstmt.AuthorizationAccessor
+
+	// AstFormatter contains operations for formatting out AST nodes into
+	// SQL statement text.
+	AstFormatter = scbuildstmt.AstFormatter
 )
 
 type elementState struct {
@@ -116,6 +131,9 @@ type eventLogState struct {
 	// for any new elements added. This is used for detailed
 	// tracking during cascade operations.
 	sourceElementID *scpb.SourceElementID
+
+	// astFormatter used to format AST elements as redactable strings.
+	astFormatter AstFormatter
 }
 
 // newEventLogState constructs an eventLogState.
@@ -125,7 +143,8 @@ func newEventLogState(
 	stmts := initial.Statements
 	els := eventLogState{
 		statements: append(stmts, scpb.Statement{
-			Statement: n.String(),
+			Statement:    n.String(),
+			StatementTag: n.StatementTag(),
 		}),
 		authorization: scpb.Authorization{
 			AppName:  d.SessionData().ApplicationName,
@@ -137,6 +156,7 @@ func newEventLogState(
 			SubWorkID:       1,
 			SourceElementID: 1,
 		},
+		astFormatter: d.AstFormatter(),
 	}
 	*els.sourceElementID = 1
 	return &els
@@ -150,6 +170,7 @@ type buildCtx struct {
 	scbuildstmt.Dependencies
 	scbuildstmt.BuilderState
 	scbuildstmt.EventLogState
+	scbuildstmt.TreeAnnotator
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
@@ -160,6 +181,7 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		Context:       b.Context,
 		Dependencies:  b.Dependencies,
 		BuilderState:  b.BuilderState,
+		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
 }
