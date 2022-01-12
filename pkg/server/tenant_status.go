@@ -1042,3 +1042,31 @@ func (t *tenantStatusServer) NodesList(
 	}
 	return &resp, err
 }
+
+func (t *tenantStatusServer) TxnIDResolution(
+	ctx context.Context, req *serverpb.TxnIDResolutionRequest,
+) (*serverpb.TxnIDResolutionResponse, error) {
+	ctx = t.AnnotateCtx(propagateGatewayMetadata(ctx))
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	instanceID, local, err := t.parseInstanceID(req.CoordinatorID)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if local {
+		return t.localTxnIDResolution(req), nil
+	}
+
+	instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	statusClient, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	return statusClient.TxnIDResolution(ctx, req)
+}
