@@ -204,7 +204,7 @@ func NewColBatchScan(
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
-	table := spec.BuildTableDescriptor()
+	table := flowCtx.TableDescriptor(&spec.Table)
 	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
 	tableArgs, _, err := populateTableArgs(
 		ctx, flowCtx, table, table.ActiveIndexes()[spec.IndexIdx],
