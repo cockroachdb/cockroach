@@ -1425,97 +1425,99 @@ func (a *Allocator) TransferLeaseTarget(
 		return candidates[a.randGen.Intn(len(candidates))]
 
 	case qpsConvergence:
+		leaseReplQPS, _ := stats.avgQPS()
+		candidates := make([]roachpb.StoreID, 0, len(existing)-1)
+		for _, repl := range existing {
+			if repl.StoreID != leaseRepl.StoreID() {
+				candidates = append(candidates, repl.StoreID)
+			}
+		}
+
 		// When the goal is to further QPS convergence across stores, we ensure that
 		// any lease transfer decision we make *reduces the delta between the store
 		// serving the highest QPS and the store serving the lowest QPS* among our
 		// list of candidates.
+		bestStore, noRebalanceReason := bestStoreToMinimizeQPSDelta(
+			leaseReplQPS,
+			qpsRebalanceThreshold.Get(&a.storePool.st.SV),
+			minQPSDifferenceForTransfers.Get(&a.storePool.st.SV),
+			leaseRepl.StoreID(),
+			candidates,
+			storeDescMap,
+		)
 
-		// Create a separate map of store_id -> qps that we can manipulate in order
-		// to simulate the resulting QPS distribution of various potential lease
-		// transfer decisions.
-		storeQPSMap := make(map[roachpb.StoreID]float64)
-		for _, storeDesc := range storeDescMap {
-			storeQPSMap[storeDesc.StoreID] = storeDesc.Capacity.QueriesPerSecond
-		}
-
-		leaseholderStoreQPS, ok := storeQPSMap[leaseRepl.StoreID()]
-		if !ok {
+		switch noRebalanceReason {
+		case noBetterCandidate:
+			log.VEventf(ctx, 5, "r%d: could not find a better target for lease", leaseRepl.GetRangeID())
+			return roachpb.ReplicaDescriptor{}
+		case existingNotOverfull:
 			log.VEventf(
-				ctx, 3, "cannot find store descriptor for leaseholder s%d;"+
-					" skipping this range", leaseRepl.StoreID(),
+				ctx, 5, "r%d: existing leaseholder s%d is not overfull",
+				leaseRepl.GetRangeID(), leaseRepl.StoreID(),
 			)
 			return roachpb.ReplicaDescriptor{}
+		case deltaNotSignificant:
+			log.VEventf(
+				ctx, 5,
+				"r%d: delta between s%d and the coldest follower (ignoring r%d's lease) is not large enough",
+				leaseRepl.GetRangeID(), leaseRepl.StoreID(), leaseRepl.GetRangeID(),
+			)
+			return roachpb.ReplicaDescriptor{}
+		case significantlySwitchesRelativeDisposition:
+			log.VEventf(ctx, 5,
+				"r%d: lease transfer away from s%d would make it hotter than the coldest follower",
+				leaseRepl.GetRangeID(), leaseRepl.StoreID())
+			return roachpb.ReplicaDescriptor{}
+		case missingStatsForExistingStore:
+			log.VEventf(
+				ctx, 5, "r%d: missing stats for leaseholder s%d",
+				leaseRepl.GetRangeID(), leaseRepl.StoreID(),
+			)
+			return roachpb.ReplicaDescriptor{}
+		case none:
+		default:
+			log.Fatalf(ctx, "unknown declineReason: %v", noRebalanceReason)
 		}
 
-		leaseholderReplQPS, _ := stats.avgQPS()
-		currentDelta := getQPSDelta(storeQPSMap, existing)
-		bestOption := getCandidateWithMinQPS(storeQPSMap, existing)
-		if bestOption != (roachpb.ReplicaDescriptor{}) && bestOption.StoreID != leaseRepl.StoreID() &&
-			// It is always beneficial to transfer the lease to the coldest candidate
-			// if the range's own qps is smaller than the difference between the
-			// leaseholder store and the candidate store. This will always drive down
-			// the difference between those two stores, which should always drive down
-			// the difference between the store serving the highest QPS and the store
-			// serving the lowest QPS.
-			//
-			// TODO(aayush): We should think about whether we need any padding here.
-			// Not adding any sort of padding could make this a little sensitive, but
-			// there are some downsides to doing so. If the padding here is too high,
-			// we're going to keep ignoring opportunities for lease transfers for
-			// ranges with low QPS. This can add up and prevent us from achieving
-			// convergence in cases where we're dealing with a ton of very low-QPS
-			// ranges.
-			(leaseholderStoreQPS-leaseholderReplQPS) > storeQPSMap[bestOption.StoreID] {
-			storeQPSMap[leaseRepl.StoreID()] -= leaseholderReplQPS
-			storeQPSMap[bestOption.StoreID] += leaseholderReplQPS
-			minDelta := getQPSDelta(storeQPSMap, existing)
-			log.VEventf(
-				ctx,
-				3,
-				"lease transfer to s%d would reduce the QPS delta between this ranges' stores from %.2f to %.2f",
-				bestOption.StoreID,
-				currentDelta,
-				minDelta,
-			)
-			return bestOption
+		for _, repl := range existing {
+			if repl.StoreID == bestStore {
+				return repl
+			}
 		}
-		return roachpb.ReplicaDescriptor{}
+		panic("unreachable")
 	default:
 		log.Fatalf(ctx, "unexpected lease transfer goal %d", g)
 	}
 	panic("unreachable")
 }
 
-// getCandidateWithMinQPS returns the `ReplicaDescriptor` that belongs to the
-// store serving the lowest QPS among all the `existing` replicas.
+// getCandidateWithMinQPS returns the StoreID that belongs to the store serving
+// the lowest QPS among all the `candidates` stores.
 func getCandidateWithMinQPS(
-	storeQPSMap map[roachpb.StoreID]float64, existing []roachpb.ReplicaDescriptor,
-) roachpb.ReplicaDescriptor {
+	storeQPSMap map[roachpb.StoreID]float64, candidates []roachpb.StoreID,
+) (bestCandidate roachpb.StoreID) {
 	minCandidateQPS := math.MaxFloat64
-	var candidateWithMin roachpb.ReplicaDescriptor
-	for _, repl := range existing {
-		candidateQPS, ok := storeQPSMap[repl.StoreID]
+	for _, store := range candidates {
+		candidateQPS, ok := storeQPSMap[store]
 		if !ok {
 			continue
 		}
 		if minCandidateQPS > candidateQPS {
 			minCandidateQPS = candidateQPS
-			candidateWithMin = repl
+			bestCandidate = store
 		}
 	}
-	return candidateWithMin
+	return bestCandidate
 }
 
 // getQPSDelta returns the difference between the store serving the highest QPS
-// and the store serving the lowest QPS, among the set of stores that have an
-// `existing` replica.
-func getQPSDelta(
-	storeQPSMap map[roachpb.StoreID]float64, existing []roachpb.ReplicaDescriptor,
-) float64 {
+// and the store serving the lowest QPS, among the set of stores in the
+// `domain`.
+func getQPSDelta(storeQPSMap map[roachpb.StoreID]float64, domain []roachpb.StoreID) float64 {
 	maxCandidateQPS := float64(0)
 	minCandidateQPS := math.MaxFloat64
-	for _, repl := range existing {
-		candidateQPS, ok := storeQPSMap[repl.StoreID]
+	for _, cand := range domain {
+		candidateQPS, ok := storeQPSMap[cand]
 		if !ok {
 			continue
 		}
