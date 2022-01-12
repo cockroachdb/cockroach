@@ -343,6 +343,9 @@ func WriteDescriptors(
 			// behavior if the cluster version is bumped DURING a restore.
 			dKey := catalogkv.MakeDatabaseNameKey(ctx, settings, desc.GetName())
 			b.CPut(dKey.Key(codec), desc.GetID(), nil)
+
+			// We also have to put a system.namespace entry for the public schema.
+			b.CPut(catalogkeys.NewPublicSchemaKey(desc.GetID()).Key(codec), keys.PublicSchemaID, nil)
 		}
 
 		// Write namespace and descriptor entries for each schema.
