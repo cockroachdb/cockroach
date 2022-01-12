@@ -11,6 +11,8 @@
 package security_test
 
 import (
+	"crypto/ed25519"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -57,6 +59,9 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 	))
 	require.NoError(t, security.CreateNodePair(
 		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
+
+	// Also check that the tenant signing cert gets created.
+	require.NoError(t, security.CreateTenantSigningPair(certsDir, 500*time.Hour, false /* overwrite */, tenant))
 	return certsDir, cleanup
 }
 
@@ -145,4 +150,16 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, fmt.Sprintf("hello, tenant %d", tenant), string(b))
+
+	// Verify that the tenant signing cert was set up correctly.
+	signingCert, err := cm.GetTenantSigningCert()
+	require.NoError(t, err)
+	privateKey, err := security.PEMToPrivateKey(signingCert.KeyFileContents)
+	require.NoError(t, err)
+	ed25519PrivateKey, isEd25519 := privateKey.(ed25519.PrivateKey)
+	require.True(t, isEd25519)
+	payload := []byte{1, 2, 3}
+	signature := ed25519.Sign(ed25519PrivateKey, payload)
+	err = signingCert.ParsedCertificates[0].CheckSignature(x509.PureEd25519, payload, signature)
+	require.NoError(t, err)
 }

@@ -1117,6 +1117,11 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 			if err := security.WriteTenantPair(certsDir, pair, false /* overwrite */); err != nil {
 				return err
 			}
+			if err := security.CreateTenantSigningPair(
+				certsDir, demoCtx.DefaultCertLifetime, false /* overwrite */, uint64(i+2),
+			); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

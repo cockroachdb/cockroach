@@ -13,6 +13,7 @@ package security
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
@@ -79,6 +80,12 @@ func PrivateKeyToPEM(key crypto.PrivateKey) (*pem.Block, error) {
 			return nil, errors.Wrap(err, "error marshaling ECDSA key")
 		}
 		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: bytes}, nil
+	case ed25519.PrivateKey:
+		bytes, err := x509.MarshalPKCS8PrivateKey(k)
+		if err != nil {
+			return nil, errors.Wrap(err, "error marshaling Ed25519 key")
+		}
+		return &pem.Block{Type: "PRIVATE KEY", Bytes: bytes}, nil
 	default:
 		return nil, errors.Errorf("unknown key type: %v", k)
 	}
@@ -136,7 +143,7 @@ func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
 	}
 	if key, err := x509.ParsePKCS8PrivateKey(der); err == nil {
 		switch key := key.(type) {
-		case *rsa.PrivateKey, *ecdsa.PrivateKey:
+		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey:
 			return key, nil
 		default:
 			return nil, errors.New("found unknown private key type in PKCS#8 wrapping")
