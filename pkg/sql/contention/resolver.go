@@ -147,7 +147,8 @@ func (q *resolverQueueImpl) resolveLocked(ctx context.Context) error {
 
 	// We sort the queue by the CoordinatorNodeID.
 	sort.Slice(queueCpy, func(i, j int) bool {
-		return queueCpy[i].Event.TxnMeta.CoordinatorNodeID < queueCpy[j].Event.TxnMeta.CoordinatorNodeID
+		return queueCpy[i].BlockingEvent.TxnMeta.CoordinatorNodeID <
+			queueCpy[j].BlockingEvent.TxnMeta.CoordinatorNodeID
 	})
 
 	currentBatch, remaining := readUntilNextCoordinatorID(queueCpy)
@@ -178,20 +179,20 @@ func (q *resolverQueueImpl) resolveLocked(ctx context.Context) error {
 			// again later. In this case, we don't want to update the retry
 			// record since we are confident that the txnID entry on the coordinator
 			// node has not yet being evicted.
-			if _, ok := inProgressTxnIDs[event.Event.TxnMeta.ID]; ok {
+			if _, ok := inProgressTxnIDs[event.BlockingEvent.TxnMeta.ID]; ok {
 				q.mu.unresolvedEvents = append(q.mu.unresolvedEvents, event)
 				// Clear any retry count if there is any.
-				delete(q.mu.remainingRetries, event.Event.TxnMeta.ID)
+				delete(q.mu.remainingRetries, event.BlockingEvent.TxnMeta.ID)
 				continue
 			}
 
 			// If we successfully resolveLocked the transaction ID, we append it to the
 			// resolvedEvent slice and clear remaining retry count if there is any.
-			if txnFingerprintID, ok := resolvedTxnIDs[event.Event.TxnMeta.ID]; ok {
-				event.TxnFingerprintID = txnFingerprintID
+			if txnFingerprintID, ok := resolvedTxnIDs[event.BlockingEvent.TxnMeta.ID]; ok {
+				event.BlockingTxnFingerprintID = txnFingerprintID
 				q.mu.resolvedEvents = append(q.mu.resolvedEvents, event)
 
-				delete(q.mu.remainingRetries, event.Event.TxnMeta.ID)
+				delete(q.mu.remainingRetries, event.BlockingEvent.TxnMeta.ID)
 				continue
 			}
 
@@ -219,16 +220,16 @@ func (q *resolverQueueImpl) maybeRequeueEventForRetryLocked(
 	// count. If its retry budget is exhausted, we discard it. Else, we
 	// re-queue the event for retry and decrement its retry budget for the
 	// event.
-	remainingRetryBudget, ok := q.mu.remainingRetries[event.Event.TxnMeta.ID]
+	remainingRetryBudget, ok := q.mu.remainingRetries[event.BlockingEvent.TxnMeta.ID]
 	if !ok {
 		remainingRetryBudget = initialBudget
 	} else {
 		remainingRetryBudget--
 	}
-	q.mu.remainingRetries[event.Event.TxnMeta.ID] = remainingRetryBudget
+	q.mu.remainingRetries[event.BlockingEvent.TxnMeta.ID] = remainingRetryBudget
 
 	if remainingRetryBudget == 0 {
-		delete(q.mu.remainingRetries, event.Event.TxnMeta.ID)
+		delete(q.mu.remainingRetries, event.BlockingEvent.TxnMeta.ID)
 		return false /* requeued */
 	}
 
@@ -243,9 +244,9 @@ func readUntilNextCoordinatorID(
 		return nil /* eventsForFirstCoordinator */, nil /* remaining */
 	}
 
-	currentCoordinatorID := sortedEvents[0].Event.TxnMeta.CoordinatorNodeID
+	currentCoordinatorID := sortedEvents[0].BlockingEvent.TxnMeta.CoordinatorNodeID
 	for idx, event := range sortedEvents {
-		if event.Event.TxnMeta.CoordinatorNodeID != currentCoordinatorID {
+		if event.BlockingEvent.TxnMeta.CoordinatorNodeID != currentCoordinatorID {
 			return sortedEvents[:idx], sortedEvents[idx:]
 		}
 	}
@@ -274,12 +275,12 @@ func makeRPCRequestFromBatch(
 	batch []contentionpb.ExtendedContentionEvent,
 ) *serverpb.TxnIDResolutionRequest {
 	req := &serverpb.TxnIDResolutionRequest{
-		CoordinatorID: strconv.Itoa(int(batch[0].Event.TxnMeta.CoordinatorNodeID)),
+		CoordinatorID: strconv.Itoa(int(batch[0].BlockingEvent.TxnMeta.CoordinatorNodeID)),
 		TxnIDs:        make([]uuid.UUID, 0, len(batch)),
 	}
 
 	for _, event := range batch {
-		req.TxnIDs = append(req.TxnIDs, event.Event.TxnMeta.ID)
+		req.TxnIDs = append(req.TxnIDs, event.BlockingEvent.TxnMeta.ID)
 	}
 
 	return req
