@@ -214,7 +214,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in the column expressions.
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
+		resolver := flowCtx.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
 		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), &resolver); err != nil {
 			return err
@@ -248,7 +248,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	// Release leases on any accessed types now that type metadata is installed.
 	// We do this so that leases on any accessed types are not held for the
 	// entire backfill process.
-	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
+	flowCtx.Descriptors.ReleaseAll(ctx)
 
 	rowMetrics := flowCtx.GetRowMetrics()
 	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
@@ -627,7 +627,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
+		resolver := flowCtx.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
 		if err = typedesc.HydrateTypesInTableDescriptor(
 			ctx, desc.TableDesc(), &resolver,
@@ -648,7 +648,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	// Release leases on any accessed types now that type metadata is installed.
 	// We do this so that leases on any accessed types are not held for the
 	// entire backfill process.
-	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
+	flowCtx.Descriptors.ReleaseAll(ctx)
 
 	// Add the columns referenced in the predicate to valNeededForCol so that
 	// columns necessary to evaluate the predicate expression are fetched.

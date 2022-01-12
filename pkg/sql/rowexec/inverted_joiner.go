@@ -195,7 +195,7 @@ func newInvertedJoiner(
 		return nil, errors.AssertionFailedf("unexpected inverted join type %s", spec.Type)
 	}
 	ij := &invertedJoiner{
-		desc:                 spec.BuildTableDescriptor(),
+		desc:                 flowCtx.TableDescriptor(&spec.Table),
 		input:                input,
 		inputTypes:           input.OutputTypes(),
 		prefixEqualityCols:   spec.PrefixEqualityColumns,
@@ -273,7 +273,7 @@ func newInvertedJoiner(
 		return nil, err
 	}
 
-	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+	semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
 	onExprColTypes := make([]*types.T, 0, len(ij.inputTypes)+len(rightColTypes))
 	onExprColTypes = append(onExprColTypes, ij.inputTypes...)
 	onExprColTypes = append(onExprColTypes, rightColTypes...)

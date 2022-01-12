@@ -161,7 +161,7 @@ func populateTableArgs(
 	// make sure they are hydrated. In row execution engine it is done during
 	// the processor initialization, but neither ColBatchScan nor cFetcher are
 	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
 	return args, neededColumns, resolver.HydrateTypeSlice(ctx, args.typs)
 }
 
