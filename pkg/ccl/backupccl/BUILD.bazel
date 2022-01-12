@@ -162,6 +162,7 @@ go_test(
         "//pkg/blobs",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/multitenantccl",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
