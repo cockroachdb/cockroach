@@ -312,6 +312,7 @@ go_library(
         "//pkg/sql/colflow",
         "//pkg/sql/contention",
         "//pkg/sql/contention/txnidcache",
+        "//pkg/sql/contentionpb",
         "//pkg/sql/covering",
         "//pkg/sql/delegate",
         "//pkg/sql/descmetadata",

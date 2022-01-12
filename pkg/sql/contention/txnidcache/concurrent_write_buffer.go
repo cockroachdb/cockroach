@@ -14,12 +14,13 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const messageBlockSize = 1024
 
-type messageBlock [messageBlockSize]ResolvedTxnID
+type messageBlock [messageBlockSize]contentionpb.ResolvedTxnID
 
 // concurrentWriteBuffer is a data structure that optimizes for concurrent
 // writes and also implements the Writer interface.
@@ -72,7 +73,7 @@ func newConcurrentWriteBuffer(sink messageSink, msgBlockPool *sync.Pool) *concur
 
 // Record records a mapping from txnID to its corresponding transaction
 // fingerprint ID. Record is safe to be used concurrently.
-func (c *concurrentWriteBuffer) Record(resolvedTxnID ResolvedTxnID) {
+func (c *concurrentWriteBuffer) Record(resolvedTxnID contentionpb.ResolvedTxnID) {
 	c.flushSyncLock.RLock()
 	defer c.flushSyncLock.RUnlock()
 	for {

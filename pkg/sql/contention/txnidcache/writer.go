@@ -13,6 +13,7 @@ package txnidcache
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -44,7 +45,7 @@ func newWriter(sink messageSink, msgBlockPool *sync.Pool) *writer {
 }
 
 // Record implements the Writer interface.
-func (w *writer) Record(resolvedTxnID ResolvedTxnID) {
+func (w *writer) Record(resolvedTxnID contentionpb.ResolvedTxnID) {
 	shardIdx := hashTxnID(resolvedTxnID.TxnID)
 	buffer := w.shards[shardIdx]
 	buffer.Record(resolvedTxnID)
