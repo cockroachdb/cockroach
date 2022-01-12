@@ -59,7 +59,7 @@ SequenceDependency :  Type
 object UniqueConstraint
 
 UniqueConstraint :  ConstraintType
-UniqueConstraint :  ConstraintOrdinal
+UniqueConstraint :  ConstraintId
 UniqueConstraint :  TableID
 UniqueConstraint :  IndexID
 UniqueConstraint : []ColumnIDs
@@ -67,7 +67,7 @@ UniqueConstraint : []ColumnIDs
 object CheckConstraint
 
 CheckConstraint :  ConstraintType
-CheckConstraint :  ConstraintOrdinal
+CheckConstraint :  ConstraintId
 CheckConstraint :  TableID
 CheckConstraint :  Name
 CheckConstraint :  Expr
@@ -185,7 +185,7 @@ object ConstraintName
 
 ConstraintName :  TableID
 ConstraintName :  ConstraintType
-ConstraintName :  ConstraintOrdinal
+ConstraintName :  ConstraintId
 ConstraintName :  Name
 
 object DefaultExprTypeReference
@@ -225,7 +225,7 @@ DatabaseSchemaEntry :  SchemaID
 object CheckConstraintTypeReference
 
 CheckConstraintTypeReference :  TableID
-CheckConstraintTypeReference :  ConstraintOrdinal
+CheckConstraintTypeReference :  ConstraintId
 CheckConstraintTypeReference :  TypeID
 
 Table <|-- Column

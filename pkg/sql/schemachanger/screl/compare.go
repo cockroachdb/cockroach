@@ -22,7 +22,7 @@ var equalityAttrs = []rel.Attr{
 	ReferencedDescID,
 	ColumnID,
 	ConstraintType,
-	ConstraintOrdinal,
+	ConstraintId,
 	Name,
 	Username,
 	IndexID,

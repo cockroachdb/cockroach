@@ -140,7 +140,7 @@ message SequenceDependency {
 message UniqueConstraint {
   option (gogoproto.equal) = true;
   ConstraintType constraint_type = 1;
-  uint32 constraint_ordinal = 2;
+  uint32 constraint_id = 2;
   uint32 table_id = 3 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   uint32 index_id = 4 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
   repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
@@ -149,7 +149,7 @@ message UniqueConstraint {
 message CheckConstraint {
   option (gogoproto.equal) = true;
   ConstraintType constraint_type = 1;
-  uint32 constraint_ordinal = 2;
+  uint32 constraint_id = 2;
   uint32 table_id = 3 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   string name = 4;
   string expr = 5;
@@ -211,7 +211,7 @@ message ColumnTypeReference {
 message CheckConstraintTypeReference {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  uint32 constraint_ordinal = 2;
+  uint32 constraint_id = 2;
   uint32 type_id = 3 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
@@ -338,7 +338,7 @@ message ConstraintName {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   ConstraintType constraint_type = 2;
-  uint32 constraint_ordinal = 3;
+  uint32 constraint_id = 3;
   string name = 4;
 }
 

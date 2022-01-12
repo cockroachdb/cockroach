@@ -68,8 +68,8 @@ const (
 	Username
 	// ConstraintType is the ID of a constraint
 	ConstraintType
-	// ConstraintOrdinal is the ordinal of the constraints
-	ConstraintOrdinal
+	// ConstraintId is the ordinal of the constraints
+	ConstraintId
 )
 
 var t = reflect.TypeOf
@@ -106,13 +106,13 @@ var Schema = rel.MustSchema("screl",
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ConstraintType, "ConstraintType"),
-		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
+		rel.EntityAttr(ConstraintId, "ConstraintId"),
 	),
 	rel.EntityMapping(t((*scpb.CheckConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(Name, "Name"),
 		rel.EntityAttr(ConstraintType, "ConstraintType"),
-		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
+		rel.EntityAttr(ConstraintId, "ConstraintId"),
 	),
 	rel.EntityMapping(t((*scpb.Sequence)(nil)),
 		rel.EntityAttr(DescID, "SequenceID"),
@@ -146,7 +146,7 @@ var Schema = rel.MustSchema("screl",
 	),
 	rel.EntityMapping(t((*scpb.CheckConstraintTypeReference)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
+		rel.EntityAttr(ConstraintId, "ConstraintId"),
 		rel.EntityAttr(ReferencedDescID, "TypeID"),
 	),
 	rel.EntityMapping(t((*scpb.ViewDependsOnType)(nil)),
@@ -215,7 +215,7 @@ var Schema = rel.MustSchema("screl",
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(Name, "Name"),
 		rel.EntityAttr(ConstraintType, "ConstraintType"),
-		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
+		rel.EntityAttr(ConstraintId, "ConstraintId"),
 	),
 	rel.EntityMapping(t((*scpb.DatabaseSchemaEntry)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),

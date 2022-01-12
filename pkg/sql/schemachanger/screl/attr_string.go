@@ -19,12 +19,12 @@ func _() {
 	_ = x[Target-9]
 	_ = x[Username-10]
 	_ = x[ConstraintType-11]
-	_ = x[ConstraintOrdinal-12]
+	_ = x[ConstraintId-12]
 }
 
-const _Attr_name = "DescIDReferencedDescIDColumnIDNameIndexIDTargetStatusCurrentStatusElementTargetUsernameConstraintTypeConstraintOrdinal"
+const _Attr_name = "DescIDReferencedDescIDColumnIDNameIndexIDTargetStatusCurrentStatusElementTargetUsernameConstraintTypeConstraintId"
 
-var _Attr_index = [...]uint8{0, 6, 22, 30, 34, 41, 53, 66, 73, 79, 87, 101, 118}
+var _Attr_index = [...]uint8{0, 6, 22, 30, 34, 41, 53, 66, 73, 79, 87, 101, 113}
 
 func (i Attr) String() string {
 	i -= 1

@@ -178,9 +178,9 @@ func decomposeExprToElements(
 				}
 			case exprTypeCheck:
 				typeRef = &scpb.CheckConstraintTypeReference{
-					TableID:           tableID,
-					ConstraintOrdinal: expressionID,
-					TypeID:            typeID,
+					TableID:      tableID,
+					ConstraintId: expressionID,
+					TypeID:       typeID,
 				}
 			}
 			enqueue(b, targetStatus, typeRef)
@@ -432,17 +432,17 @@ func decomposeTableDescToElements(
 	// Add any constraints without indexes first.
 	for idx, constraint := range tbl.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
 		enqueue(b, targetStatus, &scpb.ConstraintName{
-			TableID:           tbl.GetID(),
-			ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
-			ConstraintOrdinal: uint32(idx),
-			Name:              constraint.Name,
+			TableID:        tbl.GetID(),
+			ConstraintType: scpb.ConstraintType_UniqueWithoutIndex,
+			ConstraintId:   uint32(idx),
+			Name:           constraint.Name,
 		})
 		enqueue(b, targetStatus, &scpb.UniqueConstraint{
-			TableID:           tbl.GetID(),
-			ConstraintType:    scpb.ConstraintType_UniqueWithoutIndex,
-			ConstraintOrdinal: uint32(idx),
-			IndexID:           0, // Invalid ID
-			ColumnIDs:         constraint.ColumnIDs,
+			TableID:        tbl.GetID(),
+			ConstraintType: scpb.ConstraintType_UniqueWithoutIndex,
+			ConstraintId:   uint32(idx),
+			IndexID:        0, // Invalid ID
+			ColumnIDs:      constraint.ColumnIDs,
 		})
 	}
 	// Add any check constraints next.
@@ -456,19 +456,19 @@ func decomposeTableDescToElements(
 			targetStatus,
 		)
 		enqueue(b, targetStatus, &scpb.ConstraintName{
-			TableID:           tbl.GetID(),
-			ConstraintType:    scpb.ConstraintType_Check,
-			ConstraintOrdinal: uint32(idx),
-			Name:              constraint.Name,
+			TableID:        tbl.GetID(),
+			ConstraintType: scpb.ConstraintType_Check,
+			ConstraintId:   uint32(idx),
+			Name:           constraint.Name,
 		})
 		enqueue(b, targetStatus, &scpb.CheckConstraint{
-			ConstraintType:    scpb.ConstraintType_Check,
-			ConstraintOrdinal: uint32(idx),
-			TableID:           tbl.GetID(),
-			Name:              constraint.Name,
-			Validated:         constraint.Validity == descpb.ConstraintValidity_Validated,
-			ColumnIDs:         constraint.ColumnIDs,
-			Expr:              constraint.Expr,
+			ConstraintType: scpb.ConstraintType_Check,
+			ConstraintId:   uint32(idx),
+			TableID:        tbl.GetID(),
+			Name:           constraint.Name,
+			Validated:      constraint.Validity == descpb.ConstraintValidity_Validated,
+			ColumnIDs:      constraint.ColumnIDs,
+			Expr:           constraint.Expr,
 		})
 	}
 	// Add locality information.
