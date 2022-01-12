@@ -23,22 +23,53 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
-// TestCastsVolatilityMatchesPostgres checks that our defined casts match
-// Postgres' casts for Volatility.
+// TestCastsMatchPostgres checks that the Volatility and CastContext of our
+// defined casts match Postgres' casts.
 //
-// Dump command below:
-// COPY (
-//   SELECT c.castsource, c.casttarget, p.provolatile, p.proleakproof
-//   FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
-// ) TO STDOUT WITH CSV DELIMITER '|' HEADER;
-func TestCastsVolatilityMatchesPostgres(t *testing.T) {
+// The command for generating pg_cast_dump.csv from psql is below. We ignore
+// types that we do not support, and we ignore geospatial types because they are
+// an extension of Postgres and have no official OIDs.
+//
+//   \copy (
+//     WITH ignored_types AS (
+//       SELECT t::regtype::oid t
+//       FROM (VALUES
+//         ('geography'),
+//         ('geometry'),
+//         ('box2d'),
+//         ('box3d'),
+//         ('tstzmultirange'),
+//         ('int4multirange'),
+//         ('int8multirange'),
+//         ('tstzmultirange'),
+//         ('tsmultirange'),
+//         ('datemultirange'),
+//         ('nummultirange')
+//       ) AS types(t)
+//     )
+//     SELECT
+//       c.castsource,
+//       c.casttarget,
+//       p.provolatile,
+//       p.proleakproof,
+//       c.castcontext,
+//       substring(version(), 'PostgreSQL (\d+\.\d+)') pg_version
+//     FROM pg_cast c JOIN pg_proc p ON (c.castfunc = p.oid)
+//     WHERE
+//       c.castsource NOT IN (SELECT t FROM ignored_types)
+//       AND c.casttarget NOT IN (SELECT t FROM ignored_types)
+//     ORDER BY 1, 2
+//   ) TO pg_cast_dump.csv WITH CSV DELIMITER '|' HEADER;
+//
+func TestCastsMatchPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	csvPath := filepath.Join("testdata", "pg_cast_provolatile_dump.csv")
+	csvPath := filepath.Join("testdata", "pg_cast_dump.csv")
 	f, err := os.Open(csvPath)
 	require.NoError(t, err)
 
@@ -51,11 +82,16 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	_, err = reader.Read()
 	require.NoError(t, err)
 
-	type pgCast struct {
-		from, to   oid.Oid
-		volatility Volatility
+	type pgCastKey struct {
+		from, to oid.Oid
 	}
-	var pgCasts []pgCast
+
+	type pgCastValue struct {
+		volatility Volatility
+		context    CastContext
+	}
+
+	pgCastMap := make(map[pgCastKey]pgCastValue)
 
 	for {
 		line, err := reader.Read()
@@ -63,7 +99,7 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 			break
 		}
 		require.NoError(t, err)
-		require.Len(t, line, 4)
+		require.Len(t, line, 6)
 
 		fromOid, err := strconv.Atoi(line[0])
 		require.NoError(t, err)
@@ -75,162 +111,64 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 		require.Len(t, provolatile, 1)
 		proleakproof := line[3]
 		require.Len(t, proleakproof, 1)
+		castcontext := line[4]
+		require.Len(t, castcontext, 1)
 
 		v, err := VolatilityFromPostgres(provolatile, proleakproof[0] == 't')
 		require.NoError(t, err)
 
-		pgCasts = append(pgCasts, pgCast{
-			from:       oid.Oid(fromOid),
-			to:         oid.Oid(toOid),
-			volatility: v,
-		})
-	}
+		c, err := castContextFromPostgres(castcontext)
+		require.NoError(t, err)
 
-	oidToFamily := func(o oid.Oid) (_ types.Family, ok bool) {
-		t, ok := types.OidToType[o]
-		if !ok {
-			return 0, false
-		}
-		return t.Family(), true
-	}
-
-	oidStr := func(o oid.Oid) string {
-		res, ok := oidext.TypeName(o)
-		if !ok {
-			res = fmt.Sprintf("%d", o)
-		}
-		return res
-	}
-
-	for _, c := range validCasts {
-		if c.volatility == 0 {
-			t.Errorf("cast %s::%s has no volatility set", c.from.Name(), c.to.Name())
-
-		}
-		if c.ignoreVolatilityCheck {
-			continue
-		}
-
-		// Look through all pg casts and find any where the Oids map to these
-		// families.
-		found := false
-		for i := range pgCasts {
-			fromFamily, fromOk := oidToFamily(pgCasts[i].from)
-			toFamily, toOk := oidToFamily(pgCasts[i].to)
-			if fromOk && toOk && fromFamily == c.from && toFamily == c.to {
-				found = true
-				if c.volatility != pgCasts[i].volatility {
-					t.Errorf("cast %s::%s has volatility %s; corresponding pg cast %s::%s has volatility %s",
-						c.from.Name(), c.to.Name(), c.volatility,
-						oidStr(pgCasts[i].from), oidStr(pgCasts[i].to), pgCasts[i].volatility,
-					)
-				}
-			}
-		}
-		if !found && testing.Verbose() {
-			t.Logf("cast %s::%s has no corresponding pg cast", c.from.Name(), c.to.Name())
-		}
+		pgCastMap[pgCastKey{oid.Oid(fromOid), oid.Oid(toOid)}] = pgCastValue{v, c}
 	}
 
 	for src := range castMap {
 		for tgt, c := range castMap[src] {
-			if c.volatility == volatilityTODO {
-				continue
-			}
-
 			// Find the corresponding pg cast.
-			found := false
-			for _, pgCast := range pgCasts {
-				if src == pgCast.from && tgt == pgCast.to {
-					found = true
-					if c.volatility != pgCast.volatility {
-						t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
-							oidStr(src), oidStr(tgt), c.volatility, pgCast.volatility,
-						)
-
-					}
-				}
-			}
-			if !found && testing.Verbose() {
+			pgCast, ok := pgCastMap[pgCastKey{src, tgt}]
+			if !ok && testing.Verbose() {
 				t.Logf("cast %s::%s has no corresponding pg cast", oidStr(src), oidStr(tgt))
+			}
+			if ok && c.volatility != pgCast.volatility {
+				t.Errorf("cast %s::%s has volatility %s; corresponding pg cast has volatility %s",
+					oidStr(src), oidStr(tgt), c.volatility, pgCast.volatility,
+				)
+			}
+			if ok && c.maxContext != pgCast.context {
+				t.Errorf("cast %s::%s has maxContext %s; corresponding pg cast has context %s",
+					oidStr(src), oidStr(tgt), c.maxContext, pgCast.context,
+				)
 			}
 		}
 	}
 }
 
-func TestCastMapIncludesValidCasts(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// familyToType returns the first type found of the given family.
-	familyToTypes := func(f types.Family) []*types.T {
-		var typs []*types.T
-		for _, typ := range types.OidToType {
-			if f == typ.Family() {
-				typs = append(typs, typ)
-			}
-		}
-		return typs
-	}
-
-	// findCast returns the first cast found from a type in srcTypes to a type
-	// in tgtTypes.
-	findCast := func(srcTypes, tgtTypes []*types.T) (_ cast, ok bool) {
-		for _, src := range srcTypes {
-			for _, tgt := range tgtTypes {
-				c, ok := lookupCast(
-					src,
-					tgt,
-					false, /* intervalStyleEnabled */
-					false, /* dateStyleEnabled */
-				)
-				if ok {
-					return c, true
-				}
-			}
-		}
-		return cast{}, false
-	}
-
-	// Validate that there is at least one cast in castMap for each cast in
-	// validCasts.
-	for _, c := range validCasts {
-		srcTypes := familyToTypes(c.from)
-		if len(srcTypes) == 0 {
-			continue
-		}
-
-		tgtTypes := familyToTypes(c.to)
-		if len(tgtTypes) == 0 {
-			continue
-		}
-
-		_, ok := findCast(srcTypes, tgtTypes)
-		if !ok {
-			t.Errorf(
-				"castMap should include at least one cast from family %s to family %s",
-				c.from.Name(), c.to.Name(),
-			)
-		}
+// castContextFromPostgres returns a CastContext that matches the castcontext
+// setting in Postgres's pg_cast table.
+func castContextFromPostgres(castcontext string) (CastContext, error) {
+	switch castcontext {
+	case "e":
+		return CastContextExplicit, nil
+	case "a":
+		return CastContextAssignment, nil
+	case "i":
+		return CastContextImplicit, nil
+	default:
+		return 0, errors.AssertionFailedf("invalid castcontext %s", castcontext)
 	}
 }
 
 // TestCastsFromUnknown verifies that there is a cast from Unknown defined for
-// all type families.
+// all types.
 func TestCastsFromUnknown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for v := range types.Family_name {
-		switch fam := types.Family(v); fam {
-		case types.UnknownFamily, types.AnyFamily:
-			// These type families are exceptions.
-
-		default:
-			cast := lookupCastInfo(types.UnknownFamily, fam, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
-			if cast == nil {
-				t.Errorf("cast from Unknown to %s does not exist", fam)
-			}
+	for _, typ := range types.OidToType {
+		_, ok := lookupCast(types.Unknown, typ, false /* intervalStyleEnabled */, false /* dateStyleEnabled */)
+		if !ok {
+			t.Errorf("cast from Unknown to %s does not exist", typ.String())
 		}
 	}
 }
@@ -289,4 +227,12 @@ func TestTupleCastVolatility(t *testing.T) {
 			t.Errorf("from: %s  to: %s  expected: %s  got: %s", &from, &to, tc.exp, res)
 		}
 	}
+}
+
+func oidStr(o oid.Oid) string {
+	res, ok := oidext.TypeName(o)
+	if !ok {
+		res = fmt.Sprintf("%d", o)
+	}
+	return res
 }

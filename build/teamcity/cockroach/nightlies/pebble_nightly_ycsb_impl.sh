@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-#
-# This script runs the Pebble Nightly YCSB benchmarks.
-#
-# It is run by the Pebble Nightly - AWS TeamCity build
-# configuration.
 
 set -eo pipefail
 
 _dir="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Execute the common commands for the benchmark runs.
-. "$_dir/teamcity-nightly-pebble-common.sh"
+. "$_dir/pebble_nightly_common.sh"
 
 # Run the YCSB benchmark.
 #
@@ -27,6 +22,7 @@ if ! timeout -s INT $((1000*60)) bin/roachtest run \
   --cockroach "true" \
   --workload "true" \
   --artifacts "$artifacts" \
+  --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --parallelism 3 \
   --teamcity \
   --cpu-quota=384 \
