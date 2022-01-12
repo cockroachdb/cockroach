@@ -1749,7 +1749,9 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			)
 			res = stmtRes
 
-			ev, payload, err = ex.execStmt(ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes)
+			ev, payload, err = ex.execStmt(
+				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, false, /* isNextCmdSync */
+			)
 			return err
 		}()
 		// Note: we write to ex.statsCollector.PhaseTimes, instead of ex.phaseTimes,
@@ -1817,7 +1819,7 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				ex.implicitTxn(),
 			)
 			res = stmtRes
-			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo)
+			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo, tcmd.FollowedBySync)
 			return err
 		}()
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
