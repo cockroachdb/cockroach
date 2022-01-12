@@ -87,6 +87,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 // TODO(irfansharif): Make sure all the relevant binary targets are defined
 // above, and in usage docs.
 
+// buildTargetMapping maintains shorthands that map 1:1 with bazel targets.
 var buildTargetMapping = map[string]string{
 	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
 	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
@@ -255,7 +256,7 @@ func targetToBinBasename(target string) string {
 // (e.g. after translation, so short -> "//pkg/cmd/cockroach-short").
 func (d *dev) getBasicBuildArgs(
 	ctx context.Context, targets []string, skipGenerate bool,
-) (args []string, buildTargets []buildTarget, err error) {
+) (args []string, buildTargets []buildTarget, _ error) {
 	if len(targets) == 0 {
 		// Default to building the cockroach binary.
 		targets = append(targets, "cockroach")
@@ -277,8 +278,8 @@ func (d *dev) getBasicBuildArgs(
 			queryArgs := []string{"query", target, "--output=label_kind"}
 			labelKind, queryErr := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
 			if queryErr != nil {
-				err = fmt.Errorf("could not run `bazel %s` (%w)", shellescape.QuoteCommand(queryArgs), queryErr)
-				return
+				return nil, nil, fmt.Errorf("could not run `bazel %s` (%w)",
+					shellescape.QuoteCommand(queryArgs), queryErr)
 			}
 			for _, line := range strings.Split(strings.TrimSpace(string(labelKind)), "\n") {
 				fields := strings.Fields(line)
@@ -299,10 +300,10 @@ func (d *dev) getBasicBuildArgs(
 			}
 			continue
 		}
+
 		aliased, ok := buildTargetMapping[target]
 		if !ok {
-			err = fmt.Errorf("unrecognized target: %s", target)
-			return
+			return nil, nil, fmt.Errorf("unrecognized target: %s", target)
 		}
 
 		args = append(args, aliased)
@@ -324,7 +325,7 @@ func (d *dev) getBasicBuildArgs(
 		args = append(args, "--config=test")
 	}
 
-	return
+	return args, buildTargets, nil
 }
 
 // Hoist generated code out of the sandbox and into the workspace.
