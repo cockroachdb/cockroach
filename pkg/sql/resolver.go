@@ -358,32 +358,55 @@ func (p *planner) HasPrivilege(
 func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 	ctx context.Context, specifier tree.HasPrivilegeSpecifier,
 ) (catalog.Descriptor, error) {
-	if specifier.TableName != nil {
-		tn, err := parser.ParseQualifiedTableName(*specifier.TableName)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.ResolveTableName(ctx, tn); err != nil {
-			return nil, err
-		}
-
-		if p.SessionData().Database != "" && p.SessionData().Database != string(tn.CatalogName) {
-			// Postgres does not allow cross-database references in these
-			// functions, so we don't either.
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"cross-database references are not implemented: %s", tn)
-		}
-		_, table, err := p.Descriptors().GetImmutableTableByName(
-			ctx, p.txn, tn, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required: true,
-				},
-			},
+	if specifier.DatabaseName != nil {
+		return p.Descriptors().GetImmutableDatabaseByName(
+			ctx, p.txn, *specifier.DatabaseName, tree.DatabaseLookupFlags{Required: true},
 		)
+	} else if specifier.DatabaseOID != nil {
+		_, database, err := p.Descriptors().GetImmutableDatabaseByID(
+			ctx, p.txn, descpb.ID(*specifier.DatabaseOID), tree.DatabaseLookupFlags{Required: true},
+		)
+		return database, err
+	} else if specifier.TableName != nil || specifier.TableOID != nil {
+		var table catalog.TableDescriptor
+		var err error
+		if specifier.TableName != nil {
+			var tn *tree.TableName
+			tn, err = parser.ParseQualifiedTableName(*specifier.TableName)
+			if err != nil {
+				return nil, err
+			}
+			if _, err = p.ResolveTableName(ctx, tn); err != nil {
+				return nil, err
+			}
+
+			if p.SessionData().Database != "" && p.SessionData().Database != string(tn.CatalogName) {
+				// Postgres does not allow cross-database references in these
+				// functions, so we don't either.
+				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+					"cross-database references are not implemented: %s", tn)
+			}
+			_, table, err = p.Descriptors().GetImmutableTableByName(
+				ctx, p.txn, tn, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					},
+				},
+			)
+		} else {
+			table, err = p.Descriptors().GetImmutableTableByID(
+				ctx, p.txn, descpb.ID(*specifier.TableOID),
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					},
+				},
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
-		if err := validateColumnForHasPrivilegeSpecifier(
+		if err = validateColumnForHasPrivilegeSpecifier(
 			table,
 			specifier,
 		); err != nil {
@@ -391,27 +414,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 		}
 		return table, nil
 	}
-	if specifier.TableOID == nil {
-		return nil, errors.AssertionFailedf("no table name or oid found")
-	}
-	table, err := p.Descriptors().GetImmutableTableByID(
-		ctx, p.txn, descpb.ID(*specifier.TableOID),
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required: true,
-			},
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateColumnForHasPrivilegeSpecifier(
-		table,
-		specifier,
-	); err != nil {
-		return nil, err
-	}
-	return table, nil
+	return nil, errors.AssertionFailedf("invalid specifier")
 }
 
 func validateColumnForHasPrivilegeSpecifier(

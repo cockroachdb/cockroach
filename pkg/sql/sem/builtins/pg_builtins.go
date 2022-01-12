@@ -1460,7 +1460,15 @@ SELECT description
 				return nil, err
 			}
 			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				return hasPrivilege(ctx, specifier, user, priv)
+				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
+				if err != nil {
+					// When a TableOID is specified and the relation is not found, we return NULL.
+					if specifier.TableOID != nil && sqlerrors.IsUndefinedRelationError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
 			})
 		},
 	),
@@ -1470,23 +1478,10 @@ SELECT description
 		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
 		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
-			specifier, err := tableHasPrivilegeSpecifier(tableArg)
+			colArg := tree.UnwrapDatum(ctx, args[1])
+			specifier, err := columnHasPrivilegeSpecifier(tableArg, colArg)
 			if err != nil {
 				return nil, err
-			}
-			// Note that we only verify the column exists for has_column_privilege.
-			colArg := tree.UnwrapDatum(ctx, args[1])
-			switch t := colArg.(type) {
-			case *tree.DString:
-				// When colArg is a string, it specifies the attribute name.
-				n := tree.Name(*t)
-				specifier.ColumnName = &n
-			case *tree.DInt:
-				// When colArg is an integer, it specifies the attribute number.
-				attNum := uint32(*t)
-				specifier.ColumnAttNum = &attNum
-			default:
-				return nil, errors.AssertionFailedf("unexpected arg type %T", t)
 			}
 
 			privs, err := parsePrivilegeStr(args[2], privMap{
@@ -1503,7 +1498,15 @@ SELECT description
 				return nil, err
 			}
 			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				return hasPrivilege(ctx, specifier, user, priv)
+				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
+				if err != nil {
+					// When a TableOID is specified and the relation is not found, we return NULL.
+					if specifier.TableOID != nil && sqlerrors.IsUndefinedRelationError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
 			})
 		},
 	),
@@ -1512,22 +1515,11 @@ SELECT description
 		"database",
 		argTypeOpts{{"database", strOrOidTypes}},
 		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
-			dbArg := tree.UnwrapDatum(ctx, args[0])
-			db, err := getNameForArg(ctx, dbArg, "pg_database", "datname")
+
+			databaseArg := tree.UnwrapDatum(ctx, args[0])
+			specifier, err := databaseHasPrivilegeSpecifier(databaseArg)
 			if err != nil {
 				return nil, err
-			}
-			retNull := false
-			if db == "" {
-				switch dbArg.(type) {
-				case *tree.DString:
-					return nil, pgerror.Newf(pgcode.InvalidCatalogName,
-						"database %s does not exist", dbArg)
-				case *tree.DOid:
-					// Postgres returns NULL if no matching language is found
-					// when given an OID.
-					retNull = true
-				}
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1543,13 +1535,17 @@ SELECT description
 			if err != nil {
 				return nil, err
 			}
-			if retNull {
-				return tree.DNull, nil
-			}
-			databasePrivilegePred := fmt.Sprintf("database_name = '%s'", db)
+
 			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				return evalPrivilegeCheck(ctx, `"".crdb_internal`, "cluster_database_privileges",
-					user, databasePrivilegePred, priv.Kind)
+				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
+				if err != nil {
+					// When a DatabaseOID is specified and the relation is not found, we return NULL.
+					if specifier.DatabaseOID != nil && sqlerrors.IsUndefinedDatabaseError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
 			})
 		},
 	),
@@ -1854,7 +1850,15 @@ SELECT description
 				return nil, err
 			}
 			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				return hasPrivilege(ctx, specifier, user, priv)
+				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
+				if err != nil {
+					// When a TableOID is specified and the relation is not found, we return NULL.
+					if specifier.TableOID != nil && sqlerrors.IsUndefinedRelationError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
 			})
 		},
 	),
@@ -2414,27 +2418,19 @@ SELECT description
 	return r[0], nil
 }
 
-// hasPrivilege returns whether the given specifier has the given privilege.
-func hasPrivilege(
-	ctx *tree.EvalContext,
-	specifier tree.HasPrivilegeSpecifier,
-	user security.SQLUsername,
-	priv privilege.Privilege,
-) (tree.Datum, error) {
-	ret, err := ctx.Planner.HasPrivilege(
-		ctx.Context,
-		specifier,
-		user,
-		priv,
-	)
-	if err != nil {
-		// When an OID is specified and the relation is not found, we return NULL.
-		if specifier.TableOID != nil && sqlerrors.IsUndefinedRelationError(err) {
-			return tree.DNull, nil
-		}
-		return nil, err
+func databaseHasPrivilegeSpecifier(databaseArg tree.Datum) (tree.HasPrivilegeSpecifier, error) {
+	var specifier tree.HasPrivilegeSpecifier
+	switch t := databaseArg.(type) {
+	case *tree.DString:
+		s := string(*t)
+		specifier.DatabaseName = &s
+	case *tree.DOid:
+		oid := oid.Oid(t.DInt)
+		specifier.DatabaseOID = &oid
+	default:
+		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", databaseArg)
 	}
-	return tree.MakeDBool(tree.DBool(ret)), nil
+	return specifier, nil
 }
 
 // tableHasPrivilegeSpecifier returns the HasPrivilegeSpecifier for
@@ -2450,6 +2446,25 @@ func tableHasPrivilegeSpecifier(tableArg tree.Datum) (tree.HasPrivilegeSpecifier
 		specifier.TableOID = &oid
 	default:
 		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", tableArg)
+	}
+	return specifier, nil
+}
+
+// Note that we only verify the column exists for has_column_privilege.
+func columnHasPrivilegeSpecifier(tableArg tree.Datum, colArg tree.Datum) (tree.HasPrivilegeSpecifier, error) {
+	specifier, err := tableHasPrivilegeSpecifier(tableArg)
+	if err != nil {
+		return specifier, err
+	}
+	switch t := colArg.(type) {
+	case *tree.DString:
+		n := tree.Name(*t)
+		specifier.ColumnName = &n
+	case *tree.DInt:
+		attNum := uint32(*t)
+		specifier.ColumnAttNum = &attNum
+	default:
+		return specifier, errors.AssertionFailedf("unexpected arg type %T", t)
 	}
 	return specifier, nil
 }
