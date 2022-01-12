@@ -267,6 +267,7 @@ PREPARE insert_s AS INSERT INTO assn_cast(s) VALUES ($1)
 statement error expected EXECUTE parameter expression to have type string, but \'1\' has type int
 EXECUTE insert_s(1)
 
+
 # Tests for assignment casts of DEFAULT expressions.
 subtest assignment_casts_default
 
@@ -320,35 +321,6 @@ query IRR
 SELECT * FROM assn_cast_dec_default
 ----
 1  2  1.6
-
-# Tests for assignment casts of computed columns.
-subtest assignment_casts_computed
-
-statement ok
-CREATE TABLE assn_cast_comp (
-  i INT,
-  i2 INT2 AS (i + 9999999) STORED,
-  t TEXT,
-  c CHAR AS (t) STORED,
-  d DECIMAL(10, 0),
-  d_comp DECIMAL(10, 2) AS (d) STORED,
-  d2 DECIMAL(10, 2),
-  d2_comp DECIMAL(10, 0) AS (d2) STORED
-)
-
-statement error integer out of range for type int2
-INSERT INTO assn_cast_comp(i) VALUES (1)
-
-statement error value too long for type CHAR
-INSERT INTO assn_cast_comp(t) VALUES ('foo')
-
-statement ok
-INSERT INTO assn_cast_comp(d, d2) VALUES (1.56, 2.78)
-
-query RRRR
-SELECT d, d_comp, d2, d2_comp FROM assn_cast_comp
-----
-2  2.00  2.78  3
 
 
 # Tests for assignment casts in UPDATEs.
@@ -1048,6 +1020,119 @@ INSERT INTO assn_cast_p VALUES (3.0, 1) ON CONFLICT (p) DO UPDATE SET d = 3.0
 
 statement ok
 INSERT INTO assn_cast_p VALUES (4.0, 3.0) ON CONFLICT (d) DO UPDATE SET d = 3.0
+
+
+# Tests for assignment casts of computed columns.
+subtest assignment_casts_computed
+
+statement ok
+CREATE TABLE assn_cast_comp (
+  k INT PRIMARY KEY,
+  i INT,
+  i2 INT2 AS (i + 9999999) STORED,
+  t TEXT,
+  c CHAR AS (t) STORED,
+  d DECIMAL(10, 0),
+  d_comp DECIMAL(10, 2) AS (d) STORED,
+  d2 DECIMAL(10, 2),
+  d2_comp DECIMAL(10, 0) AS (d2) STORED
+)
+
+statement error integer out of range for type int2
+INSERT INTO assn_cast_comp(k, i) VALUES (1, 1)
+
+statement error value too long for type CHAR
+INSERT INTO assn_cast_comp(k, t) VALUES (1, 'foo')
+
+statement ok
+INSERT INTO assn_cast_comp(k, d, d2) VALUES (1, 1.56, 2.78)
+
+query IRRRR
+SELECT k, d, d_comp, d2, d2_comp FROM assn_cast_comp
+----
+1  2  2.00  2.78  3
+
+statement error integer out of range for type int2
+UPDATE assn_cast_comp SET i = 1 WHERE k = 1
+
+statement error value too long for type CHAR
+UPDATE assn_cast_comp SET t = 'foo' WHERE k = 1
+
+statement ok
+UPDATE assn_cast_comp SET d = 3.45, d2 = 4.56 WHERE k = 1
+
+query IRRRR
+SELECT k, d, d_comp, d2, d2_comp FROM assn_cast_comp
+----
+1  3  3.00  4.56  5
+
+statement error integer out of range for type int2
+UPSERT INTO assn_cast_comp (k, i) VALUES (1, 1)
+
+statement error integer out of range for type int2
+UPSERT INTO assn_cast_comp (k, i) VALUES (2, 2)
+
+statement error value too long for type CHAR
+UPSERT INTO assn_cast_comp (k, t) VALUES (1, 'foo')
+
+statement error value too long for type CHAR
+UPSERT INTO assn_cast_comp (k, t) VALUES (2, 'bar')
+
+statement ok
+UPSERT INTO assn_cast_comp (k, d, d2) VALUES (1, 5.43, 7.89)
+
+query IRRRR
+SELECT k, d, d_comp, d2, d2_comp FROM assn_cast_comp
+----
+1  5  5.00  7.89  8
+
+
+# Tests for assignment casts of ON UPDATE expressions.
+subtest assignment_casts_on_update
+
+statement ok
+CREATE TABLE assn_cast_on_update (
+    k INT PRIMARY KEY,
+    i INT UNIQUE,
+    d DECIMAL(10, 1) ON UPDATE 1.23,
+    d2 DECIMAL(10, 1) ON UPDATE 1.23::DECIMAL(10, 2),
+    d_comp DECIMAL(10, 0) AS (d) STORED
+)
+
+statement ok
+INSERT INTO assn_cast_on_update (k, i) VALUES (1, 10)
+
+statement ok
+UPDATE assn_cast_on_update SET i = 11 WHERE k = 1
+
+query IIRRR
+SELECT * FROM assn_cast_on_update
+----
+1  11  1.2  1.2  1
+
+statement ok
+UPDATE assn_cast_on_update SET d = NULL, d2 = NULL  WHERE k = 1
+
+statement ok
+UPSERT INTO assn_cast_on_update (k, i) VALUES (1, 10)
+
+statement ok
+UPSERT INTO assn_cast_on_update (k, i) VALUES (2, 20)
+
+query IIRRR
+SELECT * FROM assn_cast_on_update
+----
+1  10  1.2   1.2   1
+2  20  NULL  NULL  NULL
+
+statement ok
+INSERT INTO assn_cast_on_update (k, i) VALUES (2, 20) ON CONFLICT (i) DO UPDATE SET i = 30
+
+query IIRRR
+SELECT * FROM assn_cast_on_update
+----
+1  10  1.2  1.2  1
+2  30  1.2  1.2  1
 
 
 # Regression tests.
