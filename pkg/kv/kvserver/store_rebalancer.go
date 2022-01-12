@@ -582,15 +582,24 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		log.VEventf(ctx, 3, "considering replica rebalance for r%d with %.2f qps",
 			replWithStats.repl.GetRangeID(), replWithStats.qps)
 
-		targetVoterRepls, targetNonVoterRepls := sr.getRebalanceTargetsBasedOnQPS(
+		targetVoterRepls, targetNonVoterRepls, foundRebalance := sr.getRebalanceTargetsBasedOnQPS(
 			ctx,
 			rebalanceCtx,
 			options,
 		)
+
+		if !foundRebalance {
+			log.VEventf(ctx, 3, "could not find rebalance opportunities for r%d", replWithStats.repl.RangeID)
+			continue
+		}
+
 		storeDescMap := storeListToMap(allStoresList)
 
 		// Pick the voter with the least QPS to be leaseholder;
 		// RelocateRange transfers the lease to the first provided target.
+		//
+		// TODO(aayush): Does this logic need to exist? This logic does not take
+		// lease preferences into account. So it is already broken in a way.
 		newLeaseIdx := 0
 		newLeaseQPS := math.MaxFloat64
 		var raftStatus *raft.Status
@@ -625,7 +634,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 // the stores in this cluster.
 func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 	ctx context.Context, rbCtx rangeRebalanceContext, options scorerOptions,
-) (finalVoterTargets, finalNonVoterTargets []roachpb.ReplicaDescriptor) {
+) (finalVoterTargets, finalNonVoterTargets []roachpb.ReplicaDescriptor, foundRebalance bool) {
 	finalVoterTargets = rbCtx.rangeDesc.Replicas().VoterDescriptors()
 	finalNonVoterTargets = rbCtx.rangeDesc.Replicas().NonVoterDescriptors()
 
@@ -652,6 +661,9 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 				rbCtx.rangeDesc.RangeID,
 			)
 			break
+		} else {
+			// Record the fact that we found at least one rebalance opportunity.
+			foundRebalance = true
 		}
 		log.VEventf(
 			ctx,
@@ -712,6 +724,9 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 				rbCtx.rangeDesc.RangeID,
 			)
 			break
+		} else {
+			// Record the fact that we found at least one rebalance opportunity.
+			foundRebalance = true
 		}
 		log.VEventf(
 			ctx,
@@ -737,7 +752,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 		// Pretend that we've executed upon this rebalancing decision.
 		finalNonVoterTargets = newNonVoters
 	}
-	return finalVoterTargets, finalNonVoterTargets
+	return finalVoterTargets, finalNonVoterTargets, foundRebalance
 }
 
 func storeListToMap(sl StoreList) map[roachpb.StoreID]*roachpb.StoreDescriptor {
