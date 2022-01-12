@@ -246,7 +246,7 @@ statement ok
 DROP VIEW v
 
 statement ok
-CREATE TABLE t (i INT, k STRING AS ('a'::typ::string) STORED)
+CREATE TABLE t (i INT, k typ AS ('a'::typ) STORED)
 
 statement ok
 CREATE VIEW v AS (SELECT i FROM t)
@@ -1215,8 +1215,8 @@ CREATE TABLE ttc1 (x d_tc);
 CREATE TABLE ttc2 (y d_tc[]);
 CREATE TABLE ttc3 (
   x BOOL DEFAULT ('hello'::d_tc = 'hello'::d_tc),
-  y STRING AS ('howdy'::d2_tc::STRING) STORED,
-  CHECK ('hello'::d_tc::string = 'hello'),
+  y d2_tc AS ('howdy'::d2_tc) STORED,
+  CHECK ('hello'::d_tc = 'hello'::d_tc),
   INDEX i(y) WHERE ('hello'::d_tc = 'hello'::d_tc)
 );
 

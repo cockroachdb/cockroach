@@ -120,28 +120,28 @@ statement error cannot modify table record type
 ALTER TABLE b ADD COLUMN b INT DEFAULT (((1,'a')::b).a)
 
 statement error cannot modify table record type
-CREATE TABLE fail (b INT AS (((1,'a')::b).a) VIRTUAL)
+CREATE TABLE fail (b INT AS (((1,'a'::e)::b).a) VIRTUAL)
 
 statement error cannot modify table record type
-ALTER TABLE b ADD COLUMN b INT AS (((1,'a')::b).a) VIRTUAL
+ALTER TABLE b ADD COLUMN b INT AS (((1,'a'::e)::b).a) VIRTUAL
 
 statement error cannot modify table record type
-CREATE TABLE fail (b INT AS (((1,'a')::b).a) STORED)
+CREATE TABLE fail (b INT AS (((1,'a'::e)::b).a) STORED)
 
 statement error cannot modify table record type
-ALTER TABLE b ADD COLUMN b INT AS (((1,'a')::b).a) STORED
+ALTER TABLE b ADD COLUMN b INT AS (((1,'a'::e)::b).a) STORED
 
 statement error cannot modify table record type
-CREATE TABLE fail (b INT, INDEX(b) WHERE b > (((1,'a')::b).a))
+CREATE TABLE fail (b INT, INDEX(b) WHERE b > (((1,'a'::e)::b).a))
 
 statement error cannot modify table record type
-CREATE INDEX ON a(a) WHERE a > (((1,'a')::b).a)
+CREATE INDEX ON a(a) WHERE a > (((1,'a'::e)::b).a)
 
 statement error cannot modify table record type
-CREATE TABLE fail (b INT, INDEX((b + (((1,'a')::b).a))))
+CREATE TABLE fail (b INT, INDEX((b + (((1,'a'::e)::b).a))))
 
 statement error cannot modify table record type
-CREATE INDEX ON a((a + (((1,'a')::b).a)))
+CREATE INDEX ON a((a + (((1,'a'::e)::b).a)))
 
 statement error value type tuple{int AS a, e AS e} cannot be used for table columns
 CREATE VIEW v AS SELECT (1,'a')::b
