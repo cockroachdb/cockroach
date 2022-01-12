@@ -1673,7 +1673,7 @@ func (ex *connExecutor) run(
 		}
 
 		var err error
-		if err = ex.execCmd(ex.Ctx()); err != nil {
+		if err = ex.execCmd(); err != nil {
 			if errors.IsAny(err, io.EOF, errDrainingComplete) {
 				return nil
 			}
@@ -1696,7 +1696,8 @@ var errDrainingComplete = fmt.Errorf("draining done. this is a good time to fini
 // Returns drainingComplete if the session should finish because draining is
 // complete (i.e. we received a DrainRequest - possibly previously - and the
 // connection is found to be idle).
-func (ex *connExecutor) execCmd(ctx context.Context) error {
+func (ex *connExecutor) execCmd() error {
+	ctx := ex.Ctx()
 	cmd, pos, err := ex.stmtBuf.CurCmd()
 	if err != nil {
 		return err // err could be io.EOF
@@ -1915,6 +1916,10 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// If a txn just started, we henceforth want to run in the context of the
+		// transaction. Similarly, if a txn just ended, we don't want to run in its
+		// context any more.
+		ctx = ex.Ctx()
 	} else {
 		// If no event was generated synthesize an advance code.
 		advInfo = advanceInfo{
