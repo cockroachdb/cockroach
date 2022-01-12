@@ -1570,21 +1570,24 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 	}
 
 	options := rangeCountScorerOptions{}
+	eqClass := equivalenceClass{
+		candidateSL: storeList,
+	}
 	for i, tc := range testCases {
-		sc := roachpb.StoreCapacity{
-			RangeCount: tc.rangeCount,
+		sd := roachpb.StoreDescriptor{
+			StoreID: 1,
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: tc.rangeCount,
+			},
 		}
-		if a, e := options.rebalanceToConvergesScore(
-			storeList, sc,
-		) == 1, tc.toConverges; a != e {
-			t.Errorf("%d: rebalanceToConvergesScore(storeList, %+v) got %t; want %t", i, sc, a, e)
+		eqClass.existing = sd
+		if a, e := options.rebalanceToConvergesScore(eqClass, sd) == 1, tc.toConverges; a != e {
+			t.Errorf("%d: rebalanceToConvergesScore(eqClass, %+v) got %t; want %t", i, sd, a, e)
 		}
 		// NB: Any replica whose removal would not converge the range count to the
 		// mean is given a score of 1 to make it less attractive for removal.
-		if a, e := options.rebalanceFromConvergesScore(
-			storeList, sc,
-		) == 0, tc.fromConverges; a != e {
-			t.Errorf("%d: rebalanceFromConvergesScore(storeList, %+v) got %t; want %t", i, sc, a, e)
+		if a, e := options.rebalanceFromConvergesScore(eqClass, sd) == 0, tc.fromConverges; a != e {
+			t.Errorf("%d: rebalanceFromConvergesScore(eqClass, %+v) got %t; want %t", i, sd, a, e)
 		}
 	}
 }
