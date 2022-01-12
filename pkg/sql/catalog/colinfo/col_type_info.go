@@ -14,7 +14,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -153,50 +152,4 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		return true
 	}
 	return false
-}
-
-// GetColumnTypes populates the types of the columns with the given IDs into the
-// outTypes slice, returning it. You must use the returned slice, as this
-// function might allocate a new slice.
-func GetColumnTypes(
-	desc catalog.TableDescriptor, columnIDs []descpb.ColumnID, outTypes []*types.T,
-) ([]*types.T, error) {
-	if cap(outTypes) < len(columnIDs) {
-		outTypes = make([]*types.T, len(columnIDs))
-	} else {
-		outTypes = outTypes[:len(columnIDs)]
-	}
-	for i, id := range columnIDs {
-		col, err := desc.FindColumnWithID(id)
-		if err != nil {
-			return nil, err
-		}
-		if !col.Public() {
-			return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
-		}
-		outTypes[i] = col.GetType()
-	}
-	return outTypes, nil
-}
-
-// GetColumnTypesFromColDescs populates the types of the columns with the given
-// IDs into the outTypes slice, returning it. You must use the returned slice,
-// as this function might allocate a new slice.
-func GetColumnTypesFromColDescs(
-	cols []catalog.Column, columnIDs []descpb.ColumnID, outTypes []*types.T,
-) []*types.T {
-	if cap(outTypes) < len(columnIDs) {
-		outTypes = make([]*types.T, len(columnIDs))
-	} else {
-		outTypes = outTypes[:len(columnIDs)]
-	}
-	for i, id := range columnIDs {
-		for j := range cols {
-			if id == cols[j].GetID() {
-				outTypes[i] = cols[j].GetType()
-				break
-			}
-		}
-	}
-	return outTypes
 }
