@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -2012,7 +2012,7 @@ func (ex *connExecutor) recordTransaction(
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
-	ex.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
+	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            transactionID,
 		TxnFingerprintID: transactionFingerprintID,
 	})

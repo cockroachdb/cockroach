@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -22,6 +23,10 @@ import (
 type Provider interface {
 	// Start starts all background tasks for the txnidcache.Provider.
 	Start(ctx context.Context, stopper *stop.Stopper)
+
+	// Resolve returns the corresponding roachpb.TransactionFingerprintID of
+	// the given transaction IDs.
+	Resolve(txnIDs []uuid.UUID) []contentionpb.ResolvedTxnID
 
 	reader
 	messageSink
@@ -33,7 +38,7 @@ type Writer interface {
 	// Record writes a pair of transactionID and transaction fingerprint ID
 	// into a temporary buffer. This buffer will eventually be flushed into
 	// the transaction ID cache asynchronously.
-	Record(resolvedTxnID ResolvedTxnID)
+	Record(resolvedTxnID contentionpb.ResolvedTxnID)
 
 	// Flush starts the flushing process of writer's temporary buffer.
 	Flush()
@@ -48,8 +53,10 @@ type reader interface {
 	// if the given txnID has no entry in the Cache, the returned "found" boolean
 	// will be false.
 	Lookup(txnID uuid.UUID) (result roachpb.TransactionFingerprintID, found bool)
+}
 
-	// TODO(azhng): we eventually want to implement a batch-lookup API.
+type resolver interface {
+	resolve(unresolvedSet map[uuid.UUID]struct{}, resolvedSet []contentionpb.ResolvedTxnID) []contentionpb.ResolvedTxnID
 }
 
 type disconnector interface {
@@ -79,4 +86,5 @@ type messageSink interface {
 type storage interface {
 	reader
 	pusher
+	resolver
 }

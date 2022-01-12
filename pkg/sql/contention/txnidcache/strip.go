@@ -13,6 +13,7 @@ package txnidcache
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -26,6 +27,7 @@ type strip struct {
 }
 
 var _ reader = &strip{}
+var _ resolver = &strip{}
 
 func newStrip(capacity contentionutils.CapacityLimiter) *strip {
 	c := &strip{
@@ -60,17 +62,38 @@ func (c *strip) tryInsertBlock(
 	defer c.Unlock()
 
 	blockIdx := blockStartingOffset
-	for ; blockIdx < messageBlockSize && block[blockIdx].valid() && int64(len(c.data)) < capn; blockIdx++ {
+	for ; blockIdx < messageBlockSize && block[blockIdx].Valid() && int64(len(c.data)) < capn; blockIdx++ {
 		c.data[block[blockIdx].TxnID] = block[blockIdx].TxnFingerprintID
 	}
-	return blockIdx, blockIdx < messageBlockSize && block[blockIdx].valid()
+	return blockIdx, blockIdx < messageBlockSize && block[blockIdx].Valid()
 }
 
+// Lookup implements the reader interface.
 func (c *strip) Lookup(txnID uuid.UUID) (roachpb.TransactionFingerprintID, bool) {
 	c.RLock()
 	defer c.RUnlock()
 	txnFingerprintID, found := c.data[txnID]
 	return txnFingerprintID, found
+}
+
+// Resolve implements the reader interface.
+func (c *strip) resolve(
+	txnIDs map[uuid.UUID]struct{}, result []contentionpb.ResolvedTxnID,
+) []contentionpb.ResolvedTxnID {
+	c.RLock()
+	defer c.RUnlock()
+
+	for txnID := range txnIDs {
+		if txnFingerprintID, ok := c.data[txnID]; ok {
+			result = append(result, contentionpb.ResolvedTxnID{
+				TxnID:            txnID,
+				TxnFingerprintID: txnFingerprintID,
+			})
+			delete(txnIDs, txnID)
+		}
+	}
+
+	return result
 }
 
 func (c *strip) clear() {

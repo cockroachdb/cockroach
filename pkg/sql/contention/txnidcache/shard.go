@@ -13,6 +13,7 @@ package txnidcache
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -52,6 +53,7 @@ func newShard(
 	return shard
 }
 
+// Lookup implements the storage interface.
 func (s *shard) Lookup(txnID uuid.UUID) (roachpb.TransactionFingerprintID, bool) {
 	s.RLock()
 	defer s.RUnlock()
@@ -68,6 +70,24 @@ func (s *shard) Lookup(txnID uuid.UUID) (roachpb.TransactionFingerprintID, bool)
 	return roachpb.TransactionFingerprintID(0), false
 }
 
+// Resolve implements the resolver interface.
+func (s *shard) resolve(
+	txnIDs map[uuid.UUID]struct{}, result []contentionpb.ResolvedTxnID,
+) []contentionpb.ResolvedTxnID {
+	s.RLock()
+	defer s.RUnlock()
+
+	for i := s.head; ; i = s.prevIdx(i) {
+		result = s.ring[i].resolve(txnIDs, result)
+		if i == s.tail {
+			break
+		}
+	}
+
+	return result
+}
+
+// push implements the storage interface.
 func (s *shard) push(block messageBlock) {
 	s.Lock()
 	defer s.Unlock()

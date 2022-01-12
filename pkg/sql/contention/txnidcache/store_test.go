@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -62,7 +63,7 @@ func generateRandomData() (
 		txnID := uuid.FastMakeV4()
 		txnFingerprintID := roachpb.TransactionFingerprintID(rand.Int63())
 		expected[txnID] = txnFingerprintID
-		block[i] = ResolvedTxnID{
+		block[i] = contentionpb.ResolvedTxnID{
 			TxnID:            txnID,
 			TxnFingerprintID: txnFingerprintID,
 		}

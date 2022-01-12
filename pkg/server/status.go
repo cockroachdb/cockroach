@@ -357,6 +357,19 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 	return response, nil
 }
 
+func (b *baseStatusServer) localTxnIDResolution(
+	req *serverpb.TxnIDResolutionRequest,
+) *serverpb.TxnIDResolutionResponse {
+	txnIDCache := b.sqlServer.pgServer.SQLServer.GetTxnIDCache()
+
+	result := txnIDCache.Resolve(req.TxnIDs)
+	resp := &serverpb.TxnIDResolutionResponse{
+		ResolvedTxnIDs: result,
+	}
+
+	return resp
+}
+
 // A statusServer provides a RESTful status API.
 type statusServer struct {
 	*baseStatusServer
@@ -2836,4 +2849,26 @@ func (s *statusServer) JobStatus(
 	*res.Progress = j.Progress()
 
 	return &serverpb.JobStatusResponse{Job: res}, nil
+}
+
+func (s *statusServer) TxnIDResolution(
+	ctx context.Context, req *serverpb.TxnIDResolutionRequest,
+) (*serverpb.TxnIDResolutionResponse, error) {
+	ctx = s.AnnotateCtx(propagateGatewayMetadata(ctx))
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	nodeID := roachpb.NodeID(req.CoordinatorNodeID)
+	local := nodeID == s.gossip.NodeID.Get()
+	if local {
+		return s.localTxnIDResolution(req), nil
+	}
+
+	statusClient, err := s.dialNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	return statusClient.TxnIDResolution(ctx, req)
 }

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -29,11 +30,11 @@ func TestShard(t *testing.T) {
 
 		expected := make(map[uuid.UUID]roachpb.TransactionFingerprintID)
 		block1 := messageBlock{
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(1),
 			},
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(2),
 			},
@@ -57,19 +58,19 @@ func TestShard(t *testing.T) {
 
 		expected := make(map[uuid.UUID]roachpb.TransactionFingerprintID)
 		block1 := messageBlock{
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(1),
 			},
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(2),
 			},
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(3),
 			},
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(4),
 			},
@@ -84,7 +85,7 @@ func TestShard(t *testing.T) {
 		// We are inserting more than the capacity of the shard. This means
 		// the first two ResolvedTxnIDs will be evicted from their corresponding strip.
 		block2 := messageBlock{
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(5),
 			},
@@ -104,11 +105,11 @@ func TestShard(t *testing.T) {
 		// This would result in another eviction of the strip, and this block will
 		// end up being stored across two strips.
 		block3 := messageBlock{
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(6),
 			},
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(7),
 			},

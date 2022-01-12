@@ -12,6 +12,7 @@ package txnidcache
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -36,7 +37,7 @@ func (s shardedStore) push(block messageBlock) {
 
 	// We do a full pass of the block to group each ResolvedTxnID in the block
 	// to its corresponding shard.
-	for blockIdx := 0; blockIdx < messageBlockSize && block[blockIdx].valid(); blockIdx++ {
+	for blockIdx := 0; blockIdx < messageBlockSize && block[blockIdx].Valid(); blockIdx++ {
 		shardIdx := hashTxnID(block[blockIdx].TxnID)
 		shardedBlock[shardIdx][shardedIndex[shardIdx]] = block[blockIdx]
 		shardedIndex[shardIdx]++
@@ -55,4 +56,27 @@ func (s shardedStore) Lookup(
 ) (result roachpb.TransactionFingerprintID, found bool) {
 	shardIdx := hashTxnID(txnID)
 	return s[shardIdx].Lookup(txnID)
+}
+
+// Resolve implements the reader interface.
+func (s shardedStore) resolve(
+	txnIDs map[uuid.UUID]struct{}, result []contentionpb.ResolvedTxnID,
+) []contentionpb.ResolvedTxnID {
+	var shardedTxnIDs [shardCount]map[uuid.UUID]struct{}
+
+	for txnID := range txnIDs {
+		shardIdx := hashTxnID(txnID)
+		shard := shardedTxnIDs[shardIdx]
+		if shard == nil {
+			shard = make(map[uuid.UUID]struct{})
+			shardedTxnIDs[shardIdx] = shard
+		}
+		shard[txnID] = struct{}{}
+	}
+
+	for shardIdx := 0; shardIdx < shardCount; shardIdx++ {
+		result = s[shardIdx].resolve(shardedTxnIDs[shardIdx], result)
+	}
+
+	return result
 }

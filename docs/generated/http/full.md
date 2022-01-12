@@ -4161,6 +4161,51 @@ UserSQLRolesResponse returns a list of roles for the logged SQL user.
 
 
 
+## TxnIDResolution
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing Transaction ID Resolution.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| CoordinatorNodeID | [int32](#cockroach.server.serverpb.TxnIDResolutionRequest-int32) |  |  | [reserved](#support-status) |
+| txnIDs | [bytes](#cockroach.server.serverpb.TxnIDResolutionRequest-bytes) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for issuing Transaction ID Resolution.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| resolvedTxnIDs | [cockroach.sql.contentionpb.ResolvedTxnID](#cockroach.server.serverpb.TxnIDResolutionResponse-cockroach.sql.contentionpb.ResolvedTxnID) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

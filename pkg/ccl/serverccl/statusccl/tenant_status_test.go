@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -82,6 +83,10 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	t.Run("index_usage_stats", func(t *testing.T) {
 		testIndexUsageForTenants(t, testHelper)
+	})
+
+	t.Run("txn_id_resolution", func(t *testing.T) {
+		testTxnIDResolutionRPC(ctx, t, testHelper)
 	})
 }
 
@@ -902,4 +907,54 @@ func testTenantStatusCancelQuery(ctx context.Context, t *testing.T, helper *tena
 	httpPod1.PostJSON("/_status/cancel_query/0", &cancelQueryReq, &cancelQueryResp)
 	require.Equal(t, false, cancelQueryResp.Canceled)
 	require.Equal(t, fmt.Sprintf("query ID %s not found", query.ID), cancelQueryResp.Error)
+}
+
+// testTxnIDResolutionRPC tests the reachability of TxnIDResolution RPC. The
+// underlying implementation correctness is tested within
+// pkg/sql/contention/txnidcache.
+func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTestHelper) {
+	run := func(sqlConn *sqlutils.SQLRunner, status serverpb.SQLStatusServer, coordinatorNodeID int32) {
+		sqlConn.Exec(t, "SET application_name='test1'")
+
+		sqlConn.Exec(t, "BEGIN")
+		result := sqlConn.QueryStr(t, `
+SELECT id
+FROM crdb_internal.node_transactions
+WHERE application_name = 'test1'`)
+		require.Equal(t, 1 /* expected */, len(result),
+			"expected only one active txn, but there are %d active txns found", len(result))
+		txnID := uuid.FromStringOrNil(result[0][0])
+		require.False(t, uuid.Nil.Equal(txnID),
+			"expected a valid txnID, but %+v is found", result)
+		sqlConn.Exec(t, "COMMIT")
+
+		testutils.SucceedsWithin(t, func() error {
+			resp, err := status.TxnIDResolution(ctx, &serverpb.TxnIDResolutionRequest{
+				CoordinatorNodeID: coordinatorNodeID,
+				TxnIDs:            []uuid.UUID{txnID},
+			})
+			require.NoError(t, err)
+			if len(resp.ResolvedTxnIDs) != 1 {
+				return errors.New("txnID not found")
+			}
+			require.True(t, resp.ResolvedTxnIDs[0].TxnID.Equal(txnID))
+			return nil
+		}, 3*time.Second)
+	}
+
+	t.Run("regular_cluster", func(t *testing.T) {
+		status :=
+			helper.hostCluster.Server(0 /* idx */).StatusServer().(serverpb.SQLStatusServer)
+		sqlConn := helper.hostCluster.ServerConn(0 /* idx */)
+		run(sqlutils.MakeSQLRunner(sqlConn), status, 1 /* coordinatorNodeID */)
+	})
+
+	t.Run("tenant_cluster", func(t *testing.T) {
+		// Select a different tenant status server here so a pod-to-pod RPC will
+		// happen.
+		status :=
+			helper.testCluster().tenantStatusSrv(2 /* idx */)
+		sqlConn := helper.testCluster().tenantConn(0 /* idx */)
+		run(sqlConn, status, 1 /* coordinatorNodeID */)
+	})
 }

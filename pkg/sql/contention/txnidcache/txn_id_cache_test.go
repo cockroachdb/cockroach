@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -174,12 +175,16 @@ func TestTransactionIDCache(t *testing.T) {
 	sqlServer := testServer.SQLServer().(*sql.Server)
 	txnIDCache := sqlServer.GetTxnIDCache()
 
-	txnIDCache.(*txnidcache.Cache).FlushActiveWritersForTest()
-
 	t.Run("resolved_txn_id_cache_record", func(t *testing.T) {
 		testutils.SucceedsWithin(t, func() error {
+			var txnIDQuery []uuid.UUID
+			for txnID := range expectedTxnIDToUUIDMapping {
+				txnIDQuery = append(txnIDQuery, txnID)
+			}
+			actualResolvedTxnIDs := txnIDCache.Resolve(txnIDQuery)
+			actualResolvedMap := resolvedTxnIDsToMap(actualResolvedTxnIDs)
 			for txnID, expectedTxnFingerprintID := range expectedTxnIDToUUIDMapping {
-				actualTxnFingerprintID, ok := txnIDCache.Lookup(txnID)
+				actualTxnFingerprintID, ok := actualResolvedMap[txnID]
 				if !ok {
 					return errors.Newf("expected to find txn(%s) with fingerprintID: "+
 						"%d, but it was not found.",
@@ -187,7 +192,9 @@ func TestTransactionIDCache(t *testing.T) {
 					)
 				}
 				if expectedTxnFingerprintID != actualTxnFingerprintID {
-					return errors.Newf("expected to find txn(%s) with fingerprintID: %d, but the actual fingerprintID is: %d", txnID, expectedTxnFingerprintID, actualTxnFingerprintID)
+					return errors.Newf("expected to find txn(%s) with fingerprintID: "+
+						"%d, but the actual fingerprintID is: %d",
+						txnID, expectedTxnFingerprintID, actualTxnFingerprintID)
 				}
 			}
 			return nil
@@ -203,7 +210,7 @@ func TestTransactionIDCache(t *testing.T) {
 			txnFingerprintID roachpb.TransactionFingerprintID) {
 			if strings.Contains(sessionData.ApplicationName, appName) {
 				if txnFingerprintID != roachpb.InvalidTransactionFingerprintID {
-					txnIDCache.(*txnidcache.Cache).FlushActiveWritersForTest()
+					txnIDCache.(*txnidcache.Cache).FlushActiveWriters()
 
 					testutils.SucceedsWithin(t, func() error {
 						existingTxnFingerprintID, ok := txnIDCache.Lookup(txnID)
@@ -230,6 +237,18 @@ func TestTransactionIDCache(t *testing.T) {
 			"expected to found provisional txn id cache record, "+
 				"but it was not found")
 	})
+}
+
+func resolvedTxnIDsToMap(
+	resolvedTxnIDs []contentionpb.ResolvedTxnID,
+) map[uuid.UUID]roachpb.TransactionFingerprintID {
+	result := make(map[uuid.UUID]roachpb.TransactionFingerprintID)
+
+	for _, resolvedTxnID := range resolvedTxnIDs {
+		result[resolvedTxnID.TxnID] = resolvedTxnID.TxnFingerprintID
+	}
+
+	return result
 }
 
 type runtimeHookInjector struct {

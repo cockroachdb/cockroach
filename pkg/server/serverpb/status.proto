@@ -1411,6 +1411,24 @@ message UserSQLRolesResponse {
   repeated string roles = 1;
 }
 
+// Request object for issuing Transaction ID Resolution.
+message TxnIDResolutionRequest {
+  int32 CoordinatorNodeID = 1 [
+    (gogoproto.customname) = "CoordinatorNodeID"
+  ];
+
+  repeated bytes txnIDs = 2 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+}
+
+// Response object for issuing Transaction ID Resolution.
+message TxnIDResolutionResponse {
+  repeated cockroach.sql.contentionpb.ResolvedTxnID resolvedTxnIDs = 1 [
+    (gogoproto.nullable) = false];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -1795,4 +1813,6 @@ service Status {
       get: "/_status/sqlroles"
     };
   }
+
+  rpc TxnIDResolution(TxnIDResolutionRequest) returns (TxnIDResolutionResponse) {}
 }

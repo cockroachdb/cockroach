@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -109,20 +110,7 @@ var (
 		roachpb.TransactionFingerprintID(0).Size()
 )
 
-// ResolvedTxnID represents a TxnID that is resolved to its corresponding
-// TxnFingerprintID.
-type ResolvedTxnID struct {
-	TxnID            uuid.UUID
-	TxnFingerprintID roachpb.TransactionFingerprintID
-}
-
-func (r *ResolvedTxnID) valid() bool {
-	return r.TxnID != uuid.UUID{}
-}
-
-var (
-	_ Provider = &Cache{}
-)
+var _ Provider = &Cache{}
 
 // NewTxnIDCache creates a new instance of Cache.
 func NewTxnIDCache(st *cluster.Settings, metrics *Metrics) *Cache {
@@ -164,6 +152,22 @@ func (t *Cache) Lookup(txnID uuid.UUID) (result roachpb.TransactionFingerprintID
 	return t.store.Lookup(txnID)
 }
 
+// Resolve implements the Provider interface.
+func (t *Cache) Resolve(txnIDs []uuid.UUID) []contentionpb.ResolvedTxnID {
+	t.FlushActiveWriters()
+
+	query := make(map[uuid.UUID]struct{}, len(txnIDs))
+	result := make([]contentionpb.ResolvedTxnID, 0, len(txnIDs))
+
+	for _, txnID := range txnIDs {
+		query[txnID] = struct{}{}
+	}
+
+	result = t.store.resolve(query, result)
+
+	return result
+}
+
 // GetWriter implements the writerPool interface.
 func (t *Cache) GetWriter() Writer {
 	return t.pool.GetWriter()
@@ -184,9 +188,11 @@ func (t *Cache) disconnect(w Writer) {
 	t.pool.disconnect(w)
 }
 
-// FlushActiveWritersForTest is only used in test to flush all writers so the
+// FlushActiveWriters is only used in test to flush all writers so the
 // content of the Cache can be inspected.
-func (t *Cache) FlushActiveWritersForTest() {
+// N.B. this is quite expensive since the writer flush effectively blocks
+// all write operations from happening.
+func (t *Cache) FlushActiveWriters() {
 	poolImpl := t.pool.(*writerPoolImpl)
 	poolImpl.mu.Lock()
 	defer poolImpl.mu.Unlock()

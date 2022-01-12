@@ -14,25 +14,26 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestStrip(t *testing.T) {
 	block := messageBlock{
-		ResolvedTxnID{
+		contentionpb.ResolvedTxnID{
 			TxnID:            uuid.FastMakeV4(),
 			TxnFingerprintID: roachpb.TransactionFingerprintID(1),
 		},
-		ResolvedTxnID{
+		contentionpb.ResolvedTxnID{
 			TxnID:            uuid.FastMakeV4(),
 			TxnFingerprintID: roachpb.TransactionFingerprintID(2),
 		},
-		ResolvedTxnID{
+		contentionpb.ResolvedTxnID{
 			TxnID:            uuid.FastMakeV4(),
 			TxnFingerprintID: roachpb.TransactionFingerprintID(3),
 		},
-		ResolvedTxnID{
+		contentionpb.ResolvedTxnID{
 			TxnID:            uuid.FastMakeV4(),
 			TxnFingerprintID: roachpb.TransactionFingerprintID(4),
 		},
@@ -53,7 +54,7 @@ func TestStrip(t *testing.T) {
 		require.Equal(t, false /* expected */, more)
 
 		extraBlock := messageBlock{
-			ResolvedTxnID{
+			contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(5),
 			},
@@ -114,7 +115,7 @@ func buildExpectedLookupMapFromMessageBlock(
 	block messageBlock, existingExpectedLookupMap map[uuid.UUID]roachpb.TransactionFingerprintID,
 ) map[uuid.UUID]roachpb.TransactionFingerprintID {
 	for i := range block {
-		if !block[i].valid() {
+		if !block[i].Valid() {
 			break
 		}
 		existingExpectedLookupMap[block[i].TxnID] = block[i].TxnFingerprintID

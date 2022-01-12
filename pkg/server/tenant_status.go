@@ -884,3 +884,29 @@ func (t *tenantStatusServer) TableIndexStats(
 	return getTableIndexUsageStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
 		t.sqlServer.internalExecutor)
 }
+
+func (t *tenantStatusServer) TxnIDResolution(
+	ctx context.Context, req *serverpb.TxnIDResolutionRequest,
+) (*serverpb.TxnIDResolutionResponse, error) {
+	ctx = t.AnnotateCtx(propagateGatewayMetadata(ctx))
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	instanceID := base.SQLInstanceID(req.CoordinatorNodeID)
+	local := instanceID == t.sqlServer.SQLInstanceID()
+	if local {
+		return t.localTxnIDResolution(req), nil
+	}
+
+	instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	statusClient, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	return statusClient.TxnIDResolution(ctx, req)
+}

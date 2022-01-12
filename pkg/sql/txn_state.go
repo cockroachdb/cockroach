@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -225,7 +226,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	if ok {
 		// We will come back to update the TxnFingerprintID once the transaction
 		// finishes execution.
-		ts.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
+		ts.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 			TxnID:            txnID,
 			TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
 		})

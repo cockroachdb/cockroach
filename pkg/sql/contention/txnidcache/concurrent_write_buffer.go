@@ -10,11 +10,14 @@
 
 package txnidcache
 
-import "github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+)
 
 const messageBlockSize = 512
 
-type messageBlock [messageBlockSize]ResolvedTxnID
+type messageBlock [messageBlockSize]contentionpb.ResolvedTxnID
 
 // ConcurrentWriteBuffer is a data structure that optimizes for concurrent
 // writes and also implements the Writer interface.
@@ -53,7 +56,7 @@ func NewConcurrentWriteBuffer(sink messageSink) *ConcurrentWriteBuffer {
 
 // Record records a mapping from txnID to its corresponding transaction
 // fingerprint ID. Record is safe to be used concurrently.
-func (c *ConcurrentWriteBuffer) Record(resolvedTxnID ResolvedTxnID) {
+func (c *ConcurrentWriteBuffer) Record(resolvedTxnID contentionpb.ResolvedTxnID) {
 	c.guard.AtomicWrite(func(writerIdx int64) {
 		c.msgBlock[writerIdx] = resolvedTxnID
 	})

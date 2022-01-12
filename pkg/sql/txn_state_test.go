@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -701,7 +701,7 @@ func TestTransitions(t *testing.T) {
 type dummyTxnIDCacheWriter struct{}
 
 // Record implements txnidcache.Writer interface.
-func (*dummyTxnIDCacheWriter) Record(_ txnidcache.ResolvedTxnID) {}
+func (*dummyTxnIDCacheWriter) Record(_ contentionpb.ResolvedTxnID) {}
 
 // Flush implements txnidcache.Writer interface.
 func (*dummyTxnIDCacheWriter) Flush() {}
