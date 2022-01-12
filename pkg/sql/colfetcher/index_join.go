@@ -410,7 +410,7 @@ func NewColIndexJoin(
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
-	table := spec.BuildTableDescriptor()
+	table := flowCtx.TableDescriptor(&spec.Table)
 	index := table.ActiveIndexes()[spec.IndexIdx]
 	tableArgs, neededColumns, err := populateTableArgs(
 		ctx, flowCtx, table, index, nil, /* invertedCol */

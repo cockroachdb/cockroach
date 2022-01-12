@@ -116,7 +116,7 @@ func (ag *aggregatorBase) init(
 	// grouped-by values for each bucket.  ag.funcs is updated to contain all
 	// the functions which need to be fed values.
 	ag.inputTypes = input.OutputTypes()
-	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+	semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
 	for i, aggInfo := range spec.Aggregations {
 		if aggInfo.FilterColIdx != nil {
 			col := *aggInfo.FilterColIdx
