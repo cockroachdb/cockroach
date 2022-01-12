@@ -1,0 +1,53 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanconfigprotectedts",
+    srcs = ["protectedts_table_reader.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigprotectedts",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/spanconfig",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanconfigprotectedts_test",
+    srcs = [
+        "main_test.go",
+        "protectedts_table_reader_test.go",
+    ],
+    embed = [":spanconfigprotectedts"],
+    deps = [
+        "//pkg/base",
+        "//pkg/jobs",
+        "//pkg/jobs/jobsprotectedts",
+        "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/spanconfig",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/distsql",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)

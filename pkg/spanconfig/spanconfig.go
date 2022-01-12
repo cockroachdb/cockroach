@@ -234,6 +234,29 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
+// TenantProtectedTimestamps represents all the Protections that apply to a
+// tenant's keyspace.
+type TenantProtectedTimestamps struct {
+	Protections []hlc.Timestamp
+	TenantID    roachpb.TenantID
+}
+
+// ProtectedTimestampTableReader represents a table reader that returns the
+// protected timestamps that apply to the different targets that can be
+// protected from GC.
+type ProtectedTimestampTableReader interface {
+	// GetProtectedTimestampsForCluster returns all the protected timestamps that
+	// apply to the entire cluster's keyspace.
+	GetProtectedTimestampsForCluster() []hlc.Timestamp
+	// GetProtectedTimestampsForTenants returns all the protected timestamps that
+	// apply to a paritcular tenant's keyspace. It returns this for all tenants
+	// that have protected timestamp records.
+	GetProtectedTimestampsForTenants() []TenantProtectedTimestamps
+	// GetProtectedTimestampsForSchemaObject returns all the protected timestamps
+	// that apply to the descID's keyspan.
+	GetProtectedTimestampsForSchemaObject(descID descpb.ID) []hlc.Timestamp
+}
+
 // DescriptorUpdate captures the ID and the type of descriptor or zone that been
 // updated. It's the unit of what the SQLWatcher emits.
 type DescriptorUpdate struct {
