@@ -149,12 +149,26 @@ message ResolvedTxnID {
 
 
 message ExtendedContentionEvent {
-  cockroach.roachpb.ContentionEvent event = 1 [
+  cockroach.roachpb.ContentionEvent blocking_event = 1 [
     (gogoproto.nullable) = false
   ];
-
-  uint64 txn_fingerprint_id = 2 [
-    (gogoproto.customname) = "TxnFingerprintID",
+  uint64 blocking_txn_fingerprint_id = 2 [
+    (gogoproto.customname) = "BlockingTxnFingerprintID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID"
   ];
+
+  bytes waiting_txn_id = 3 [
+    (gogoproto.customname) = "WaitingTxnID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+  uint64 waiting_txn_fingerprint_id = 4 [
+    (gogoproto.customname) = "WaitingTxnFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID"
+  ];
+
+   google.protobuf.Timestamp collection_ts = 5 [
+     (gogoproto.nullable) = false,
+     (gogoproto.stdtime) = true
+   ];
 }

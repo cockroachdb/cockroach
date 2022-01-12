@@ -69,3 +69,8 @@ func (skc SingleNonSQLKeyContention) String() string {
 func (r *ResolvedTxnID) Valid() bool {
 	return !uuid.Nil.Equal(r.TxnID)
 }
+
+// Valid returns if the ExtendedContentionEvent is valid.
+func (e *ExtendedContentionEvent) Valid() bool {
+	return e.BlockingEvent.TxnMeta.ID != uuid.UUID{}
+}
