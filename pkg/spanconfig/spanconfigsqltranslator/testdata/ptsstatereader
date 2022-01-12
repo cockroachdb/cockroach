@@ -1,0 +1,110 @@
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+----
+
+# Descriptor IDs
+# db: 54
+# t1: 56
+# t2: 57
+
+# Write a protected timestamp on t1.
+protect id=1 ts=1
+schemaObject 56
+----
+
+# Write a protected timestamp on t1 and t2.
+protect id=2 ts=2
+schemaObject 56,57
+----
+
+# Write a protected timestamp on db.
+protect id=3 ts=3
+schemaObject 54
+----
+
+# Write a protected timestamp on cluster.
+protect id=4 ts=4
+cluster
+----
+
+# Write a protected timestamp on tenant 1.
+protect id=5 ts=5
+tenant 1
+----
+
+# Write a protected timestamp on tenant 2.
+protect id=6 ts=6
+tenant 2
+----
+
+# Write another protected timestamp on tenant 2.
+protect id=7 ts=7
+tenant 2
+----
+
+# Records on t1.
+statereader schemaObject=56
+----
+[ts=1 ts=2]
+
+
+# Records on t2.
+statereader schemaObject=57
+----
+[ts=2]
+
+# Records on db.
+statereader schemaObject=54
+----
+[ts=3]
+
+
+statereader cluster
+----
+[ts=4]
+
+statereader tenants
+----
+tenant_id=1 [ts=5]
+tenant_id=2 [ts=6 ts=7]
+
+# Release a few records.
+release id=5
+----
+
+release id=4
+----
+
+release id=3
+----
+
+release id=1
+----
+
+# Records on t1.
+statereader schemaObject=56
+----
+[ts=2]
+
+
+# Records on t2.
+statereader schemaObject=57
+----
+[ts=2]
+
+# Records on db.
+statereader schemaObject=54
+----
+[]
+
+
+statereader cluster
+----
+[]
+
+statereader tenants
+----
+tenant_id=2 [ts=6 ts=7]
+
