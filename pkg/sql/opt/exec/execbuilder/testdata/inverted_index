@@ -1471,6 +1471,7 @@ inner-join (lookup geo_table)
  ├── cost: 112704.87
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
+ ├── distribution: test
  ├── prune: (1,5)
  ├── inner-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11
@@ -1480,12 +1481,14 @@ inner-join (lookup geo_table)
  │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
+ │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
+ │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)
@@ -1561,6 +1564,7 @@ left-join (lookup geo_table)
  ├── cost: 112904.87
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
+ ├── distribution: test
  ├── prune: (1,5)
  ├── left-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
@@ -1571,12 +1575,14 @@ left-join (lookup geo_table)
  │    ├── cost: 42004.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
+ │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)
@@ -1597,6 +1603,7 @@ semi-join (lookup geo_table)
  ├── cost: 112704.87
  ├── key: (1)
  ├── fd: (1)-->(2)
+ ├── distribution: test
  ├── prune: (1)
  ├── inner-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
@@ -1607,12 +1614,14 @@ semi-join (lookup geo_table)
  │    ├── cost: 42004.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
+ │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    ├── interesting orderings: (+1)
  │    │    └── unfiltered-cols: (1-4)
@@ -1634,6 +1643,7 @@ anti-join (lookup geo_table)
  ├── cost: 112704.87
  ├── key: (1)
  ├── fd: (1)-->(2)
+ ├── distribution: test
  ├── prune: (1)
  ├── left-join (inverted geo_table@geom_index)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
@@ -1644,12 +1654,14 @@ anti-join (lookup geo_table)
  │    ├── cost: 42004.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
+ │    ├── distribution: test
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    │    ├── cost: 1104.82
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
+ │    │    ├── distribution: test
  │    │    ├── prune: (1,2)
  │    │    └── unfiltered-cols: (1-4)
  │    └── filters (true)

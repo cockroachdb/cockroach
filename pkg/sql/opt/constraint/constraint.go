@@ -303,21 +303,37 @@ func (c *Constraint) Contains(evalCtx *tree.EvalContext, other *Constraint) bool
 // span that contains it).
 func (c *Constraint) ContainsSpan(evalCtx *tree.EvalContext, sp *Span) bool {
 	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
-	// Binary search to find an overlapping span.
+	if cSpan, ok := c.findIntersectingSpan(&keyCtx, sp); ok {
+		// The spans must overlap. Check if sp is fully contained.
+		return sp.CompareStarts(&keyCtx, cSpan) >= 0 &&
+			sp.CompareEnds(&keyCtx, cSpan) <= 0
+	}
+	return false
+}
+
+// IntersectsSpan returns true if the constraint overlaps the given span.
+func (c *Constraint) IntersectsSpan(evalCtx *tree.EvalContext, sp *Span) bool {
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	_, ok := c.findIntersectingSpan(&keyCtx, sp)
+	return ok
+}
+
+// findIntersectingSpan performs binary search to find a span within
+// the constraint that overlaps sp.
+func (c *Constraint) findIntersectingSpan(keyCtx *KeyContext, sp *Span) (_ *Span, ok bool) {
 	for l, r := 0, c.Spans.Count()-1; l <= r; {
 		m := (l + r) / 2
 		cSpan := c.Spans.Get(m)
-		if sp.StartsAfter(&keyCtx, cSpan) {
+		if sp.StartsAfter(keyCtx, cSpan) {
 			l = m + 1
-		} else if cSpan.StartsAfter(&keyCtx, sp) {
+		} else if cSpan.StartsAfter(keyCtx, sp) {
 			r = m - 1
 		} else {
-			// The spans must overlap. Check if sp is fully contained.
-			return sp.CompareStarts(&keyCtx, cSpan) >= 0 &&
-				sp.CompareEnds(&keyCtx, cSpan) <= 0
+			// The spans must overlap.
+			return cSpan, true
 		}
 	}
-	return false
+	return nil, false
 }
 
 // Combine refines the receiver constraint using constraints on a suffix of the

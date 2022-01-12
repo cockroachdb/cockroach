@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -499,7 +500,7 @@ func (o *Optimizer) optimizeGroupMember(
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	if CanProvidePhysicalProps(member, required) {
+	if CanProvidePhysicalProps(o.evalCtx, member, required) {
 		var cost memo.Cost
 		for i, n := 0, member.ChildCount(); i < n; i++ {
 			// Given required parent properties, get the properties required from
@@ -579,6 +580,12 @@ func (o *Optimizer) enforceProps(
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
+	if !required.Distribution.Any() {
+		enforcer := &memo.DistributeExpr{Input: member}
+		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
+		return o.optimizeEnforcer(state, enforcer, required, member, memberProps)
+	}
+
 	if !required.Ordering.Any() {
 		// Try Sort enforcer that requires no ordering from its input.
 		enforcer := &memo.SortExpr{Input: member}
@@ -633,7 +640,7 @@ func (o *Optimizer) optimizeEnforcer(
 // shouldExplore ensures that exploration is only triggered for optimizeGroup
 // calls that will not recurse via a call from enforceProps.
 func (o *Optimizer) shouldExplore(required *physical.Required) bool {
-	return required.Ordering.Any()
+	return required.Ordering.Any() && required.Distribution.Any()
 }
 
 // setLowestCostTree traverses the memo and recursively updates child pointers
@@ -711,6 +718,7 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
 		provided.Ordering = ordering.BuildProvided(relParent, &parentProps.Ordering)
+		provided.Distribution = distribution.BuildProvided(o.evalCtx, relParent, &parentProps.Distribution)
 		o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
 	}
 
