@@ -51,6 +51,11 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 55
 
 Please add new entries at the top.
 
+- Version: 57 (MinAcceptedVersion: 57)
+	- TableReaderSpec now contains a specific list of column IDs and the internal
+		schema now corresponds to these columns (instead of all table columns). The
+		HasSystemColumns, DeprecatedIsCheck fields have been removed.
+
 - Version: 56 (MinAcceptedVersion: 56)
 	- The Visibility fields from TableReaderSpec, IndexSkipTableReaderSpec,
 	  JoinReaderSpec have been removed.

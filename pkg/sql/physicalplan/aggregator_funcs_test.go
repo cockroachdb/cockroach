@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -123,12 +124,14 @@ func checkDistAggregationInfo(
 	fn execinfrapb.AggregatorSpec_Func,
 	info physicalplan.DistAggregationInfo,
 ) {
-	colType := tableDesc.PublicColumns()[colIdx].GetType()
+	col := tableDesc.PublicColumns()[colIdx]
+	colType := col.GetType()
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
-			Table: *tableDesc.TableDesc(),
-			Spans: make([]roachpb.Span, 1),
+			Table:     *tableDesc.TableDesc(),
+			Spans:     make([]roachpb.Span, 1),
+			ColumnIDs: []descpb.ColumnID{col.GetID()},
 		}
 
 		var err error
@@ -143,10 +146,6 @@ func checkDistAggregationInfo(
 
 		return execinfrapb.ProcessorSpec{
 			Core: execinfrapb.ProcessorCoreUnion{TableReader: &tr},
-			Post: execinfrapb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{uint32(colIdx)},
-			},
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				Streams: []execinfrapb.StreamEndpointSpec{

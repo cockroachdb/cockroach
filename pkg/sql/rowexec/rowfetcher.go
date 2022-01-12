@@ -50,6 +50,9 @@ type rowFetcher interface {
 	) error
 
 	NextRow(ctx context.Context) (rowenc.EncDatumRow, error)
+	NextRowInto(
+		ctx context.Context, destination rowenc.EncDatumRow, colIdxMap catalog.TableColMap,
+	) (ok bool, err error)
 
 	// PartialKey is not stat-related but needs to be supported.
 	PartialKey(int) (roachpb.Key, error)
@@ -59,36 +62,31 @@ type rowFetcher interface {
 	Close(ctx context.Context)
 }
 
-// initRowFetcher initializes the fetcher.
-func initRowFetcher(
+// makeRowFetcher creates and initializes a fetcher.
+func makeRowFetcher(
 	flowCtx *execinfra.FlowCtx,
-	fetcher *row.Fetcher,
 	desc catalog.TableDescriptor,
 	indexIdx int,
-	colIdxMap catalog.TableColMap,
+	columns []catalog.Column,
 	reverseScan bool,
-	valNeededForCol util.FastIntSet,
 	mon *mon.BytesMonitor,
 	alloc *tree.DatumAlloc,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
-	withSystemColumns bool,
-	virtualColumn catalog.Column,
-) (index catalog.Index, isSecondaryIndex bool, err error) {
+) (*row.Fetcher, error) {
+	fetcher := &row.Fetcher{}
 	if indexIdx >= len(desc.ActiveIndexes()) {
-		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
+		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
-	index = desc.ActiveIndexes()[indexIdx]
-	isSecondaryIndex = !index.Primary()
+	index := desc.ActiveIndexes()[indexIdx]
+	isSecondaryIndex := !index.Primary()
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
-		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
-		ValNeededForCol:  valNeededForCol,
+		Columns:          columns,
 	}
-	tableArgs.InitCols(desc, withSystemColumns, virtualColumn)
 
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
@@ -101,8 +99,52 @@ func initRowFetcher(
 		mon,
 		tableArgs,
 	); err != nil {
-		return nil, false, err
+		return nil, err
 	}
+	return fetcher, nil
+}
 
-	return index, isSecondaryIndex, nil
+// makeRowFetcherLegacy is a legacy version of the row fetcher which uses
+// the valNeededForCol ordinal set to determine the fetcher columns.
+func makeRowFetcherLegacy(
+	flowCtx *execinfra.FlowCtx,
+	desc catalog.TableDescriptor,
+	indexIdx int,
+	reverseScan bool,
+	valNeededForCol util.FastIntSet,
+	mon *mon.BytesMonitor,
+	alloc *tree.DatumAlloc,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	withSystemColumns bool,
+	invertedColumn catalog.Column,
+) (*row.Fetcher, error) {
+	cols := make([]catalog.Column, 0, len(desc.AllColumns()))
+	for i, col := range desc.ReadableColumns() {
+		if valNeededForCol.Contains(i) {
+			if invertedColumn != nil && col.GetID() == invertedColumn.GetID() {
+				col = invertedColumn
+			}
+			cols = append(cols, col)
+		}
+	}
+	if withSystemColumns {
+		start := len(desc.ReadableColumns())
+		for i, col := range desc.SystemColumns() {
+			if valNeededForCol.Contains(start + i) {
+				cols = append(cols, col)
+			}
+		}
+	}
+	return makeRowFetcher(
+		flowCtx,
+		desc,
+		indexIdx,
+		cols,
+		reverseScan,
+		mon,
+		alloc,
+		lockStrength,
+		lockWaitPolicy,
+	)
 }

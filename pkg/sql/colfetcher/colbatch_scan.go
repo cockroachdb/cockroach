@@ -194,20 +194,30 @@ func NewColBatchScan(
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
 		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
-	if spec.DeprecatedIsCheck {
-		// cFetchers don't support these checks.
-		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
-	}
-
 	limitHint := rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	table := flowCtx.TableDescriptor(&spec.Table)
 	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
-	tableArgs, _, err := populateTableArgs(
+	tableArgs, err := populateTableArgs(
 		ctx, flowCtx, table, table.ActiveIndexes()[spec.IndexIdx],
-		invertedColumn, spec.HasSystemColumns, post, helper,
+		spec.ColumnIDs, invertedColumn, helper,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	// Make sure that render expressions are deserialized right away so that we
+	// don't have to re-parse them multiple times.
+	if post.RenderExprs != nil {
+		for i := range post.RenderExprs {
+			// It is ok to use the evalCtx of the flowCtx since it won't be
+			// mutated (we are not evaluating the expressions). It's also ok to
+			// update post in-place even if flowCtx.PreserveFlowSpecs is true
+			// since we're not really mutating the render expressions.
+			post.RenderExprs[i].LocalExpr, err = helper.ProcessExpr(post.RenderExprs[i], flowCtx.EvalCtx, tableArgs.typs)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -221,7 +231,7 @@ func NewColBatchScan(
 		flowCtx.TraceKV,
 	}
 
-	if err = fetcher.Init(flowCtx.Codec(), allocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns); err != nil {
+	if err = fetcher.Init(flowCtx.Codec(), allocator, kvFetcherMemAcc, tableArgs); err != nil {
 		fetcher.Release()
 		return nil, err
 	}

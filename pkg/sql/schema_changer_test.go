@@ -1785,14 +1785,14 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		_, err := sqlDB.Exec(tc.sql)
 		if tc.errString == "" {
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("%s: %v", tc.sql, err)
 			}
 		} else {
 			if err == nil {
-				t.Fatal("expected error")
+				t.Fatalf("%s: expected error", tc.sql)
 			}
 			if !strings.Contains(err.Error(), tc.errString) {
-				t.Fatal(err)
+				t.Fatalf("%s: %v", tc.sql, err)
 			}
 		}
 	}

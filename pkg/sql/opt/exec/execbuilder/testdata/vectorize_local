@@ -60,7 +60,7 @@ regions: <hidden>
   table: a@a_pkey
   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkcFqKjEUhvf3KQ5ndS_kYqaLLrKSigWx1qLipswiJgcbOpNMkzNUkXmsvkCfrMxEF6UIXZ7v_Pnz588J01uFCtfTh-lkAxruV8sFaBTog6VHXVNC9YwFlgKbGAylFGKPToNgZg-opEDnm5Z7XAo0IRKqE7LjilDhRu8qWpG2FEcSBVpi7arBVo-b6Godjyhw3WifFPxHgcuWFYwLFDjfAruaFMjPj5RnEzyTZxf8j1UM7wkiaavgRkh5NtgdmS64uIW5u0OBi-1kAompARNaz_CXDjxynv8pkEPKLCB6vSao9QFqqkM8gq6qYDSTVSChd99pNi-UILTc9G_p9UO4C8jxyk5gJufqEus9oSo68ft6V5Sa4BN9a_aas-xKgWT3lL8whTYaeorBDNfkcTmcG4ClxHlb5GHm86oruz9fAQAA__-9SrYw
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkcFqGzEQhu99imFOLahY20MPOpUuLhjXdbGNL2EPsjQ4IrvSRpolNmYfKy-QJwsrxYcQDLntfPPvPz-_LpgeW1S4nf-d1zvQ8GezXoFGgT5Y-qc7SqjusMJGYB-DoZRCnNAlCxb2hEoKdL4feMKNQBMiobogO24JFe70oaUNaUtxJlGgJdauzbb6Vx9dp-MZBdahHTqfVD6-7fX0-R0FLvfAriMF8uU5ldkEz-TZBf9hFcNTgkjaKvghpKwKPZyZrrj6CUv3GwWu9nUNiakHEwbP8JVOPHOevymQOWgRED3cEnT6BB11IZ5Bt20wmskqkDC5HzSbe0oQBu4HVjDpc7grKPGaUWAhb-0l1kdCVY3i8w1vKPXBJ3pX7i1nOTYCyR6pvGIKQzT0PwaTz5Rxnf_LwFLisq3KsPBlNTbjl9cAAAD___Jpt8k=
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
@@ -69,7 +69,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 3 (24 B)
+rows read from KV: 2 (16 B)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -80,8 +80,8 @@ regions: <hidden>
 │ actual row count: 2
 │ KV time: 0µs
 │ KV contention time: 0µs
-│ KV rows read: 1
-│ KV bytes read: 8 B
+│ KV rows read: 0
+│ KV bytes read: 0 B
 │ table: d@d_pkey
 │ equality: (b) = (b)
 │
@@ -98,7 +98,7 @@ regions: <hidden>
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk99q20wQxe-_pxjm6itsHckXpSwUTE0KThO7OCE3RRer3SFVI-2ouyNqY_xYfYE-WdGuAk1NSv9dztk5M6PfQQeMn1rUeH1-eb68ATsz8Ga7uQILF5vVGhxs1uBmNbwCO6tRoWdHa9NRRP0eS6wU9oEtxchhlA6pYeV2qAuFje8HGeVKoeVAqA8ojbSEGm9M3dKWjKNwVqBCR2KaNo21i0gWFV73xkcNz1HhZhANi1It5qjw7S1I05GG4uuXmGvLXshLw_7kKfDnCIGM0zCZ673Qg1S-gNeo8Op2uYQo1IPlwQv8Tzs5a7w801Ck83ID0f1TDZ3ZQUcdhz2YtmVrhJyGIk2vjdgPFIEH6ccPGfvTWQ_CHKujwlxNvKKYO0JdHtWvM73gxk9Iy8dI3aIPTWfCHhVeMt8PPXzkxgN7DYnpBBinBYlaBpbrKKZtT9j-WQzlaQwv_1EKtCM7nO7_iwDmvxPAlmLPPtIj-E9NLo6VQnJ3lH-cyEOw9C6wTWtyuUm-JDiKkl_LXKx8fhoP_N5c_tQ8_8FcHf_7FgAA__-oKkn2
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk89qGzEQxu99imFOLajOrg89CAqmJgWnibc4IZeyB600pNvsarbSLLUxfqy-QJ-srJRAU-PSf8fv0_zj96E9xs8darw-vzxf3oCdGXi7qa7AwkW1WoODag1u1sBrsLMGFXp2tDY9RdQfsMRa4RDYUowcJmufClZui7pQ2PphlMmuFVoOhHqP0kpHqPHGNB1tyDgKZwUqdCSm7dJYu4hkUeGSu7H3UYNRMO2-HsykXqLCd7cgbU8aim9fY9aWvZCXlv3RU-AvEQIZp2GenWYn9GiVr-ANKry6XS4hCg1gefQCz2krZ62XFxqKdGEuILo_VdCbLfTUc9iB6Tq2RshpKNL0xoj9SBF4lGEUDVN9OuvRmGN9UJjVA7Io5o5Qlwf1-1gvuPUPVMunVN1iCG1vwg4VXjLfjwN84tYDew2LCUs1nbGYutKCRC0DyzqK6bojtn8XQ3EcQ_GfUqAt2fF4_z8EMP-TADYUB_aRnsA_Nbk41ArJ3VH-O5HHYOl9YJvWZFmlvmQ4ipJfyyxWPj9NB_7YXP6yef5Tc3149j0AAP__zKZLlg==
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -196,7 +196,7 @@ regions: <hidden>
       table: d@d_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkU8Fq20AQvfcrhjklZBtLcuhhIWAa3OK0tosdcik-rHenioi0q-yOqI3xZ_UH-mVFUkMjx3Fr6KHQm-bNe6OZN7MbDA85SpwPPw6vbkCfK3g3m45Bw2gyGc5gPJy9H8L1dDQBA9NJQ7gEc75EgdYZmqiCAsrPGONCYOmdphCcr6FNQxiZFcpIYGbLimt4IVA7Tyg3yBnnhBJv1DKnGSlDvhehQEOssrwpqweBNAqcl8oGCa9R4LRiCYMYBX64Bc4KkhB9_xbaWDvLZDlz9lnKu68BPCkjIWmR5ZrpEYrfwFsUOL69uoLAVIJ2lWU4oRX3MsunEqKmt5ZAdP8SoVArKKhwfg0qz51WTEZC1FRfKtZ3FMBVXNZT1PymrUcgwcVWYBv9NCuwSgllvBV_bujceSbfi7teDuIzFEgr0tVzgw61XefCQw5MRQkmC_dQBZXSX5gqOWaqp2eSdEczg9JnhfLrfaeS_Gen0n_R1F9eVtZ5Q55Mx8dFrfwdZc9mxuRTunaZJd_rdzeT0xc-GcRnp5c-S-_az84j_qfu8eKYe5xRKJ0NtGvh3spR7RuZlNo9BFd5TZ-8081v2nDa6BrAUOA2G7fByLapusGn4viguN8Rx7vi5AhxsivuHxRf7LS92L76EQAA__8gyhMy
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkUsFqGzEQvfcrhjklRI1316EHQcDUuMVpbRcn5FJ8kKWps2RX2kiz1Mb4s_oD_bKyq4baTuLW0EOhN82b90Yzb2aN4aFAideDj4P-DehzBe-mkxFoGI7HgymMBtP3A7iaDMdgYDJuCZdgzuco0DpDY1VSQPkZU5wJrLzTFILzDbRuCUOzRJkIzG1VcwPPBGrnCeUaOeeCUOKNmhc0JWXIdxIUaIhVXrRldS-QRoF9V9SlDRIUCryuVPN8jQI_3ALnJUlIvn8LMdbOMlnOnX2S8u5rAE_KSMgiMl8xPULpG3iLAke3_T4Epgq0qy3DCS25k1s-lZC07UUC0f1LhFItoaTS-RWoonBaMRkJSVt9rljfUQBXc1WzhIbftvUIZDjbCIzRT78CqwWhTDfizz29dp7Jd9JdO3vpGQqkJen6qUGH2m5y4aEAprICk4d7qINa0F-YKjtmqu1LyXZHM73K56Xyq-1rmf-_19J90ddfdtbWeUOezI6Vs0b5O8ozyxmRX9CVyy35Tnd3OQV94ZNeenZ66fPFXXyiwEkzQi_9107y4piTnFKonA20b-GzlZPGNzILinsIrvaaPnmn229iOGl1LWAocMymMRjamGoa3BanB8XdHXG6L86OEGf74u5B8cVe27PNqx8BAAD__1-LFmQ=
 
 statement ok
 RESET vectorize; RESET distsql

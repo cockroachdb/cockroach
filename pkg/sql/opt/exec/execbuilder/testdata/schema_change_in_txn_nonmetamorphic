@@ -31,6 +31,167 @@ Scan /Table/56/{1-2}
 CPut /Table/56/1/101/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
 CPut /Table/56/1/101/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1101.2
 
+query T
+EXPLAIN (OPT, CATALOG, VERBOSE)
+UPSERT INTO t SELECT a + 1 FROM t
+----
+TABLE t
+ ├── a int not null
+ ├── f decimal as ((a + b) + d) stored [write-only]
+ ├── b decimal not null default (1000.15:::DECIMAL) [write-only]
+ ├── c collatedstring{en_us} default ('empty':::STRING COLLATE en_US) [write-only]
+ ├── d decimal not null [write-only]
+ ├── e time [write-only]
+ ├── g int not null default (15:::INT8) [delete-only]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_a_b_c (a, b, c, g)
+ ├── FAMILY fam_1_d_e_f (d, e, f)
+ └── PRIMARY INDEX t_pkey
+      └── a int not null
+TABLE t
+ ├── a int not null
+ ├── f decimal as ((a + b) + d) stored [write-only]
+ ├── b decimal not null default (1000.15:::DECIMAL) [write-only]
+ ├── c collatedstring{en_us} default ('empty':::STRING COLLATE en_US) [write-only]
+ ├── d decimal not null [write-only]
+ ├── e time [write-only]
+ ├── g int not null default (15:::INT8) [delete-only]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_a_b_c (a, b, c, g)
+ ├── FAMILY fam_1_d_e_f (d, e, f)
+ └── PRIMARY INDEX t_pkey
+      └── a int not null
+TABLE t
+ ├── a int not null
+ ├── f decimal as ((a + b) + d) stored [write-only]
+ ├── b decimal not null default (1000.15:::DECIMAL) [write-only]
+ ├── c collatedstring{en_us} default ('empty':::STRING COLLATE en_US) [write-only]
+ ├── d decimal not null [write-only]
+ ├── e time [write-only]
+ ├── g int not null default (15:::INT8) [delete-only]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_a_b_c (a, b, c, g)
+ ├── FAMILY fam_1_d_e_f (d, e, f)
+ └── PRIMARY INDEX t_pkey
+      └── a int not null
+upsert t
+ ├── columns: <none>
+ ├── arbiter indexes: t_pkey
+ ├── canary column: a:29
+ ├── fetch columns: a:29 f:30 b:31 c:32 d:33 e:34 g:35
+ ├── insert-mapping:
+ │    ├── "?column?":19 => a:1
+ │    ├── f_cast:28 => f:2
+ │    ├── b_cast:24 => b:3
+ │    ├── c_cast:25 => c:4
+ │    ├── d_cast:26 => d:5
+ │    └── e_default:23 => e:6
+ ├── update-mapping:
+ │    ├── upsert_f:41 => f:2
+ │    ├── b_cast:24 => b:3
+ │    ├── c_cast:25 => c:4
+ │    ├── d_cast:26 => d:5
+ │    └── e_default:23 => e:6
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 2712.8525
+ ├── distribution: test
+ └── project
+      ├── columns: upsert_f:41 "?column?":19 e_default:23 b_cast:24 c_cast:25 d_cast:26 f_cast:28 a:29 f:30 b:31 c:32 d:33 e:34 g:35
+      ├── immutable
+      ├── stats: [rows=1000]
+      ├── cost: 2712.8425
+      ├── key: (19)
+      ├── fd: ()-->(23-26), (19)-->(28-35,41), (29)-->(30-35)
+      ├── distribution: test
+      ├── prune: (19,23-26,28-35,41)
+      ├── left-join (hash)
+      │    ├── columns: "?column?":19 e_default:23 b_cast:24 c_cast:25 d_cast:26 f_cast:28 a:29 f:30 b:31 c:32 d:33 e:34 g:35
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      │    ├── immutable
+      │    ├── stats: [rows=1000, distinct(29)=1000, null(29)=0]
+      │    ├── cost: 2692.8225
+      │    ├── key: (19)
+      │    ├── fd: ()-->(23-26), (19)-->(28-35), (29)-->(30-35)
+      │    ├── distribution: test
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: "?column?":19 e_default:23 b_cast:24 c_cast:25 d_cast:26 f_cast:28
+      │    │    ├── grouping columns: "?column?":19
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    ├── immutable
+      │    │    ├── stats: [rows=1000, distinct(19)=1000, null(19)=0, distinct(24)=1000, null(24)=0, distinct(25)=1000, null(25)=0, distinct(26)=1000, null(26)=0, distinct(28)=1000, null(28)=0]
+      │    │    ├── cost: 1345.83625
+      │    │    ├── key: (19)
+      │    │    ├── fd: ()-->(23-26), (19)-->(23-26,28)
+      │    │    ├── distribution: test
+      │    │    ├── project
+      │    │    │    ├── columns: f_cast:28 "?column?":19 e_default:23 b_cast:24 c_cast:25 d_cast:26
+      │    │    │    ├── immutable
+      │    │    │    ├── stats: [rows=1000, distinct(19)=1000, null(19)=0]
+      │    │    │    ├── cost: 1265.66
+      │    │    │    ├── fd: ()-->(23-26), (19)-->(28)
+      │    │    │    ├── distribution: test
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: b_cast:24 c_cast:25 d_cast:26 e_default:23 "?column?":19
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── stats: [rows=1000, distinct(19)=1000, null(19)=0]
+      │    │    │    │    ├── cost: 1245.64
+      │    │    │    │    ├── fd: ()-->(23-26)
+      │    │    │    │    ├── distribution: test
+      │    │    │    │    ├── prune: (19,23-26)
+      │    │    │    │    ├── scan t
+      │    │    │    │    │    ├── columns: a:10
+      │    │    │    │    │    ├── stats: [rows=1000, distinct(10)=1000, null(10)=0]
+      │    │    │    │    │    ├── cost: 1185.62
+      │    │    │    │    │    ├── key: (10)
+      │    │    │    │    │    ├── distribution: test
+      │    │    │    │    │    ├── prune: (10)
+      │    │    │    │    │    └── interesting orderings: (+10)
+      │    │    │    │    └── projections
+      │    │    │    │         ├── 1000.2 [as=b_cast:24]
+      │    │    │    │         ├── 'empty' COLLATE en_US [as=c_cast:25]
+      │    │    │    │         ├── 0.00 [as=d_cast:26]
+      │    │    │    │         ├── CAST(NULL AS TIME) [as=e_default:23]
+      │    │    │    │         └── a:10 + 1 [as="?column?":19, outer=(10), immutable]
+      │    │    │    └── projections
+      │    │    │         └── assignment-cast: DECIMAL(10,1) [as=f_cast:28, outer=(19), immutable]
+      │    │    │              └── "?column?":19 + 1000.2
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=b_cast:24, outer=(24)]
+      │    │         │    └── b_cast:24
+      │    │         ├── first-agg [as=c_cast:25, outer=(25)]
+      │    │         │    └── c_cast:25
+      │    │         ├── first-agg [as=d_cast:26, outer=(26)]
+      │    │         │    └── d_cast:26
+      │    │         ├── first-agg [as=e_default:23, outer=(23)]
+      │    │         │    └── e_default:23
+      │    │         └── first-agg [as=f_cast:28, outer=(28)]
+      │    │              └── f_cast:28
+      │    ├── scan t
+      │    │    ├── columns: a:29 f:30 b:31 c:32 d:33 e:34 g:35
+      │    │    ├── stats: [rows=1000, distinct(29)=1000, null(29)=0]
+      │    │    ├── cost: 1306.82
+      │    │    ├── key: (29)
+      │    │    ├── fd: (29)-->(30-35)
+      │    │    ├── distribution: test
+      │    │    ├── prune: (29-35)
+      │    │    ├── interesting orderings: (+29)
+      │    │    └── unfiltered-cols: (29-37)
+      │    └── filters
+      │         └── "?column?":19 = a:29 [outer=(19,29), constraints=(/19: (/NULL - ]; /29: (/NULL - ]), fd=(19)==(29), (29)==(19)]
+      └── projections
+           └── case [as=upsert_f:41, outer=(24,26,28,29), immutable]
+                ├── true
+                ├── when
+                │    ├── a:29 IS NULL
+                │    └── f_cast:28
+                └── assignment-cast: DECIMAL(10,1)
+                     └── d_cast:26 + (a:29 + b_cast:24)
+
 # Expect default values for b, c, zero value for d, and NULL value for e.
 query T kvtrace(prefix=/Table/56/)
 UPSERT INTO t SELECT a + 1 FROM t

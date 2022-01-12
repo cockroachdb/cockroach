@@ -144,10 +144,26 @@ func indexDetail(desc *descpb.TableDescriptor, indexIdx uint32) string {
 
 // summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
-	details := []string{indexDetail(&tr.Table, tr.IndexIdx)}
+	details := make([]string, 0, 3)
+	details = append(details, indexDetail(&tr.Table, tr.IndexIdx))
+	tbl := tabledesc.NewUnsafeImmutable(&tr.Table)
+	var b strings.Builder
+	b.WriteString("Columns:")
+	for i, colID := range tr.ColumnIDs {
+		col, err := tbl.FindColumnWithID(colID)
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteByte(' ')
+		if err != nil {
+			b.WriteString(fmt.Sprintf("?%d?", colID))
+		} else {
+			b.WriteString(col.GetName())
+		}
+	}
+	details = append(details, b.String())
 
 	if len(tr.Spans) > 0 {
-		tbl := tabledesc.NewUnsafeImmutable(&tr.Table)
 		// only show the first span
 		idx := tbl.ActiveIndexes()[int(tr.IndexIdx)]
 		valDirs := catalogkeys.IndexKeyValDirs(idx)

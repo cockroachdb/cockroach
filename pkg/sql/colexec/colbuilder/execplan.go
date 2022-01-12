@@ -170,9 +170,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.TableReader != nil:
-		if spec.Core.TableReader.DeprecatedIsCheck {
-			return errors.Newf("scrub table reader is unsupported in vectorized")
-		}
 		return nil
 
 	case spec.Core.JoinReader != nil:

@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -32,11 +33,10 @@ type cFetcherTableArgs struct {
 	desc  catalog.TableDescriptor
 	index catalog.Index
 	// ColIdxMap is a mapping from ColumnID to the ordinal of the corresponding
-	// column within the cols field. Only needed columns are present.
+	// column within the cols field.
 	ColIdxMap        catalog.TableColMap
 	isSecondaryIndex bool
-	// cols are all needed columns of the table that are present in the index.
-	// The system columns, if requested, are at the end of cols.
+	// cols are the columns for which we need to produce values.
 	cols []catalog.Column
 	// typs are the types of only needed columns from the table.
 	typs []*types.T
@@ -73,13 +73,60 @@ func (a *cFetcherTableArgs) populateTypes(cols []catalog.Column) {
 	}
 }
 
-// populateTableArgs fills all fields of the cFetcherTableArgs. It examines the
-// given post-processing spec to find the set of the needed columns, and only
-// these columns are added into the table args while post is adjusted
-// accordingly.
+// populateTableArgs fills in cFetcherTableArgs.
+func populateTableArgs(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	columnIDs []descpb.ColumnID,
+	invertedCol catalog.Column,
+	helper *colexecargs.ExprHelper,
+) (_ *cFetcherTableArgs, _ error) {
+	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
+
+	if cap(args.cols) < len(columnIDs) {
+		args.cols = make([]catalog.Column, len(columnIDs))
+	}
+	cols := args.cols[:0]
+	for _, colID := range columnIDs {
+		if invertedCol != nil && colID == invertedCol.GetID() {
+			cols = append(cols, invertedCol)
+		} else {
+			col, err := table.FindColumnWithID(colID)
+			if err != nil {
+				return nil, err
+			}
+			cols = append(cols, col)
+		}
+	}
+	*args = cFetcherTableArgs{
+		desc:             table,
+		index:            index,
+		isSecondaryIndex: !index.Primary(),
+		cols:             cols,
+		typs:             args.typs,
+	}
+	args.populateTypes(cols)
+	for i := range cols {
+		args.ColIdxMap.Set(cols[i].GetID(), i)
+	}
+
+	// Before we can safely use types from the table descriptor, we need to
+	// make sure they are hydrated. In row execution engine it is done during
+	// the processor initialization, but neither ColBatchScan nor cFetcher are
+	// processors, so we need to do the hydration ourselves.
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	return args, resolver.HydrateTypeSlice(ctx, args.typs)
+}
+
+// populateTableArgsLegacy is a legacy version of populateTableArgs which
+// examines the given post-processing spec to find the set of the needed
+// columns. These columns are added to the table args and the column references
+// in post are adjusted accordingly.
 // - neededColumns is a set containing the ordinals of all columns that need to
 // be fetched.
-func populateTableArgs(
+func populateTableArgsLegacy(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	table catalog.TableDescriptor,
