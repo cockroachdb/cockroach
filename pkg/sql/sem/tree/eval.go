@@ -494,19 +494,19 @@ func initNonArrayToNonArrayConcatenation() {
 			Volatility: volatility,
 		})
 	}
-	fromTypeToVolatility := make(map[types.Family]Volatility)
-	for _, cast := range validCasts {
-		if cast.to == types.StringFamily {
-			fromTypeToVolatility[cast.from] = cast.volatility
+	fromTypeToVolatility := make(map[oid.Oid]Volatility)
+	ForEachCast(func(src, tgt oid.Oid) {
+		if tgt == oid.T_text {
+			fromTypeToVolatility[src] = castMap[src][tgt].volatility
 		}
-	}
+	})
 	// We allow tuple + string concatenation, as well as any scalar types.
 	for _, t := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
 		// Do not re-add String+String or String+Bytes, as they already exist
 		// and have predefined correct behavior.
 		if t != types.String && t != types.Bytes {
-			addConcat(t, types.String, fromTypeToVolatility[t.Family()])
-			addConcat(types.String, t, fromTypeToVolatility[t.Family()])
+			addConcat(t, types.String, fromTypeToVolatility[t.Oid()])
+			addConcat(types.String, t, fromTypeToVolatility[t.Oid()])
 		}
 	}
 }
