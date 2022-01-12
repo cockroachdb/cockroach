@@ -506,11 +506,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			filter(ctx, ex.sessionData(), ast.String(), execErr)
 		}
 
-		// Do the auto-commit, if necessary.
+		// Do the auto-commit, if necessary. In the extended protocol, the
+		// auto-commit happens when the Sync message is handled.
 		if retEv != nil || retErr != nil {
 			return
 		}
-		if canAutoCommit {
+		if canAutoCommit && !isExtendedProtocol {
 			retEv, retPayload = ex.handleAutoCommit(ctx, ast)
 			return
 		}
@@ -709,7 +710,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
 
-	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec
 
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
