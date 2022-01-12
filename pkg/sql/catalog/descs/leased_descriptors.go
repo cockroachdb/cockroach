@@ -116,12 +116,8 @@ func (ld *leasedDescriptors) getByID(
 	ctx context.Context, txn deadlineHolder, id descpb.ID, setTxnDeadline bool,
 ) (_ catalog.Descriptor, shouldReadFromStore bool, _ error) {
 	// First, look to see if we already have the table in the shared cache.
-	if cached := ld.cache.GetByID(id); cached != nil {
-		if log.V(2) {
-			log.Eventf(ctx, "found descriptor in collection for (%d, %d, '%s'): %d",
-				cached.GetParentID(), cached.GetParentSchemaID(), cached.GetName(), id)
-		}
-		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
+	if cached := ld.getCachedByID(ctx, id); cached != nil {
+		return cached, false, nil
 	}
 
 	if systemschema.IsUnleasableSystemDescriptorByID(id) {
@@ -131,6 +127,18 @@ func (ld *leasedDescriptors) getByID(
 	readTimestamp := txn.ReadTimestamp()
 	desc, err := ld.lm.Acquire(ctx, readTimestamp, id)
 	return ld.getResult(ctx, txn, setTxnDeadline, desc, err)
+}
+
+func (ld *leasedDescriptors) getCachedByID(ctx context.Context, id descpb.ID) catalog.Descriptor {
+	cached := ld.cache.GetByID(id)
+	if cached == nil {
+		return nil
+	}
+	if log.V(2) {
+		log.Eventf(ctx, "found descriptor in collection for (%d, %d, '%s'): %d",
+			cached.GetParentID(), cached.GetParentSchemaID(), cached.GetName(), id)
+	}
+	return cached.(lease.LeasedDescriptor).Underlying()
 }
 
 // getResult is a helper to deal with the result that comes back from Acquire
