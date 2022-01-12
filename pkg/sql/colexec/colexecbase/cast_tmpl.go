@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -418,14 +417,6 @@ func setNativeToDatumCast(
 
 type cast_NAMEOp struct {
 	castOpBase
-
-	// {{if and (eq $fromFamily "types.DecimalFamily") (eq $toFamily "types.IntFamily")}}
-	// {{/*
-	// overloadHelper is used only when we perform the cast from decimals to
-	// ints. In all other cases we don't want to wastefully allocate the helper.
-	// */}}
-	overloadHelper execgen.OverloadHelper
-	// {{end}}
 }
 
 var _ colexecop.ResettableOperator = &cast_NAMEOp{}
@@ -437,11 +428,6 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	// {{if and (eq $fromFamily "types.DecimalFamily") (eq $toFamily "types.IntFamily")}}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
-	_overloadHelper := c.overloadHelper
-	// {{end}}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
