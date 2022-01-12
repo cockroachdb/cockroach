@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -83,7 +84,7 @@ func TestResolver(t *testing.T) {
 			tcs[i], tcs[j] = tcs[j], tcs[i]
 		})
 		populateFakeStatusServerCluster(statusServer, tcs)
-		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs)
+		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
 		resolver.enqueue(input)
 		actual, err := resolver.dequeue(ctx)
 		require.NoError(t, err)
@@ -127,7 +128,7 @@ func TestResolver(t *testing.T) {
 		}
 
 		populateFakeStatusServerCluster(statusServer, tcs)
-		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs)
+		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
 		resolver.enqueue(input)
 		actual, err := resolver.dequeue(ctx)
 		require.NoError(t, err)
@@ -139,7 +140,7 @@ func TestResolver(t *testing.T) {
 		require.Equal(t, 1 /* expected */, len(resolver.mu.unresolvedEvents),
 			"expected resolver to retry resolution for active txns, "+
 				"but it did not")
-		require.True(t, activeTxnID.Equal(resolver.mu.unresolvedEvents[0].Event.TxnMeta.ID))
+		require.True(t, activeTxnID.Equal(resolver.mu.unresolvedEvents[0].BlockingEvent.TxnMeta.ID))
 		require.Empty(t, resolver.mu.remainingRetries,
 			"expected resolver not to create retry record for active txns, "+
 				"but it did")
@@ -163,7 +164,7 @@ func TestResolver(t *testing.T) {
 			},
 		}
 		populateFakeStatusServerCluster(statusServer, newTxns)
-		newInput, newExpected := generateUnresolvedContentionEventsFromTestData(t, newTxns)
+		newInput, newExpected := generateUnresolvedContentionEventsFromTestData(t, newTxns, time.Time{})
 		// The txn with 'activeTxnID' is already present in the resolver. Omit it
 		// from the input.
 		newInput = newInput[:1]
@@ -212,7 +213,7 @@ func TestResolver(t *testing.T) {
 		// Explicitly omit the last missing txnID from status server to simulate an
 		// evicted txnID from txnIDCache.
 		populateFakeStatusServerCluster(statusServer, tcs[:2])
-		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs)
+		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
 
 		resolver.enqueue(input)
 		actual, err := resolver.dequeue(ctx)
@@ -285,11 +286,11 @@ func TestResolver(t *testing.T) {
 		statusServer.setStatusServerError(
 			"3" /* coordinatorNode */, injectedErr)
 
-		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs)
+		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
 		expected = sortResolvedContentionEvents(expected)
 		expectedWithOnlyResultsFromAvailableNodes := make([]contentionpb.ExtendedContentionEvent, 0, len(expected))
 		for _, event := range expected {
-			if event.Event.TxnMeta.CoordinatorNodeID != 3 {
+			if event.BlockingEvent.TxnMeta.CoordinatorNodeID != 3 {
 				expectedWithOnlyResultsFromAvailableNodes = append(expectedWithOnlyResultsFromAvailableNodes, event)
 			}
 		}
@@ -330,7 +331,7 @@ func TestResolver(t *testing.T) {
 		// Take down node 2.
 		statusServer.setStatusServerError(
 			"2" /* coordinatorNodeID */, injectedErr)
-		input2, expected2 := generateUnresolvedContentionEventsFromTestData(t, tcs)
+		input2, expected2 := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
 
 		resolver.enqueue(input2)
 		require.Equal(t, 2, len(resolver.mu.unresolvedEvents))
@@ -356,7 +357,7 @@ func TestResolver(t *testing.T) {
 		require.Equal(t, 1, len(resolver.mu.unresolvedEvents))
 		require.Equal(t, 1, len(resolver.mu.remainingRetries))
 		require.Empty(t, resolver.mu.resolvedEvents)
-		require.True(t, resolver.mu.unresolvedEvents[0].Event.TxnMeta.ID.Equal(missingTxnID2))
+		require.True(t, resolver.mu.unresolvedEvents[0].BlockingEvent.TxnMeta.ID.Equal(missingTxnID2))
 
 		// Lift all injected RPC errors to simulate nodes coming back online.
 		statusServer.clearErrors()
@@ -372,29 +373,30 @@ func sortResolvedContentionEvents(
 	events []contentionpb.ExtendedContentionEvent,
 ) []contentionpb.ExtendedContentionEvent {
 	sort.Slice(events, func(i, j int) bool {
-		return events[i].TxnFingerprintID < events[j].TxnFingerprintID
+		return events[i].BlockingTxnFingerprintID < events[j].BlockingTxnFingerprintID
 	})
 	return events
 }
 
 func generateUnresolvedContentionEventsFromTestData(
-	t *testing.T, tcs []testData,
+	t *testing.T, tcs []testData, collectionTs time.Time,
 ) (
 	input []contentionpb.ExtendedContentionEvent,
 	expected []contentionpb.ExtendedContentionEvent,
 ) {
 	for _, tc := range tcs {
 		event := contentionpb.ExtendedContentionEvent{}
-		event.Event.TxnMeta.ID = tc.TxnID
+		event.BlockingEvent.TxnMeta.ID = tc.TxnID
 		coordinatorID, err := strconv.Atoi(tc.coordinatorNodeID)
 		require.NoError(t, err)
-		event.Event.TxnMeta.CoordinatorNodeID = int32(coordinatorID)
+		event.BlockingEvent.TxnMeta.CoordinatorNodeID = int32(coordinatorID)
 		input = append(input, event)
 
 		if tc.TxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
 			resolvedEvent := contentionpb.ExtendedContentionEvent{}
-			resolvedEvent.Event = event.Event
-			resolvedEvent.TxnFingerprintID = tc.TxnFingerprintID
+			resolvedEvent.BlockingEvent = event.BlockingEvent
+			resolvedEvent.BlockingTxnFingerprintID = tc.TxnFingerprintID
+			resolvedEvent.CollectionTs = collectionTs
 			expected = append(expected, resolvedEvent)
 		}
 	}

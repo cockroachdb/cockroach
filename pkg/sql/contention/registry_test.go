@@ -11,6 +11,7 @@
 package contention_test
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -68,6 +70,7 @@ func TestRegistry(t *testing.T) {
 		}
 		return stringRepresentation
 	}
+	st := cluster.MakeTestingClusterSettings()
 	registryMap := make(map[string]*contention.Registry)
 	// registry is the current registry.
 	var registry *contention.Registry
@@ -79,7 +82,7 @@ func TestRegistry(t *testing.T) {
 			var ok bool
 			registry, ok = registryMap[registryKey]
 			if !ok {
-				registry = contention.NewRegistry()
+				registry = contention.NewRegistry(st, nil /* status */)
 				registryMap[registryKey] = registry
 			}
 			return d.Expected
@@ -170,7 +173,10 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 	const numGoroutines = 10
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
-	registry := contention.NewRegistry()
+	st := cluster.MakeTestingClusterSettings()
+	// Disable the event store.
+	contention.TxnIDResolutionInterval.Override(context.Background(), &st.SV, 0)
+	registry := contention.NewRegistry(st, nil /* status */)
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
@@ -301,8 +307,11 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 		}
 	}
 
+	st := cluster.MakeTestingClusterSettings()
+	// Disable the event store.
+	contention.TxnIDResolutionInterval.Override(context.Background(), &st.SV, 0)
 	createNewSerializedRegistry := func() contentionpb.SerializedRegistry {
-		r := contention.NewRegistry()
+		r := contention.NewRegistry(st, nil /* status */)
 		populateRegistry(r)
 		s := r.Serialize()
 		checkSerializedRegistryInvariants(s)
