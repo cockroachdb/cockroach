@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -71,7 +72,7 @@ func (c *fifoCache) add(b *block) {
 
 	blockSize := 0
 	for i := range b {
-		if !b[i].valid() {
+		if !b[i].Valid() {
 			break
 		}
 
@@ -120,7 +121,7 @@ func (c *fifoCache) maybeEvictLocked() {
 // evictNodeLocked deletes all entries in the block from the internal map.
 func (c *fifoCache) evictNodeLocked(node *blockListNode) {
 	for i := 0; i < blockSize; i++ {
-		if !node.block[i].valid() {
+		if !node.block[i].Valid() {
 			break
 		}
 
@@ -128,7 +129,7 @@ func (c *fifoCache) evictNodeLocked(node *blockListNode) {
 	}
 }
 
-func (e *blockList) append(block []ResolvedTxnID) {
+func (e *blockList) append(block []contentionpb.ResolvedTxnID) {
 	block = e.appendToTail(block)
 	for len(block) > 0 {
 		e.addNode()
@@ -147,7 +148,9 @@ func (e *blockList) addNode() {
 	e.tailIdx = 0
 }
 
-func (e *blockList) appendToTail(block []ResolvedTxnID) (remaining []ResolvedTxnID) {
+func (e *blockList) appendToTail(
+	block []contentionpb.ResolvedTxnID,
+) (remaining []contentionpb.ResolvedTxnID) {
 	if e.head == nil {
 		return block
 	}

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -94,7 +95,7 @@ func BenchmarkWriter(b *testing.B) {
 				randomValueBase := numOfOps * writerIdx
 				for i := 0; i < numOfOps; i++ {
 					randomValue := randomValueBase + i
-					w.Record(ResolvedTxnID{
+					w.Record(contentionpb.ResolvedTxnID{
 						TxnID:            generateUUID(uint64(randomValue)),
 						TxnFingerprintID: roachpb.TransactionFingerprintID(math.MaxInt - randomValue),
 					})
@@ -160,7 +161,7 @@ var _ blockSink = &counterSink{}
 
 func (c *counterSink) push(block *block) {
 	for i := 0; i < blockSize; i++ {
-		if !block[i].valid() {
+		if !block[i].Valid() {
 			break
 		}
 		c.numOfRecord++
@@ -173,7 +174,7 @@ func TestTxnIDCacheCanBeDisabledViaClusterSetting(t *testing.T) {
 
 	sink := &counterSink{}
 	w := newWriter(st, sink)
-	w.Record(ResolvedTxnID{
+	w.Record(contentionpb.ResolvedTxnID{
 		TxnID: uuid.FastMakeV4(),
 	})
 
@@ -183,7 +184,7 @@ func TestTxnIDCacheCanBeDisabledViaClusterSetting(t *testing.T) {
 	// This should disable txn id cache.
 	MaxSize.Override(ctx, &st.SV, 0)
 
-	w.Record(ResolvedTxnID{
+	w.Record(contentionpb.ResolvedTxnID{
 		TxnID: uuid.FastMakeV4(),
 	})
 	w.Flush()
@@ -192,7 +193,7 @@ func TestTxnIDCacheCanBeDisabledViaClusterSetting(t *testing.T) {
 	// This should re-enable txn id cache.
 	MaxSize.Override(ctx, &st.SV, MaxSize.Default())
 
-	w.Record(ResolvedTxnID{
+	w.Record(contentionpb.ResolvedTxnID{
 		TxnID: uuid.FastMakeV4(),
 	})
 	w.Flush()
