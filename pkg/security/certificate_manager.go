@@ -126,7 +126,7 @@ type CertificateManager struct {
 	clientCerts    map[SQLUsername]*CertInfo
 
 	// Certs only used with multi-tenancy.
-	tenantCACert, tenantCert *CertInfo
+	tenantCACert, tenantCert, tenantSigningCert *CertInfo
 
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
 	// Server-side config.
@@ -401,6 +401,26 @@ func TenantKeyFilename(tenantIdentifier string) string {
 	return "client-tenant." + tenantIdentifier + keyExtension
 }
 
+// TenantSigningCertPath returns the expected file path for the node certificate.
+func (cl CertsLocator) TenantSigningCertPath(tenantIdentifier string) string {
+	return filepath.Join(cl.certsDir, TenantSigningCertFilename(tenantIdentifier))
+}
+
+// TenantSigningCertFilename returns the expected file name for the node certificate.
+func TenantSigningCertFilename(tenantIdentifier string) string {
+	return "tenant-signing." + tenantIdentifier + certExtension
+}
+
+// TenantSigningKeyPath returns the expected file path for the node key.
+func (cl CertsLocator) TenantSigningKeyPath(tenantIdentifier string) string {
+	return filepath.Join(cl.certsDir, TenantSigningKeyFilename(tenantIdentifier))
+}
+
+// TenantSigningKeyFilename returns the expected file name for the node key.
+func TenantSigningKeyFilename(tenantIdentifier string) string {
+	return "tenant-signing." + tenantIdentifier + keyExtension
+}
+
 // ClientCertPath returns the expected file path for the user's certificate.
 func (cl CertsLocator) ClientCertPath(user SQLUsername) string {
 	return filepath.Join(cl.certsDir, ClientCertFilename(user))
@@ -601,7 +621,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	}
 
 	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
-	var tenantCACert, tenantCert *CertInfo
+	var tenantCACert, tenantCert, tenantSigningCert *CertInfo
 	clientCerts := make(map[SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
@@ -623,6 +643,17 @@ func (cm *CertificateManager) LoadCertificates() error {
 			}
 			if tenantID == cm.tenantIdentifier {
 				tenantCert = ci
+			}
+		case TenantSigningPem:
+			// When there are multiple tenant signing certs, pick the one we need only.
+			// In practice, this is expected only during testing, when we share a certs
+			// dir between multiple tenants.
+			tenantID, err := strconv.ParseUint(ci.Name, 10, 64)
+			if err != nil {
+				return errors.Errorf("invalid tenant id %s", ci.Name)
+			}
+			if tenantID == cm.tenantIdentifier {
+				tenantSigningCert = ci
 			}
 		case TenantCAPem:
 			tenantCACert = ci
@@ -701,6 +732,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.tenantConfig = nil
 	cm.tenantCACert = tenantCACert
 	cm.tenantCert = tenantCert
+	cm.tenantSigningCert = tenantSigningCert
 
 	cm.updateMetricsLocked()
 	return nil
@@ -1037,6 +1069,18 @@ func (cm *CertificateManager) GetTenantTLSConfig() (*tls.Config, error) {
 
 	cm.tenantConfig = cfg
 	return cfg, nil
+}
+
+// GetTenantSigningCert returns the most up-to-date tenant signing certificate.
+func (cm *CertificateManager) GetTenantSigningCert() (*CertInfo, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	c := cm.tenantSigningCert
+	if err := checkCertIsValid(c); err != nil {
+		return nil, makeError(err, "problem with tenant signing certificate")
+	}
+	return c, nil
 }
 
 // GetClientTLSConfig returns the most up-to-date client tls.Config.

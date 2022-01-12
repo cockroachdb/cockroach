@@ -150,6 +150,8 @@ func TestGenerateTenantCerts(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, security.WriteTenantPair(certsDir, cp, false))
 
+	require.NoError(t, security.CreateTenantSigningPair(certsDir, time.Hour, false /* overwrite */, 999))
+
 	cl := security.NewCertificateLoader(certsDir)
 	require.NoError(t, cl.Load())
 	infos := cl.Certificates()
@@ -173,6 +175,11 @@ func TestGenerateTenantCerts(t *testing.T) {
 		{
 			FileUsage: security.TenantPem,
 			Filename:  "client-tenant.999.crt",
+			Name:      "999",
+		},
+		{
+			FileUsage: security.TenantSigningPem,
+			Filename:  "tenant-signing.999.crt",
 			Name:      "999",
 		},
 	}, infos)
@@ -221,6 +228,8 @@ func TestGenerateNodeCerts(t *testing.T) {
 // ca.crt: CA certificate
 // node.crt: dual-purpose node certificate
 // client.root.crt: client certificate for the root user.
+// client-tenant.10.crt: tenant client certificate for tenant 10.
+// tenant-signing.10.crt: tenant signing certificate for tenant 10.
 func generateBaseCerts(certsDir string) error {
 	{
 		caKey := filepath.Join(certsDir, security.EmbeddedCAKey)
@@ -248,6 +257,7 @@ func generateBaseCerts(certsDir string) error {
 	}
 
 	{
+		tenantID := uint64(10)
 		caKey := filepath.Join(certsDir, security.EmbeddedTenantCAKey)
 		if err := security.CreateTenantCAPair(
 			certsDir, caKey,
@@ -257,11 +267,14 @@ func generateBaseCerts(certsDir string) error {
 		}
 
 		tcp, err := security.CreateTenantPair(certsDir, caKey,
-			testKeySize, time.Hour*48, 10, []string{"127.0.0.1"})
+			testKeySize, time.Hour*48, tenantID, []string{"127.0.0.1"})
 		if err != nil {
 			return err
 		}
 		if err := security.WriteTenantPair(certsDir, tcp, true); err != nil {
+			return err
+		}
+		if err := security.CreateTenantSigningPair(certsDir, 96*time.Hour, true /* overwrite */, tenantID); err != nil {
 			return err
 		}
 	}
