@@ -1955,7 +1955,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 	}
 }
 
-func (ex *connExecutor) onTxnRestart() {
+func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 	if ex.extraTxnState.shouldExecuteOnTxnRestart {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
 		ex.extraTxnState.transactionStatementFingerprintIDs = nil
@@ -1969,7 +1969,7 @@ func (ex *connExecutor) onTxnRestart() {
 		ex.extraTxnState.rowsWritten = 0
 
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
-			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)
+			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.extraTxnState.autoRetryReason)
 		}
 	}
 }
