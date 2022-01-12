@@ -356,6 +356,55 @@ func TestConstraintContainsSpan(t *testing.T) {
 	}
 }
 
+func TestConstraintIntersectsSpan(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	// Each test case has a bunch of spans that are expected to intersect the
+	// constraint, and a bunch of spans that are expected not to.
+	testData := []struct {
+		constraint           string
+		intersectingSpans    string
+		notIntersectingSpans string
+	}{
+		{
+			constraint:           "/1: [/1 - /3]",
+			intersectingSpans:    "[/0 - /1] (/0 - /2] [/2 - /2] (/0 - /3) [/1 - /1] (/1 - /2) [/2 - /3] [/1 - /3] [/2 - /5]",
+			notIntersectingSpans: "[/0 - /1) (/3 - /5) [/7 - /7] [/7 - /10]",
+		},
+		{
+			constraint: "/1/2: [ - /2] [/4 - /4] [/5/3 - /7) [/9 - /9/20]",
+			intersectingSpans: "[ - /1] [ - /2] [ - /3] [/1 - /2] [/2 - /2] [/3 - /4] [/4 - /4] " +
+				"[/5/3 - /5/3/1] [/5/3 - /7] [/6 - /8] [/5/5 - /7) [/9/19 - /9/20] [/9/20 - /9/21] [/8 - /9]",
+			notIntersectingSpans: "[/3 - /3] (/2 - /4) [/5 - /5/3) (/9/20 - /10]",
+		},
+		{
+			constraint:           "/1/-2: [/1/5 - /1/2] [/3/5 - /5/2] [/7 - ]",
+			intersectingSpans:    "[/1/5 - /1/2] [/1/4 - /1/3] [/1/4 - /1/2] [/4 - /5) [/4 - /5/1] [/4/6 - /5/3] [/6/10 - ]",
+			notIntersectingSpans: "[ - /1/6] (/1/2 - /3/5) [/6 - /7) (/6/3 - /6/9]",
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := ParseConstraint(&evalCtx, tc.constraint)
+
+			spans := parseSpans(&evalCtx, tc.intersectingSpans)
+			for i := 0; i < spans.Count(); i++ {
+				if sp := spans.Get(i); !c.IntersectsSpan(&evalCtx, sp) {
+					t.Errorf("%s should intersect span %s", c, sp)
+				}
+			}
+			spans = parseSpans(&evalCtx, tc.notIntersectingSpans)
+			for i := 0; i < spans.Count(); i++ {
+				if sp := spans.Get(i); c.IntersectsSpan(&evalCtx, sp) {
+					t.Errorf("%s should not intersect span %s", c, sp)
+				}
+			}
+		})
+	}
+}
+
 func TestConstraintCombine(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

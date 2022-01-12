@@ -216,6 +216,11 @@ func init() {
 		buildChildReqOrdering: sortBuildChildReqOrdering,
 		buildProvidedOrdering: sortBuildProvided,
 	}
+	funcMap[opt.DistributeOp] = funcs{
+		canProvideOrdering:    distributeCanProvideOrdering,
+		buildChildReqOrdering: distributeBuildChildReqOrdering,
+		buildProvidedOrdering: distributeBuildProvided,
+	}
 	funcMap[opt.InsertOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
 		buildChildReqOrdering: mutationBuildChildReqOrdering,
