@@ -1489,6 +1489,24 @@ message UserSQLRolesResponse {
   repeated string roles = 1;
 }
 
+// Request object for issuing Transaction ID Resolution.
+message TxnIDResolutionRequest {
+  // coordinator_id is either the NodeID or SQLInstanceID depending on whether
+  // the transaction is executed on a system tenant or a regular tenant.
+  string coordinator_id = 1 [(gogoproto.customname) = "CoordinatorID"];
+
+  repeated bytes txnIDs = 2 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+}
+
+// Response object for issuing Transaction ID Resolution.
+message TxnIDResolutionResponse {
+  repeated cockroach.sql.contentionpb.ResolvedTxnID resolvedTxnIDs = 1 [
+    (gogoproto.nullable) = false];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -1881,4 +1899,20 @@ service Status {
       get: "/_status/sqlroles"
     };
   }
+
+  // TxnIDResolution is used by the contention event store to resolve
+  // transaction ID into transaction fingerprint IDs.
+  // This RPC does not have a corresponding HTTP endpoint on purpose, since
+  // DB Console should never directly query this endpoint.
+  //
+  // The API contract is the following:
+  // - if the server can resolve the transaction IDs in the RPC request, it will
+  //   be returned in the RPC response.
+  // - if the server is not able to resolve the transaction IDs, it will
+  //   instructs the transaction ID cache to drain its write buffer. (Since
+  //   transaction ID cache's write path is asynchronous, the transaction ID
+  //   requested by the client might not be available in the cache yet).
+  //   Client is responsible to perform retries if the requested transaction ID
+  //   is not returned in the RPC response.
+  rpc TxnIDResolution(TxnIDResolutionRequest) returns (TxnIDResolutionResponse) {}
 }
