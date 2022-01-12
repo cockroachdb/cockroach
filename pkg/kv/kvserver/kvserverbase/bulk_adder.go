@@ -63,6 +63,15 @@ type BulkAdderOptions struct {
 	// requests accordingly or check the MVCCAddSSTable version gate.
 	DisallowShadowingBelow hlc.Timestamp
 
+	// WriteAtRequestTimestamp controls the corresponding AddSSTable request
+	// option which updates all MVCC timestamps in the SST to the request
+	// timestamp, even if the request gets pushed. This ensures the writes
+	// comply with the timestamp cache and closed timestamp.
+	//
+	// Note that older nodes do not respect this flag so callers should
+	// check MVCCAddSSTable.
+	WriteAtRequestTimestamp bool
+
 	// BatchTimestamp is the timestamp to use on AddSSTable requests (which can be
 	// different from the timestamp used to construct the adder which is what is
 	// actually applied to each key).

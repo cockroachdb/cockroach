@@ -75,6 +75,9 @@ type SSTBatcher struct {
 	// disallowShadowingBelow is described on roachpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
 
+	// writeAtRequestTimestamp is described on roachpb.AddSSTableRequest.
+	writeAtRequestTimestamp bool
+
 	// skips duplicate keys (iff they are buffered together). This is true when
 	// used to backfill an inverted index. An array in JSONB with multiple values
 	// which are the same, will all correspond to the same kv in the inverted
@@ -347,7 +350,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	}
 
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowingBelow, b.ms, b.settings, b.batchTS)
+	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowingBelow, b.writeAtRequestTimestamp, b.ms, b.settings, b.batchTS)
 	if err != nil {
 		return err
 	}
@@ -427,6 +430,7 @@ type sstSpan struct {
 	start, end             roachpb.Key
 	sstBytes               []byte
 	disallowShadowingBelow hlc.Timestamp
+	writeAtRequestTs       bool
 	stats                  enginepb.MVCCStats
 }
 
@@ -439,6 +443,7 @@ func AddSSTable(
 	start, end roachpb.Key,
 	sstBytes []byte,
 	disallowShadowingBelow hlc.Timestamp,
+	writeAtRequestTimestamp bool,
 	ms enginepb.MVCCStats,
 	settings *cluster.Settings,
 	batchTs hlc.Timestamp,
@@ -461,7 +466,8 @@ func AddSSTable(
 		stats = ms
 	}
 
-	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, disallowShadowingBelow: disallowShadowingBelow, stats: stats}}
+	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes,
+		disallowShadowingBelow: disallowShadowingBelow, writeAtRequestTs: writeAtRequestTimestamp, stats: stats}}
 	const maxAddSSTableRetries = 10
 	for len(work) > 0 {
 		item := work[0]
@@ -489,7 +495,7 @@ func AddSSTable(
 				// This will fail if the range has split but we'll check for that below.
 				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, false, /* disallowConflicts */
 					!item.disallowShadowingBelow.IsEmpty(), item.disallowShadowingBelow, &item.stats,
-					ingestAsWriteBatch, batchTs, false /* writeAtBatchTs */)
+					ingestAsWriteBatch, batchTs, item.writeAtRequestTs)
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil
