@@ -274,6 +274,11 @@ func IsUndefinedRelationError(err error) bool {
 	return errHasCode(err, pgcode.UndefinedTable)
 }
 
+// IsUndefinedDatabaseError checks whether this is an undefined database error.
+func IsUndefinedDatabaseError(err error) bool {
+	return errHasCode(err, pgcode.UndefinedDatabase)
+}
+
 func errHasCode(err error, code ...pgcode.Code) bool {
 	pgCode := pgerror.GetPGCode(err)
 	for _, c := range code {
