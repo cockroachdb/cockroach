@@ -104,7 +104,7 @@ func newTableReader(
 	tr.batchBytesLimit = batchBytesLimit
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	tableDesc := spec.BuildTableDescriptor()
+	tableDesc := flowCtx.TableDescriptor(&spec.Table)
 	invertedColumn := tabledesc.FindInvertedColumn(tableDesc, spec.InvertedColumn)
 	cols := tableDesc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {

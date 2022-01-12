@@ -58,6 +58,26 @@ func (tc *Collection) getTableByName(
 	return true, desc.(catalog.TableDescriptor), nil
 }
 
+// GetLeasedImmutableTableByID returns a leased immutable table descriptor by
+// its ID.
+func (tc *Collection) GetLeasedImmutableTableByID(
+	ctx context.Context, txn *kv.Txn, tableID descpb.ID,
+) (catalog.TableDescriptor, error) {
+	desc, _, err := tc.leased.getByID(ctx, tc.deadlineHolder(txn), tableID, false /* setTxnDeadline */)
+	if err != nil || desc == nil {
+		return nil, err
+	}
+	table, err := catalog.AsTableDescriptor(desc)
+	if err != nil {
+		return nil, err
+	}
+	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
+	if err != nil {
+		return nil, err
+	}
+	return hydrated, nil
+}
+
 // GetUncommittedMutableTableByID returns an uncommitted mutable table by its
 // ID.
 func (tc *Collection) GetUncommittedMutableTableByID(id descpb.ID) (*tabledesc.Mutable, error) {

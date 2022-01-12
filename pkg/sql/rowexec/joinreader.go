@@ -256,7 +256,7 @@ func newJoinReader(
 	}
 
 	var lookupCols []uint32
-	tableDesc := spec.BuildTableDescriptor()
+	tableDesc := flowCtx.TableDescriptor(&spec.Table)
 	switch readerType {
 	case indexJoinReaderType:
 		lookupCols = make([]uint32, tableDesc.GetPrimaryIndex().NumKeyColumns())
@@ -400,7 +400,7 @@ func newJoinReader(
 		lookupExprTypes = append(lookupExprTypes, leftTypes...)
 		lookupExprTypes = append(lookupExprTypes, columnTypes...)
 
-		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+		semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
 		if err := jr.lookupExpr.Init(spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
 			return nil, err
 		}

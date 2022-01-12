@@ -59,7 +59,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
-		tableDesc:      spec.BuildTableDescriptor(),
+		tableDesc:      flowCtx.TableDescriptor(&spec.Table),
 		spec:           spec,
 		input:          input,
 		output:         output,

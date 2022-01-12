@@ -97,7 +97,7 @@ func (jb *joinerBase) init(
 	); err != nil {
 		return err
 	}
-	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+	semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
 	return jb.onCond.Init(onExpr, onCondTypes, semaCtx, jb.EvalCtx)
 }
 

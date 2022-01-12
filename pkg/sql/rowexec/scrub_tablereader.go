@@ -78,7 +78,7 @@ func newScrubTableReader(
 		indexIdx: int(spec.IndexIdx),
 	}
 
-	tr.tableDesc = spec.BuildTableDescriptor()
+	tr.tableDesc = flowCtx.TableDescriptor(&spec.Table)
 	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 
 	if err := tr.Init(

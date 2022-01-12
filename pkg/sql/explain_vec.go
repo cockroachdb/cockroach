@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -96,9 +95,7 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 			VecFDSemaphore: p.execCfg.DistSQLSrv.VecFDSemaphore,
 			NodeDialer:     p.DistSQLPlanner().nodeDialer,
 		},
-		TypeResolverFactory: &descs.DistSQLTypeResolverFactory{
-			Descriptors: p.Descriptors(),
-		},
+		Descriptors: p.Descriptors(),
 		DiskMonitor: &mon.BytesMonitor{},
 	}
 }

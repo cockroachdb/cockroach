@@ -57,7 +57,7 @@ func convertToVecTree(
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, false,
 		nil, &execinfra.RowChannel{}, &fakeBatchReceiver{}, flowCtx.Cfg.NodeDialer, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
+		flowCtx.Cfg.VecFDSemaphore, flowCtx.NewTypeResolver(flowCtx.EvalCtx.Txn),
 		admission.WorkInfo{},
 	)
 	// We create an unlimited memory account because we're interested whether the
