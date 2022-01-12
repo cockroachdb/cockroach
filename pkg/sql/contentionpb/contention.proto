@@ -12,8 +12,11 @@ syntax = "proto3";
 package cockroach.sql.contentionpb;
 option go_package = "contentionpb";
 
+import "roachpb/api.proto";
+
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 // IndexContentionEvents describes all of the available contention information
 // about a single index.
@@ -142,4 +145,16 @@ message ResolvedTxnID {
   uint64 txnFingerprintID = 2 [(gogoproto.customname) = "TxnFingerprintID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
     (gogoproto.nullable) = false];
+}
+
+
+message ExtendedContentionEvent {
+  cockroach.roachpb.ContentionEvent event = 1 [
+    (gogoproto.nullable) = false
+  ];
+
+  uint64 txn_fingerprint_id = 2 [
+    (gogoproto.customname) = "TxnFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID"
+  ];
 }
