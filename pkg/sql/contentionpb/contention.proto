@@ -128,3 +128,23 @@ message SerializedRegistry {
   repeated SingleNonSQLKeyContention non_sql_keys_contention = 2 [(gogoproto.nullable) = false,
                                                                   (gogoproto.customname) = "NonSQLKeysContention"];
 }
+
+message ResolvedTxnID {
+  // The Response only returns the txnID that is present on the
+  // inquired node. If the txnID is not present on the inquired
+  // node, then it is not returned.
+  bytes txnID = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+
+  // This field is allowed to be null. This means the given transaction ID
+  // is found on the given node. However, the transaction fingerprint ID
+  // for that transaction ID is not yet available since the transaction
+  // has not yet finished executing.
+  // This would require the node to check ActiveQueries store in addition
+  // to TxnID Cache.
+  uint64 txnFingerprintID = 2 [(gogoproto.customname) = "TxnFingerprintID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
+    (gogoproto.nullable) = false];
+}
