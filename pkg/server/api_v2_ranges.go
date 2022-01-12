@@ -421,7 +421,8 @@ type hotRangesResponse struct {
 	Next string `json:"next,omitempty"`
 }
 
-// Hot range details
+// Hot range details struct describes common information about hot range,
+// (ie its range ID, QPS, table name, etc.).
 //
 // swagger:model hotRangeInfo
 type hotRangeInfo struct {
