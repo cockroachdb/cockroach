@@ -190,8 +190,7 @@ func TestProcessorBasic(t *testing.T) {
 		p.syncEventC()
 		require.Equal(t, 0, p.rts.intentQ.Len())
 	})
-	require.NotPanics(t, func() { p.ForwardClosedTS(hlc.Timestamp{}) })
-	require.NotPanics(t, func() { p.ForwardClosedTS(hlc.Timestamp{WallTime: 1}) })
+	p.ForwardClosedTS(hlc.Timestamp{})
 
 	// Add a registration.
 	r1Stream := newTestStream()
@@ -207,6 +206,11 @@ func TestProcessorBasic(t *testing.T) {
 	require.True(t, r1OK)
 	p.syncEventAndRegistrations()
 	require.Equal(t, 1, p.Len())
+	require.Empty(t, r1Stream.Events()) // no resolved timestamp yet
+
+	// Forward the closed timestamp and wait for a checkpoint event.
+	p.ForwardClosedTS(hlc.Timestamp{WallTime: 1})
+	p.syncEventAndRegistrations()
 	require.Equal(t,
 		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
@@ -465,20 +469,8 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	)
 	p.syncEventAndRegistrations()
 	require.Equal(t, 2, p.Len())
-	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
-			hlc.Timestamp{WallTime: 0},
-		)},
-		r1Stream.Events(),
-	)
-	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
-			hlc.Timestamp{WallTime: 0},
-		)},
-		r2Stream.Events(),
-	)
+	require.Empty(t, r1Stream.Events())
+	require.Empty(t, r2Stream.Events())
 
 	// Block its Send method and fill up the registration's input channel.
 	unblock := r1Stream.BlockSend()
@@ -585,13 +577,9 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	p.syncEventAndRegistrations()
 	require.Equal(t, 1, p.Len())
 
-	// The registration should be provided a checkpoint immediately with an
-	// empty resolved timestamp because it did not perform a catch-up scan.
-	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
-		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
-		hlc.Timestamp{},
-	)}
-	require.Equal(t, chEvent, r1Stream.Events())
+	// The registration should not be provided a checkpoint immediately, because
+	// the resolved timestamp is empty.
+	require.Empty(t, r1Stream.Events())
 
 	// The resolved timestamp should still not be initialized.
 	require.False(t, p.rts.IsInit())
@@ -618,7 +606,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 18}, p.rts.Get())
 
 	// The registration should have been informed of the new resolved timestamp.
-	chEvent = []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
 		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 		hlc.Timestamp{WallTime: 18},
 	)}
@@ -906,10 +894,8 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 	// from before they registered.
 	for s, expFirstIdx := range regs {
 		events := s.Events()
-		require.IsType(t, &roachpb.RangeFeedCheckpoint{}, events[0].GetValue())
-		require.IsType(t, &roachpb.RangeFeedValue{}, events[1].GetValue())
-
-		firstVal := events[1].GetValue().(*roachpb.RangeFeedValue)
+		require.IsType(t, &roachpb.RangeFeedValue{}, events[0].GetValue())
+		firstVal := events[0].GetValue().(*roachpb.RangeFeedValue)
 		firstIdx := firstVal.Value.Timestamp.WallTime
 		require.Equal(t, expFirstIdx, firstIdx)
 	}
