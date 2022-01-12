@@ -14,13 +14,14 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 )
 
 // blockSize is chosen as 168 since each ResolvedTxnID is 24 byte.
 // 168 * 24 = 4032 bytes < 4KiB page size.
 const blockSize = 168
 
-type block [blockSize]ResolvedTxnID
+type block [blockSize]contentionpb.ResolvedTxnID
 
 var blockPool = &sync.Pool{
 	New: func() interface{} {
@@ -69,7 +70,7 @@ func newConcurrentWriteBuffer(sink blockSink) *concurrentWriteBuffer {
 
 // Record records a mapping from txnID to its corresponding transaction
 // fingerprint ID. Record is safe to be used concurrently.
-func (c *concurrentWriteBuffer) Record(resolvedTxnID ResolvedTxnID) {
+func (c *concurrentWriteBuffer) Record(resolvedTxnID contentionpb.ResolvedTxnID) {
 	c.guard.AtomicWrite(func(writerIdx int64) {
 		c.guard.block[writerIdx] = resolvedTxnID
 	})

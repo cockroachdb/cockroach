@@ -150,6 +150,8 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/colexec",
         "//pkg/sql/contention",
+        "//pkg/sql/contention/txnidcache",
+        "//pkg/sql/contentionpb",
         "//pkg/sql/descmetadata",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
