@@ -4,7 +4,7 @@ Original authors: Michael Butler & Shiranka Miskin (November 2021)
 
 
 
-## Introduction
+## What is a Job?
 
 Jobs are CockroachDB's way of representing long running background tasks.  They
 are used internally as a core part of various features of CockroachDB such as
@@ -20,21 +20,17 @@ SCHEDULE FOR BACKUP`
 
 
 
-## What is a Job?
+## Internal Representation
 
 A Job is represented as a row in the
 [`system.jobs`](https://github.com/cockroachdb/cockroach/blob/7097a9015f1a09c7dee4fbdbcc6bde82121f657b/pkg/sql/catalog/systemschema/system.go#L185)
 table.  This table is the single source of truth for the information about
-currently relevant jobs.  Nodes read this table and claim jobs that are
-unclaimed and unfinished, using the [`payload`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/jobspb/jobs.proto#L755)
-to determine how to execute it and the
+currently relevant jobs.  Nodes read this table to determine the jobs they can
+execute, using the
+[`payload`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/jobspb/jobs.proto#L755)
+to determine how to execute them and the
 [`progress`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/jobspb/jobs.proto#L815)
-to pick up from where other nodes may have left it and checkpoint completed
-work. The `payload` column also stores the start and end time of the job.
-
-A more user-readable version of this table can be viewed using
-the [`SHOW JOBS`](https://www.cockroachlabs.com/docs/stable/show-jobs.html) SQL
-statement.
+to pick up from where other nodes may have left it.
 
 ```sql
 CREATE TABLE system.jobs (
@@ -63,7 +59,6 @@ CREATE TABLE system.jobs (
   ... -- constraint/index/family
 )
 ```
-
 
 Jobs are primarily specified and differentiated through their `payload` column
 which are bytes of type
@@ -118,10 +113,20 @@ message Progress {
 }
 ```
 
+A more user-readable version of `system.jobs` with the parsed `payload` and
+`progress` information can be monitored through the
+[`crdb_internal.jobs`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/sql/crdb_internal.go#L660)
+table (which simply reads from `system.jobs`).  The [`SHOW
+JOBS`](https://www.cockroachlabs.com/docs/stable/show-jobs.html) command
+operates by [reading from
+`crdb_internal.jobs`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/sql/delegate/show_jobs.go#L23).
 
-
-A Job is created when a [new row is inserted](https://github.com/cockroachdb/cockroach/blob/7097a9015f1a09c7dee4fbdbcc6bde82121f657b/pkg/jobs/registry.go#L550) to the jobs table.  Once written, it is
-able to be claimed by any node in the cluster through the [setting of `claim_session_id` and `claim_instance_id`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/adopt.go#L48)
+A Job is created when a [new row is
+inserted](https://github.com/cockroachdb/cockroach/blob/7097a9015f1a09c7dee4fbdbcc6bde82121f657b/pkg/jobs/registry.go#L550)
+to `system.jobs`.  Once written, it is able to be "claimed" by any node in the
+cluster (asserting that it is responsible for executing the job) through the
+[setting of `claim_session_id` and
+`claim_instance_id`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/adopt.go#L48)
 in the job record.  Job execution ends when the status changes from `running` to
 `success`, `cancelled`, or `failure`. The job record eventually gets
 [deleted](https://github.com/cockroachdb/cockroach/blob/7097a9015f1a09c7dee4fbdbcc6bde82121f657b/pkg/jobs/registry.go#L1000)
