@@ -277,8 +277,10 @@ func newZigzagJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
-	// TODO(ajwerner): Utilize a cached copy of these tables.
-	tables := spec.BuildTableDescriptors()
+	tables := make([]catalog.TableDescriptor, len(spec.Tables))
+	for i := range spec.Tables {
+		tables[i] = flowCtx.TableDescriptor(&spec.Tables[i])
+	}
 	if len(tables) != 2 {
 		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(tables))
 	}

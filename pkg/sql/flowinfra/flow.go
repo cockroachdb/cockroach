@@ -493,9 +493,9 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		panic("flow cleanup called twice")
 	}
 
-	// Release any descriptors accessed by this flow
-	if f.TypeResolverFactory != nil {
-		f.TypeResolverFactory.CleanupFunc(ctx)
+	// Release any descriptors accessed by this flow.
+	if f.Descriptors != nil && f.IsDescriptorsCleanupRequired {
+		f.Descriptors.ReleaseAll(ctx)
 	}
 
 	sp := tracing.SpanFromContext(ctx)

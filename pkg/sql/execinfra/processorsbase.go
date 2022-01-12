@@ -786,7 +786,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.MemMonitor = memMonitor
 
 	// Hydrate all types used in the processor.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(evalCtx.Txn)
 	if err := resolver.HydrateTypeSlice(evalCtx.Context, coreOutputTypes); err != nil {
 		return err
 	}

@@ -277,10 +277,13 @@ func GetHydratedZoneConfigForNamedZone(
 	zoneID, zone, _, _, err := getZoneConfig(
 		codec, descpb.ID(id), getKey, false /* getInheritedDefault */, false, /* mayBeTable */
 	)
+	if err != nil {
+		return nil, err
+	}
 	if err := completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
 		return nil, err
 	}
-	return zone, err
+	return zone, nil
 }
 
 // GetHydratedZoneConfigForTable returns a fully hydrated zone config for a

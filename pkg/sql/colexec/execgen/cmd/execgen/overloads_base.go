@@ -271,6 +271,7 @@ type lastArgWidthOverload struct {
 
 	AssignFunc  assignFunc
 	CompareFunc compareFunc
+	HashFunc    hashFunc
 }
 
 // newLastArgWidthOverload creates a new lastArgWidthOverload. Note that it
@@ -352,6 +353,7 @@ type twoArgsResolvedOverloadRightWidthInfo struct {
 type assignFunc func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string
 type compareFunc func(targetElem, leftElem, rightElem, leftCol, rightCol string) string
 type castFunc func(to, from, evalCtx, toType string) string
+type hashFunc func(targetElem, vElem, vVec, vIdx string) string
 
 // Assign produces a Go source string that assigns the "targetElem" variable to
 // the result of applying the overload to the two inputs, "leftElem" and
@@ -399,14 +401,8 @@ func (o *lastArgWidthOverload) Compare(
 		leftElem, rightElem, targetElem, leftElem, rightElem, targetElem, targetElem)
 }
 
-func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec string) string {
-	if o.AssignFunc != nil {
-		if ret := o.AssignFunc(o, targetElem, vElem, "", targetCol, vVec, ""); ret != "" {
-			return ret
-		}
-	}
-	// Default assign form assumes a function operator.
-	return fmt.Sprintf("%s = %s(%s)", targetElem, o.overloadBase.OpStr, vElem)
+func (o *lastArgWidthOverload) AssignHash(targetElem, vElem, vVec, vIdx string) string {
+	return o.HashFunc(targetElem, vElem, vVec, vIdx)
 }
 
 func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
@@ -597,8 +593,8 @@ func (b *argWidthOverloadBase) SetVariableSize(target, value string) string {
 var (
 	lawo = &lastArgWidthOverload{}
 	_    = lawo.Assign
+	_    = lawo.AssignHash
 	_    = lawo.Compare
-	_    = lawo.UnaryAssign
 
 	awob = &argWidthOverloadBase{}
 	_    = awob.GoTypeSliceName
