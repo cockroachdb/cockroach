@@ -86,7 +86,9 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 	}
 	r.keyBuf = EncodeKeyToBuf(r.keyBuf, key)
 	var iKey *sstable.InternalKey
-	iKey, r.value = r.iter.SeekGE(r.keyBuf)
+	// TODO(bilal): Pass in true for trySeekUsingNext when that optimization is
+	// correct.
+	iKey, r.value = r.iter.SeekGE(r.keyBuf, false /* trySeekUsingNext */)
 	if iKey != nil {
 		r.iterValid = true
 		r.mvccKey, r.err = DecodeMVCCKey(iKey.UserKey)
