@@ -374,8 +374,8 @@ func (ta *TxnAborter) executorKnobs() base.ModuleTestingKnobs {
 	return &sql.ExecutorTestingKnobs{
 		// We're going to abort txns using a TxnAborter, and that's incompatible
 		// with AutoCommit.
-		DisableAutoCommit: true,
-		StatementFilter:   ta.statementFilter,
+		DisableAutoCommitDuringExec: true,
+		StatementFilter:             ta.statementFilter,
 	}
 }
 

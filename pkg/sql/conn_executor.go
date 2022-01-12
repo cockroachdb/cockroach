@@ -1862,9 +1862,12 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		// message causes the backend to close the current transaction if it's not
 		// inside a BEGIN/COMMIT transaction block (“close” meaning to commit if no
 		// error, or roll back if error)."
-		// In other words, Sync is treated as auto-commit for implicit transactions.
+		// In other words, Sync is treated as commit for implicit transactions.
 		if op, ok := ex.machine.CurState().(stateOpen); ok {
 			if op.ImplicitTxn.Get() {
+				// Note that the handling of ev in the case of Sync is massaged a bit
+				// later - Sync is special in that, if it encounters an error, that does
+				// *not *cause the session to ignore all commands until the next Sync.
 				ev, payload = ex.handleAutoCommit(ctx, &tree.CommitTransaction{})
 			}
 		}
@@ -1915,11 +1918,29 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// Massage the advancing for Sync, which is special.
+		if _, ok := cmd.(Sync); ok {
+			switch advInfo.code {
+			case skipBatch:
+				// An error on Sync doesn't cause us to skip commands (and errors are
+				// possible because Sync can trigger a commit). We generate the
+				// ErrorResponse and the ReadyForQuery responses, and we continue with
+				// the next command. From the Postgres docs:
+				// """
+				// Note that no skipping occurs if an error is detected while processing
+				// Sync — this ensures that there is one and only one ReadyForQuery sent for
+				// each Sync.
+				// """
+				advInfo = advanceInfo{code: advanceOne}
+			case advanceOne:
+			case rewind:
+			case stayInPlace:
+				return errors.AssertionFailedf("unexpected advance code stayInPlace when processing Sync")
+			}
+		}
 	} else {
 		// If no event was generated synthesize an advance code.
-		advInfo = advanceInfo{
-			code: advanceOne,
-		}
+		advInfo = advanceInfo{code: advanceOne}
 	}
 
 	// Decide if we need to close the result or not. We don't need to do it if
