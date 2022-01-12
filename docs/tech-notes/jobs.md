@@ -465,10 +465,78 @@ TODO (hopefully by someone on SQL Schema :))))
 Next, we describe how various kinds of jobs work, i.e. when a node picks up a Backup or 
 Changefeed job, what does it actually do? This will be more high level, and will point towards 
 RFCs/Docs/Blogposts for further details.
-TODO(MB): BulkIO
 TODO(Shiranka): CDC
 TODO(???): Schema Changes
+### Backup
+TODO(MB)
 
-TODO: Talk about how Backup uses two schedules that depend on each other and
+### Restore
+Before reading through this code walk through of restore, watch the [MOLTing tutorial](https://cockroachlabs.udemy.com/course/general-onboarding/learn/lecture/22164146#overview)
+on restore. This walk through doesn't consider the distinct code paths each type of 
+RESTORE may take. 
+
+#### Planning
+In addition to general CCL job planning, [planning a restore](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1771) 
+has the following main components.
+- [Resolves](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1826)
+the location of the backup files we seek to restore.
+- [Figures out](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1910) 
+which descriptors the user wants to restore. Descriptors are objects that hold metadata about 
+  various 
+  SQL objects, like [columns](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/sql/catalog/descpb/structured.proto#L123)
+or [databases](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/sql/catalog/descpb/structured.proto#L123).
+- [Allocate](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L2028) new descriptor IDs for the descriptors we're restoring from the backup files. Why do 
+  this? Every descriptor on disk has a unique id, so RESTORE must resolve ID collisions between the 
+stale ID's in the back up and any IDs in the target cluster.
+
+#### Execution
+When a gateway node [resumes](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_job.go#L1371)
+a restore job, the following occurs before any processors spin up. For more on processors, check 
+out the discussion in [Life of a Query](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/life_of_a_query.md#physical-planning-and-execution). 
+- [Write](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_job.go#L1441)
+the new descriptors to disk in an offline state so no users can interact with the 
+  descriptors during the restore. 
+- [Derive](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_job.go#L426)
+a list of key spans we need to restore from the restoring descriptors. A key span is just an 
+  interval in the *backup's* key space.
+
+We're now ready to begin loading the backup data into our cockroach cluster. Important note: the 
+last range in the restoring cluster's key space is one big empty range, with a key span 
+starting above the highest key with data in the cluster up to the max key allowed in the cluster. 
+We want to restore to that empty range.
+
+Our first task is to split this massive empty range up into smaller ranges that we will restore 
+data into, and randomly assign nodes to be leaseholders for these new ranges. More concretely, 
+the restore job's gateway node will [iterate through](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_processor_planning.go#L84) 
+the list of key spans we seek to restore, and round robin assign them to nodes in the cluster which
+will then each start up a split and scatter processor. 
+
+A split and scatter processor will then do the following, for each key span it processes:
+- Issue a [split key request](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L94) 
+  to the kv layer at the beginning key of the next span it will 
+  process, which splits that big empty range at that given key, creating a new range to import data 
+  into. I recommend reading the [code and comments here](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L352) 
+because the indexing is a little confusing. 
+  - Note:  before the split request, we [remap](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L84) 
+    this key (currently in the backup space) so it maps nicely to the restore key space.
+    E.g. suppose we want to restore a table with a key span in the backup from 57/1 to 57/2; but the
+    restore cluster already has data in that key space. To avoid collisions, we have to remap this 
+    key span into the keyspan of that empty range.
+- Issue a [scatter request](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L123) 
+  to the kv layer on the span's first key. This asks kv to randomly reassign 
+  the lease of this key's range. KV may not obey the request. 
+- Route info to this new range's new leaseholder, so the leaseholder can restore data into that 
+  range.
+
+In addition to running a split and scatter processor, each node will run a restore data processor. 
+For each empty range the restore data processor receives, it will [read](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L167) 
+the relevant Backup SSTables in external storage, [remap](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L433) 
+each key to the restore's key space, and [flush](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L458) 
+SSTable(s) to disk, bypassing much of the infrastructure related to writing data to disk from conventional 
+queries. Note: all the kv shenanigans (e.g. range data replication, range splitting/merging, 
+leaseholder reassignment) is abstracted away from the bulk codebase, though these things can happen 
+while the restore is in process!  
+
+  TODO: Talk about how Backup uses two schedules that depend on each other and
 must be cleaned up together
 
