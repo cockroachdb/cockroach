@@ -1749,7 +1749,10 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			)
 			res = stmtRes
 
-			ev, payload, err = ex.execStmt(ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes)
+			canAutoCommit := ex.implicitTxn()
+			ev, payload, err = ex.execStmt(
+				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, canAutoCommit,
+			)
 			return err
 		}()
 		// Note: we write to ex.statsCollector.PhaseTimes, instead of ex.phaseTimes,
@@ -1817,7 +1820,15 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				ex.implicitTxn(),
 			)
 			res = stmtRes
-			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo)
+
+			// In the extended protocol, autocommit is not always allowed. The postgres
+			// docs say that commands in the extended protocol are all treated as an
+			// implicit transaction that does not get committed until a Sync message is
+			// received. However, if we are executing a statement that is immediately
+			// followed by Sync (which is the common case), then we still can auto-commit,
+			// which allows the 1PC txn fast path to be used.
+			canAutoCommit := ex.implicitTxn() && tcmd.FollowedBySync
+			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo, canAutoCommit)
 			return err
 		}()
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,

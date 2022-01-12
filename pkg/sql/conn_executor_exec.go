@@ -77,6 +77,7 @@ func (ex *connExecutor) execStmt(
 	prepared *PreparedStatement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
+	canAutoCommit bool,
 ) (fsm.Event, fsm.EventPayload, error) {
 	ast := parserStmt.AST
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
@@ -129,10 +130,10 @@ func (ex *connExecutor) execStmt(
 				"stmt.no.constants", stmtNoConstants,
 			)
 			pprof.Do(ctx, labels, func(ctx context.Context) {
-				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
+				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
 			})
 		} else {
-			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res)
+			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
 		}
 		switch ev.(type) {
 		case eventNonRetriableErr:
@@ -197,6 +198,7 @@ func (ex *connExecutor) execPortal(
 	portalName string,
 	stmtRes CommandResult,
 	pinfo *tree.PlaceholderInfo,
+	canAutoCommit bool,
 ) (ev fsm.Event, payload fsm.EventPayload, err error) {
 	switch ex.machine.CurState().(type) {
 	case stateOpen:
@@ -219,7 +221,7 @@ func (ex *connExecutor) execPortal(
 		if portal.exhausted {
 			return nil, nil, nil
 		}
-		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes)
+		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
 		// Portal suspension is supported via a "side" state machine
 		// (see pgwire.limitedCommandResult for details), so when
 		// execStmt returns, we know for sure that the portal has been
@@ -235,7 +237,7 @@ func (ex *connExecutor) execPortal(
 		return ev, payload, err
 
 	default:
-		return ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes)
+		return ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
 	}
 }
 
@@ -258,6 +260,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	prepared *PreparedStatement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
+	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	ast := parserStmt.AST
 	ctx = withStatement(ctx, ast)
@@ -276,27 +279,12 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	os := ex.machine.CurState().(stateOpen)
 
-	isNextCmdSync := false
 	isExtendedProtocol := prepared != nil
 	if isExtendedProtocol {
 		stmt = makeStatementFromPrepared(prepared, queryID)
-		// Only check for Sync in the extended protocol. In the simple protocol,
-		// Sync is meaningless, so it's OK to let isNextCmdSync default to false.
-		isNextCmdSync, err = ex.stmtBuf.isNextCmdSync()
-		if err != nil {
-			return makeErrEvent(err)
-		}
 	} else {
 		stmt = makeStatement(parserStmt, queryID)
 	}
-
-	// In some cases, we need to turn off autocommit behavior here. The postgres
-	// docs say that commands in the extended protocol are all treated as an
-	// implicit transaction that does not get committed until a Sync message is
-	// received. However, if we are executing a statement that is immediately
-	// followed by Sync (which is the common case), then we still can auto-commit,
-	// which allows the "insert fast path" (1PC optimization) to be used.
-	canAutoCommit := os.ImplicitTxn.Get() && (!isExtendedProtocol || isNextCmdSync)
 
 	ex.incrementStartedStmtCounter(ast)
 	defer func() {
