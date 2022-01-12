@@ -659,6 +659,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if hasNodeLiveness {
 		traceCollector = collector.New(cfg.nodeDialer, nodeLiveness, cfg.Tracer)
 	}
+	contentionRegistry := contention.NewRegistry(cfg.Settings, cfg.sqlStatusServer.TxnIDResolution)
+	contentionRegistry.Start(ctx, cfg.stopper)
 
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
@@ -681,7 +683,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLStatusServer:         cfg.sqlStatusServer,
 		RegionsServer:           cfg.regionsServer,
 		SessionRegistry:         cfg.sessionRegistry,
-		ContentionRegistry:      contention.NewRegistry(),
+		ContentionRegistry:      contentionRegistry,
 		SQLLiveness:             cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
