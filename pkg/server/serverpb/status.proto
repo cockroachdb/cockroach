@@ -1122,7 +1122,9 @@ message HotRangesResponse {
   ];
 }
 
+// HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
 message HotRangesResponseV2 {
+  // HotRange message describes a single hot range, ie its QPS, node ID it belongs to, etc.
   message HotRange {
     // range_id indicates Range ID that's identified as hot range
     int32 range_id = 1 [

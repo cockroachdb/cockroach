@@ -2069,6 +2069,8 @@ type hotRangeReportMeta struct {
 	parentID   uint32
 }
 
+// HotRangesV2 returns hot ranges from all stores on requested node or all nodes in case
+// request message doesn't include specific node ID.
 func (s *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
@@ -2109,7 +2111,6 @@ func (s *statusServer) HotRangesV2(
 	}
 
 	var ranges []*serverpb.HotRangesResponseV2_HotRange
-	// TODO (koorosh): how to flatten triple nested loop?
 	for nodeID, hr := range resp.HotRangesByNodeID {
 		for _, store := range hr.Stores {
 			for _, r := range store.HotRanges {

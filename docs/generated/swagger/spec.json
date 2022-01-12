@@ -1776,8 +1776,9 @@
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
     },
     "hotRangeInfo": {
-      "description": "Hot range details",
+      "description": "(ie its range ID, QPS, table name, etc.).",
       "type": "object",
+      "title": "Hot range details struct describes common information about hot range,",
       "properties": {
         "database_name": {
           "type": "string",
