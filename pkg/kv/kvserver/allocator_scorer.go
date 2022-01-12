@@ -87,6 +87,9 @@ var rangeRebalanceThreshold = func() *settings.FloatSetting {
 	return s
 }()
 
+// CockroachDB's has two heuristics that trigger replica rebalancing: range
+// count convergence and QPS convergence. scorerOptions defines the interface
+// that both of these heuristics must implement.
 type scorerOptions interface {
 	// deterministic is set by tests to have the allocator methods sort their
 	// results by constraints score as well as by store IDs, as opposed to just
@@ -94,30 +97,41 @@ type scorerOptions interface {
 	deterministicForTesting() bool
 	// shouldRebalanceBasedOnThresholds returns whether the specified store is a
 	// candidate for having a replica removed from it given the candidate store
-	// list based on either range count or QPS. This method returns true if any of
-	// the following is true:
-	// 1. `store` is overfull for the given signal.
-	// 2. `store` is above the mean for the given signal, and at least one other
-	// store is underfull for the given signal.
+	// list based on either range count or QPS.
+	//
+	// CRDB's rebalancing logic first checks whether any existing replica is in
+	// violation of constraints or is on stores that have an almost-full disk. If
+	// not, it then uses `shouldRebalanceBasedOnThresholds()` to determine whether
+	// the `eqClass`'s current stats are divergent enough to justify rebalancing
+	// replicas.
 	shouldRebalanceBasedOnThresholds(
-		ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
+		ctx context.Context, eqClass equivalenceClass,
 	) bool
 	// balanceScore returns a discrete score (`balanceStatus`) based on whether
 	// the store represented by `sc` classifies as underfull, aroundTheMean, or
 	// overfull relative to all the stores in `sl`.
 	balanceScore(sl StoreList, sc roachpb.StoreCapacity) balanceStatus
 	// rebalanceFromConvergenceScore assigns a convergence score to the store
-	// referred to by `sc` based on whether moving a replica away from this store
-	// would converge its stats towards the mean. If moving the replica away from
-	// `sc` would not converge its stats towards the mean, a high convergence
+	// referred to by `eqClass.existing` based on whether moving a replica away
+	// from this store would converge its stats towards the mean (relative to the
+	// equivalence class `eqClass`). If moving the replica away from the existing
+	// store would not converge its stats towards the mean, a high convergence
 	// score is assigned, which would make it less likely for us to pick this
 	// store's replica to move away.
-	rebalanceFromConvergesScore(sl StoreList, sc roachpb.StoreCapacity) int
+	rebalanceFromConvergesScore(eqClass equivalenceClass) int
 	// rebalanceToConvergesScore is similar to `rebalanceFromConvergesScore` but
 	// it assigns a high convergence score iff moving a replica to the store
-	// referred to by `sc` will converge its stats towards the mean. This makes it
-	// more likely for us to pick this store as the rebalance target.
-	rebalanceToConvergesScore(sl StoreList, sc roachpb.StoreCapacity) int
+	// referred to by `candidate` will converge its stats towards the mean
+	// (relative to the equivalence class `eqClass`). This makes it more likely
+	// for us to pick this store as the rebalance target.
+	rebalanceToConvergesScore(eqClass equivalenceClass, candidate roachpb.StoreDescriptor) int
+	// removalConvergesScore is similar to  `rebalanceFromConvergesScore` (both
+	// deal with computing a converges score for existing stores that might
+	// relinquish a replica). removalConvergesScore assigns a negative convergence
+	// score to the existing store (or multiple replicas, if there are multiple
+	// with the same QPS) that would converge the range's existing stores' QPS the
+	// most.
+	removalConvergesScore(removalCandStoreList StoreList, existing roachpb.StoreDescriptor) int
 }
 
 // rangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
@@ -134,11 +148,14 @@ func (o rangeCountScorerOptions) deterministicForTesting() bool {
 }
 
 func (o rangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
-	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
+	ctx context.Context, eqClass equivalenceClass,
 ) bool {
+	store := eqClass.existing
+	sl := eqClass.candidateSL
 	if len(sl.stores) == 0 {
 		return false
 	}
+
 	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(o, sl.candidateRanges.mean)))
 	// 1. We rebalance if `store` is too far above the mean (i.e. stores
 	// that are overfull).
@@ -183,27 +200,43 @@ func (o rangeCountScorerOptions) balanceScore(
 }
 
 // rebalanceFromConvergesScore returns 1 iff rebalancing a replica away from
-// `sc` will _not_ converge its range count towards the mean of stores in `sl`.
-// When we're considering whether to rebalance a replica away from a store or
-// not, we want to give it a "boost" (i.e. make it a less likely candidate for
-// removal) if it doesn't further our goal to converge range count towards the
-// mean.
-func (o rangeCountScorerOptions) rebalanceFromConvergesScore(
-	sl StoreList, sc roachpb.StoreCapacity,
-) int {
-	if !rebalanceConvergesRangeCountOnMean(sl, sc, sc.RangeCount-1) {
+// `sd` will _not_ converge its range count towards the mean of the candidate
+// stores in the equivalence class `eqClass`. When we're considering whether to
+// rebalance a replica away from a store or not, we want to give it a "boost"
+// (i.e. make it a less likely candidate for removal) if it doesn't further our
+// goal to converge range count towards the mean.
+func (o rangeCountScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
+	if !rebalanceConvergesRangeCountOnMean(
+		eqClass.candidateSL, eqClass.existing.Capacity, eqClass.existing.Capacity.RangeCount-1,
+	) {
 		return 1
 	}
 	return 0
 }
 
-// rebalanceToConvergesScore returns 1 if rebalancing a replica to `sc` will
-// converge its range count towards the mean of all the stores inside
-// `sl`.
+// rebalanceToConvergesScore returns 1 if rebalancing a replica to `sd` will
+// converge its range count towards the mean of the candidate stores inside
+// `eqClass`.
 func (o rangeCountScorerOptions) rebalanceToConvergesScore(
-	sl StoreList, sc roachpb.StoreCapacity,
+	eqClass equivalenceClass, candidate roachpb.StoreDescriptor,
 ) int {
-	if rebalanceConvergesRangeCountOnMean(sl, sc, sc.RangeCount+1) {
+	if rebalanceConvergesRangeCountOnMean(eqClass.candidateSL, candidate.Capacity, candidate.Capacity.RangeCount+1) {
+		return 1
+	}
+	return 0
+}
+
+// removalConvergesScore assigns a low convergesScore to the existing store if
+// removing it would converge the range counts of the existing stores towards
+// the mean (this low score makes it more likely to be picked for removal).
+// Otherwise, a high convergesScore is assigned (which would make this store
+// less likely to be picked for removal).
+func (o rangeCountScorerOptions) removalConvergesScore(
+	removalCandStoreList StoreList, existing roachpb.StoreDescriptor,
+) int {
+	if !rebalanceConvergesRangeCountOnMean(
+		removalCandStoreList, existing.Capacity, existing.Capacity.RangeCount-1,
+	) {
 		return 1
 	}
 	return 0
@@ -214,63 +247,73 @@ func (o rangeCountScorerOptions) rebalanceToConvergesScore(
 // queries-per-second. This means that the resulting rebalancing decisions will
 // further the goal of converging QPS across stores in the cluster.
 type qpsScorerOptions struct {
-	deterministic         bool
-	qpsRebalanceThreshold float64
+	deterministic                             bool
+	qpsRebalanceThreshold, minRequiredQPSDiff float64
+
+	// QPS-based rebalancing assumes that:
+	// 1. Every replica of a range receives the same level of traffic
+	// 2. Transferring this replica to another store would also transfer all of
+	// this replica's load onto that receiving store.
+	//
+	// See comment inside `StoreRebalancer.chooseRangeToRebalance()` for why these
+	// assumptions are justified.
+
+	// qpsPerReplica states the level of traffic being served by each replica in a
+	// range.
+	qpsPerReplica float64
 }
 
 func (o qpsScorerOptions) deterministicForTesting() bool {
 	return o.deterministic
 }
 
+// shouldRebalanceBasedOnThresholds tries to determine if, within the given
+// equivalenceClass `eqClass`, rebalancing a replica from one of the existing
+// stores to one of the candidate stores will lead to QPS convergence among the
+// stores in the equivalence class.
 func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
-	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList,
+	ctx context.Context, eqClass equivalenceClass,
 ) bool {
-	if len(sl.stores) == 0 {
+	if len(eqClass.candidateSL.stores) == 0 {
 		return false
 	}
-	// 1. We rebalance if `store` is too far above the mean (i.e. stores
-	// that are overfull).
-	overfullThreshold := overfullQPSThreshold(o, sl.candidateQueriesPerSecond.mean)
-	if store.Capacity.QueriesPerSecond > overfullThreshold {
+
+	_, noRebalanceReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
+	switch noRebalanceReason {
+	case noBetterCandidate:
 		log.VEventf(
-			ctx,
-			2,
-			"s%d: should-rebalance(QPS-overfull): QPS=%.2f, mean=%.2f, overfull-threshold=%.2f",
-			store.StoreID,
-			store.Capacity.QueriesPerSecond,
-			sl.candidateQueriesPerSecond.mean,
-			overfullThreshold,
+			ctx, 4, "could not find a better candidate to replace s%d", eqClass.existing.StoreID,
 		)
-		return true
+		return false
+	case existingNotOverfull:
+		log.VEventf(ctx, 4, "existing store s%d is not overfull", eqClass.existing.StoreID)
+		return false
+	case deltaNotSignificant:
+		log.VEventf(
+			ctx, 4,
+			"delta between s%d and the next best candidate is not significant enough",
+			eqClass.existing.StoreID,
+		)
+		return false
+	case significantlySwitchesRelativeDisposition:
+		log.VEventf(
+			ctx, 4,
+			"rebalancing from s%[1]d to the next best candidate could make it significantly hotter than s%[1]d",
+			eqClass.existing.StoreID,
+		)
+		return false
+	case missingStatsForExistingStore:
+		log.VEventf(ctx, 4, "missing QPS stats for s%d", eqClass.existing.StoreID)
+		return false
+	case none:
+	default:
 	}
-	// 2. We rebalance if `store` isn't overfull, but it is above the mean and
-	// there is at least one other store that is "underfull" (i.e. too far below
-	// the mean).
-	if store.Capacity.QueriesPerSecond > sl.candidateQueriesPerSecond.mean {
-		underfullThreshold := underfullQPSThreshold(o, sl.candidateQueriesPerSecond.mean)
-		for _, desc := range sl.stores {
-			if desc.Capacity.QueriesPerSecond < underfullThreshold {
-				log.VEventf(
-					ctx,
-					2,
-					"s%d: should-rebalance(better-fit-QPS=s%d): QPS=%.2f, otherQPS=%.2f, mean=%.2f, underfull-threshold=%.2f",
-					store.StoreID,
-					desc.StoreID,
-					store.Capacity.QueriesPerSecond,
-					desc.Capacity.QueriesPerSecond,
-					sl.candidateQueriesPerSecond.mean,
-					underfullThreshold,
-				)
-				return true
-			}
-		}
-	}
-	// If we reached this point, we're happy with the range where it is.
-	return false
+
+	return true
 }
 
 func (o qpsScorerOptions) balanceScore(sl StoreList, sc roachpb.StoreCapacity) balanceStatus {
-	maxQPS := overfullQPSThreshold(o, sl.candidateQueriesPerSecond.mean)
+	maxQPS := overfullQPSThreshold(o.qpsRebalanceThreshold, sl.candidateQueriesPerSecond.mean)
 	minQPS := underfullQPSThreshold(o, sl.candidateQueriesPerSecond.mean)
 	curQPS := sc.QueriesPerSecond
 	if curQPS < minQPS {
@@ -281,21 +324,50 @@ func (o qpsScorerOptions) balanceScore(sl StoreList, sc roachpb.StoreCapacity) b
 	return aroundTheMean
 }
 
-func (o qpsScorerOptions) rebalanceFromConvergesScore(_ StoreList, _ roachpb.StoreCapacity) int {
-	// When using `qpsScorerOptions` (i.e. when rebalancing with the goal of
-	// promoting QPS convergence), we disable the `convergesScore` because we only
-	// have access to the QPS of the current (i.e. usually the leaseholder)
-	// replica. We do not have access to the QPS of other replicas, and when this
-	// method is called, the caller doesn't yet know which replica is going to be
-	// rebalanced. Thus, we cannot actually compute the `convergesScore` when
-	// rebalancing off of QPS.
+// rebalanceFromConvergesScore returns a score of -1 if the existing store in
+// eqClass needs to be rebalanced away in order to minimize the QPS delta
+// between the stores in the equivalence class `eqClass`.
+func (o qpsScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
+	_, noRebalanceReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
+	// If there are any rebalance opportunities that minimize the QPS delta in
+	// this equivalence class, we return a score of -1 to make the existing store
+	// more likely to be picked for removal.
+	if noRebalanceReason == none {
+		return -1
+	}
 	return 0
 }
 
-func (o qpsScorerOptions) rebalanceToConvergesScore(_ StoreList, _ roachpb.StoreCapacity) int {
-	// When using `qpsScorerOptions` (i.e. when rebalancing with the goal of
-	// promoting QPS convergence), we disable the `convergesScore`. See comment
-	// inside `rebalanceFromConvergesScore()` for details.
+// rebalanceToConvergesScore returns a score of 1 if `candidate` needs to be
+// rebalanced to in order to minimize the QPS delta between the stores in the
+// equivalence class `eqClass`
+func (o qpsScorerOptions) rebalanceToConvergesScore(
+	eqClass equivalenceClass, candidate roachpb.StoreDescriptor,
+) int {
+	bestTarget, noRebalanceReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
+	if noRebalanceReason == none && bestTarget == candidate.StoreID {
+		return 1
+	}
+	return 0
+}
+
+// removalConvergesScore returns a score of -1 `existing` is the hottest store
+// (based on QPS) among the stores inside `removalCandidateStores`.
+func (o qpsScorerOptions) removalConvergesScore(
+	removalCandStoreList StoreList, existing roachpb.StoreDescriptor,
+) int {
+	maxQPS := float64(-1)
+	for _, store := range removalCandStoreList.stores {
+		if store.Capacity.QueriesPerSecond > maxQPS {
+			maxQPS = store.Capacity.QueriesPerSecond
+		}
+	}
+	// NB: Note that if there are multiple stores inside `removalCandStoreList`
+	// with the same (or similar) maxQPS, we will return a removalConvergesScore
+	// of -1 for all of them.
+	if scoresAlmostEqual(maxQPS, existing.Capacity.QueriesPerSecond) {
+		return -1
+	}
 	return 0
 }
 
@@ -737,8 +809,8 @@ func candidateListForRemoval(
 		// adding 1 to the constraint score. Note that when selecting a
 		// candidate for removal the candidates with the lowest scores are
 		// more likely to be removed.
-		candidates[i].convergesScore = options.rebalanceFromConvergesScore(
-			removalCandidateStoreList, candidates[i].store.Capacity,
+		candidates[i].convergesScore = options.removalConvergesScore(
+			removalCandidateStoreList, candidates[i].store,
 		)
 		candidates[i].balanceScore = options.balanceScore(
 			removalCandidateStoreList, candidates[i].store.Capacity,
@@ -764,6 +836,171 @@ func candidateListForRemoval(
 type rebalanceOptions struct {
 	existing   candidate
 	candidates candidateList
+}
+
+// equivalenceClass captures the set of "equivalent" replacement candidates
+// for each existing replica. "equivalent" here means the candidates that are
+// just as diverse as the existing replica, conform to zone config constraints
+// on the range and don't have a full disk.
+// Following are a few examples:
+// 1. Consider a 3 region cluster with regions A, B and C. Assume there is a
+// range that has 1 replica in each of those regions. For each existing
+// replica, its equivalence class would contain all the other stores in its
+// own region.
+// 2. Consider a cluster with 10 racks, each with 2 stores (on 2 different
+// nodes). Assume that racks 1, 2 and 3 each have a replica for a range. For
+// the existing replica in rack 1, its equivalence class would contain its
+// neighboring store in rack 1 and all stores in racks 4...10.
+type equivalenceClass struct {
+	existing roachpb.StoreDescriptor
+	// `candidateSl` is just the `StoreList` representation of `candidates`
+	// (maintained separately to avoid converting the latter into the former for
+	// all the `scorerOptions` methods).
+	candidateSL StoreList
+	candidates  candidateList
+}
+
+const (
+	// We generally discard replica and lease rebalancing opportunities that would
+	// invert the relative dispositions of the sending and receiving stores. In
+	// other words, we generally disallow rebalances were qps(s1) < qps(s2) before
+	// the rebalance but qps(s1) > qps(s2) after the rebalance. However, an
+	// exception to this is that if the inversion is insignificant (less than
+	// minQPSTransferOvershoot qps).
+	maxQPSTransferOvershoot = 500
+)
+
+type declineReason int
+
+const (
+	none declineReason = iota
+	noBetterCandidate
+	existingNotOverfull
+	deltaNotSignificant
+	significantlySwitchesRelativeDisposition
+	missingStatsForExistingStore
+)
+
+// bestStoreToMinimizeQPSDelta computes a rebalance (or lease transfer) target
+// for the existing store such that executing the rebalance (or lease transfer)
+// decision would minimize the QPS range between the existing store and the
+// coldest store in the equivalence class.
+func bestStoreToMinimizeQPSDelta(
+	qps, rebalanceThreshold, minRequiredQPSDiff float64,
+	existing roachpb.StoreID,
+	candidates []roachpb.StoreID,
+	storeDescMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
+) (bestCandidate roachpb.StoreID, reason declineReason) {
+	storeQPSMap := make(map[roachpb.StoreID]float64, len(candidates)+1)
+	for _, store := range candidates {
+		if desc, ok := storeDescMap[store]; ok {
+			storeQPSMap[store] = desc.Capacity.QueriesPerSecond
+		}
+	}
+	desc, ok := storeDescMap[existing]
+	if !ok {
+		return 0, missingStatsForExistingStore
+	}
+	storeQPSMap[existing] = desc.Capacity.QueriesPerSecond
+
+	// domain defines the domain over which this function tries to minimize the
+	// QPS delta.
+	domain := append(candidates, existing)
+	storeDescs := make([]roachpb.StoreDescriptor, 0, len(domain))
+	for _, desc := range storeDescMap {
+		storeDescs = append(storeDescs, *desc)
+	}
+	domainStoreList := makeStoreList(storeDescs)
+
+	bestCandidate = getCandidateWithMinQPS(storeQPSMap, candidates)
+	if bestCandidate == 0 {
+		return 0, noBetterCandidate
+	}
+
+	bestCandQPS := storeQPSMap[bestCandidate]
+	existingQPS := storeQPSMap[existing]
+	if bestCandQPS > existingQPS {
+		return 0, noBetterCandidate
+	}
+
+	// NB: The store's QPS and the replica's QPS aren't captured at the same
+	// time, so they may be mutually inconsistent. Thus, it is possible for
+	// the store's QPS captured here to be lower than the replica's QPS. So we
+	// defensively use the `math.Max` here.
+	existingQPSIgnoringRepl := math.Max(existingQPS-qps, 0)
+
+	// Only proceed if the QPS difference between `existing` and
+	// `bestCandidate` (not accounting for the replica under consideration) is
+	// higher than `minQPSDifferenceForTransfers`.
+	diffIgnoringRepl := existingQPSIgnoringRepl - bestCandQPS
+	if diffIgnoringRepl < minRequiredQPSDiff {
+		return 0, deltaNotSignificant
+	}
+
+	// Only proceed with rebalancing iff `existingStore` is overfull relative to
+	// the equivalence class.
+	mean := domainStoreList.candidateQueriesPerSecond.mean
+	overfullThreshold := overfullQPSThreshold(rebalanceThreshold, mean)
+	if existingQPS < overfullThreshold {
+		return 0, existingNotOverfull
+	}
+
+	// Simulate the coldest candidate's QPS after it receives a replica for the
+	// range.
+	storeQPSMap[bestCandidate] += qps
+	// Simulate the hottest existing store's QPS after it sheds the replica away.
+	storeQPSMap[existing] = existingQPSIgnoringRepl
+	bestCandQPSWithRepl := storeQPSMap[bestCandidate]
+
+	if existingQPSIgnoringRepl+maxQPSTransferOvershoot < bestCandQPSWithRepl {
+		return 0, significantlySwitchesRelativeDisposition
+	}
+
+	// NB: We proceed with a rebalance even if `currentQPSDelta` is exactly equal
+	// to `newQPSDelta`. Consider the following example:
+	// perReplicaQPS: 10qps
+	// existingQPS: 100qps
+	// candidates: [100qps, 0qps, 0qps]
+	//
+	// In such (perhaps unrealistic) scenarios, rebalancing from the existing
+	// store to the coldest store is not going to reduce the delta between all
+	// these stores, but it is still a desirable action to take.
+
+	currentQPSDelta := getQPSDelta(storeQPSMap, domain)
+	newQPSDelta := getQPSDelta(storeQPSMap, domain)
+	if currentQPSDelta < newQPSDelta {
+		panic(
+			fmt.Sprintf(
+				"programming error: projected QPS delta higher than current delta;"+
+					" existing: %0.2f qps, coldest candidate: %0.2f qps, replica/lease: %0.2f qps",
+				existingQPS, bestCandQPS, qps,
+			),
+		)
+	}
+
+	return bestCandidate, none
+}
+
+// getRebalanceTargetToMinimizeDelta returns the best store (from the set of
+// candidates in the equivalence class) such that rebalancing to this store
+// would minimize the delta between the existing store and the coldest store in
+// the equivalence class.
+func (o *qpsScorerOptions) getRebalanceTargetToMinimizeDelta(
+	eqClass equivalenceClass,
+) (bestStore roachpb.StoreID, noRebalanceReason declineReason) {
+	domainStoreList := makeStoreList(append(eqClass.candidateSL.stores, eqClass.existing))
+	candidates := make([]roachpb.StoreID, 0, len(eqClass.candidateSL.stores))
+	for _, store := range eqClass.candidateSL.stores {
+		candidates = append(candidates, store.StoreID)
+	}
+	return bestStoreToMinimizeQPSDelta(
+		o.qpsPerReplica,
+		o.qpsRebalanceThreshold,
+		o.minRequiredQPSDiff,
+		eqClass.existing.StoreID,
+		candidates,
+		storeListToMap(domainStoreList),
+	)
 }
 
 // rankedCandidateListForRebalancing returns a list of `rebalanceOptions`, i.e.
@@ -834,24 +1071,6 @@ func rankedCandidateListForRebalancing(
 	// stores by attributes as well, but it's simplest to just run this for each
 	// store.
 
-	// equivalenceClass captures the set of "equivalent" replacement candidates
-	// for each existing replica. "equivalent" here means the candidates that are
-	// just as diverse as the existing replica, conform to zone config constraints
-	// on the range and don't have a full disk.
-	// Following are a few examples:
-	// 1. Consider a 3 region cluster with regions A, B and C. Assume there is a
-	// range that has 1 replica in each of those regions. For each existing
-	// replica, its equivalence class would contain all the other stores in its
-	// own region.
-	// 2. Consider a cluster with 10 racks, each with 2 stores (on 2 different
-	// nodes). Assume that racks 1, 2 and 3 each have a replica for a range. For
-	// the existing replica in rack 1, its equivalence class would contain its
-	// neighboring store in rack 1 and all stores in racks 4...10.
-	type equivalenceClass struct {
-		existing    roachpb.StoreDescriptor
-		candidateSL StoreList
-		candidates  candidateList
-	}
 	var equivalenceClasses []equivalenceClass
 	var needRebalanceTo bool
 	for _, existing := range existingStores {
@@ -911,6 +1130,7 @@ func rankedCandidateListForRebalancing(
 			if !cand.less(existing) {
 				// If `cand` is not worse than `existing`, add it to the list.
 				comparableCands = append(comparableCands, cand)
+
 				if !needRebalanceFrom && !needRebalanceTo && existing.less(cand) {
 					needRebalanceTo = true
 					log.VEventf(ctx, 2,
@@ -926,17 +1146,22 @@ func rankedCandidateListForRebalancing(
 		} else {
 			sort.Sort(sort.Reverse(byScore(comparableCands)))
 		}
+
+		// Filter down to the set of stores that are better than the rest based on
+		// diversity, disk fullness and constraints conformance. These stores are
+		// all in the same equivalence class with regards to the range in question.
 		bestCands := comparableCands.best()
+
 		bestStores := make([]roachpb.StoreDescriptor, len(bestCands))
 		for i := range bestCands {
 			bestStores[i] = bestCands[i].store
 		}
-		equivalenceClasses = append(
-			equivalenceClasses, equivalenceClass{
-				existing:    existing.store,
-				candidateSL: makeStoreList(bestStores),
-				candidates:  bestCands,
-			})
+		eqClass := equivalenceClass{
+			existing:    existing.store,
+			candidateSL: makeStoreList(bestStores),
+			candidates:  bestCands,
+		}
+		equivalenceClasses = append(equivalenceClasses, eqClass)
 	}
 
 	// 3. Decide whether we should try to rebalance. Note that for each existing
@@ -946,24 +1171,14 @@ func rankedCandidateListForRebalancing(
 	needRebalance := needRebalanceFrom || needRebalanceTo
 	var shouldRebalanceCheck bool
 	if !needRebalance {
-		for _, existing := range existingStores {
-			var candidateSL StoreList
-		outer:
-			for _, comparable := range equivalenceClasses {
-				if existing.store.StoreID == comparable.existing.StoreID {
-					candidateSL = comparable.candidateSL
-					break outer
-				}
-			}
-			// NB: If we have any candidates that are at least as good as the existing
-			// replicas in terms of diversity and disk fullness, check whether the
-			// existing replicas' stats are divergent enough to justify a rebalance.
-			if options.shouldRebalanceBasedOnThresholds(ctx, existing.store, candidateSL) {
+		for _, eqClass := range equivalenceClasses {
+			if options.shouldRebalanceBasedOnThresholds(ctx, eqClass) {
 				shouldRebalanceCheck = true
 				break
 			}
 		}
 	}
+
 	if !needRebalance && !shouldRebalanceCheck {
 		return nil
 	}
@@ -985,7 +1200,7 @@ func rankedCandidateListForRebalancing(
 			// Similarly to in candidateListForRemoval, any replica whose
 			// removal would not converge the range stats to their mean is given a
 			// constraint score boost of 1 to make it less attractive for removal.
-			convergesScore := options.rebalanceFromConvergesScore(comparable.candidateSL, existing.store.Capacity)
+			convergesScore := options.rebalanceFromConvergesScore(comparable)
 			balanceScore := options.balanceScore(comparable.candidateSL, existing.store.Capacity)
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
@@ -1005,7 +1220,7 @@ func rankedCandidateListForRebalancing(
 			s := cand.store
 			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
-			cand.convergesScore = options.rebalanceToConvergesScore(comparable.candidateSL, s.Capacity)
+			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
 			cand.rangeCount = int(s.Capacity.RangeCount)
 			candidates = append(candidates, cand)
 		}
@@ -1520,8 +1735,8 @@ func underfullRangeThreshold(options rangeCountScorerOptions, mean float64) floa
 	return mean - math.Max(mean*options.rangeRebalanceThreshold, minRangeRebalanceThreshold)
 }
 
-func overfullQPSThreshold(options qpsScorerOptions, mean float64) float64 {
-	return mean + math.Max(mean*options.qpsRebalanceThreshold, minQPSThresholdDifference)
+func overfullQPSThreshold(rebalanceThreshold float64, mean float64) float64 {
+	return mean + math.Max(mean*rebalanceThreshold, minQPSThresholdDifference)
 }
 
 func underfullQPSThreshold(options qpsScorerOptions, mean float64) float64 {
