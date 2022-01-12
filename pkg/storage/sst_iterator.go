@@ -33,6 +33,10 @@ type sstIterator struct {
 
 	// roachpb.Verify k/v pairs on each call to Next.
 	verify bool
+
+	// For determining whether to trySeekUsingNext=true in SeekGE.
+	prevSeekKey  MVCCKey
+	seekGELastOp bool
 }
 
 // NewSSTIterator returns a `SimpleMVCCIterator` for the provided file, which it
@@ -86,7 +90,15 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 	}
 	r.keyBuf = EncodeKeyToBuf(r.keyBuf, key)
 	var iKey *sstable.InternalKey
-	iKey, r.value = r.iter.SeekGE(r.keyBuf)
+	trySeekUsingNext := false
+	if r.seekGELastOp {
+		// trySeekUsingNext = r.prevSeekKey <= key
+		trySeekUsingNext = !key.Less(r.prevSeekKey)
+	}
+	// NB: seekGELastOp may still be true, and we haven't updated prevSeekKey.
+	// So be careful not to return before the end of the function that sets these
+	// fields up for the next SeekGE.
+	iKey, r.value = r.iter.SeekGE(r.keyBuf, trySeekUsingNext)
 	if iKey != nil {
 		r.iterValid = true
 		r.mvccKey, r.err = DecodeMVCCKey(iKey.UserKey)
@@ -97,6 +109,9 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
 		r.err = roachpb.Value{RawBytes: r.value}.Verify(r.mvccKey.Key)
 	}
+	r.prevSeekKey.Key = append(r.prevSeekKey.Key[:0], r.mvccKey.Key...)
+	r.prevSeekKey.Timestamp = r.mvccKey.Timestamp
+	r.seekGELastOp = true
 }
 
 // Valid implements the SimpleMVCCIterator interface.
@@ -106,6 +121,7 @@ func (r *sstIterator) Valid() (bool, error) {
 
 // Next implements the SimpleMVCCIterator interface.
 func (r *sstIterator) Next() {
+	r.seekGELastOp = false
 	if !r.iterValid || r.err != nil {
 		return
 	}
@@ -124,6 +140,7 @@ func (r *sstIterator) Next() {
 
 // NextKey implements the SimpleMVCCIterator interface.
 func (r *sstIterator) NextKey() {
+	r.seekGELastOp = false
 	if !r.iterValid || r.err != nil {
 		return
 	}
