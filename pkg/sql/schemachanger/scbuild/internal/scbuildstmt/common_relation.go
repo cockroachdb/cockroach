@@ -430,40 +430,42 @@ func decomposeTableDescToElements(
 		panic(err)
 	}
 	// Add any constraints without indexes first.
-	for idx, constraint := range tbl.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+	for _, constraint := range tbl.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+		id := b.NextConstraintID(tbl)
 		enqueue(b, targetStatus, &scpb.ConstraintName{
 			TableID:        tbl.GetID(),
 			ConstraintType: scpb.ConstraintType_UniqueWithoutIndex,
-			ConstraintId:   uint32(idx),
+			ConstraintId:   id,
 			Name:           constraint.Name,
 		})
 		enqueue(b, targetStatus, &scpb.UniqueConstraint{
 			TableID:        tbl.GetID(),
 			ConstraintType: scpb.ConstraintType_UniqueWithoutIndex,
-			ConstraintId:   uint32(idx),
+			ConstraintId:   id,
 			IndexID:        0, // Invalid ID
 			ColumnIDs:      constraint.ColumnIDs,
 		})
 	}
 	// Add any check constraints next.
-	for idx, constraint := range tbl.AllActiveAndInactiveChecks() {
+	for _, constraint := range tbl.AllActiveAndInactiveChecks() {
+		id := b.NextConstraintID(tbl)
 		decomposeExprToElements(
 			b,
 			constraint.Expr,
 			exprTypeCheck,
 			tbl.GetID(),
-			uint32(idx),
+			id,
 			targetStatus,
 		)
 		enqueue(b, targetStatus, &scpb.ConstraintName{
 			TableID:        tbl.GetID(),
 			ConstraintType: scpb.ConstraintType_Check,
-			ConstraintId:   uint32(idx),
+			ConstraintId:   id,
 			Name:           constraint.Name,
 		})
 		enqueue(b, targetStatus, &scpb.CheckConstraint{
 			ConstraintType: scpb.ConstraintType_Check,
-			ConstraintId:   uint32(idx),
+			ConstraintId:   id,
 			TableID:        tbl.GetID(),
 			Name:           constraint.Name,
 			Validated:      constraint.Validity == descpb.ConstraintValidity_Validated,

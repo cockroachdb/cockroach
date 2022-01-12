@@ -1,6 +1,137 @@
 create-table
-CREATE TABLE defaultdb.customers (id INT PRIMARY KEY, email STRING UNIQUE);
+CREATE TABLE defaultdb.customers (id INT PRIMARY KEY CHECK (id < 500), email STRING UNIQUE CHECK (email <> 'blah'));
 ----
+
+build
+DROP TABLE defaultdb.customers CASCADE;
+----
+- [[CheckConstraint:{DescID: 54, ConstraintType: Check, ConstraintOrdinal: 1, Name: check_id}, ABSENT], PUBLIC]
+  details:
+    columnIds:
+    - 1
+    constraintId: 1
+    constraintType: Check
+    expr: id < 500:::INT8
+    name: check_id
+    tableId: 54
+    validated: true
+- [[CheckConstraint:{DescID: 54, ConstraintType: Check, ConstraintOrdinal: 2, Name: check_email}, ABSENT], PUBLIC]
+  details:
+    columnIds:
+    - 2
+    constraintId: 2
+    constraintType: Check
+    expr: email != 'blah':::STRING
+    name: check_email
+    tableId: 54
+    validated: true
+- [[Column:{DescID: 54, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    familyName: primary
+    pgAttributeNum: 1
+    tableId: 54
+    type:
+      family: IntFamily
+      oid: 20
+      width: 64
+- [[Column:{DescID: 54, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    familyName: primary
+    nullable: true
+    pgAttributeNum: 2
+    tableId: 54
+    type:
+      family: StringFamily
+      oid: 25
+- [[ColumnName:{DescID: 54, ColumnID: 1, Name: id}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: id
+    tableId: 54
+- [[ColumnName:{DescID: 54, ColumnID: 2, Name: email}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: email
+    tableId: 54
+- [[ConstraintName:{DescID: 54, ConstraintType: Check, ConstraintOrdinal: 1, Name: check_id}, ABSENT], PUBLIC]
+  details:
+    constraintId: 1
+    constraintType: Check
+    name: check_id
+    tableId: 54
+- [[ConstraintName:{DescID: 54, ConstraintType: Check, ConstraintOrdinal: 2, Name: check_email}, ABSENT], PUBLIC]
+  details:
+    constraintId: 2
+    constraintType: Check
+    name: check_email
+    tableId: 54
+- [[IndexName:{DescID: 54, IndexID: 1, Name: customers_pkey}, ABSENT], PUBLIC]
+  details:
+    indexId: 1
+    name: customers_pkey
+    tableId: 54
+- [[IndexName:{DescID: 54, IndexID: 2, Name: customers_email_key}, ABSENT], PUBLIC]
+  details:
+    indexId: 2
+    name: customers_email_key
+    tableId: 54
+- [[Locality:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 54
+- [[Namespace:{DescID: 54, Name: customers}, ABSENT], PUBLIC]
+  details:
+    databaseId: 50
+    descriptorId: 54
+    name: customers
+    schemaId: 51
+- [[Owner:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 54
+    owner: root
+- [[PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    indexId: 1
+    keyColumnDirection:
+    - ASC
+    keyColumnIds:
+    - 1
+    shardedDescriptor: {}
+    sourceIndexId: 1
+    storingColumnIds:
+    - 2
+    tableId: 54
+    unique: true
+- [[SecondaryIndex:{DescID: 54, IndexID: 2}, ABSENT], PUBLIC]
+  details:
+    indexId: 2
+    keyColumnDirection:
+    - ASC
+    keyColumnIds:
+    - 2
+    keySuffixColumnIds:
+    - 1
+    shardedDescriptor: {}
+    tableId: 54
+    unique: true
+- [[Table:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    tableId: 54
+- [[UserPrivileges:{DescID: 54, Username: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 54
+    privileges: 2
+    username: admin
+- [[UserPrivileges:{DescID: 54, Username: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 54
+    username: public
+- [[UserPrivileges:{DescID: 54, Username: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 54
+    privileges: 2
+    username: root
 
 create-table
 CREATE TABLE IF NOT EXISTS defaultdb.orders (

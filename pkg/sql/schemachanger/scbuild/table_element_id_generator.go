@@ -75,3 +75,21 @@ func (b buildCtx) NextIndexID(tbl catalog.TableDescriptor) descpb.IndexID {
 	}
 	return tbl.GetNextIndexID()
 }
+
+// NextConstraintID implements the scbuildstmt.TableElementIDGenerator interface.
+func (b buildCtx) NextConstraintID(tbl catalog.TableDescriptor) uint32 {
+	maxConstraintId := uint32(0)
+	b.BuilderState.ForEachElementStatus(func(status, targetStatus scpb.Status, elem scpb.Element) {
+		if _, ok := elem.(*scpb.ConstraintName); !ok {
+			return
+		}
+		if screl.GetDescID(elem) != tbl.GetID() {
+			return
+		}
+		constraintId := screl.GetConstraintId(elem)
+		if maxConstraintId < constraintId {
+			maxConstraintId = constraintId
+		}
+	})
+	return maxConstraintId + 1
+}

@@ -269,6 +269,11 @@ type TableElementIDGenerator interface {
 	// NextIndexID returns the ID that should be used for any new index added to
 	// this table descriptor.
 	NextIndexID(tbl catalog.TableDescriptor) descpb.IndexID
+
+	// NextConstraintID returns a unique ID for a constraint. These will be
+	// used by both execution and build phases for adding/dropping constraints, b
+	// but are never written into descriptors.
+	NextConstraintID(tbl catalog.TableDescriptor) uint32
 }
 
 // AstFormatter provides interfaces for formatting AST nodes.

@@ -42,3 +42,16 @@ func GetDescIDs(s scpb.TargetState) descpb.IDs {
 	}
 	return descIDSet.Ordered()
 }
+
+// GetConstraintId retrieves the constraint ID from the element.
+func GetConstraintId(e scpb.Element) uint32 {
+	id, err := Schema.GetAttribute(ConstraintId, e)
+	if err != nil {
+		// Note that this is safe because we have a unit test that ensures that
+		// all elements don't panic on this.
+		panic(errors.NewAssertionErrorWithWrappedErrf(
+			err, "failed to retrieve constraint ID for %T", e,
+		))
+	}
+	return id.(uint32)
+}
