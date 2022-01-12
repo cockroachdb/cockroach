@@ -588,6 +588,23 @@ func TestInternerPhysProps(t *testing.T) {
 		Presentation: physical.Presentation{{Alias: "d", ID: 2}, {Alias: "e", ID: 3}},
 		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5,6)"),
 	}
+	physProps7 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		LimitHint:    1,
+	}
+	physProps8 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		LimitHint:    1,
+		Distribution: physical.Distribution{Regions: []string{"us-east", "us-west"}},
+	}
+	physProps9 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		LimitHint:    1,
+		Distribution: physical.Distribution{Regions: []string{"us-east", "us-west"}},
+	}
 
 	testCases := []struct {
 		phys    *physical.Required
@@ -600,6 +617,9 @@ func TestInternerPhysProps(t *testing.T) {
 		{phys: &physProps4, inCache: false},
 		{phys: &physProps5, inCache: false},
 		{phys: &physProps6, inCache: false},
+		{phys: &physProps7, inCache: false},
+		{phys: &physProps8, inCache: false},
+		{phys: &physProps9, inCache: true},
 	}
 
 	inCache := make(map[*physical.Required]bool)

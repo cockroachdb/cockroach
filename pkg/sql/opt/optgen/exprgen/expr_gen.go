@@ -356,7 +356,7 @@ func convertSlice(
 func (eg *exprGen) populateBestProps(expr opt.Expr, required *physical.Required) memo.Cost {
 	rel, _ := expr.(memo.RelExpr)
 	if rel != nil {
-		if !xform.CanProvidePhysicalProps(rel, required) {
+		if !xform.CanProvidePhysicalProps(eg.f.EvalContext(), rel, required) {
 			panic(errorf("operator %s cannot provide required props %s", rel.Op(), required))
 		}
 	}

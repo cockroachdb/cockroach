@@ -138,7 +138,7 @@ func (e *ProjectExpr) RequiredPhysical() *physical.Required {
 }
 
 func (e *ProjectExpr) ProvidedPhysical() *physical.Provided {
-	return &e.grp.bestProps().provided
+	return e.grp.bestProps().provided
 }
 
 func (e *ProjectExpr) Cost() Cost {
@@ -352,7 +352,7 @@ func (e *SortExpr) RequiredPhysical() *physical.Required {
 }
 
 func (e *SortExpr) ProvidedPhysical() *physical.Provided {
-	return &e.best.provided
+	return e.best.provided
 }
 
 func (e *SortExpr) Cost() Cost {

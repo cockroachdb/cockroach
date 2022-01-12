@@ -236,6 +236,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.SortExpr:
 		ep, err = b.buildSort(t)
 
+	case *memo.DistributeExpr:
+		ep, err = b.buildDistribute(t)
+
 	case *memo.IndexJoinExpr:
 		ep, err = b.buildIndexJoin(t)
 
@@ -1652,6 +1655,23 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (execPlan, error) {
+	input, err := b.buildRelational(distribute.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	distribution := distribute.ProvidedPhysical().Distribution
+	inputDistribution := distribute.Input.ProvidedPhysical().Distribution
+	if distribution.Equals(inputDistribution) {
+		return execPlan{}, errors.AssertionFailedf("distribution already provided by input")
+	}
+
+	// TODO(rytaft): This is currently a no-op. We should pass this distribution
+	// info to the DistSQL planner.
+	return input, err
 }
 
 func (b *Builder) buildOrdinality(ord *memo.OrdinalityExpr) (execPlan, error) {
