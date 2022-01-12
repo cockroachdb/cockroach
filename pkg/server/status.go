@@ -55,6 +55,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -69,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	raft "go.etcd.io/etcd/raft/v3"
@@ -364,6 +367,53 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 		return bytes.Compare(response.Flows[i].FlowID.GetBytes(), response.Flows[j].FlowID.GetBytes()) < 0
 	})
 	return response, nil
+}
+
+func (b *baseStatusServer) localTxnIDResolution(
+	req *serverpb.TxnIDResolutionRequest,
+) *serverpb.TxnIDResolutionResponse {
+	txnIDCache := b.sqlServer.pgServer.SQLServer.GetTxnIDCache()
+
+	unresolvedTxnIDs := make(map[uuid.UUID]struct{}, len(req.TxnIDs))
+	for _, txnID := range req.TxnIDs {
+		unresolvedTxnIDs[txnID] = struct{}{}
+	}
+
+	resp := &serverpb.TxnIDResolutionResponse{
+		ResolvedTxnIDs: make([]contentionpb.ResolvedTxnID, 0, len(req.TxnIDs)),
+	}
+
+	// Optimistically attempt to resolve txn IDs. However, if the optimistic
+	// attempt fails, we flush the txnID cache and try again.
+	unresolvedTxnIDs, resp.ResolvedTxnIDs =
+		resolveTxnIDHelper(txnIDCache, unresolvedTxnIDs, resp.ResolvedTxnIDs)
+
+	if len(unresolvedTxnIDs) > 0 {
+		txnIDCache.Flush()
+
+		// If there are any unresolved txn IDs at this point, we can simply
+		// discard them. The caller will perform retry accordingly based
+		// on the response we send back.
+		_, resp.ResolvedTxnIDs =
+			resolveTxnIDHelper(txnIDCache, unresolvedTxnIDs, resp.ResolvedTxnIDs)
+	}
+
+	return resp
+}
+
+func resolveTxnIDHelper(
+	txnIDCache *txnidcache.Cache, query map[uuid.UUID]struct{}, result []contentionpb.ResolvedTxnID,
+) (remaining map[uuid.UUID]struct{}, _ []contentionpb.ResolvedTxnID) {
+	for txnID := range query {
+		if txnFingerprintID, found := txnIDCache.Lookup(txnID); found {
+			delete(query, txnID)
+			result = append(result, contentionpb.ResolvedTxnID{
+				TxnID:            txnID,
+				TxnFingerprintID: txnFingerprintID,
+			})
+		}
+	}
+	return query, result
 }
 
 // A statusServer provides a RESTful status API.
@@ -3027,4 +3077,28 @@ func (s *statusServer) JobStatus(
 	*res.Progress = j.Progress()
 
 	return &serverpb.JobStatusResponse{Job: res}, nil
+}
+
+func (s *statusServer) TxnIDResolution(
+	ctx context.Context, req *serverpb.TxnIDResolutionRequest,
+) (*serverpb.TxnIDResolutionResponse, error) {
+	ctx = s.AnnotateCtx(propagateGatewayMetadata(ctx))
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	requestedNodeID, local, err := s.parseNodeID(req.CoordinatorID)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if local {
+		return s.localTxnIDResolution(req), nil
+	}
+
+	statusClient, err := s.dialNode(ctx, requestedNodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	return statusClient.TxnIDResolution(ctx, req)
 }
