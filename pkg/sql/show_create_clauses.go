@@ -563,6 +563,9 @@ func showConstraintClause(
 	f *tree.FmtCtx,
 ) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
+		if e.Hidden {
+			continue
+		}
 		f.WriteString(",\n\t")
 		if len(e.Name) > 0 {
 			f.WriteString("CONSTRAINT ")

@@ -108,11 +108,18 @@ func NewKVFetcher(
 	return newKVFetcher(&kvBatchFetcher), err
 }
 
+// NewKVStreamingFetcher returns a new KVFetcher that utilizes the provided
+// TxnKVStreamer to perform KV reads.
+func NewKVStreamingFetcher(streamer *TxnKVStreamer) *KVFetcher {
+	return &KVFetcher{
+		KVBatchFetcher: streamer,
+	}
+}
+
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
-	ret := &KVFetcher{
+	return &KVFetcher{
 		KVBatchFetcher: batchFetcher,
 	}
-	return ret
 }
 
 // GetBytesRead returns the number of bytes read by this fetcher. It is safe for

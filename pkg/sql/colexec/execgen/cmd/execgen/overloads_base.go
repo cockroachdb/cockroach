@@ -305,12 +305,18 @@ func (o *oneArgOverload) String() string {
 }
 
 // twoArgsResolvedOverload is a utility struct that represents an overload that
-// takes it two arguments and that has been "resolved" (meaning it supports
+// takes in two arguments and that has been "resolved" (meaning it supports
 // only a single type family and a single type width on both sides).
 type twoArgsResolvedOverload struct {
 	*overloadBase
 	Left  *argWidthOverload
 	Right *lastArgWidthOverload
+}
+
+// NeedsBinaryOverloadHelper returns true iff the overload is such that it needs
+// access to execgen.BinaryOverloadHelper.
+func (o *twoArgsResolvedOverload) NeedsBinaryOverloadHelper() bool {
+	return o.kind == binaryOverload && o.Right.RetVecMethod == "Datum"
 }
 
 // twoArgsResolvedOverloadsInfo contains all overloads that take in two
