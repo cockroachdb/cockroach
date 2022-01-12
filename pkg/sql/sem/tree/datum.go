@@ -3662,6 +3662,11 @@ func NewDTupleWithLen(typ *types.T, l int) *DTuple {
 	return &DTuple{D: make(Datums, l), typ: typ}
 }
 
+// MakeDTuple creates a DTuple with the provided datums. See NewDTuple.
+func MakeDTuple(typ *types.T, d ...Datum) DTuple {
+	return DTuple{D: d, typ: typ}
+}
+
 // AsDTuple attempts to retrieve a *DTuple from an Expr, returning a *DTuple and
 // a flag signifying whether the assertion was successful. The function should
 // be used instead of direct type assertions wherever a *DTuple wrapped by a
