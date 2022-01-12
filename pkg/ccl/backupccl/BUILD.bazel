@@ -160,7 +160,7 @@ go_test(
         "split_and_scatter_processor_test.go",
         "system_schema_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + ["@cockroach//c-deps:libgeos"],
     embed = [":backupccl"],
     deps = [
         "//pkg/base",
