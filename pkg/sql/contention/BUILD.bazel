@@ -2,18 +2,24 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "contention",
-    srcs = ["registry.go"],
+    srcs = [
+        "registry.go",
+        "resolver.go",
+        "test_utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/contention",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/server/serverpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/contentionpb",
         "//pkg/util/cache",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -22,6 +28,7 @@ go_test(
     size = "small",
     srcs = [
         "registry_test.go",
+        "resolver_test.go",
         "utils_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -38,6 +45,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
