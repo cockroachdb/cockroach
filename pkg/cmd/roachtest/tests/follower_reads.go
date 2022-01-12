@@ -51,7 +51,6 @@ func registerFollowerReads(r registry.Registry) {
 			name = name + "/insufficient-quorum"
 		}
 		r.Add(registry.TestSpec{
-			Skip:  "https://github.com/cockroachdb/cockroach/issues/69817",
 			Name:  name,
 			Owner: registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(
