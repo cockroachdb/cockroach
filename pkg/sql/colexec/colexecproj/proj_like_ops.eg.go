@@ -23,12 +23,6 @@ type projPrefixBytesBytesConstOp struct {
 }
 
 func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -115,12 +109,6 @@ type projSuffixBytesBytesConstOp struct {
 }
 
 func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -207,12 +195,6 @@ type projContainsBytesBytesConstOp struct {
 }
 
 func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -299,12 +281,6 @@ type projRegexpBytesBytesConstOp struct {
 }
 
 func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -391,12 +367,6 @@ type projNotPrefixBytesBytesConstOp struct {
 }
 
 func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -483,12 +453,6 @@ type projNotSuffixBytesBytesConstOp struct {
 }
 
 func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -575,12 +539,6 @@ type projNotContainsBytesBytesConstOp struct {
 }
 
 func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -667,12 +625,6 @@ type projNotRegexpBytesBytesConstOp struct {
 }
 
 func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {

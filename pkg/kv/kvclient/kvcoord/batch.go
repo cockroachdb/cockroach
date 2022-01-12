@@ -18,7 +18,7 @@ import (
 
 var emptySpan = roachpb.Span{}
 
-// truncate restricts all requests to the given key range and returns new,
+// Truncate restricts all requests to the given key range and returns new,
 // truncated, requests. All returned requests are "truncated" to the given span,
 // and requests which are found to not overlap the given span at all are
 // removed. A mapping of response index to request index is returned. For
@@ -27,8 +27,8 @@ var emptySpan = roachpb.Span{}
 // reqs = Put[a], Put[c], Put[b],
 // rs = [a,bb],
 //
-// then truncate(reqs,rs) returns (Put[a], Put[b]) and positions [0,2].
-func truncate(
+// then Truncate(reqs,rs) returns (Put[a], Put[b]) and positions [0,2].
+func Truncate(
 	reqs []roachpb.RequestUnion, rs roachpb.RSpan,
 ) ([]roachpb.RequestUnion, []int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
@@ -191,18 +191,18 @@ func prev(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 	return candidate, nil
 }
 
-// next gives the left boundary of the union of all requests which don't affect
+// Next gives the left boundary of the union of all requests which don't affect
 // keys less than the given key. Note that the left boundary is inclusive, that
 // is, the returned RKey is the inclusive left endpoint of the keys the request
 // should operate on next.
 //
-// Informally, a call `next(reqs, k)` means: we've already executed the parts of
+// Informally, a call `Next(reqs, k)` means: we've already executed the parts of
 // `reqs` that intersect `[KeyMin, k)`; please tell me how far to the right the
 // next relevant request begins.
 //
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
+func Next(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
 	for _, union := range reqs {
 		inner := union.GetInner()

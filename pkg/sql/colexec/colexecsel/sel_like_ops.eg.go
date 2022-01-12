@@ -23,12 +23,6 @@ type selPrefixBytesBytesConstOp struct {
 }
 
 func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -112,12 +106,6 @@ type selSuffixBytesBytesConstOp struct {
 }
 
 func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -201,12 +189,6 @@ type selContainsBytesBytesConstOp struct {
 }
 
 func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -290,12 +272,6 @@ type selRegexpBytesBytesConstOp struct {
 }
 
 func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -379,12 +355,6 @@ type selNotPrefixBytesBytesConstOp struct {
 }
 
 func (p *selNotPrefixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -468,12 +438,6 @@ type selNotSuffixBytesBytesConstOp struct {
 }
 
 func (p *selNotSuffixBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -557,12 +521,6 @@ type selNotContainsBytesBytesConstOp struct {
 }
 
 func (p *selNotContainsBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -646,12 +604,6 @@ type selNotRegexpBytesBytesConstOp struct {
 }
 
 func (p *selNotRegexpBytesBytesConstOp) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the selection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {

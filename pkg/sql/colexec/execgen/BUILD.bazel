@@ -5,7 +5,7 @@ go_library(
     srcs = [
         "execgen.go",
         "inline.go",
-        "overloads_util.go",
+        "overloads_bin_util.go",
         "placeholders.go",
         "supported_bin_cmp_ops.go",
         "template.go",
