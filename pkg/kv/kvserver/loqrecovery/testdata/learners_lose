@@ -1,8 +1,8 @@
 # Tests verifying that learners don't become survivors.
 
-# First use case where we can make a right decision
+# First use case where we can make a right decision.
 # With two out of five replicas remaining, check that learner
-# is not picked as a survivor even if all other criteria are met
+# is not picked as a survivor even if all other criteria are met.
 # Note: for replica type codes, see metadata.proto
 
 replication-data
@@ -24,7 +24,7 @@ replication-data
   EndKey: /Max
   Replicas:
   - { NodeID: 1, StoreID: 1, ReplicaID: 1}
-  - { NodeID: 2, StoreID: 2, ReplicaID: 2, ReplicaType: 1}   # learner has highest storeID but must not win
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2, ReplicaType: 1}  # learner has highest storeID but must not win
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
   - { NodeID: 5, StoreID: 5, ReplicaID: 5}
@@ -73,9 +73,8 @@ dump-store stores=(1,2)
     - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
     - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
 
-# Second use case where we can't make a decision and leave replica as is
-# Only a single learner is left, there is no way to recover.
-
+# Second use case where we can't make a decision and fail keyspace coverage as
+# only a single learner is left, there is no way to recover.
 replication-data
 - StoreID: 1
   RangeID: 1
@@ -116,35 +115,7 @@ ok
 
 make-plan
 ----
-[]
-
-apply-plan stores=(1,2)
-----
-ok
-
-dump-store stores=(1,2)
-----
-- NodeID: 1
-  StoreID: 1
-  Descriptors:
-  - RangeID: 1
-    StartKey: /Min
-    Replicas:
-    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1, ReplicaType: 1}
-    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 2}
-    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 3}
-  - RangeID: 2
-    StartKey: /Table/1
-    Replicas:
-    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
-    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
-    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
-- NodeID: 2
-  StoreID: 2
-  Descriptors:
-  - RangeID: 2
-    StartKey: /Table/1
-    Replicas:
-    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
-    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
-    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+ERROR: Key space covering is not complete. Discovered following inconsistencies:
+range gap /{Min-Table/1}
+  r0: /Min
+  r2: /{Table/1-Max}

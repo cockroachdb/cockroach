@@ -60,3 +60,15 @@ func (m ReplicaUpdate) NodeID() roachpb.NodeID {
 func (m ReplicaUpdate) StoreID() roachpb.StoreID {
 	return m.NewReplica.StoreID
 }
+
+// Replica gets replica for the store where this info and range
+// descriptor were collected. Returns err if it can't find replica
+// descriptor for the store it originated from.
+func (m *ReplicaInfo) Replica() (roachpb.ReplicaDescriptor, error) {
+	if d, ok := m.Desc.GetReplicaDescriptor(m.StoreID); ok {
+		return d, nil
+	}
+	return roachpb.ReplicaDescriptor{}, errors.Errorf(
+		"invalid replica info: its own store s%d is not present in descriptor replicas %s",
+		m.StoreID, m.Desc)
+}

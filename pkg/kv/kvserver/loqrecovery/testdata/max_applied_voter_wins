@@ -1,0 +1,221 @@
+# With two out of five replicas remaining, check that replica with highest
+# range applied index is chosen regardless of replica storeID.
+# We have a 5-way replication and have two out of five nodes left so quorum
+# is lost.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}  # replicas 3-5 are located on unavailable stores
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11  # this replica has higher applied index so is preferred over the other one
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}  # replicas 3-5 are located on unavailable stores
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10    # applied index takes precedence over store ID so this replica loses
+  RaftCommittedIndex: 14   # committed index while higher, should not confuse planner and use applied index
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+
+apply-plan stores=(1,2)
+----
+ok
+
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+- NodeID: 2
+  StoreID: 2
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+
+
+# Second use case where stale replica which remained from before split
+# on store with higher ID will conflict with later one spanning smaller range.
+# We have a stale replica in s2 which still remembers group across s3 and s4
+# but they are not available anymore. While LHS and RHS across s1, s4, s5 are
+# now more recent. Stale replica loses based on raft applied index being lower.
+replication-data
+- StoreID: 1  # this is the LHS replica post split
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 6}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 7}
+  RangeAppliedIndex: 15
+  RaftCommittedIndex: 15
+- StoreID: 1  # this is the RHS replica post split
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 6}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 7}
+  RangeAppliedIndex: 15
+  RaftCommittedIndex: 15
+- StoreID: 2
+  RangeID: 1  # this is the old version of range which got stale
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 5
+  RangeID: 1  # this is the LHS replica post split
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 6}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 7}
+  RangeAppliedIndex: 15
+  RaftCommittedIndex: 15
+- StoreID: 5
+  RangeID: 2  # this is the RHS replica post split
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 6}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 7}
+  RangeAppliedIndex: 15
+  RaftCommittedIndex: 15
+- StoreID: 6
+  RangeID: 1  # this is the LHS replica post split
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 6}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 7}
+  RangeAppliedIndex: 15
+  RaftCommittedIndex: 15
+- StoreID: 6
+  RangeID: 2  # this is the RHS replica post split
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 6}
+  - { NodeID: 6, StoreID: 6, ReplicaID: 7}
+  RangeAppliedIndex: 15
+  RaftCommittedIndex: 15
+----
+ok
+
+collect-replica-info stores=(1,2,5,6)
+----
+ok
+
+make-plan
+----
+[]
+
+apply-plan stores=(1,2,5,6)
+----
+ok
+
+dump-store stores=(1,2,5,6)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 6}
+    - Replica: {NodeID: 6, StoreID: 6, ReplicaID: 7}
+  - RangeID: 2
+    StartKey: /Table/1
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 6}
+    - Replica: {NodeID: 6, StoreID: 6, ReplicaID: 7}
+- NodeID: 2
+  StoreID: 2
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+- NodeID: 5
+  StoreID: 5
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 6}
+    - Replica: {NodeID: 6, StoreID: 6, ReplicaID: 7}
+  - RangeID: 2
+    StartKey: /Table/1
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 6}
+    - Replica: {NodeID: 6, StoreID: 6, ReplicaID: 7}
+- NodeID: 6
+  StoreID: 6
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 6}
+    - Replica: {NodeID: 6, StoreID: 6, ReplicaID: 7}
+  - RangeID: 2
+    StartKey: /Table/1
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 6}
+    - Replica: {NodeID: 6, StoreID: 6, ReplicaID: 7}
