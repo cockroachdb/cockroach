@@ -67,7 +67,7 @@ type TestTenantInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
-	// ExecutorConfig returns a copy of the tenant's SystemIDChecker.
+	// SystemIDChecker returns a copy of the tenant's SystemIDChecker.
 	// The real return type is keys.SystemIDChecker.
 	SystemIDChecker() interface{}
 

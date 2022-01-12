@@ -314,8 +314,8 @@ func TestClusterResetSQLStats(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
 
-	for _, flushed := range []bool{false, true} {
-		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
+	for _, persisted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("persisted=%t", persisted), func(t *testing.T) {
 			testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 				ServerArgs: params,
 			})
@@ -329,13 +329,14 @@ func TestClusterResetSQLStats(t *testing.T) {
 				gatewayServer.Stopper())
 
 			populateStats(t, sqlDB)
-			if flushed {
-				gatewayServer.SQLServer().(*sql.Server).
-					GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+			if persisted {
+				for i := 0; i < testCluster.NumServers(); i++ {
+					testCluster.Server(i).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+				}
 			}
 
 			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
-				Combined: true,
+				Combined: persisted,
 			})
 			require.NoError(t, err)
 
@@ -349,7 +350,7 @@ func TestClusterResetSQLStats(t *testing.T) {
 			require.NoError(t, err)
 
 			statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
-				Combined: true,
+				Combined: persisted,
 			})
 			require.NoError(t, err)
 

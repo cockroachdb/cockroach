@@ -64,7 +64,7 @@ func TestSQLStatsFlush(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	fakeTime := stubTime{
-		aggInterval: time.Hour,
+		aggInterval: persistedsqlstats.SQLStatsAggregationInterval.Default(),
 	}
 	fakeTime.setTime(timeutil.Now())
 
@@ -73,6 +73,10 @@ func TestSQLStatsFlush(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					StubTimeNow: fakeTime.Now,
+					// Currently, the default flush interval is 15s, so we
+					// want to prevent unwanted premature flushing that
+					// might impact verification of in-memory stats.
+					DisallowAutomaticFlush: true,
 				},
 			},
 		},

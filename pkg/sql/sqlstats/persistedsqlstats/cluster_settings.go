@@ -24,7 +24,7 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"sql.stats.flush.interval",
 	"the interval at which SQL execution statistics are flushed to disk",
-	time.Hour,
+	time.Second*15,
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 ).WithPublic()
 
@@ -78,4 +78,14 @@ var SQLStatsCleanupRecurrence = settings.RegisterValidatedStringSetting(
 		}
 		return nil
 	},
+).WithPublic()
+
+// SQLStatsAggregationInterval is the cluster setting that controls the interval
+// at which we aggregate stats when writing to the system table.
+var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.stats.aggregation.interval",
+	"the interval of aggregation of SQL execution statistics",
+	time.Hour,
+	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 ).WithPublic()

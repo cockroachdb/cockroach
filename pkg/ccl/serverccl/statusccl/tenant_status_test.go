@@ -25,10 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -90,220 +93,217 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 	ctx := context.Background()
 
-	serverParams, _ := tests.CreateTestServerParams()
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: serverParams,
-	})
-	defer testCluster.Stopper().Stop(ctx)
-
-	server := testCluster.Server(0 /* idx */)
-
-	tenant, sqlDB := serverutils.StartTenant(t, server, base.TestTenantArgs{
-		TenantID: roachpb.MakeTenantID(10 /* id */),
-		TestingKnobs: base.TestingKnobs{
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				AOSTClause: "AS OF SYSTEM TIME '-1us'",
-			},
-		},
-	})
-
-	nonTenant := testCluster.Server(1 /* idx */)
-
-	tenantStatusServer := tenant.StatusServer().(serverpb.SQLStatusServer)
-
-	type testCase struct {
-		stmt                 string
-		formattedStmt        string
-		fingerprint          string
-		formattedFingerprint string
-	}
-
-	testCaseTenant := []testCase{
-		{
-			stmt:          `CREATE DATABASE roachblog_t`,
-			formattedStmt: "CREATE DATABASE roachblog_t\n",
-		},
-		{
-			stmt:          `SET database = roachblog_t`,
-			formattedStmt: "SET database = roachblog_t\n",
-		},
-		{
-			stmt:          `CREATE TABLE posts_t (id INT8 PRIMARY KEY, body STRING)`,
-			formattedStmt: "CREATE TABLE posts_t (id INT8 PRIMARY KEY, body STRING)\n",
-		},
-		{
-			stmt:                 `INSERT INTO posts_t VALUES (1, 'foo')`,
-			fingerprint:          `INSERT INTO posts_t VALUES (_, '_')`,
-			formattedStmt:        "INSERT INTO posts_t VALUES (1, 'foo')\n",
-			formattedFingerprint: "INSERT INTO posts_t VALUES (_, '_')\n",
-		},
-		{
-			stmt:          `SELECT * FROM posts_t`,
-			formattedStmt: "SELECT * FROM posts_t\n",
-		},
-	}
-
-	for _, stmt := range testCaseTenant {
-		_, err := sqlDB.Exec(stmt.stmt)
-		require.NoError(t, err)
-	}
-
-	err := sqlDB.Close()
-	require.NoError(t, err)
-
-	testCaseNonTenant := []testCase{
-		{
-			stmt:          `CREATE DATABASE roachblog_nt`,
-			formattedStmt: "CREATE DATABASE roachblog_nt\n",
-		},
-		{
-			stmt:          `SET database = roachblog_nt`,
-			formattedStmt: "SET database = roachblog_nt\n",
-		},
-		{
-			stmt:          `CREATE TABLE posts_nt (id INT8 PRIMARY KEY, body STRING)`,
-			formattedStmt: "CREATE TABLE posts_nt (id INT8 PRIMARY KEY, body STRING)\n",
-		},
-		{
-			stmt:                 `INSERT INTO posts_nt VALUES (1, 'foo')`,
-			fingerprint:          `INSERT INTO posts_nt VALUES (_, '_')`,
-			formattedStmt:        "INSERT INTO posts_nt VALUES (1, 'foo')\n",
-			formattedFingerprint: "INSERT INTO posts_nt VALUES (_, '_')\n",
-		},
-		{
-			stmt:          `SELECT * FROM posts_nt`,
-			formattedStmt: "SELECT * FROM posts_nt\n",
-		},
-	}
-
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, nonTenant.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
-	defer cleanupGoDB()
-	sqlDB, err = gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-
-	for _, stmt := range testCaseNonTenant {
-		_, err = sqlDB.Exec(stmt.stmt)
-		require.NoError(t, err)
-	}
-	err = sqlDB.Close()
-	require.NoError(t, err)
-
-	request := &serverpb.StatementsRequest{}
-	combinedStatsRequest := &serverpb.CombinedStatementsStatsRequest{}
-	var tenantStats *serverpb.StatementsResponse
-	var tenantCombinedStats *serverpb.StatementsResponse
-
-	// Populate `tenantStats` and `tenantCombinedStats`. The tenant server
-	// `Statements` and `CombinedStatements` methods are backed by the
-	// sqlinstance system which uses a cache populated through rangefeed
-	// for keeping track of SQL pod data. We use `SucceedsSoon` to eliminate
-	// race condition with the sqlinstance cache population such as during
-	// a stress test.
-	testutils.SucceedsSoon(t, func() error {
-		tenantStats, err = tenantStatusServer.Statements(ctx, request)
-		if err != nil {
-			return err
-		}
-		if tenantStats == nil || len(tenantStats.Statements) == 0 {
-			return errors.New("tenant statements are unexpectedly empty")
-		}
-
-		tenantCombinedStats, err = tenantStatusServer.CombinedStatementStats(ctx, combinedStatsRequest)
-		if tenantCombinedStats == nil || len(tenantCombinedStats.Statements) == 0 {
-			return errors.New("tenant combined statements are unexpectedly empty")
-		}
-		return nil
-	})
-
-	path := "/_status/statements"
-	var nonTenantStats serverpb.StatementsResponse
-	err = serverutils.GetJSONProto(nonTenant, path, &nonTenantStats)
-	require.NoError(t, err)
-
-	path = "/_status/combinedstmts"
-	var nonTenantCombinedStats serverpb.StatementsResponse
-	err = serverutils.GetJSONProto(nonTenant, path, &nonTenantCombinedStats)
-	require.NoError(t, err)
-
-	checkStatements := func(t *testing.T, tc []testCase, actual *serverpb.StatementsResponse, combined bool) {
-		t.Helper()
-		var expectedStatements []string
-		for _, stmt := range tc {
-			var expectedStmt = stmt.stmt
-			if combined {
-				expectedStmt = stmt.formattedStmt
+	for _, persistedStats := range []bool{false, true} {
+		t.Run(fmt.Sprintf("persistedStats=%t", persistedStats), func(t *testing.T) {
+			serverParams, _ := tests.CreateTestServerParams()
+			serverParams.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+				AOSTClause:             "AS OF SYSTEM TIME '-1us'",
+				DisallowAutomaticFlush: true,
 			}
-			if stmt.fingerprint != "" {
-				if combined {
-					expectedStmt = stmt.formattedFingerprint
-				} else {
-					expectedStmt = stmt.fingerprint
+			testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+				ServerArgs: serverParams,
+			})
+			defer testCluster.Stopper().Stop(ctx)
+
+			server := testCluster.Server(0 /* idx */)
+
+			tenant, sqlDB := serverutils.StartTenant(t, server, base.TestTenantArgs{
+				TenantID: roachpb.MakeTenantID(10 /* id */),
+				TestingKnobs: base.TestingKnobs{
+					SQLStatsKnobs: &sqlstats.TestingKnobs{
+						AOSTClause:             "AS OF SYSTEM TIME '-1us'",
+						DisallowAutomaticFlush: true,
+					},
+				},
+			})
+
+			nonTenant := testCluster.Server(1 /* idx */)
+
+			tenantStatusServer := tenant.StatusServer().(serverpb.SQLStatusServer)
+
+			type testCase struct {
+				stmt                 string
+				formattedStmt        string
+				fingerprint          string
+				formattedFingerprint string
+			}
+
+			testCaseTenant := []testCase{
+				{
+					stmt:          `CREATE DATABASE roachblog_t`,
+					formattedStmt: "CREATE DATABASE roachblog_t\n",
+				},
+				{
+					stmt:          `SET database = roachblog_t`,
+					formattedStmt: "SET database = roachblog_t\n",
+				},
+				{
+					stmt:          `CREATE TABLE posts_t (id INT8 PRIMARY KEY, body STRING)`,
+					formattedStmt: "CREATE TABLE posts_t (id INT8 PRIMARY KEY, body STRING)\n",
+				},
+				{
+					stmt:                 `INSERT INTO posts_t VALUES (1, 'foo')`,
+					fingerprint:          `INSERT INTO posts_t VALUES (_, '_')`,
+					formattedStmt:        "INSERT INTO posts_t VALUES (1, 'foo')\n",
+					formattedFingerprint: "INSERT INTO posts_t VALUES (_, '_')\n",
+				},
+				{
+					stmt:          `SELECT * FROM posts_t`,
+					formattedStmt: "SELECT * FROM posts_t\n",
+				},
+			}
+
+			for _, stmt := range testCaseTenant {
+				_, err := sqlDB.Exec(stmt.stmt)
+				require.NoError(t, err)
+			}
+
+			err := sqlDB.Close()
+			require.NoError(t, err)
+
+			testCaseNonTenant := []testCase{
+				{
+					stmt:          `CREATE DATABASE roachblog_nt`,
+					formattedStmt: "CREATE DATABASE roachblog_nt\n",
+				},
+				{
+					stmt:          `SET database = roachblog_nt`,
+					formattedStmt: "SET database = roachblog_nt\n",
+				},
+				{
+					stmt:          `CREATE TABLE posts_nt (id INT8 PRIMARY KEY, body STRING)`,
+					formattedStmt: "CREATE TABLE posts_nt (id INT8 PRIMARY KEY, body STRING)\n",
+				},
+				{
+					stmt:                 `INSERT INTO posts_nt VALUES (1, 'foo')`,
+					fingerprint:          `INSERT INTO posts_nt VALUES (_, '_')`,
+					formattedStmt:        "INSERT INTO posts_nt VALUES (1, 'foo')\n",
+					formattedFingerprint: "INSERT INTO posts_nt VALUES (_, '_')\n",
+				},
+				{
+					stmt:          `SELECT * FROM posts_nt`,
+					formattedStmt: "SELECT * FROM posts_nt\n",
+				},
+			}
+
+			pgURL, cleanupGoDB := sqlutils.PGUrl(
+				t, nonTenant.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+			defer cleanupGoDB()
+			sqlDB, err = gosql.Open("postgres", pgURL.String())
+			require.NoError(t, err)
+
+			for _, stmt := range testCaseNonTenant {
+				_, err = sqlDB.Exec(stmt.stmt)
+				require.NoError(t, err)
+			}
+			err = sqlDB.Close()
+			require.NoError(t, err)
+
+			if persistedStats {
+				// Flush stats.
+				for i := 0; i < testCluster.NumServers(); i++ {
+					testCluster.Server(i).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 				}
+				tenant.PGServer().(*pgwire.Server).SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 			}
 
-			expectedStatements = append(expectedStatements, expectedStmt)
-		}
-
-		var actualStatements []string
-		for _, respStatement := range actual.Statements {
-			if respStatement.Key.KeyData.Failed {
-				// We ignore failed statements here as the INSERT statement can fail and
-				// be automatically retried, confusing the test success check.
-				continue
+			request := &serverpb.StatementsRequest{}
+			var tenantStats *serverpb.StatementsResponse
+			if persistedStats {
+				request.Combined = true
 			}
-			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// We ignore internal queries, these are not relevant for the
-				// validity of this test.
-				continue
+
+			// Populate `tenantStats`. The tenant server
+			// `Statements` and `CombinedStatements` methods are backed by the
+			// sqlinstance system which uses a cache populated through rangefeed
+			// for keeping track of SQL pod data. We use `SucceedsSoon` to eliminate
+			// race condition with the sqlinstance cache population such as during
+			// a stress test.
+			testutils.SucceedsSoon(t, func() error {
+				tenantStats, err = tenantStatusServer.Statements(ctx, request)
+				if err != nil {
+					return err
+				}
+				if tenantStats == nil || len(tenantStats.Statements) == 0 {
+					return errors.New("tenant statements are unexpectedly empty")
+				}
+				return nil
+			})
+
+			path := "/_status/statements"
+			if persistedStats {
+				path = "/_status/combinedstmts"
 			}
-			actualStatements = append(actualStatements, respStatement.Key.KeyData.Query)
-		}
+			var nonTenantStats serverpb.StatementsResponse
+			err = serverutils.GetJSONProto(nonTenant, path, &nonTenantStats)
+			require.NoError(t, err)
 
-		sort.Strings(expectedStatements)
-		sort.Strings(actualStatements)
+			checkStatements := func(t *testing.T, tc []testCase, actual *serverpb.StatementsResponse) {
+				t.Helper()
+				var expectedStatements []string
+				for _, stmt := range tc {
+					var expectedStmt = stmt.stmt
+					if persistedStats {
+						expectedStmt = stmt.formattedStmt
+					}
+					if stmt.fingerprint != "" {
+						if persistedStats {
+							expectedStmt = stmt.formattedFingerprint
+						} else {
+							expectedStmt = stmt.fingerprint
+						}
+					}
 
-		require.Equal(t, expectedStatements, actualStatements)
+					expectedStatements = append(expectedStatements, expectedStmt)
+				}
+
+				var actualStatements []string
+				for _, respStatement := range actual.Statements {
+					if respStatement.Key.KeyData.Failed {
+						// We ignore failed statements here as the INSERT statement can fail and
+						// be automatically retried, confusing the test success check.
+						continue
+					}
+					if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+						// We ignore internal queries, these are not relevant for the
+						// validity of this test.
+						continue
+					}
+					actualStatements = append(actualStatements, respStatement.Key.KeyData.Query)
+				}
+
+				sort.Strings(expectedStatements)
+				sort.Strings(actualStatements)
+
+				require.Equal(t, expectedStatements, actualStatements)
+			}
+
+			// First we verify that we have expected stats from tenants.
+			t.Run("tenant-stats", func(t *testing.T) {
+				checkStatements(t, testCaseTenant, tenantStats)
+			})
+
+			// Now we verify the non tenant stats are what we expected.
+			t.Run("non-tenant-stats", func(t *testing.T) {
+				checkStatements(t, testCaseNonTenant, &nonTenantStats)
+			})
+
+			// Now we verify that tenant and non-tenant have no visibility into each other's stats.
+			t.Run("overlap", func(t *testing.T) {
+				for _, tenantStmt := range tenantStats.Statements {
+					for _, nonTenantStmt := range nonTenantStats.Statements {
+						require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
+					}
+				}
+
+				for _, tenantTxn := range tenantStats.Transactions {
+					for _, nonTenantTxn := range nonTenantStats.Transactions {
+						require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
+					}
+				}
+			})
+		})
 	}
-
-	// First we verify that we have expected stats from tenants.
-	t.Run("tenant-stats", func(t *testing.T) {
-		checkStatements(t, testCaseTenant, tenantStats, false)
-		checkStatements(t, testCaseTenant, tenantCombinedStats, true)
-	})
-
-	// Now we verify the non tenant stats are what we expected.
-	t.Run("non-tenant-stats", func(t *testing.T) {
-		checkStatements(t, testCaseNonTenant, &nonTenantStats, false)
-		checkStatements(t, testCaseNonTenant, &nonTenantCombinedStats, true)
-	})
-
-	// Now we verify that tenant and non-tenant have no visibility into each other's stats.
-	t.Run("overlap", func(t *testing.T) {
-		for _, tenantStmt := range tenantStats.Statements {
-			for _, nonTenantStmt := range nonTenantStats.Statements {
-				require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
-			}
-		}
-
-		for _, tenantTxn := range tenantStats.Transactions {
-			for _, nonTenantTxn := range nonTenantStats.Transactions {
-				require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
-			}
-		}
-
-		for _, tenantStmt := range tenantCombinedStats.Statements {
-			for _, nonTenantStmt := range nonTenantCombinedStats.Statements {
-				require.NotEqual(t, tenantStmt, nonTenantStmt, "expected tenant to have no visibility to non-tenant's statement stats, but found:", nonTenantStmt)
-			}
-		}
-
-		for _, tenantTxn := range tenantCombinedStats.Transactions {
-			for _, nonTenantTxn := range nonTenantCombinedStats.Transactions {
-				require.NotEqual(t, tenantTxn, nonTenantTxn, "expected tenant to have no visibility to non-tenant's transaction stats, but found:", nonTenantTxn)
-			}
-		}
-	})
 }
 
 func testResetSQLStatsRPCForTenant(
@@ -330,10 +330,6 @@ func testResetSQLStatsRPCForTenant(
 	}
 
 	var expectedStatements []string
-	for _, tc := range stmts {
-		expectedStatements = append(expectedStatements, tc.formattedStmt)
-	}
-
 	testCluster := testHelper.testCluster()
 	controlCluster := testHelper.controlCluster()
 
@@ -352,73 +348,88 @@ func testResetSQLStatsRPCForTenant(
 
 	}()
 
-	for _, flushed := range []bool{false, true} {
-		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
-			// Clears the SQL Stats at the end of each test via builtin.
-			defer func() {
-				testCluster.tenantConn(randomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
-				controlCluster.tenantConn(randomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
-			}()
+	testReset := func(persisted bool) {
+		t.Helper()
+		// Clears the SQL Stats at the end of each test via builtin.
+		defer func() {
+			testCluster.tenantConn(randomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+			controlCluster.tenantConn(randomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+		}()
 
-			for _, stmt := range stmts {
-				testCluster.tenantConn(randomServer).Exec(t, stmt.stmt)
-				controlCluster.tenantConn(randomServer).Exec(t, stmt.stmt)
+		for _, stmt := range stmts {
+			testCluster.tenantConn(randomServer).Exec(t, stmt.stmt)
+			controlCluster.tenantConn(randomServer).Exec(t, stmt.stmt)
+		}
+
+		if persisted {
+			// Test persisted stats, so flush stats before read.
+			for i := range testCluster {
+				testCluster.tenantSQLStats(serverIdx(i)).Flush(ctx)
 			}
 
-			if flushed {
-				testCluster.tenantSQLStats(randomServer).Flush(ctx)
-				controlCluster.tenantSQLStats(randomServer).Flush(ctx)
+			for i := range controlCluster {
+				controlCluster.tenantSQLStats(serverIdx(i)).Flush(ctx)
 			}
+		}
 
-			status := testCluster.tenantStatusSrv(randomServer)
+		status := testCluster.tenantStatusSrv(randomServer)
 
-			statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
-				Combined: true,
-			})
-			require.NoError(t, err)
-
-			require.NotEqual(t, 0, len(statsPreReset.Statements),
-				"expected to find stats for at least one statement, but found: %d", len(statsPreReset.Statements))
-			ensureExpectedStmtFingerprintExistsInRPCResponse(t, expectedStatements, statsPreReset, "test")
-
-			_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{
-				ResetPersistedStats: true,
-			})
-			require.NoError(t, err)
-
-			statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
-				Combined: true,
-			})
-			require.NoError(t, err)
-
-			if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
-				t.Fatal("expected to find stats last reset value changed, but didn't")
-			}
-
-			for _, txnStatsPostReset := range statsPostReset.Transactions {
-				for _, txnStatsPreReset := range statsPreReset.Transactions {
-					require.NotEqual(t, txnStatsPostReset, txnStatsPreReset,
-						"expected to have reset SQL stats, but still found transaction %+v", txnStatsPostReset)
-				}
-			}
-
-			for _, stmtStatsPostReset := range statsPostReset.Statements {
-				for _, stmtStatsPreReset := range statsPreReset.Statements {
-					require.NotEqual(t, stmtStatsPostReset, stmtStatsPreReset,
-						"expected to have reset SQL stats, but still found statement %+v", stmtStatsPostReset)
-				}
-			}
-
-			// Ensures that sql stats reset is isolated by tenant boundary.
-			statsFromControlCluster, err :=
-				controlCluster.tenantStatusSrv(randomServer).Statements(ctx, &serverpb.StatementsRequest{
-					Combined: true,
-				})
-			require.NoError(t, err)
-
-			ensureExpectedStmtFingerprintExistsInRPCResponse(t, expectedStatements, statsFromControlCluster, "control")
+		statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+			Combined: persisted,
 		})
+		require.NoError(t, err)
+
+		require.NotEqual(t, 0, len(statsPreReset.Statements),
+			"expected to find stats for at least one statement, but found: %d", len(statsPreReset.Statements))
+		ensureExpectedStmtFingerprintExistsInRPCResponse(t, expectedStatements, statsPreReset, "test")
+
+		_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{
+			ResetPersistedStats: true,
+		})
+		require.NoError(t, err)
+
+		statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{
+			Combined: true,
+		})
+		require.NoError(t, err)
+
+		if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
+			t.Fatal("expected to find stats last reset value changed, but didn't")
+		}
+
+		for _, txnStatsPostReset := range statsPostReset.Transactions {
+			for _, txnStatsPreReset := range statsPreReset.Transactions {
+				require.NotEqual(t, txnStatsPostReset, txnStatsPreReset,
+					"expected to have reset SQL stats, but still found transaction %+v", txnStatsPostReset)
+			}
+		}
+
+		for _, stmtStatsPostReset := range statsPostReset.Statements {
+			for _, stmtStatsPreReset := range statsPreReset.Statements {
+				require.NotEqual(t, stmtStatsPostReset, stmtStatsPreReset,
+					"expected to have reset SQL stats, but still found statement %+v", stmtStatsPostReset)
+			}
+		}
+
+		// Ensures that sql stats reset is isolated by tenant boundary.
+		statsFromControlCluster, err :=
+			controlCluster.tenantStatusSrv(randomServer).Statements(ctx, &serverpb.StatementsRequest{
+				Combined: persisted,
+			})
+		require.NoError(t, err)
+
+		ensureExpectedStmtFingerprintExistsInRPCResponse(t, expectedStatements, statsFromControlCluster, "control")
 	}
+
+	for _, tc := range stmts {
+		expectedStatements = append(expectedStatements, tc.stmt)
+	}
+	testReset(false)
+
+	for i, tc := range stmts {
+		expectedStatements[i] = tc.formattedStmt
+	}
+	testReset(true)
 }
 
 func testResetIndexUsageStatsRPCForTenant(

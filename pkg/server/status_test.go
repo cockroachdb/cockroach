@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1541,6 +1542,11 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 		}
 	}
 
+	// Flush SQL stats to system tables, relied on by the combined stats API.
+	for i := 0; i < testCluster.NumServers(); i++ {
+		testCluster.Server(i).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(context.Background())
+	}
+
 	// Hit query endpoint.
 	var resp serverpb.StatementsResponse
 	if err := getStatusJSONProto(firstServerProto, "combinedstmts", &resp); err != nil {
@@ -1605,7 +1611,15 @@ func TestStatusAPITransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					DisallowAutomaticFlush: true,
+				},
+			},
+		},
+	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
@@ -1741,6 +1755,11 @@ func TestStatusAPITransactionStatementFingerprintIDsTruncation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			DisallowAutomaticFlush: true,
+		},
+	}
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: params,
 	})
@@ -1807,8 +1826,9 @@ func TestStatusAPIStatements(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
-					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+					AOSTClause:             "AS OF SYSTEM TIME '-1us'",
+					StubTimeNow:            func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+					DisallowAutomaticFlush: true,
 				},
 			},
 		},
@@ -1955,13 +1975,17 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		thirdServerSQL.Exec(t, stmt.stmt)
 	}
 
+	// Flush SQL stats to system tables, relied on by the combined stats API.
+	for i := 0; i < testCluster.NumServers(); i++ {
+		testCluster.Server(i).SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(context.Background())
+	}
+
 	var resp serverpb.StatementsResponse
 	// Test that non-admin without VIEWACTIVITY privileges cannot access.
 	err := getStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts", &resp, false)
 	if !testutils.IsError(err, "status: 403") {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
-
 	// Grant VIEWACTIVITY.
 	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
 

@@ -29,6 +29,10 @@ type TestingKnobs struct {
 	// AOSTClause overrides the AS OF SYSTEM TIME clause in queries used in
 	// persistedsqlstats.
 	AOSTClause string
+
+	// DisallowAutomaticFlush disallows the flushing of persisted stats at
+	// the interval set by the sql.stats.flush.interval cluster setting.
+	DisallowAutomaticFlush bool
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.

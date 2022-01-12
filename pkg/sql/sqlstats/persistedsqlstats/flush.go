@@ -239,7 +239,7 @@ func (s *PersistedSQLStats) doInsertElseDoUpdate(
 }
 
 func (s *PersistedSQLStats) computeAggregatedTs() time.Time {
-	interval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	interval := SQLStatsAggregationInterval.Get(&s.cfg.Settings.SV)
 	now := s.getTimeNow()
 
 	aggTs := now.Truncate(interval)
@@ -431,7 +431,7 @@ ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_ha
              aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
 DO NOTHING
 `
-	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	aggInterval := SQLStatsAggregationInterval.Get(&s.cfg.Settings.SV)
 
 	// Prepare data for insertion.
 	metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(stats)
