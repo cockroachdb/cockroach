@@ -133,9 +133,6 @@ func NewProcessor(
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
-		if core.TableReader.DeprecatedIsCheck {
-			return nil, errors.New("scrubbing TableReader no longer implemented")
-		}
 		return newTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 	}
 	if core.Filterer != nil {

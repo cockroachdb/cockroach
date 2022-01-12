@@ -77,8 +77,10 @@ type ColumnBackfiller struct {
 	updateExprs []tree.TypedExpr
 	evalCtx     *tree.EvalContext
 
-	fetcher row.Fetcher
-	alloc   tree.DatumAlloc
+	fetcher     row.Fetcher
+	fetcherCols []catalog.Column
+	colIdxMap   catalog.TableColMap
+	alloc       tree.DatumAlloc
 
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
@@ -128,19 +130,17 @@ func (cb *ColumnBackfiller) init(
 	}
 
 	// We need all the non-virtual columns.
-	var valNeededForCol util.FastIntSet
-	for i, c := range desc.PublicColumns() {
+	for _, c := range desc.PublicColumns() {
 		if !c.IsVirtual() {
-			valNeededForCol.Add(i)
+			cb.fetcherCols = append(cb.fetcherCols, c)
 		}
 	}
 
+	cb.colIdxMap = catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
 	tableArgs := row.FetcherTableArgs{
-		Desc:            desc,
-		Index:           desc.GetPrimaryIndex(),
-		ColIdxMap:       catalog.ColumnIDToOrdinalMap(desc.PublicColumns()),
-		Cols:            desc.PublicColumns(),
-		ValNeededForCol: valNeededForCol,
+		Desc:    desc,
+		Index:   desc.GetPrimaryIndex(),
+		Columns: cb.fetcherCols,
 	}
 
 	// Create a bound account associated with the column backfiller.
@@ -318,10 +318,8 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		return roachpb.Key{}, err
 	}
 
-	oldValues := make(tree.Datums, len(ru.FetchCols))
 	updateValues := make(tree.Datums, len(cb.updateExprs))
 	b := txn.NewBatch()
-	rowLength := 0
 	iv := &schemaexpr.RowIndexedVarContainer{
 		Cols:    make([]catalog.Column, 0, len(tableDesc.PublicColumns())+len(cb.added)),
 		Mapping: ru.FetchColIDtoRowIndex,
@@ -329,15 +327,25 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	iv.Cols = append(iv.Cols, tableDesc.PublicColumns()...)
 	iv.Cols = append(iv.Cols, cb.added...)
 	cb.evalCtx.IVarContainer = iv
+
+	fetchedValues := make(tree.Datums, cb.colIdxMap.Len())
+	iv.CurSourceRow = make(tree.Datums, len(iv.Cols))
+	// We can have more FetchCols than public columns; fill the rest with NULLs.
+	oldValues := make(tree.Datums, len(ru.FetchCols))
+	for i := range oldValues {
+		oldValues[i] = tree.DNull
+	}
+
 	for i := int64(0); i < int64(chunkSize); i++ {
-		datums, err := cb.fetcher.NextRowDecoded(ctx)
+		ok, err := cb.fetcher.NextRowDecodedInto(ctx, fetchedValues, cb.colIdxMap)
 		if err != nil {
 			return roachpb.Key{}, err
 		}
-		if datums == nil {
+		if !ok {
 			break
 		}
-		iv.CurSourceRow = datums
+
+		iv.CurSourceRow = append(iv.CurSourceRow[:0], fetchedValues...)
 
 		// Evaluate the new values. This must be done separately for
 		// each row so as to handle impure functions correctly.
@@ -358,15 +366,8 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			}
 			updateValues[j] = val
 		}
-		copy(oldValues, datums)
-		// Update oldValues with NULL values where values weren't found;
-		// only update when necessary.
-		if rowLength != len(datums) {
-			rowLength = len(datums)
-			for j := rowLength; j < len(oldValues); j++ {
-				oldValues[j] = tree.DNull
-			}
-		}
+		copy(oldValues, fetchedValues)
+
 		// No existing secondary indexes will be updated by adding or dropping a
 		// column. It is safe to use an empty PartialIndexUpdateHelper in this
 		// case.
@@ -447,6 +448,8 @@ type IndexBackfiller struct {
 	// backfilled.
 	indexesToEncode []catalog.Index
 
+	// valNeededForCol contains the indexes (into cols) of all columns that we
+	// need to fetch values for.
 	valNeededForCol util.FastIntSet
 
 	alloc tree.DatumAlloc
@@ -816,6 +819,19 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	memUsedPerChunk += indexEntriesInChunkInitialBufferSize
 	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
+	var fetcherCols []catalog.Column
+	for i, c := range ib.cols {
+		if ib.valNeededForCol.Contains(i) {
+			fetcherCols = append(fetcherCols, c)
+		}
+	}
+	if ib.rowVals == nil {
+		ib.rowVals = make(tree.Datums, len(ib.cols))
+		// We don't produce values for all columns, so initialize with NULLs.
+		for i := range ib.rowVals {
+			ib.rowVals[i] = tree.DNull
+		}
+	}
 	// Get the next set of rows.
 	//
 	// Running the scan and applying the changes in many transactions
@@ -825,11 +841,9 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	tableArgs := row.FetcherTableArgs{
-		Desc:            tableDesc,
-		Index:           tableDesc.GetPrimaryIndex(),
-		ColIdxMap:       ib.colIdxMap,
-		Cols:            ib.cols,
-		ValNeededForCol: ib.valNeededForCol,
+		Desc:    tableDesc,
+		Index:   tableDesc.GetPrimaryIndex(),
+		Columns: fetcherCols,
 	}
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
@@ -890,20 +904,13 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		return nil
 	}
 	for i := int64(0); i < chunkSize; i++ {
-		encRow, err := fetcher.NextRow(ctx)
+		ok, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
 			return nil, nil, 0, err
 		}
-		if encRow == nil {
+		if !ok {
 			break
 		}
-		if len(ib.rowVals) == 0 {
-			ib.rowVals = make(tree.Datums, len(encRow))
-		}
-		if err := rowenc.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.alloc); err != nil {
-			return nil, nil, 0, err
-		}
-
 		iv.CurSourceRow = ib.rowVals
 
 		// First populate default values, then populate computed expressions which

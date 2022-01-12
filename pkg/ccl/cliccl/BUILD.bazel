@@ -42,7 +42,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -105,18 +104,21 @@ func newTableReader(
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	tableDesc := flowCtx.TableDescriptor(&spec.Table)
-	invertedColumn := tabledesc.FindInvertedColumn(tableDesc, spec.InvertedColumn)
-	cols := tableDesc.DeletableColumns()
-	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
-	resultTypes := catalog.ColumnTypesWithInvertedCol(cols, invertedColumn)
 
-	// Add all requested system columns to the output.
-	if spec.HasSystemColumns {
-		for _, sysCol := range tableDesc.SystemColumns() {
-			resultTypes = append(resultTypes, sysCol.GetType())
-			columnIdxMap.Set(sysCol.GetID(), columnIdxMap.Len())
+	cols := make([]catalog.Column, len(spec.ColumnIDs))
+	for i, colID := range spec.ColumnIDs {
+		if spec.InvertedColumn != nil && colID == spec.InvertedColumn.ID {
+			cols[i] = tabledesc.FindInvertedColumn(tableDesc, spec.InvertedColumn)
+		} else {
+			var err error
+			cols[i], err = tableDesc.FindColumnWithID(colID)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
+
+	resultTypes := catalog.ColumnTypes(cols)
 
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
@@ -139,24 +141,18 @@ func newTableReader(
 		return nil, err
 	}
 
-	neededColumns := tr.OutputHelper.NeededColumns()
-
-	var fetcher row.Fetcher
-	if _, _, err := initRowFetcher(
+	fetcher, err := makeRowFetcher(
 		flowCtx,
-		&fetcher,
 		tableDesc,
 		int(spec.IndexIdx),
-		columnIdxMap,
+		cols,
 		spec.Reverse,
-		neededColumns,
 		flowCtx.EvalCtx.Mon,
 		&tr.alloc,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
-		spec.HasSystemColumns,
-		invertedColumn,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -168,10 +164,10 @@ func newTableReader(
 	}
 
 	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
-		tr.fetcher = newRowFetcherStatCollector(&fetcher)
+		tr.fetcher = newRowFetcherStatCollector(fetcher)
 		tr.ExecStatsForTrace = tr.execStatsForTrace
 	} else {
-		tr.fetcher = &fetcher
+		tr.fetcher = fetcher
 	}
 
 	return tr, nil

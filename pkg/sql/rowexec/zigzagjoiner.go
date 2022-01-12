@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -382,7 +381,10 @@ func (z *zigzagJoiner) Start(ctx context.Context) {
 // zigzagJoinerInfo contains all the information that needs to be
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
-	fetcher rowFetcher
+	fetcher      rowFetcher
+	row          rowenc.EncDatumRow
+	rowColIdxMap catalog.TableColMap
+
 	// rowsRead is the total number of rows that this fetcher read from disk.
 	rowsRead   int64
 	alloc      *tree.DatumAlloc
@@ -480,13 +482,10 @@ func (z *zigzagJoiner) setupInfo(
 	info.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), info.table, info.index)
 
 	// Setup the Fetcher.
-	var fetcher row.Fetcher
-	_, _, err := initRowFetcher(
+	fetcher, err := makeRowFetcherLegacy(
 		flowCtx,
-		&fetcher,
 		info.table,
 		int(indexOrdinal),
-		catalog.ColumnIDToOrdinalMap(info.table.PublicColumns()),
 		false, /* reverse */
 		neededCols,
 		flowCtx.EvalCtx.Mon,
@@ -501,11 +500,13 @@ func (z *zigzagJoiner) setupInfo(
 	if err != nil {
 		return err
 	}
+	info.row = make(rowenc.EncDatumRow, len(info.table.PublicColumns()))
+	info.rowColIdxMap = catalog.ColumnIDToOrdinalMap(info.table.PublicColumns())
 
 	if collectingStats {
-		info.fetcher = newRowFetcherStatCollector(&fetcher)
+		info.fetcher = newRowFetcherStatCollector(fetcher)
 	} else {
-		info.fetcher = &fetcher
+		info.fetcher = fetcher
 	}
 
 	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table.GetID(), info.index.GetID())
@@ -549,22 +550,24 @@ func (z *zigzagJoiner) fetchRow(ctx context.Context) (rowenc.EncDatumRow, error)
 func (z *zigzagJoiner) fetchRowFromSide(
 	ctx context.Context, side int,
 ) (fetchedRow rowenc.EncDatumRow, err error) {
+	info := z.infos[side]
 	// Keep fetching until a row is found that does not have null in an equality
 	// column.
 	hasNull := func(row rowenc.EncDatumRow) bool {
-		for _, c := range z.infos[side].eqColumns {
+		for _, c := range info.eqColumns {
 			if row[c].IsNull() {
 				return true
 			}
 		}
 		return false
 	}
+	fetchedRow = info.row
 	for {
-		fetchedRow, err = z.infos[side].fetcher.NextRow(ctx)
-		if fetchedRow == nil || err != nil {
-			return fetchedRow, err
+		ok, err := info.fetcher.NextRowInto(ctx, fetchedRow, info.rowColIdxMap)
+		if !ok || err != nil {
+			return nil, err
 		}
-		z.infos[side].rowsRead++
+		info.rowsRead++
 		if !hasNull(fetchedRow) {
 			break
 		}

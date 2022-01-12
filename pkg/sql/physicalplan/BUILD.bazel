@@ -57,6 +57,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
