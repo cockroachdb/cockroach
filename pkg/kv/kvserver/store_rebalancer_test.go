@@ -340,16 +340,21 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 			qps:          100,
 			expectTarget: 0,
 		},
+
+		// NB: The two cases below expect no lease transfer because the average QPS
+		// (1300 for stores 1 and 2) is close enough to the current leaseholder's
+		// QPS (1500).
 		{
 			storeIDs:     []roachpb.StoreID{1, 2},
 			qps:          100,
-			expectTarget: 2,
+			expectTarget: 0,
 		},
 		{
-			storeIDs:     []roachpb.StoreID{1, 3},
-			qps:          100,
-			expectTarget: 3,
+			storeIDs:     []roachpb.StoreID{1, 2},
+			qps:          1000,
+			expectTarget: 0,
 		},
+
 		{
 			storeIDs:     []roachpb.StoreID{1, 4},
 			qps:          100,
@@ -366,14 +371,9 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 			expectTarget: 0,
 		},
 		{
-			storeIDs:     []roachpb.StoreID{1, 2},
-			qps:          200,
-			expectTarget: 2,
-		},
-		{
 			storeIDs:     []roachpb.StoreID{1, 3},
 			qps:          200,
-			expectTarget: 3,
+			expectTarget: 0,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 4},
@@ -395,10 +395,12 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 			qps:          500,
 			expectTarget: 0,
 		},
+		// s1 without the lease would be projected to have 1000 qps, which is close
+		// enough to s4's 900 qps.
 		{
 			storeIDs:     []roachpb.StoreID{1, 4},
 			qps:          500,
-			expectTarget: 4,
+			expectTarget: 0,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 5},
@@ -410,26 +412,33 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 			qps:          600,
 			expectTarget: 5,
 		},
-		{
-			storeIDs:     []roachpb.StoreID{1, 5},
-			qps:          700,
-			expectTarget: 5,
-		},
+
+		// NB: s1 serves 1500 qps and s5 serves 500. Without the lease, s1 would
+		// be projected to have 700 qps, which is close enough to 500 that we
+		// wouldn't expect a lease transfer in this situation.
 		{
 			storeIDs:     []roachpb.StoreID{1, 5},
 			qps:          800,
-			expectTarget: 5,
+			expectTarget: 0,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 4, 5},
 			qps:          800,
-			expectTarget: 5,
+			expectTarget: 0,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 3, 4, 5},
 			qps:          800,
-			expectTarget: 5,
+			expectTarget: 0,
 		},
+		// NB: However, if s1 is projected to have 701 qps, we would expect a lease
+		// transfer to s5.
+		{
+			storeIDs:     []roachpb.StoreID{1, 3, 4, 5},
+			qps:          799,
+			expectTarget: 0,
+		},
+
 		{
 			storeIDs:     []roachpb.StoreID{1, 4},
 			qps:          1.5,
@@ -691,6 +700,9 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 	twoReplicasInSecondHottestRegion := []roachpb.ConstraintsConjunction{
 		constraint("b", 2),
 	}
+	oneReplicaInColdestRegion := []roachpb.ConstraintsConjunction{
+		constraint("c", 1),
+	}
 
 	testCases := []struct {
 		name                          string
@@ -706,7 +718,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			name:                "no rebalance",
 			voters:              []roachpb.StoreID{3, 6, 9},
 			constraints:         oneReplicaPerRegion,
-			expRebalancedVoters: []roachpb.StoreID{9, 6, 3},
+			expRebalancedVoters: []roachpb.StoreID{},
 		},
 		// A replica is in a heavily loaded region, on a relatively heavily loaded
 		// store. We expect it to be moved to a less busy store within the same
@@ -738,19 +750,21 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 		// the same region.
 		{
 			// Within the hottest region, expect rebalance from the hottest node (n1)
-			// to the coolest node (n3). Within the lease hot region, expect movement
-			// from n8 to n9.
+			// to the coolest node (n3). Within the lease hot region, we don't expect
+			// a rebalance from n8 to n9 because the qps difference between the two
+			// stores is too small.
 			name:                "QPS balance without constraints",
 			voters:              []roachpb.StoreID{1, 5, 8},
-			expRebalancedVoters: []roachpb.StoreID{9, 5, 3},
+			expRebalancedVoters: []roachpb.StoreID{8, 5, 3},
 		},
 		{
 			// Within the second hottest region, expect rebalance from the hottest
-			// node (n4) to the coolest node (n6). Within the lease hot region, expect
-			// movement from n8 to n9.
+			// node (n4) to the coolest node (n6). Within the lease hot region, we
+			// don't expect a rebalance from n8 to n9 because the qps difference
+			// between the two stores is too small.
 			name:                "QPS balance without constraints",
 			voters:              []roachpb.StoreID{8, 4, 3},
-			expRebalancedVoters: []roachpb.StoreID{9, 6, 3},
+			expRebalancedVoters: []roachpb.StoreID{8, 6, 3},
 		},
 
 		// Multi-region database configurations.
@@ -788,8 +802,17 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			constraints:      oneReplicaPerRegion,
 			// NB: We've got 3 voters in the hottest region, but we only need 2. We
 			// expect that one of the voters from the hottest region will be moved to
-			// the least hot region.
-			expRebalancedVoters: []roachpb.StoreID{9, 2, 4, 8, 3},
+			// the least hot region. Additionally, in region B, we've got one replica
+			// on store 4 (which is the hottest store in that region). We expect that
+			// replica to be moved to store 6.
+			expRebalancedVoters: []roachpb.StoreID{9, 2, 6, 8, 3},
+		},
+		{
+			name:   "one voter on sub-optimal node in the coldest region",
+			voters: []roachpb.StoreID{5,6,7},
+			constraints: append(twoReplicasInSecondHottestRegion, oneReplicaInColdestRegion...),
+			// NB: Expect replica from node 7 to move to node 9.
+			expRebalancedVoters: []roachpb.StoreID{9, 5, 6},
 		},
 	}
 	for _, tc := range testCases {
@@ -836,7 +859,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters) + len(tc.nonVoters))
 			s.cfg.DefaultSpanConfig.Constraints = tc.constraints
 			s.cfg.DefaultSpanConfig.VoterConstraints = tc.voterConstraints
-			const testingQPS = float64(50)
+			const testingQPS = float64(60)
 			loadRanges(
 				rr, s, []testRange{
 					{voters: tc.voters, nonVoters: tc.nonVoters, qps: testingQPS},
@@ -874,6 +897,172 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 				nonVoterStoreIDs[i] = target.StoreID
 			}
 			require.ElementsMatch(t, nonVoterStoreIDs, tc.expRebalancedNonVoters)
+		})
+	}
+}
+
+func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	imbalancedStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 12000,
+			},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+			},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 10000,
+			},
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 3,
+			},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 8000,
+			},
+		},
+		{
+			StoreID: 4,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 4,
+			},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 200,
+			},
+		},
+		{
+			StoreID: 5,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 5,
+			},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 100,
+			},
+		},
+	}
+	for _, tc := range []struct {
+		voters, expRebalancedVoters []roachpb.StoreID
+		QPS, rebalanceThreshold     float64
+		shouldRebalance             bool
+	}{
+		{
+			voters:              []roachpb.StoreID{1, 2, 3},
+			expRebalancedVoters: []roachpb.StoreID{3, 4, 5},
+			QPS:                 5000,
+			rebalanceThreshold:  0.25,
+			shouldRebalance:     true,
+		},
+		{
+			voters:              []roachpb.StoreID{1, 2, 3},
+			expRebalancedVoters: []roachpb.StoreID{5, 2, 3},
+			QPS:                 5000,
+			rebalanceThreshold:  0.8,
+			shouldRebalance:     true,
+		},
+		{
+			voters:              []roachpb.StoreID{1, 2, 3},
+			expRebalancedVoters: []roachpb.StoreID{3, 4, 5},
+			QPS:                 1000,
+			rebalanceThreshold:  0.05,
+			shouldRebalance:     true,
+		},
+		{
+			voters: []roachpb.StoreID{1, 2, 3},
+			QPS:    5000,
+			// NB: This will lead to an overfull of just above 12000. Thus, no store
+			// should be considered overfull and we should not rebalance at all.
+			rebalanceThreshold: 2,
+			shouldRebalance:    false,
+		},
+		{
+			voters:             []roachpb.StoreID{4},
+			QPS:                100,
+			rebalanceThreshold: 0.01,
+			// NB: We don't expect a rebalance here because the difference between s4
+			// and s5 is not high enough to justify a rebalance.
+			shouldRebalance: false,
+		},
+		{
+			voters:             []roachpb.StoreID{1, 2, 3},
+			QPS:                10000,
+			rebalanceThreshold: 0.01,
+			// NB: Rebalancing a replica with 10000qps from s1 to s5 would switch the
+			// relative dispositions of s1 and s5 significantly. We expect no
+			// rebalance in this situation, see maxQPSTransferOvershoot.
+			shouldRebalance: false,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+			defer stopper.Stop(context.Background())
+			gossiputil.NewStoreGossiper(g).GossipStores(imbalancedStores, t)
+			storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+
+			var localDesc roachpb.StoreDescriptor
+			for _, store := range imbalancedStores {
+				if store.StoreID == tc.voters[0] {
+					localDesc = *store
+				}
+			}
+			cfg := TestStoreConfig(nil)
+			s := createTestStoreWithoutStart(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
+			rq := newReplicateQueue(s, a)
+			rr := newReplicaRankings()
+
+			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+
+			// Rather than trying to populate every Replica with a real raft group in
+			// order to pass replicaIsBehind checks, fake out the function for getting
+			// raft status with one that always returns all replicas as up to date.
+			sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+				status := &raft.Status{
+					Progress: make(map[uint64]tracker.Progress),
+				}
+				status.Lead = uint64(r.ReplicaID())
+				status.Commit = 1
+				for _, replica := range r.Desc().InternalReplicas {
+					status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
+						Match: 1,
+						State: tracker.StateReplicate,
+					}
+				}
+				return status
+			}
+
+			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters))
+			loadRanges(rr, s, []testRange{{voters: tc.voters, qps: tc.QPS}})
+			hottestRanges := rr.topQPS()
+			_, voterTargets, _ := sr.chooseRangeToRebalance(
+				ctx,
+				&hottestRanges,
+				&localDesc,
+				storeList,
+				qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: tc.rebalanceThreshold},
+			)
+			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
+
+			voterStoreIDs := make([]roachpb.StoreID, len(voterTargets))
+			for i, target := range voterTargets {
+				voterStoreIDs[i] = target.StoreID
+			}
+			require.Equal(t, !tc.shouldRebalance, len(voterStoreIDs) == 0)
+			if tc.shouldRebalance {
+				require.ElementsMatch(t, voterStoreIDs, tc.expRebalancedVoters)
+			}
 		})
 	}
 }
