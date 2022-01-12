@@ -1178,11 +1178,9 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
         ],
-        sha256 = "fa95cd3d43353cd585926053adf845fa6f2b039e1d97d14edd80355aec919da0",
-        strip_prefix = "github.com/cockroachdb/errors@v1.8.5",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.8.5.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:Am9evxl/po3RzpokemQvq7S7Cd0mxv24xy0B/trlQF4=",
+        version = "v1.8.6",
     )
     go_repository(
         name = "com_github_cockroachdb_go_test_teamcity",
@@ -1218,11 +1216,9 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sha256 = "00fb9a072e2ac79ba16462bcb58b892f0625a259b87bd84722cb47016706afd4",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220107174839-c75a2e96a7e8",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220107174839-c75a2e96a7e8.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:ZhbIEzddawjcYhWIiOLLePZawe1PT0VlIFVsJiVakB8=",
+        version = "v0.0.0-20220112164547-3d0ff924d13a",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
@@ -1738,11 +1734,9 @@ def go_deps():
         name = "com_github_datadog_zstd",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataDog/zstd",
-        sha256 = "3ff4837fd63967e37a0b820559d80d448b47c4951c8df7e57045ed07055cb835",
-        strip_prefix = "github.com/DataDog/zstd@v1.4.8",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataDog/zstd/com_github_datadog_zstd-v1.4.8.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:+K/VEwIAaPcHiMtQvpLD4lqW7f0Gk3xdYZmI1hD+CXo=",
+        version = "v1.5.0",
     )
     go_repository(
         name = "com_github_dave_dst",
@@ -4596,11 +4590,9 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sha256 = "e5b789e486f1e454ef02344c8235a1a4e285d7b8dd801ff8d667fce6309f3355",
-        strip_prefix = "github.com/klauspost/compress@v1.13.5",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.13.5.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:hLQYb23E8/fO+1u53d02A97a8UnsddcvYzq4ERRU4ds=",
+        version = "v1.14.1",
     )
     go_repository(
         name = "com_github_klauspost_cpuid",
@@ -4700,11 +4692,9 @@ def go_deps():
         name = "com_github_kr_pretty",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/kr/pretty",
-        sha256 = "80af0452082052d1b3265d7cb8985d464d4be222c27e14658e95632c222761e5",
-        strip_prefix = "github.com/kr/pretty@v0.2.1",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kr/pretty/com_github_kr_pretty-v0.2.1.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:WgNl7dwNpEZ6jJ9k1snq4pZsg7DOEN8hP9Xw0Tsjwk0=",
+        version = "v0.3.0",
     )
     go_repository(
         name = "com_github_kr_pty",
@@ -6177,6 +6167,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_pkg_diff",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/pkg/diff",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:aoZm08cpOy4WuID//EZDgcC4zIxODThtZNPirFr42+A=",
+        version = "v0.0.0-20210226163009-20ebb0f2a09e",
+    )
+    go_repository(
         name = "com_github_pkg_errors",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pkg/errors",
@@ -6458,11 +6456,9 @@ def go_deps():
         name = "com_github_rogpeppe_go_internal",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rogpeppe/go-internal",
-        sha256 = "191b95c35d85a5683cee6e303a08b4d103bf9de9ececdc6904f21ed90c094b0a",
-        strip_prefix = "github.com/rogpeppe/go-internal@v1.3.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rogpeppe/go-internal/com_github_rogpeppe_go_internal-v1.3.0.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:geMPLpDpQOgVyCg5z5GoRwLHepNdb71NXb67XFkP+Eg=",
+        version = "v1.8.1",
     )
     go_repository(
         name = "com_github_rs_cors",
@@ -7528,11 +7524,9 @@ def go_deps():
         name = "com_github_yuin_goldmark",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/yuin/goldmark",
-        sha256 = "920012ef5c68245bc8477f4c8bbc79264032fb6d17035f06bc4c9955f9d7f6c2",
-        strip_prefix = "github.com/yuin/goldmark@v1.4.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/yuin/goldmark/com_github_yuin_goldmark-v1.4.0.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:/vn0k+RBvwlxEmP5E7SZMqNxPhfMVFEJiykr15/0XKM=",
+        version = "v1.4.1",
     )
     go_repository(
         name = "com_github_yusufpapurcu_wmi",
@@ -8369,6 +8363,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "io_opentelemetry_go_otel_metric",
+        build_file_proto_mode = "disable_global",
+        importpath = "go.opentelemetry.io/otel/metric",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:4kzhXFP+btKm4jwxpjIqjs41A7MakRFUS86bqLHTIw8=",
+        version = "v0.20.0",
+    )
+    go_repository(
         name = "io_opentelemetry_go_otel_sdk",
         build_file_proto_mode = "disable_global",
         importpath = "go.opentelemetry.io/otel/sdk",
@@ -8566,21 +8568,17 @@ def go_deps():
         name = "org_golang_x_crypto",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/crypto",
-        sha256 = "c44b45db4eafc3270407fdd0b35be8f3d4219cf42277d42498644aec3fec4681",
-        strip_prefix = "golang.org/x/crypto@v0.0.0-20210817164053-32db794688a5",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/crypto/org_golang_x_crypto-v0.0.0-20210817164053-32db794688a5.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:7I4JAnoQBe7ZtJcBaYHi5UtiO8tQHbUSXxL+pnGRANg=",
+        version = "v0.0.0-20210921155107-089bfa567519",
     )
     go_repository(
         name = "org_golang_x_exp",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/exp",
-        sha256 = "5e56d6a6c434cc87c222eaf8a4ab44d5f1ea30741d388fa0097b51540ab5c898",
-        strip_prefix = "golang.org/x/exp@v0.0.0-20210514180818-737f94c0881e",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/exp/org_golang_x_exp-v0.0.0-20210514180818-737f94c0881e.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:gpEOK9kxNqVPOaZayQV2bzetZplXWakHeirk1bXKu2s=",
+        version = "v0.0.0-20220104160115-025e73f80486",
     )
     go_repository(
         name = "org_golang_x_image",
@@ -8616,21 +8614,17 @@ def go_deps():
         name = "org_golang_x_mod",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/mod",
-        sha256 = "8bed1489120e9428a64aca97c3a0d13065a33d1564593aae45e5c731c488f975",
-        strip_prefix = "golang.org/x/mod@v0.5.1",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/mod/org_golang_x_mod-v0.5.1.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:LQmS1nU0twXLA96Kt7U9qtHJEbBk3z6Q0V4UXjZkpr4=",
+        version = "v0.6.0-dev.0.20211013180041-c96bc1413d57",
     )
     go_repository(
         name = "org_golang_x_net",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/net",
-        sha256 = "e03e4886f5d58569e3c3879df0cf72193a5d1c63acf08d6bda4c11761ee39437",
-        strip_prefix = "golang.org/x/net@v0.0.0-20210913180222-943fd674d43e",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/net/org_golang_x_net-v0.0.0-20210913180222-943fd674d43e.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:OfiFi4JbukWwe3lzw+xunroH1mnC1e2Gy5cxNJApiSY=",
+        version = "v0.0.0-20211015210444-4f30a5c0130f",
     )
     go_repository(
         name = "org_golang_x_oauth2",
@@ -8666,11 +8660,9 @@ def go_deps():
         name = "org_golang_x_sys",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/sys",
-        sha256 = "2a250d8b0de456c701e2abc6ade76a4c6daff5a2213811053b333a2edd560908",
-        strip_prefix = "golang.org/x/sys@v0.0.0-20211210111614-af8b64212486",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/sys/org_golang_x_sys-v0.0.0-20211210111614-af8b64212486.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:0jf+tOCoZ3LyutmCOWpVni1chK4VfFLhRsDK7MhqGRY=",
+        version = "v0.0.0-20220111092808-5a964db01320",
     )
     go_repository(
         name = "org_golang_x_term",
@@ -8706,11 +8698,9 @@ def go_deps():
         name = "org_golang_x_tools",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/tools",
-        sha256 = "8e77ec3ce863221e4871e6cb3f0f148cd9f1c956446b4325abe6ec55262229db",
-        strip_prefix = "golang.org/x/tools@v0.1.7",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/tools/org_golang_x_tools-v0.1.7.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:0c3L82FDQ5rt1bjTBlchS8t6RQ6299/+5bWMnRLh+uI=",
+        version = "v0.1.8-0.20211029000441-d6a9af8af023",
     )
     go_repository(
         name = "org_golang_x_xerrors",
