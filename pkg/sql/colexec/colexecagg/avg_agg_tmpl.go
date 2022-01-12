@@ -106,14 +106,6 @@ type avg_TYPE_AGGKINDAgg struct {
 	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// {{if .NeedsHelper}}
-	// {{/*
-	// overloadHelper is used only when we perform the summation of integers
-	// and get a decimal result which is the case when NeedsHelper is true. In
-	// all other cases we don't want to wastefully allocate the helper.
-	// */}}
-	overloadHelper execgen.OverloadHelper
-	// {{end}}
 }
 
 var _ AggregateFunc = &avg_TYPE_AGGKINDAgg{}
@@ -129,16 +121,6 @@ func (a *avg_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 func (a *avg_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// {{if .NeedsHelper}}
-	// {{/*
-	// overloadHelper is used only when we perform the summation of integers
-	// and get a decimal result which is the case when NeedsHelper is true. In
-	// all other cases we don't want to wastefully allocate the helper.
-	// */}}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	// {{end}}
 	execgen.SETVARIABLESIZE(oldCurSumSize, a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
@@ -257,11 +239,6 @@ func (a *avg_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 // Remove implements the slidingWindowAggregateFunc interface (see
 // window_aggregator_tmpl.go).
 func (a *avg_TYPE_AGGKINDAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int) {
-	// {{if .NeedsHelper}}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	// {{end}}
 	execgen.SETVARIABLESIZE(oldCurSumSize, a.curSum)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()

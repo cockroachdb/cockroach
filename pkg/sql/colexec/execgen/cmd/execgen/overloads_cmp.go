@@ -222,11 +222,11 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.TmpDec1
+				var tmpDec apd.Decimal //gcassert:noescape
 				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
+				{{.Target}} = tree.CompareDecimals(&{{.Left}}, &tmpDec)
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -242,9 +242,9 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.TmpDec1
+				var tmpDec apd.Decimal //gcassert:noescape
 				tmpDec.SetInt64(int64({{.Right}}))
-				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
+				{{.Target}} = tree.CompareDecimals(&{{.Left}}, &tmpDec)
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -260,11 +260,11 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.TmpDec1
+				var tmpDec apd.Decimal //gcassert:noescape
 				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
+				{{.Target}} = tree.CompareDecimals(&tmpDec, &{{.Right}})
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -280,9 +280,9 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.TmpDec1
+				var tmpDec apd.Decimal //gcassert:noescape
 				tmpDec.SetInt64(int64({{.Left}}))
-				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
+				{{.Target}} = tree.CompareDecimals(&tmpDec, &{{.Right}})
 			}
 		`))
 

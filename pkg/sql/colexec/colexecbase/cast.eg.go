@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -1691,8 +1690,6 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 
 type castDecimalInt2Op struct {
 	castOpBase
-
-	overloadHelper execgen.OverloadHelper
 }
 
 var _ colexecop.ResettableOperator = &castDecimalInt2Op{}
@@ -1704,9 +1701,6 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
-	_overloadHelper := c.overloadHelper
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
@@ -1736,8 +1730,8 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 							var r int16
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1775,8 +1769,8 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 							var r int16
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1817,8 +1811,8 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 							var r int16
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1856,8 +1850,8 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 							var r int16
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1888,8 +1882,6 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 
 type castDecimalInt4Op struct {
 	castOpBase
-
-	overloadHelper execgen.OverloadHelper
 }
 
 var _ colexecop.ResettableOperator = &castDecimalInt4Op{}
@@ -1901,9 +1893,6 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
-	_overloadHelper := c.overloadHelper
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
@@ -1933,8 +1922,8 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 							var r int32
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -1972,8 +1961,8 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 							var r int32
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2014,8 +2003,8 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 							var r int32
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2053,8 +2042,8 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 							var r int32
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2085,8 +2074,6 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 
 type castDecimalIntOp struct {
 	castOpBase
-
-	overloadHelper execgen.OverloadHelper
 }
 
 var _ colexecop.ResettableOperator = &castDecimalIntOp{}
@@ -2098,9 +2085,6 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
-	_overloadHelper := c.overloadHelper
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
@@ -2130,8 +2114,8 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2163,8 +2147,8 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2199,8 +2183,8 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}
@@ -2232,8 +2216,8 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 							var r int64
 
 							{
-								tmpDec := &_overloadHelper.TmpDec1
-								_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &v)
+								var tmpDec apd.Decimal //gcassert:noescape
+								_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &v)
 								if err != nil {
 									colexecerror.ExpectedError(err)
 								}

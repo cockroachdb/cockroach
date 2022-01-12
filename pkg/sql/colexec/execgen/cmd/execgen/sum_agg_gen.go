@@ -25,7 +25,6 @@ import (
 type sumAggTmplInfo struct {
 	aggTmplInfoBase
 	SumKind        string
-	NeedsHelper    bool
 	InputVecMethod string
 	RetGoType      string
 	RetGoTypeSlice string
@@ -165,7 +164,6 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 			TypeFamily: toString(inputTypeFamily),
 		}
 		for _, inputTypeWidth := range supportedWidthsByCanonicalTypeFamily[inputTypeFamily] {
-			needsHelper := false
 			// Note that we don't use execinfrapb.GetAggregateInfo because we don't
 			// want to bring in a dependency on that package to reduce the burden
 			// of regenerating execgen code when the protobufs get generated.
@@ -174,9 +172,6 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 				if isSumInt {
 					retTypeFamily, retTypeWidth = types.IntFamily, anyWidth
 				} else {
-					// Non-integer summation of integers needs a helper because
-					// the result is a decimal.
-					needsHelper = true
 					retTypeFamily, retTypeWidth = types.DecimalFamily, anyWidth
 				}
 			}
@@ -187,7 +182,6 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 						canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(retTypeFamily),
 					},
 					SumKind:        sumKind,
-					NeedsHelper:    needsHelper,
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
 					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),
 					RetGoTypeSlice: goTypeSliceName(retTypeFamily, retTypeWidth),

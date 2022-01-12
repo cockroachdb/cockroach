@@ -25,7 +25,6 @@ import (
 
 type avgTmplInfo struct {
 	aggTmplInfoBase
-	NeedsHelper    bool
 	InputVecMethod string
 	RetGoType      string
 	RetGoTypeSlice string
@@ -148,14 +147,12 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	for _, inputTypeFamily := range []types.Family{types.IntFamily, types.DecimalFamily, types.FloatFamily, types.IntervalFamily} {
 		tmplInfo := avgAggTypeTmplInfo{TypeFamily: toString(inputTypeFamily)}
 		for _, inputTypeWidth := range supportedWidthsByCanonicalTypeFamily[inputTypeFamily] {
-			needsHelper := false
 			// Note that we don't use execinfrapb.GetAggregateInfo because we don't
 			// want to bring in a dependency on that package to reduce the burden
 			// of regenerating execgen code when the protobufs get generated.
 			retTypeFamily, retTypeWidth := inputTypeFamily, inputTypeWidth
 			if inputTypeFamily == types.IntFamily {
 				// Average of integers is a decimal.
-				needsHelper = true
 				retTypeFamily, retTypeWidth = types.DecimalFamily, anyWidth
 			}
 			tmplInfo.WidthOverloads = append(tmplInfo.WidthOverloads, avgAggWidthTmplInfo{
@@ -164,7 +161,6 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 					aggTmplInfoBase: aggTmplInfoBase{
 						canonicalTypeFamily: typeconv.TypeFamilyToCanonicalTypeFamily(retTypeFamily),
 					},
-					NeedsHelper:    needsHelper,
 					InputVecMethod: toVecMethod(inputTypeFamily, inputTypeWidth),
 					RetGoType:      toPhysicalRepresentation(retTypeFamily, retTypeWidth),
 					RetGoTypeSlice: goTypeSliceName(retTypeFamily, retTypeWidth),

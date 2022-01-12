@@ -10,24 +10,16 @@
 
 package execgen
 
-import (
-	"github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-// OverloadHelper is a utility struct used for templates that helps us avoid
-// allocations of temporary decimals on every overloaded operation with them as
-// well as plumbs through other useful information.
+// OverloadHelper is a utility struct used for templates that plumbs through
+// miscellaneous useful information.
 //
 // In order for the templates to see it correctly, a local variable named
 // `_overloadHelper` of this type must be declared before the inlined
 // overloaded code.
 type OverloadHelper struct {
-	// TODO(yuzefovich): remove these now that temporary apd.Decimal instances can
-	// be stack-allocated without any indirection to the heap. When doing so, make
-	// sure the stack variables don't escape by using gcassert:noescape.
-	TmpDec1, TmpDec2 apd.Decimal
-	BinFn            tree.TwoArgFn
-	EvalCtx          *tree.EvalContext
-	ByteScratch      []byte
+	BinFn       tree.TwoArgFn
+	EvalCtx     *tree.EvalContext
+	ByteScratch []byte
 }
