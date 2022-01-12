@@ -364,7 +364,7 @@ func (m *Memo) SetBestProps(
 	}
 	bp := e.bestProps()
 	bp.required = required
-	bp.provided = *provided
+	bp.provided = provided
 	bp.cost = cost
 }
 

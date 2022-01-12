@@ -52,11 +52,7 @@ type bestProps struct {
 	required *physical.Required
 
 	// Provided properties, which must be compatible with the required properties.
-	//
-	// We store these properties in-place because the structure is very small; if
-	// that changes we will want to intern them, similar to the required
-	// properties.
-	provided physical.Provided
+	provided *physical.Provided
 
 	// Cost of the best expression.
 	cost Cost
