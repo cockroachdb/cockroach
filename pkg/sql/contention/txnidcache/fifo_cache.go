@@ -76,7 +76,7 @@ func (c *fifoCache) Add(block *messageBlock) {
 
 	blockSize := 0
 	for i := range block {
-		if !block[i].valid() {
+		if !block[i].Valid() {
 			break
 		}
 
@@ -125,7 +125,7 @@ func (c *fifoCache) maybeEvictLocked() {
 // evictNodeLocked deletes all entries in the block from the internal map.
 func (c *fifoCache) evictNodeLocked(node *evictionNode) {
 	for i := 0; i < messageBlockSize; i++ {
-		if !node.messageBlock[i].valid() {
+		if !node.messageBlock[i].Valid() {
 			break
 		}
 
