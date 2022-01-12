@@ -139,6 +139,9 @@ func WriteDescriptors(
 				return err
 			}
 			b.CPut(catalogkeys.EncodeNameKey(codec, desc), desc.GetID(), nil)
+
+			// We also have to put a system.namespace entry for the public schema.
+			b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
 		}
 
 		// Write namespace and descriptor entries for each schema.

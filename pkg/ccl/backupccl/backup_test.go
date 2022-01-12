@@ -9005,3 +9005,26 @@ insert into A (a) VALUES ('foo');
 		checkRows()
 	})
 }
+
+// Verify that upon restoring a database, there is a namespace entry for its
+// public schema.
+func TestRestoreSyntheticPublicSchemaNamespaceEntry(t *testing.T) {
+	const numAccounts = 100
+	params := base.TestClusterArgs{}
+
+	_, _, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, params)
+	defer cleanup()
+
+	sqlDB.Exec(t, "CREATE DATABASE d")
+	sqlDB.Exec(t, "BACKUP DATABASE d TO $1", LocalFoo)
+	sqlDB.Exec(t, "DROP DATABASE d")
+
+	sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo))
+
+	var dbID int
+	row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'd'`)
+	row.Scan(&dbID)
+
+	sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = 'public' AND "parentID"=%d`, dbID), [][]string{{"29"}})
+}
