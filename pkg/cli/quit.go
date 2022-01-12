@@ -174,7 +174,7 @@ func doDrainNoTimeout(
 			if err != nil {
 				// Unexpected error.
 				fmt.Fprintf(stderr, "\n") // finish the line started above.
-				log.Infof(ctx, "graceful shutdown failed: %v", err)
+				log.Infof(ctx, "graceful drain failed: %v", err)
 				return false, remainingWork, err
 			}
 
