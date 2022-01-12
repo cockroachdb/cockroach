@@ -459,6 +459,30 @@ type TableDescriptor interface {
 	// colinfo.AllSystemColumnDescs.
 	SystemColumns() []Column
 
+	// IndexColumns returns a slice of Column interfaces containing all
+	// columns present in the specified Index in any capacity.
+	IndexColumns(idx Index) []Column
+	// IndexKeyColumns returns a slice of Column interfaces containing all
+	// key columns in the specified Index.
+	IndexKeyColumns(idx Index) []Column
+	// IndexKeyColumnDirections returns a slice of column directions for all
+	// key columns in the specified Index.
+	IndexKeyColumnDirections(idx Index) []descpb.IndexDescriptor_Direction
+	// IndexKeySuffixColumns returns a slice of Column interfaces containing all
+	// key suffix columns in the specified Index.
+	IndexKeySuffixColumns(idx Index) []Column
+	// IndexFullColumns returns a slice of Column interfaces containing all
+	// key columns in the specified Index, plus all key suffix columns if that
+	// index is not a unique index.
+	IndexFullColumns(idx Index) []Column
+	// IndexFullColumnDirections returns a slice of column directions for all
+	// key columns in the specified Index, plus all key suffix columns if that
+	// index is not a unique index.
+	IndexFullColumnDirections(idx Index) []descpb.IndexDescriptor_Direction
+	// IndexStoredColumns returns a slice of Column interfaces containing all
+	// stored columns in the specified Index.
+	IndexStoredColumns(idx Index) []Column
+
 	// FindColumnWithID returns the first column found whose ID matches the
 	// provided target ID, in the canonical order.
 	// If no column is found then an error is also returned.
