@@ -427,7 +427,7 @@ var specs = []stmtSpec{
 	{
 		name:   "alter_table",
 		stmt:   "alter_onetable_stmt",
-		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_def", "opt_drop_behavior", "alter_column_default", "opt_column", "opt_set_data", "table_constraint", "opt_collate", "opt_alter_column_using"},
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_def", "opt_drop_behavior", "alter_column_default", "alter_column_visible", "opt_column", "opt_set_data", "table_constraint", "opt_collate", "opt_alter_column_using"},
 		replace: map[string]string{
 			"'VALIDATE' 'CONSTRAINT' name": "",
 			"opt_validate_behavior":        "",
