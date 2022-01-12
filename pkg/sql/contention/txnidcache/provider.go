@@ -80,8 +80,3 @@ type storage interface {
 	reader
 	pusher
 }
-
-// capacityLimiter is a simple interface that informs a storage object of its
-// current size limit. This allows the capacity of the storage object to be
-// changed on the fly via cluster settings without re-allocation.
-type capacityLimiter func() int64

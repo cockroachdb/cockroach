@@ -12,6 +12,7 @@ package txnidcache
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -31,7 +32,9 @@ type shard struct {
 
 var _ storage = &shard{}
 
-func newShard(capacity capacityLimiter, ringSize int64, evictedCount *metric.Counter) *shard {
+func newShard(
+	capacity contentionutils.CapacityLimiter, ringSize int64, evictedCount *metric.Counter,
+) *shard {
 	shard := &shard{
 		ring:         make([]*strip, ringSize),
 		head:         0,

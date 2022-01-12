@@ -237,6 +237,7 @@ ALL_TESTS = [
     "//pkg/sql/colflow/colrpc:colrpc_test",
     "//pkg/sql/colflow:colflow_test",
     "//pkg/sql/colmem:colmem_test",
+    "//pkg/sql/contention/contentionutils:contentionutils_test",
     "//pkg/sql/contention/txnidcache:txnidcache_test",
     "//pkg/sql/contention:contention_test",
     "//pkg/sql/covering:covering_test",

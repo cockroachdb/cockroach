@@ -191,7 +191,7 @@ func (t *Cache) FlushActiveWritersForTest() {
 	poolImpl.mu.Lock()
 	defer poolImpl.mu.Unlock()
 	for txnIDCacheWriteBuffer := range poolImpl.mu.activeWriters {
-		txnIDCacheWriteBuffer.(*ConcurrentWriteBuffer).flushForTest()
+		txnIDCacheWriteBuffer.Flush()
 	}
 }
 

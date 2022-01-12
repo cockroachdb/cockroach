@@ -12,6 +12,7 @@ package txnidcache
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -21,12 +22,12 @@ const stripInitialCapacity = 128
 type strip struct {
 	syncutil.RWMutex
 	data     map[uuid.UUID]roachpb.TransactionFingerprintID
-	capacity capacityLimiter
+	capacity contentionutils.CapacityLimiter
 }
 
 var _ reader = &strip{}
 
-func newStrip(capacity capacityLimiter) *strip {
+func newStrip(capacity contentionutils.CapacityLimiter) *strip {
 	c := &strip{
 		data:     make(map[uuid.UUID]roachpb.TransactionFingerprintID, stripInitialCapacity),
 		capacity: capacity,

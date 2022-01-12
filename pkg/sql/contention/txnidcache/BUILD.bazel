@@ -19,6 +19,7 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/contention/contentionutils",
         "//pkg/util/encoding",
         "//pkg/util/metric",
         "//pkg/util/stop",
