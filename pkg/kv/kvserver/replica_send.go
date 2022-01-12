@@ -130,7 +130,7 @@ func (r *Replica) sendWithRangeID(
 	// sendWithRangeID crisp.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// NB: brSig will never trip if circuit breaker are not enabled.
+	// NB: brSig will never trip if circuit breakers are not enabled.
 	brSig := r.breaker.Signal()
 	if isCircuitBreakerProbe(ctx) {
 		brSig = neverTripSignaller{}

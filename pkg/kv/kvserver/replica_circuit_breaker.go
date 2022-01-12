@@ -32,7 +32,7 @@ type replicaInCircuitBreaker interface {
 	Clock() *hlc.Clock
 	Desc() *roachpb.RangeDescriptor
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
-	slowReplicationThreshold(ba *roachpb.BatchRequest) time.Duration
+	slowReplicationThreshold(ba *roachpb.BatchRequest) (time.Duration, bool)
 	rangeUnavailableError() error
 }
 
@@ -166,7 +166,12 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 	probeReq := &roachpb.ProbeRequest{}
 	probeReq.Key = desc.StartKey.AsRawKey()
 	ba.Add(probeReq)
-	if err := contextutil.RunWithTimeout(ctx, "probe", r.slowReplicationThreshold(&ba),
+	thresh, ok := r.slowReplicationThreshold(&ba)
+	if !ok {
+		// Breakers are disabled now.
+		return nil
+	}
+	if err := contextutil.RunWithTimeout(ctx, "probe", thresh,
 		func(ctx context.Context) error {
 			_, pErr := r.Send(ctx, ba)
 			return pErr.GoError()

@@ -1057,14 +1057,19 @@ func (r *Replica) hasRaftReadyRLocked() bool {
 	return r.mu.internalRaftGroup.HasReady()
 }
 
-func (r *Replica) slowReplicationThreshold(ba *roachpb.BatchRequest) time.Duration {
+// slowReplicationThreshold returns the threshold after which in-flight
+// replicated commands should be considered "stuck" and should trip the
+// per-Replica circuit breaker. The boolean indicates whether this
+// mechanism is enabled; if it isn't no action should be taken.
+func (r *Replica) slowReplicationThreshold(ba *roachpb.BatchRequest) (time.Duration, bool) {
 	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SlowReplicationThresholdOverride != nil {
 		if dur := knobs.SlowReplicationThresholdOverride(ba); dur > 0 {
-			return dur
+			return dur, true
 		}
 		// Fall through.
 	}
-	return replicaCircuitBreakerSlowReplicationThreshold.Get(&r.store.cfg.Settings.SV)
+	dur := replicaCircuitBreakerSlowReplicationThreshold.Get(&r.store.cfg.Settings.SV)
+	return dur, dur > 0
 }
 
 //go:generate stringer -type refreshRaftReason
@@ -1102,15 +1107,17 @@ func (r *Replica) refreshProposalsLocked(
 		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
-	var tripBreakerWithBA *roachpb.BatchRequest
-	var tripBreakerWithDuration time.Duration
+	var maxInflightDurationReq *roachpb.BatchRequest
+	var maxInflightDuration time.Duration
 	var slowProposalCount int64
 	var reproposals pendingCmdSlice
 	for _, p := range r.mu.proposals {
-		if dur := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks); dur > r.slowReplicationThreshold(p.Request) {
-			if tripBreakerWithDuration < dur {
-				tripBreakerWithDuration = dur
-				tripBreakerWithBA = p.Request
+		slowReplicationThreshold, ok := r.slowReplicationThreshold(p.Request)
+		inflightDuration := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks)
+		if ok && inflightDuration > slowReplicationThreshold {
+			if maxInflightDuration < inflightDuration {
+				maxInflightDuration = inflightDuration
+				maxInflightDurationReq = p.Request
 				slowProposalCount++
 			}
 		}
@@ -1176,10 +1183,10 @@ func (r *Replica) refreshProposalsLocked(
 	// which could avoid build-up of raft log entries during outages, see
 	// for example:
 	// https://github.com/cockroachdb/cockroach/issues/60612
-	if r.breaker.Signal().Err() == nil && tripBreakerWithDuration > 0 {
+	if r.breaker.Signal().Err() == nil && maxInflightDuration > 0 {
 		log.Warningf(ctx,
 			"have been waiting %.2fs for slow proposal %s",
-			tripBreakerWithDuration.Seconds(), tripBreakerWithBA,
+			maxInflightDuration.Seconds(), maxInflightDurationReq,
 		)
 		// NB: this is async because we're holding lots of locks here, and we want
 		// to avoid having to pass all the information about the replica into the
