@@ -1315,14 +1315,20 @@ type ExecutorTestingKnobs struct {
 	// BeforeRestart is called before a transaction restarts.
 	BeforeRestart func(ctx context.Context, reason error)
 
-	// DisableAutoCommit, if set, disables the auto-commit functionality of some
-	// SQL statements. That functionality allows some statements to commit
+	// DisableAutoCommitDuringExec, if set, disables the auto-commit functionality
+	// of some SQL statements. That functionality allows some statements to commit
 	// directly when they're executed in an implicit SQL txn, without waiting for
 	// the Executor to commit the implicit txn.
 	// This has to be set in tests that need to abort such statements using a
 	// StatementFilter; otherwise, the statement commits immediately after
 	// execution so there'll be nothing left to abort by the time the filter runs.
-	DisableAutoCommit bool
+	DisableAutoCommitDuringExec bool
+
+	// DisableAutoCommitAfterExecInExtendedProtocol, if set, disables the
+	// auto-commit that occurs immediately after a query is executed in the
+	// extended protocol. If this is set, the extended statement's commit will
+	// always happen when processing the Sync message.
+	DisableAutoCommitAfterExecInExtendedProtocol bool
 
 	// BeforeAutoCommit is called when the Executor is about to commit the KV
 	// transaction after running a statement in an implicit transaction, allowing

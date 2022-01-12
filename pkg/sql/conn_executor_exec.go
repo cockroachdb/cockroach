@@ -296,7 +296,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	// received. However, if we are executing a statement that is immediately
 	// followed by Sync (which is the common case), then we still can auto-commit,
 	// which allows the "insert fast path" (1PC optimization) to be used.
-	canAutoCommit := os.ImplicitTxn.Get() && (!isExtendedProtocol || isNextCmdSync)
+	canAutoCommit := os.ImplicitTxn.Get() &&
+		(!isExtendedProtocol ||
+			(!ex.server.cfg.TestingKnobs.DisableAutoCommitAfterExecInExtendedProtocol && isNextCmdSync))
 
 	ex.incrementStartedStmtCounter(ast)
 	defer func() {
@@ -709,7 +711,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
 
-	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec
 
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
