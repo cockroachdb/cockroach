@@ -13,6 +13,8 @@ package contentionpb
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 const singleIndentation = "  "
@@ -61,4 +63,9 @@ func (skc SingleNonSQLKeyContention) String() string {
 		b.WriteString(toString(skc.Txns[i], doubleIndentation))
 	}
 	return b.String()
+}
+
+// Valid returns if the ResolvedTxnID is valid.
+func (r *ResolvedTxnID) Valid() bool {
+	return r.TxnID != uuid.UUID{}
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -36,7 +37,7 @@ type Writer interface {
 	// Record writes a pair of transactionID and transaction fingerprint ID
 	// into a temporary buffer. This buffer will eventually be flushed into
 	// the transaction ID cache asynchronously.
-	Record(resolvedTxnID ResolvedTxnID)
+	Record(resolvedTxnID contentionpb.ResolvedTxnID)
 
 	// Flush starts the flushing process of writer's temporary buffer.
 	Flush()
@@ -125,17 +126,6 @@ var (
 		roachpb.TransactionFingerprintID(0).Size()
 )
 
-// ResolvedTxnID represents a TxnID that is resolved to its corresponding
-// TxnFingerprintID.
-type ResolvedTxnID struct {
-	TxnID            uuid.UUID
-	TxnFingerprintID roachpb.TransactionFingerprintID
-}
-
-func (r *ResolvedTxnID) valid() bool {
-	return r.TxnID != uuid.UUID{}
-}
-
 var (
 	_ Reader      = &Cache{}
 	_ Writer      = &Cache{}
@@ -174,7 +164,7 @@ func (t *Cache) Start(ctx context.Context, stopper *stop.Stopper) {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		for blockIdx := range msgBlock {
-			if !msgBlock[blockIdx].valid() {
+			if !msgBlock[blockIdx].Valid() {
 				break
 			}
 			t.mu.store.Add(msgBlock[blockIdx].TxnID, msgBlock[blockIdx].TxnFingerprintID)
@@ -220,7 +210,7 @@ func (t *Cache) Lookup(txnID uuid.UUID) (result roachpb.TransactionFingerprintID
 }
 
 // Record implements the Writer interface.
-func (t *Cache) Record(resolvedTxnID ResolvedTxnID) {
+func (t *Cache) Record(resolvedTxnID contentionpb.ResolvedTxnID) {
 	t.writer.Record(resolvedTxnID)
 }
 
