@@ -1545,7 +1545,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		ex.extraTxnState.savepoints.clear()
 		ex.onTxnFinish(ctx, ev)
 	case txnRestart:
-		ex.onTxnRestart()
+		ex.onTxnRestart(ctx)
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()
 		ex.state.mu.stmtCount = 0
@@ -2384,7 +2384,7 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 
 // setTransactionModes implements the txnModesSetter interface.
 func (ex *connExecutor) setTransactionModes(
-	modes tree.TransactionModes, asOfTs hlc.Timestamp,
+	ctx context.Context, modes tree.TransactionModes, asOfTs hlc.Timestamp,
 ) error {
 	// This method cheats and manipulates ex.state directly, not through an event.
 	// The alternative would be to create a special event, but it's unclear how
@@ -2407,7 +2407,7 @@ func (ex *connExecutor) setTransactionModes(
 		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if !asOfTs.IsEmpty() {
-		if err := ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs); err != nil {
+		if err := ex.state.setHistoricalTimestamp(ctx, asOfTs); err != nil {
 			return err
 		}
 		ex.state.sqlTimestamp = asOfTs.GoTime()
@@ -2641,7 +2641,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	// the completion of those schema changes first.
 	if p, ok := payload.(payloadWithError); ok {
 		if descID := scerrors.ConcurrentSchemaChangeDescID(p.errorCause()); descID != descpb.InvalidID {
-			if err := ex.handleWaitingForConcurrentSchemaChanges(descID); err != nil {
+			if err := ex.handleWaitingForConcurrentSchemaChanges(ex.Ctx(), descID); err != nil {
 				return advanceInfo{}, err
 			}
 		}
@@ -2754,9 +2754,11 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	return advInfo, nil
 }
 
-func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(descID descpb.ID) error {
+func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
+	ctx context.Context, descID descpb.ID,
+) error {
 	if err := ex.planner.WaitForDescriptorSchemaChanges(
-		ex.Ctx(), descID, ex.extraTxnState.schemaChangerState,
+		ctx, descID, ex.extraTxnState.schemaChangerState,
 	); err != nil {
 		return err
 	}
@@ -2764,7 +2766,7 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(descID descpb.ID
 	ex.state.mu.Lock()
 	defer ex.state.mu.Unlock()
 	userPriority := ex.state.mu.txn.UserPriority()
-	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ex.Ctx(), ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
+	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
 	return ex.state.mu.txn.SetUserPriority(userPriority)
 }
 

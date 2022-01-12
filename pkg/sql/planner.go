@@ -817,7 +817,7 @@ type txnModesSetter interface {
 	// setTransactionModes updates some characteristics of the current
 	// transaction.
 	// asOfTs, if not empty, is the evaluation of modes.AsOf.
-	setTransactionModes(modes tree.TransactionModes, asOfTs hlc.Timestamp) error
+	setTransactionModes(ctx context.Context, modes tree.TransactionModes, asOfTs hlc.Timestamp) error
 }
 
 // validateDescriptor is a convenience function for validating
