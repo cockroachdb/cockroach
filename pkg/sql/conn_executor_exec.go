@@ -262,21 +262,41 @@ func (ex *connExecutor) execStmtInOpenState(
 	ast := parserStmt.AST
 	ctx = withStatement(ctx, ast)
 
+	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
+		ev, payload := ex.makeErrEvent(err, ast)
+		return ev, payload, nil
+	}
+
 	var stmt Statement
 	queryID := ex.generateID()
 	// Update the deadline on the transaction based on the collections.
 	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
 	if err != nil {
-		ev, pl := ex.makeErrEvent(err, ast)
-		return ev, pl, nil
+		return makeErrEvent(err)
 	}
+	os := ex.machine.CurState().(stateOpen)
 
+	isNextCmdSync := false
 	isExtendedProtocol := prepared != nil
 	if isExtendedProtocol {
 		stmt = makeStatementFromPrepared(prepared, queryID)
+		// Only check for Sync in the extended protocol. In the simple protocol,
+		// Sync is meaningless, so it's OK to let isNextCmdSync default to false.
+		isNextCmdSync, err = ex.stmtBuf.isNextCmdSync()
+		if err != nil {
+			return makeErrEvent(err)
+		}
 	} else {
 		stmt = makeStatement(parserStmt, queryID)
 	}
+
+	// In some cases, we need to turn off autocommit behavior here. The postgres
+	// docs say that commands in the extended protocol are all treated as an
+	// implicit transaction that does not get committed until a Sync message is
+	// received. However, if we are executing a statement that is immediately
+	// followed by Sync (which is the common case), then we still can auto-commit,
+	// which allows the "insert fast path" (1PC optimization) to be used.
+	canAutoCommit := os.ImplicitTxn.Get() && (!isExtendedProtocol || isNextCmdSync)
 
 	ex.incrementStartedStmtCounter(ast)
 	defer func() {
@@ -288,8 +308,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.state.mu.Lock()
 	ex.state.mu.stmtCount++
 	ex.state.mu.Unlock()
-
-	os := ex.machine.CurState().(stateOpen)
 
 	var timeoutTicker *time.Timer
 	queryTimedOut := false
@@ -354,11 +372,6 @@ func (ex *connExecutor) execStmtInOpenState(
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
 		}
 	}(ctx, res)
-
-	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, ast)
-		return ev, payload, nil
-	}
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -497,12 +510,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		if retEv != nil || retErr != nil {
 			return
 		}
-		// The postgres docs say that commands in the extended protocol are
-		// all treated as an implicit transaction that does not get committed
-		// until a Sync message is received. The prepared statement will only be
-		// nil if we are in the simple protocol; for the extended protocol the
-		// commit occurs when Sync is received.
-		if os.ImplicitTxn.Get() && !isExtendedProtocol {
+		if canAutoCommit {
 			retEv, retPayload = ex.handleAutoCommit(ctx, ast)
 			return
 		}
@@ -701,11 +709,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
 
-	// We need to turn off autocommit behavior here so that the "insert fast path"
-	// does not get triggered. The postgres docs say that commands in the extended
-	// protocol are all treated as an implicit transaction that does not get
-	// committed until a Sync message is received.
-	p.autoCommit = os.ImplicitTxn.Get() && !isExtendedProtocol && !ex.server.cfg.TestingKnobs.DisableAutoCommit
+	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommit
 
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
