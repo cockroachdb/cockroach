@@ -333,7 +333,7 @@ func (so *importSequenceOperators) HasPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,
 	user security.SQLUsername,
-	kind privilege.Kind,
+	priv privilege.Privilege,
 ) (bool, error) {
 	return false, errors.WithStack(errSequenceOperators)
 }
