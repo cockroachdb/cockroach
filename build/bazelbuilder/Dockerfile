@@ -1,4 +1,4 @@
-FROM ubuntu:focal-20210119
+FROM ubuntu:focal-20211006
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
