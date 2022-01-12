@@ -14,6 +14,7 @@ option go_package = "roachpb";
 
 import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
 // TODO(irfansharif): We could have the proto definitions in pkg/config/zonepb
 // use these messages instead of duplicating everything.
@@ -28,6 +29,16 @@ message GCPolicy {
   // before garbage collection. A value <= 0 means older versions are never
   // GC-ed.
   int32 ttl_seconds = 1 [(gogoproto.customname) = "TTLSeconds"];
+}
+
+// ProtectionPolicy dictates a protection policy against garbage collection that
+// applies over a given span.
+message ProtectionPolicy {
+  option (gogoproto.equal) = true;
+
+  // ProtectedTimestamp is a timestamp above which GC should not run, regardless
+  // of the GC TTL.
+  util.hlc.Timestamp protected_timestamp = 10 [(gogoproto.nullable) = false];
 }
 
 // Constraint constrains the stores that a replica can be stored on. It
@@ -85,8 +96,8 @@ message LeasePreference {
   repeated Constraint constraints = 1 [(gogoproto.nullable) = false];
 }
 
-// SpanConfig holds the configuration that applies to a given keyspan. It
-// parallels the definition found in zonepb/zone.proto.
+// SpanConfig holds the configuration that applies to a given keyspan. It is a
+// superset of the fields found in zonepb.zone.proto.
 message SpanConfig {
   option (gogoproto.equal) = true;
 
@@ -140,6 +151,12 @@ message SpanConfig {
   // preferred option to least. The first preference that an existing replica of
   // a range matches will take priority for the lease.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+
+  // ProtectionPolicies is a list of policies that dictate GC behavior for a
+  // range (in conjunction with the GC Policy). A ProtectionPolicy can be used
+  // to indicate a timestamp above which GC should not run, regardless of the
+  // GC TTL.
+  repeated ProtectionPolicy protection_policies = 10 [(gogoproto.nullable) = false];
 }
 
 // SpanConfigEntry ties a span to its corresponding config.
@@ -150,6 +167,48 @@ message SpanConfigEntry {
   // Config is the set of attributes that apply over the corresponding keyspan.
   SpanConfig config = 2 [(gogoproto.nullable) = false];
 };
+
+// SystemSpanConfig is a system installed configuration that may apply to
+// multiple spans.
+message SystemSpanConfig {
+  option (gogoproto.equal) = true;
+
+  // ProtectionPolicies is a list of policies which protect data from being
+  // GC-ed.
+  repeated ProtectionPolicy protection_policies = 1 [(gogoproto.nullable) = false];
+}
+
+// SystemSpanConfigTarget is used to specify the target of a SystemSpanConfig.
+message SystemSpanConfigTarget {
+  message Cluster {
+    // TenantID indicates the tenant ID of the logical cluster being targeted.
+    // If the ID belongs to the system tenant then the entire keyspace
+    // (all ranges, including secondary tenant ranges) is considered targeted.
+    roachpb.TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+  }
+
+  message Tenant {
+    // TenantID indicates the ID of the tenant being targeted and applies to all
+    // ranges of the tenant.
+    roachpb.TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+  }
+
+  oneof union {
+    Cluster cluster = 1;
+    Tenant  tenant = 2;
+  }
+}
+
+// SystemSpanConfigEntry is a SystemSpanConfigTarget and its corresponding
+// SystemSpanConfig.
+message SystemSpanConfigEntry {
+  // SystemSpanConfigTarget represents the target over which the config is said
+  // to apply.
+  SystemSpanConfigTarget system_span_config_target = 1 [(gogoproto.nullable) = false];
+
+  // SystemSpanConfig is the config that applies.
+  SystemSpanConfig system_span_config = 2 [(gogoproto.nullable) = false];
+}
 
 // GetSpanConfigsRequest is used to fetch the span configurations over the
 // specified keyspans.
