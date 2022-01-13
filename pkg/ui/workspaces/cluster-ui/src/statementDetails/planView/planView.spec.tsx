@@ -17,6 +17,8 @@ import {
   flattenTreeAttributes,
   flattenAttributes,
   standardizeKey,
+  planNodeToString,
+  planNodeAttrsToString,
 } from "./planView";
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 
@@ -258,6 +260,96 @@ describe("planView", () => {
     it("should remove '(anti)' from the key", () => {
       assert.equal(standardizeKey("lookup join (anti)"), "lookupJoin");
       assert.equal(standardizeKey("(anti) hello world"), "helloWorld");
+    });
+  });
+
+  describe("planNodeAttrsToString", () => {
+    it("should convert an array of FlatPlanNodeAttribute[] into a string", () => {
+      const testNodeAttrs: FlatPlanNodeAttribute[] = [
+        {
+          key: "Into",
+          values: ["users(id, city, name, address, credit_card)"],
+          warn: false,
+        },
+        {
+          key: "Size",
+          values: ["5 columns, 3 rows"],
+          warn: false,
+        },
+      ];
+
+      const expectedString =
+        "Into users(id, city, name, address, credit_card) Size 5 columns, 3 rows";
+
+      assert.deepEqual(planNodeAttrsToString(testNodeAttrs), expectedString);
+    });
+  });
+
+  describe("planNodeToString", () => {
+    it("should recursively convert a FlatPlanNode into a string.", () => {
+      const testPlanNode: FlatPlanNode = {
+        name: "insert fast path",
+        attrs: [
+          {
+            key: "Into",
+            values: ["users(id, city, name, address, credit_card)"],
+            warn: false,
+          },
+          {
+            key: "Size",
+            values: ["5 columns, 3 rows"],
+            warn: false,
+          },
+        ],
+        children: [],
+      };
+
+      const expectedString =
+        "insert fast path Into users(id, city, name, address, credit_card) Size 5 columns, 3 rows";
+
+      assert.deepEqual(planNodeToString(testPlanNode), expectedString);
+    });
+
+    it("should recursively convert a FlatPlanNode (with children) into a string.", () => {
+      const testPlanNode: FlatPlanNode = {
+        name: "render",
+        attrs: [],
+        children: [
+          {
+            name: "group (scalar)",
+            attrs: [],
+            children: [
+              {
+                name: "filter",
+                attrs: [
+                  {
+                    key: "filter",
+                    values: ["variable = _"],
+                    warn: false,
+                  },
+                ],
+                children: [
+                  {
+                    name: "virtual table",
+                    attrs: [
+                      {
+                        key: "table",
+                        values: ["cluster_settings@primary"],
+                        warn: false,
+                      },
+                    ],
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const expectedString =
+        "render  group (scalar)  filter filter variable = _ virtual table table cluster_settings@primary";
+      assert.deepEqual(planNodeToString(testPlanNode), expectedString);
     });
   });
 });
