@@ -600,13 +600,22 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	ctx context.Context, p *ProposalData, closedTSTarget hlc.Timestamp,
 ) (uint64, hlc.Timestamp, error) {
 
-	// Request a new max lease applied index for any request that isn't itself
-	// a lease request. Lease requests don't need unique max lease index values
-	// because their max lease indexes are ignored. See checkForcedErr.
-	if !p.Request.IsLeaseRequest() {
+	// Assign a MaxLeaseAppliedIndex (see checkForcedErr). These provide replay
+	// protection.
+	//
+	// Lease-related proposals have their own replay protection (via the lease
+	// sequence) and will not check the lease applied index (since they are
+	// proposed from followers). While it would be legal to still assign a LAI to
+	// lease proposals, historically it has been mildly inconvenient in testing,
+	// and might belie the fact that LAI-related concepts just don't apply to
+	// lease proposals. Instead, we assign a zero LAI to lease proposals, with a
+	// condition that matches exactly that used in checkForcedError to identify
+	// lease proposals (both transfers and requests).
+	var lai uint64
+	if !p.command.ReplicatedEvalResult.IsLeaseRequest {
 		b.assignedLAI++
+		lai = b.assignedLAI
 	}
-	lai := b.assignedLAI
 
 	if filter := b.testing.leaseIndexFilter; filter != nil {
 		if override := filter(p); override != 0 {

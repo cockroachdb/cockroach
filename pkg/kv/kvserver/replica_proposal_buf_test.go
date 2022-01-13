@@ -221,7 +221,9 @@ func (pc proposalCreator) newPutProposal(ts hlc.Timestamp) *ProposalData {
 func (pc proposalCreator) newLeaseProposal(lease roachpb.Lease) *ProposalData {
 	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: lease})
-	return pc.newProposal(ba)
+	prop := pc.newProposal(ba)
+	prop.command.ReplicatedEvalResult.IsLeaseRequest = true
+	return prop
 }
 
 func (pc proposalCreator) newProposal(ba roachpb.BatchRequest) *ProposalData {
@@ -311,8 +313,10 @@ func TestProposalBuffer(t *testing.T) {
 	for i, p := range proposals {
 		if i != leaseReqIdx {
 			lai++
+			require.Equal(t, lai, p.MaxLeaseIndex)
+		} else {
+			require.Zero(t, p.MaxLeaseIndex)
 		}
-		require.Equal(t, lai, p.MaxLeaseIndex)
 	}
 
 	// Flush the buffer repeatedly until its array shrinks.
