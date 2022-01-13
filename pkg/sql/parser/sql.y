@@ -3135,7 +3135,7 @@ import_format:
 alter_unsupported_stmt:
   ALTER FUNCTION error
   {
-    return unimplemented(sqllex, "alter function")
+    return unimplementedWithIssueDetail(sqllex, 17511, "alter function")
   }
 | ALTER DOMAIN error
   {
