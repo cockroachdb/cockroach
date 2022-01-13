@@ -219,6 +219,9 @@ message LocalOnlySessionData {
   // buffered by conn executor.  This is currently used by replication primitives
   // to ensure the data is flushed to the consumer immediately.
   bool avoid_buffering = 59;
+  // CheckFunctionBodies indicates whether functions are validated during
+  // creation.
+  bool check_function_bodies = 60;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
