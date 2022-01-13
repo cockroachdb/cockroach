@@ -2859,6 +2859,10 @@ func (m *sessionDataMutator) SetSafeUpdates(val bool) {
 	m.data.SafeUpdates = val
 }
 
+func (m *sessionDataMutator) SetCheckFunctionBodies(val bool) {
+	m.data.CheckFunctionBodies = val
+}
+
 func (m *sessionDataMutator) SetPreferLookupJoinsForFKs(val bool) {
 	m.data.PreferLookupJoinsForFKs = val
 }

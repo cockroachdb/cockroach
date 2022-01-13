@@ -1085,6 +1085,23 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// See https://www.postgresql.org/docs/13/runtime-config-client.html.
+	`check_function_bodies`: {
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CheckFunctionBodies), nil
+		},
+		GetStringVal: makePostgresBoolGetStringValFn("check_function_bodies"),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("check_function_bodies", s)
+			if err != nil {
+				return err
+			}
+			m.SetCheckFunctionBodies(b)
+			return nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
 	// CockroachDB extension.
 	`prefer_lookup_joins_for_fks`: {
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
