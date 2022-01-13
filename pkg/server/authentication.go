@@ -440,6 +440,19 @@ func (s *authenticationServer) verifyPassword(
 	}
 
 	ok, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, password)
+	if ok && err == nil {
+		// Password authentication succeeded using cleartext.  If the
+		// stored hash was encoded using crdb-bcrypt, we might want to
+		// upgrade it to SCRAM instead.
+		//
+		// This auto-conversion is a CockroachDB-specific feature, which
+		// pushes clusters upgraded from a previous version into using
+		// SCRAM-SHA-256.
+		sql.MaybeUpgradeStoredPasswordHash(ctx,
+			s.server.sqlServer.execCfg,
+			username,
+			password, hashedPassword)
+	}
 	return ok, false, err
 }
 
