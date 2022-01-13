@@ -6204,12 +6204,12 @@ upsert trade_history
  ├── upsert-mapping:
  │    ├── column1:6 => trade_history.th_t_id:1
  │    ├── column2:7 => th_dts:2
- │    └── column3:8 => trade_history.th_st_id:3
+ │    └── th_st_id_cast:9 => trade_history.th_st_id:3
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:6!null column2:7!null column3:8!null
+ │    ├── columns: column1:6!null column2:7!null th_st_id_cast:9!null
  │    ├── cardinality: [3 - 3]
  │    ├── (0, '2020-06-17 22:27:42.148484', 'SBMT')
  │    ├── (0, '2020-06-20 22:27:42.148484', 'PNDG')
@@ -6217,26 +6217,26 @@ upsert trade_history
  └── f-k-checks
       ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
       │    └── anti-join (lookup trade)
-      │         ├── columns: th_t_id:9!null
-      │         ├── key columns: [9] = [10]
+      │         ├── columns: th_t_id:10!null
+      │         ├── key columns: [10] = [11]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 3]
       │         ├── with-scan &1
-      │         │    ├── columns: th_t_id:9!null
+      │         │    ├── columns: th_t_id:10!null
       │         │    ├── mapping:
-      │         │    │    └──  column1:6 => th_t_id:9
+      │         │    │    └──  column1:6 => th_t_id:10
       │         │    └── cardinality: [3 - 3]
       │         └── filters (true)
       └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
            └── anti-join (lookup status_type)
-                ├── columns: th_st_id:27!null
-                ├── key columns: [27] = [28]
+                ├── columns: th_st_id:28!null
+                ├── key columns: [28] = [29]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 3]
                 ├── with-scan &1
-                │    ├── columns: th_st_id:27!null
+                │    ├── columns: th_st_id:28!null
                 │    ├── mapping:
-                │    │    └──  column3:8 => th_st_id:27
+                │    │    └──  th_st_id_cast:9 => th_st_id:28
                 │    └── cardinality: [3 - 3]
                 └── filters (true)
 
