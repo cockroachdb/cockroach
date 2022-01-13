@@ -173,6 +173,20 @@ func (mr *MockDependenciesMockRecorder) Catalog() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Catalog", reflect.TypeOf((*MockDependencies)(nil).Catalog))
 }
 
+// CommentUpdater mocks base method.
+func (m *MockDependencies) CommentUpdater(arg0 context.Context) scexec.CommentUpdater {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommentUpdater", arg0)
+	ret0, _ := ret[0].(scexec.CommentUpdater)
+	return ret0
+}
+
+// CommentUpdater indicates an expected call of CommentUpdater.
+func (mr *MockDependenciesMockRecorder) CommentUpdater(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommentUpdater", reflect.TypeOf((*MockDependencies)(nil).CommentUpdater), arg0)
+}
+
 // EventLogger mocks base method.
 func (m *MockDependencies) EventLogger() scexec.EventLogger {
 	m.ctrl.T.Helper()

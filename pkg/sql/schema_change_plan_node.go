@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -145,7 +146,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
 	runDeps := newSchemaChangerTxnRunDependencies(
-		p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
+		p.SessionData(), p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
 	)
 	after, jobID, err := scrun.RunStatementPhase(
 		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
@@ -159,6 +160,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 }
 
 func newSchemaChangerTxnRunDependencies(
+	sessionData *sessiondata.SessionData,
 	user security.SQLUsername,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
@@ -169,6 +171,7 @@ func newSchemaChangerTxnRunDependencies(
 ) scexec.Dependencies {
 	return scdeps.NewExecutorDependencies(
 		execCfg.Codec,
+		sessionData,
 		txn,
 		user,
 		descriptors,
@@ -181,6 +184,7 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
 		scdeps.NewPartitioner(execCfg.Settings, evalContext),
+		execCfg.CommentUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		schemaChangerJobID,
 		stmts,

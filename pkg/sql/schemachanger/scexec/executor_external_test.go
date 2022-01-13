@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -60,6 +61,7 @@ func (ti testInfra) newExecDeps(
 ) scexec.Dependencies {
 	return scdeps.NewExecutorDependencies(
 		ti.lm.Codec(),
+		&sessiondata.SessionData{}, /* sessionData */
 		txn,
 		security.RootUserName(),
 		descsCollection,
@@ -67,11 +69,12 @@ func (ti testInfra) newExecDeps(
 		noopBackfiller{},  /* backfiller */
 		scdeps.NewNoOpBackfillTracker(ti.lm.Codec()),
 		scdeps.NewNoopPeriodicProgressFlusher(),
-		noopIndexValidator{}, /* indexValidator */
-		noopPartitioner{},    /* partitioner */
-		noopEventLogger{},    /* eventLogger */
-		1,                    /* schemaChangerJobID */
-		nil,                  /* statements */
+		noopIndexValidator{},        /* indexValidator */
+		noopPartitioner{},           /* partitioner */
+		noopCommentUpdaterFactory{}, /* commentUpdaterFactory*/
+		noopEventLogger{},           /* eventLogger */
+		1,                           /* schemaChangerJobID */
+		nil,                         /* statements */
 	)
 }
 
@@ -509,7 +512,54 @@ func (noopEventLogger) LogEvent(
 	return nil
 }
 
+type noopCommentUpdaterFactory struct {
+}
+
+type noopCommentUpdater struct {
+}
+
+func (noopCommentUpdaterFactory) NewCommentUpdater(
+	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
+) scexec.CommentUpdater {
+	return &noopCommentUpdater{}
+}
+
+func (noopCommentUpdater) UpsertDescriptorComment(
+	id int64, subID int64, commentType keys.CommentType, comment string,
+) error {
+	return nil
+}
+
+// DeleteDescriptorComment deletes a comment for a given descriptor.
+func (noopCommentUpdater) DeleteDescriptorComment(
+	id int64, subID int64, commentType keys.CommentType,
+) error {
+	return nil
+}
+
+//UpsertConstraintComment upsersts a comment associated with a constraint.
+func (noopCommentUpdater) UpsertConstraintComment(
+	desc catalog.TableDescriptor,
+	schemaName string,
+	constraintName string,
+	constraintType scpb.ConstraintType,
+	comment string,
+) error {
+	return nil
+}
+
+//DeleteConstraintComment deletes a comment associated with a constraint.
+func (noopCommentUpdater) DeleteConstraintComment(
+	desc catalog.TableDescriptor,
+	schemaName string,
+	constraintName string,
+	constraintType scpb.ConstraintType,
+) error {
+	return nil
+}
+
 var _ scexec.Backfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
 var _ scmutationexec.Partitioner = noopPartitioner{}
 var _ scexec.EventLogger = noopEventLogger{}
+var _ scexec.CommentUpdater = noopCommentUpdater{}

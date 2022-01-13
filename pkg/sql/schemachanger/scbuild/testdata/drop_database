@@ -122,6 +122,42 @@ DROP DATABASE db1 CASCADE
       width: 64
     usesSequenceIds:
     - 57
+- [[ColumnComment:{DescID: 59, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 59
+- [[ColumnComment:{DescID: 59, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 59
+- [[ColumnComment:{DescID: 59, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 59
+- [[ColumnComment:{DescID: 60, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 60
+- [[ColumnComment:{DescID: 60, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 60
+- [[ColumnComment:{DescID: 60, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 60
 - [[ColumnName:{DescID: 59, ColumnID: 1, Name: id}, ABSENT], PUBLIC]
   details:
     columnId: 1
@@ -152,12 +188,31 @@ DROP DATABASE db1 CASCADE
     columnId: 3
     name: val
     tableId: 60
+- [[ConstraintComment:{DescID: 59, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    constraintName: t1_pkey
+    constraintType: PrimaryKey
+    tableId: 59
+- [[ConstraintComment:{DescID: 60, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    constraintName: t1_pkey
+    constraintType: PrimaryKey
+    tableId: 60
 - [[Database:{DescID: 54}, ABSENT], PUBLIC]
   details:
     databaseId: 54
     dependentObjects:
     - 55
     - 56
+- [[DatabaseComment:{DescID: 54}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    databaseId: 54
 - [[DatabaseSchemaEntry:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC]
   details:
     databaseId: 54
@@ -180,6 +235,18 @@ DROP DATABASE db1 CASCADE
     tableId: 60
     usesSequenceIDs:
     - 57
+- [[IndexComment:{DescID: 59, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    indexId: 1
+    tableId: 59
+- [[IndexComment:{DescID: 60, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    indexId: 1
+    tableId: 60
 - [[IndexName:{DescID: 59, IndexID: 1, Name: t1_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -406,6 +473,16 @@ DROP DATABASE db1 CASCADE
     - 66
     - 67
     schemaId: 56
+- [[SchemaComment:{DescID: 55}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    schemaId: 55
+- [[SchemaComment:{DescID: 56}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    schemaId: 56
 - [[Sequence:{DescID: 57}, ABSENT], PUBLIC]
   details:
     sequenceId: 57
@@ -418,6 +495,51 @@ DROP DATABASE db1 CASCADE
 - [[Table:{DescID: 60}, ABSENT], PUBLIC]
   details:
     tableId: 60
+- [[TableComment:{DescID: 57}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 57
+- [[TableComment:{DescID: 58}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 58
+- [[TableComment:{DescID: 59}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 59
+- [[TableComment:{DescID: 60}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 60
+- [[TableComment:{DescID: 61}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 61
+- [[TableComment:{DescID: 62}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 62
+- [[TableComment:{DescID: 63}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 63
+- [[TableComment:{DescID: 64}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 64
+- [[TableComment:{DescID: 67}, ABSENT], PUBLIC]
+  details:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 67
 - [[Type:{DescID: 65}, ABSENT], PUBLIC]
   details:
     typeId: 65

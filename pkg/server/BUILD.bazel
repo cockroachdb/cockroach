@@ -130,6 +130,7 @@ go_library(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/colexec",
+        "//pkg/sql/commenter",
         "//pkg/sql/contention",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
