@@ -682,8 +682,7 @@ func RunTestsWithFn(
 					if typs != nil {
 						inputTypes = typs[i]
 					}
-					rng, _ := randutil.NewTestRand()
-					inputSources[i] = newOpTestSelInput(allocator, rng, batchSize, tup, inputTypes)
+					inputSources[i] = newOpTestSelInput(allocator, batchSize, tup, inputTypes)
 				}
 			} else {
 				for i, tup := range tups {
@@ -875,12 +874,11 @@ func NewOpTestInput(
 }
 
 func newOpTestSelInput(
-	allocator *colmem.Allocator, rng *rand.Rand, batchSize int, tuples Tuples, typs []*types.T,
+	allocator *colmem.Allocator, batchSize int, tuples Tuples, typs []*types.T,
 ) *opTestInput {
 	ret := &opTestInput{
 		allocator:     allocator,
 		useSel:        true,
-		rng:           rng,
 		batchSize:     batchSize,
 		tuples:        tuples,
 		initialTuples: tuples,
@@ -898,7 +896,7 @@ func (s *opTestInput) Init(context.Context) {
 		s.typs = extrapolateTypesFromTuples(s.tuples)
 	}
 	s.batch = s.allocator.NewMemBatchWithMaxCapacity(s.typs)
-
+	s.rng, _ = randutil.NewTestRand()
 	s.selection = make([]int, coldata.BatchSize())
 	for i := range s.selection {
 		s.selection[i] = i
@@ -913,6 +911,11 @@ func (s *opTestInput) Next() coldata.Batch {
 	batchSize := s.batchSize
 	if len(s.tuples) < batchSize {
 		batchSize = len(s.tuples)
+	}
+	// With 50% probability for this particular batch use a random size in
+	// range [1, batchSize].
+	if s.rng.Float64() < 0.5 {
+		batchSize = s.rng.Intn(batchSize) + 1
 	}
 	tups := s.tuples[:batchSize]
 	s.tuples = s.tuples[batchSize:]

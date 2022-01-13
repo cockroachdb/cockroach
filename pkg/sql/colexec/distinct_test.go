@@ -249,6 +249,22 @@ var distinctTestCases = []distinctTestCase{
 		nullsAreDistinct:        true,
 	},
 	{
+		distinctCols: []uint32{0, 1},
+		typs:         []*types.T{types.Int, types.String},
+		tuples: colexectestutils.Tuples{
+			{nil, "foo"},
+			{nil, "foo"},
+			{nil, "foo"},
+		},
+		expected: colexectestutils.Tuples{
+			{nil, "foo"},
+			{nil, "foo"},
+			{nil, "foo"},
+		},
+		isOrderedOnDistinctCols: true,
+		nullsAreDistinct:        true,
+	},
+	{
 		distinctCols: []uint32{0},
 		typs:         []*types.T{types.Int},
 		tuples: colexectestutils.Tuples{
