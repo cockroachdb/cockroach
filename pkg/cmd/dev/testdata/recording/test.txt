@@ -1,3 +1,7 @@
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
+
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
@@ -11,7 +15,11 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
-bazel query 'kind(go_test,  //pkg/util/tracing/...)'
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
+
+bazel query 'kind(go_test, //pkg/util/tracing/...)'
 ----
 //pkg/util/tracing:tracing_test
 
@@ -23,6 +31,10 @@ bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_out
 Executed 0 out of 1 test: 1 test passes.
 ----
 ----
+
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
 
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
@@ -36,6 +48,10 @@ bazel test //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all '--test_fi
 Executed 1 out of 1 test: 1 test passes.
 ----
 ----
+
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
 
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
@@ -54,6 +70,10 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
+
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
@@ -66,6 +86,10 @@ bazel test --remote_local_fallback --remote_cache=grpc://127.0.0.1:9092 --experi
 Executed 0 out of 1 test: 1 test passes.
 ----
 ----
+
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
 
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
@@ -80,6 +104,10 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
+
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
@@ -93,6 +121,10 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
+
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
@@ -105,6 +137,10 @@ bazel test --local_cpu_resources=12 --test_sharding_strategy=disabled //pkg/util
 Executed 1 out of 1 test: 1 test passes.
 ----
 ----
+
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
 
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
@@ -124,6 +160,10 @@ SUCCESS
 Executed 1 out of 1 test: 1 test passes.
 ----
 ----
+
+find pkg/testutils -type d
+----
+pkg/testutils
 
 bazel query 'kind(go_test, //pkg/testutils:all)'
 ----
@@ -154,6 +194,10 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+find pkg/util/tracing -type d
+----
+pkg/util/tracing
+
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
 ----
 //pkg/util/tracing:tracing_test
@@ -167,6 +211,10 @@ Executed 1 out of 1 test: 1 test passes.
 ----
 ----
 
+find pkg/roachpb -type d
+----
+pkg/roachpb
+
 bazel query 'kind(go_test, //pkg/roachpb:all)'
 ----
 ----
@@ -178,8 +226,20 @@ bazel query 'kind(go_test, //pkg/roachpb:all)'
 bazel test //pkg/roachpb:roachpb_test //pkg/roachpb:string_test --test_env=GOTRACEBACK=all --test_output errors
 ----
 
-bazel test pkg/roachpb:string_test --test_env=GOTRACEBACK=all --test_output errors
+find pkg/roachpb -type d
 ----
+pkg/roachpb
+
+bazel query 'kind(go_test, //pkg/roachpb:string_test)'
+----
+//pkg/roachpb:string_test
+
+bazel test //pkg/roachpb:string_test --test_env=GOTRACEBACK=all --test_output errors
+----
+
+find pkg/testutils -type d
+----
+pkg/testutils
 
 bazel query 'kind(go_test, //pkg/testutils:all)'
 ----
@@ -192,9 +252,17 @@ go/src/github.com/cockroachdb/cockroach
 bazel test //pkg/testutils:testutils_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --test_output errors
 ----
 
+find pkg/testutils -type d
+----
+pkg/testutils
+
 bazel query 'kind(go_test, //pkg/testutils:all)'
 ----
 //pkg/testutils:testutils_test
+
+find pkg/other/test -type d
+----
+pkg/other/test
 
 bazel query 'kind(go_test, //pkg/other/test:all)'
 ----
