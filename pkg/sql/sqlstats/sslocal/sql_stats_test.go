@@ -506,6 +506,7 @@ func TestTxnStatsDiscardedAfterPrematureStatementExecutionAbortion(t *testing.T)
 		".*contains a full table/index scan.*", /* errRe */
 		"SELECT * FROM t",                      /* query */
 	)
+	sqlDB.Exec(t, "SET disallow_full_table_scans=off")
 
 	// Ensure we don't generate transaction stats entry where the list of stmt
 	// fingerprint IDs is nil.
