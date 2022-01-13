@@ -4427,7 +4427,7 @@ grant_stmt:
   }
 | GRANT privileges ON SEQUENCE error
   {
-    return unimplemented(sqllex, "grant privileges on sequence")
+    return unimplementedWithIssueDetail(sqllex, 74780, "grant privileges on sequence")
   }
 | GRANT error // SHOW HELP: GRANT
 
