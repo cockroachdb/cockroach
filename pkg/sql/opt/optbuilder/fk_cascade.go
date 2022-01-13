@@ -458,7 +458,7 @@ func (cb *onDeleteSetBuilder) Build(
 				updateExprs[i].Expr = tree.DefaultVal{}
 			}
 		}
-		mb.addUpdateCols(updateExprs, false /* isUpsert */)
+		mb.addUpdateCols(updateExprs)
 
 		// TODO(radu): consider plumbing a flag to prevent building the FK check
 		// against the parent we are cascading from. Need to investigate in which
@@ -687,7 +687,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 				panic(errors.AssertionFailedf("unsupported action"))
 			}
 		}
-		mb.addUpdateCols(updateExprs, false /* isUpsert */)
+		mb.addUpdateCols(updateExprs)
 
 		mb.buildUpdate(nil /* returning */)
 		return mb.outScope.expr

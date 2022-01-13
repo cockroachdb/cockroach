@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -136,10 +135,6 @@ type mutationBuilder struct {
 	// arbiters is the set of indexes and unique constraints that are used to
 	// detect conflicts for UPSERT and INSERT ON CONFLICT statements.
 	arbiters arbiterSet
-
-	// roundedDecimalCols is the set of columns that have already been rounded.
-	// Keeping this set avoids rounding the same column multiple times.
-	roundedDecimalCols opt.ColSet
 
 	// subqueries temporarily stores subqueries that were built during initial
 	// analysis of SET expressions. They will be used later when the subqueries
@@ -721,148 +716,6 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 	mb.outScope = pb.Finish()
 }
 
-// roundDecimalValues wraps each DECIMAL-related column (including arrays of
-// decimals) with a call to the crdb_internal.round_decimal_values function, if
-// column values may need to be rounded. This is necessary when mutating table
-// columns that have a limited scale (e.g. DECIMAL(10, 1)). Here is the PG docs
-// description:
-//
-//   http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
-//   "If the scale of a value to be stored is greater than
-//   the declared scale of the column, the system will round the
-//   value to the specified number of fractional digits. Then,
-//   if the number of digits to the left of the decimal point
-//   exceeds the declared precision minus the declared scale, an
-//   error is raised."
-//
-// Note that this function only handles the rounding portion of that. The
-// precision check is done by the execution engine. The rounding cannot be done
-// there, since it needs to happen before check constraints are computed, and
-// before UPSERT joins.
-//
-// If roundComputedCols is false, then don't wrap computed columns. If true,
-// then only wrap computed columns. This is necessary because computed columns
-// can depend on other columns mutated by the operation; it is necessary to
-// first round those values, then evaluated the computed expression, and then
-// round the result of the computation.
-//
-// roundDecimalValues will only round decimal columns that are part of the
-// colIDs list (i.e. are not 0). If a column is rounded, then the list will be
-// updated with the column ID of the new synthesized column.
-func (mb *mutationBuilder) roundDecimalValues(colIDs opt.OptionalColList, roundComputedCols bool) {
-	var projectionsScope *scope
-
-	for i, id := range colIDs {
-		if id == 0 {
-			// Column not mutated, so nothing to do.
-			continue
-		}
-
-		// Include or exclude computed columns, depending on the value of
-		// roundComputedCols.
-		col := mb.tab.Column(i)
-		if col.IsComputed() != roundComputedCols {
-			continue
-		}
-
-		// Check whether the target column's type may require rounding of the
-		// input value.
-		colType := col.DatumType()
-		precision, width := colType.Precision(), colType.Width()
-		if colType.Family() == types.ArrayFamily {
-			innerType := colType.ArrayContents()
-			if innerType.Family() == types.ArrayFamily {
-				panic(errors.AssertionFailedf("column type should never be a nested array"))
-			}
-			precision, width = innerType.Precision(), innerType.Width()
-		}
-
-		props, overload := findRoundingFunction(colType, precision)
-		if props == nil {
-			continue
-		}
-
-		// If column has already been rounded, then skip it.
-		if mb.roundedDecimalCols.Contains(id) {
-			continue
-		}
-
-		private := &memo.FunctionPrivate{
-			Name:       "crdb_internal.round_decimal_values",
-			Typ:        col.DatumType(),
-			Properties: props,
-			Overload:   overload,
-		}
-		variable := mb.b.factory.ConstructVariable(id)
-		scale := mb.b.factory.ConstructConstVal(tree.NewDInt(tree.DInt(width)), types.Int)
-		fn := mb.b.factory.ConstructFunction(memo.ScalarListExpr{variable, scale}, private)
-
-		// Lazily create new scope and update the scope column to be rounded.
-		if projectionsScope == nil {
-			projectionsScope = mb.outScope.replace()
-			projectionsScope.appendColumnsFromScope(mb.outScope)
-		}
-		scopeCol := projectionsScope.getColumn(id)
-		mb.b.populateSynthesizedColumn(scopeCol, fn)
-
-		// Overwrite the input column ID with the new synthesized column ID.
-		colIDs[i] = scopeCol.id
-		mb.roundedDecimalCols.Add(scopeCol.id)
-
-		// When building an UPDATE..FROM expression the projectionScope may have
-		// two columns with different names but the same ID. As a result, the
-		// scope column with the correct name (the name of the target column)
-		// may not be returned from projectionScope.getColumn. We set the name
-		// of the new scope column to the target column name to ensure it is
-		// in-scope when building CHECK constraint and partial index PUT
-		// expressions. See #61520.
-		// TODO(mgartner): Find a less brittle way to manage the scopes of
-		// mutations so that this isn't necessary. Ideally the scope produced by
-		// addUpdateColumns would not include columns in the FROM clause. Those
-		// columns are only in-scope in the RETURNING clause via
-		// mb.extraAccessibleCols.
-		scopeCol.name = scopeColName(mb.tab.Column(i).ColName())
-	}
-
-	if projectionsScope != nil {
-		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
-		mb.outScope = projectionsScope
-	}
-}
-
-// findRoundingFunction returns the builtin function overload needed to round
-// input values. This is only necessary for DECIMAL or DECIMAL[] types that have
-// limited precision, such as:
-//
-//   DECIMAL(15, 1)
-//   DECIMAL(10, 3)[]
-//
-// If an input decimal value has more than the required number of fractional
-// digits, it must be rounded before being inserted into these types.
-//
-// NOTE: CRDB does not allow nested array storage types, so only one level of
-// array nesting needs to be checked.
-func findRoundingFunction(
-	typ *types.T, precision int32,
-) (*tree.FunctionProperties, *tree.Overload) {
-	if precision == 0 {
-		// Unlimited precision decimal target type never needs rounding.
-		return nil, nil
-	}
-
-	props, overloads := builtins.GetBuiltinProperties("crdb_internal.round_decimal_values")
-
-	if typ.Equivalent(types.Decimal) {
-		return props, &overloads[0]
-	}
-	if typ.Equivalent(types.DecimalArray) {
-		return props, &overloads[1]
-	}
-
-	// Not DECIMAL or DECIMAL[].
-	return nil, nil
-}
-
 // addCheckConstraintCols synthesizes a boolean output column for each check
 // constraint defined on the target table. The mutation operator will report a
 // constraint violation error if the value of the column is false.
@@ -1367,27 +1220,6 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	default:
 		panic(errors.AssertionFailedf("unexpected ReturningClause type: %T", t))
 	}
-}
-
-// checkDatumTypeFitsColumnType verifies that a given scalar value type is valid
-// to be stored in a column of the given column type.
-//
-// For the purpose of this analysis, column type aliases are not considered to
-// be different (eg. TEXT and VARCHAR will fit the same scalar type String).
-//
-// This is used by the UPDATE, INSERT and UPSERT code.
-// TODO(mgartner): Remove this once assignment casts are fully supported.
-func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
-	if typ.Equivalent(col.DatumType()) {
-		return
-	}
-
-	colName := string(col.ColName())
-	err := pgerror.Newf(pgcode.DatatypeMismatch,
-		"value type %s doesn't match type %s of column %q",
-		typ, col.DatumType(), tree.ErrNameString(colName))
-	err = errors.WithHint(err, "you will need to rewrite or cast the expression")
-	panic(err)
 }
 
 // addAssignmentCasts builds a projection that wraps columns in srcCols with

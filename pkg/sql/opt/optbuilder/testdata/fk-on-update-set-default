@@ -767,7 +767,7 @@ root
 # referencing column's DEFAULT expression type is not identical to the
 # referencing column type.
 exec-ddl
-CREATE TABLE parent_assn_cast (p INT PRIMARY KEY)
+CREATE TABLE parent_assn_cast (p INT PRIMARY KEY, p2 INT UNIQUE)
 ----
 
 exec-ddl
@@ -783,65 +783,237 @@ UPDATE parent_assn_cast SET p = 1 WHERE p > 1
 root
  ├── update parent_assn_cast
  │    ├── columns: <none>
- │    ├── fetch columns: p:4
+ │    ├── fetch columns: p:5 p2:6
  │    ├── update-mapping:
- │    │    └── p_new:7 => p:1
+ │    │    └── p_new:9 => p:1
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── child_assn_cast_p_fkey
  │    └── project
- │         ├── columns: p_new:7!null p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── columns: p_new:9!null p:5!null p2:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         ├── select
- │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:5!null p2:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         │    ├── scan parent_assn_cast
- │         │    │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    │    └── columns: p:5!null p2:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         │    └── filters
- │         │         └── p:4 > 1
+ │         │         └── p:5 > 1
  │         └── projections
- │              └── 1 [as=p_new:7]
+ │              └── 1 [as=p_new:9]
  └── cascade
       └── update child_assn_cast
            ├── columns: <none>
-           ├── fetch columns: c:12 child_assn_cast.p:13
+           ├── fetch columns: c:14 child_assn_cast.p:15
            ├── update-mapping:
-           │    └── p_cast:19 => child_assn_cast.p:9
+           │    └── p_cast:21 => child_assn_cast.p:11
            ├── input binding: &2
            ├── project
-           │    ├── columns: p_cast:19!null c:12!null child_assn_cast.p:13!null p_old:16!null p_new:17!null
+           │    ├── columns: p_cast:21!null c:14!null child_assn_cast.p:15!null p_old:18!null p_new:19!null
            │    ├── project
-           │    │    ├── columns: p_new:18!null c:12!null child_assn_cast.p:13!null p_old:16!null p_new:17!null
+           │    │    ├── columns: p_new:20!null c:14!null child_assn_cast.p:15!null p_old:18!null p_new:19!null
            │    │    ├── inner-join (cross)
-           │    │    │    ├── columns: c:12!null child_assn_cast.p:13!null p_old:16!null p_new:17!null
+           │    │    │    ├── columns: c:14!null child_assn_cast.p:15!null p_old:18!null p_new:19!null
            │    │    │    ├── scan child_assn_cast
-           │    │    │    │    └── columns: c:12!null child_assn_cast.p:13
+           │    │    │    │    └── columns: c:14!null child_assn_cast.p:15
            │    │    │    ├── select
-           │    │    │    │    ├── columns: p_old:16!null p_new:17!null
+           │    │    │    │    ├── columns: p_old:18!null p_new:19!null
            │    │    │    │    ├── with-scan &1
-           │    │    │    │    │    ├── columns: p_old:16!null p_new:17!null
+           │    │    │    │    │    ├── columns: p_old:18!null p_new:19!null
            │    │    │    │    │    └── mapping:
-           │    │    │    │    │         ├──  parent_assn_cast.p:4 => p_old:16
-           │    │    │    │    │         └──  p_new:7 => p_new:17
+           │    │    │    │    │         ├──  parent_assn_cast.p:5 => p_old:18
+           │    │    │    │    │         └──  p_new:9 => p_new:19
            │    │    │    │    └── filters
-           │    │    │    │         └── p_old:16 IS DISTINCT FROM p_new:17
+           │    │    │    │         └── p_old:18 IS DISTINCT FROM p_new:19
            │    │    │    └── filters
-           │    │    │         └── child_assn_cast.p:13 = p_old:16
+           │    │    │         └── child_assn_cast.p:15 = p_old:18
            │    │    └── projections
-           │    │         └── 1.45::DECIMAL(10,2) [as=p_new:18]
+           │    │         └── 1.45::DECIMAL(10,2) [as=p_new:20]
            │    └── projections
-           │         └── assignment-cast: DECIMAL(10) [as=p_cast:19]
-           │              └── p_new:18
+           │         └── assignment-cast: DECIMAL(10) [as=p_cast:21]
+           │              └── p_new:20
            └── f-k-checks
                 └── f-k-checks-item: child_assn_cast(p) -> parent_assn_cast(p)
                      └── anti-join (cross)
-                          ├── columns: p:20!null
+                          ├── columns: p:22!null
                           ├── with-scan &2
-                          │    ├── columns: p:20!null
+                          │    ├── columns: p:22!null
                           │    └── mapping:
-                          │         └──  p_cast:19 => p:20
+                          │         └──  p_cast:21 => p:22
                           ├── scan parent_assn_cast
-                          │    └── columns: parent_assn_cast.p:21!null
+                          │    └── columns: parent_assn_cast.p:23!null
                           └── filters
-                               └── p:20 = parent_assn_cast.p:21
+                               └── p:22 = parent_assn_cast.p:23
+
+exec-ddl
+CREATE TABLE child_assn_cast_p2 (
+  c INT PRIMARY KEY,
+  p2 DECIMAL(10, 0) DEFAULT 1.45::DECIMAL(10, 2) REFERENCES parent_assn_cast(p2) ON UPDATE SET DEFAULT
+)
+----
+
+build-cascades
+UPSERT INTO parent_assn_cast (p, p2) VALUES (1, 2)
+----
+root
+ ├── upsert parent_assn_cast
+ │    ├── columns: <none>
+ │    ├── arbiter indexes: parent_assn_cast_pkey
+ │    ├── canary column: p:7
+ │    ├── fetch columns: p:7 p2:8
+ │    ├── insert-mapping:
+ │    │    ├── column1:5 => p:1
+ │    │    └── column2:6 => p2:2
+ │    ├── update-mapping:
+ │    │    └── column2:6 => p2:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_assn_cast_p2_p2_fkey
+ │    └── project
+ │         ├── columns: upsert_p:11 column1:5!null column2:6!null p:7 p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         ├── left-join (hash)
+ │         │    ├── columns: column1:5!null column2:6!null p:7 p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    ├── ensure-upsert-distinct-on
+ │         │    │    ├── columns: column1:5!null column2:6!null
+ │         │    │    ├── grouping columns: column1:5!null
+ │         │    │    ├── values
+ │         │    │    │    ├── columns: column1:5!null column2:6!null
+ │         │    │    │    └── (1, 2)
+ │         │    │    └── aggregations
+ │         │    │         └── first-agg [as=column2:6]
+ │         │    │              └── column2:6
+ │         │    ├── scan parent_assn_cast
+ │         │    │    └── columns: p:7!null p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    └── filters
+ │         │         └── column1:5 = p:7
+ │         └── projections
+ │              └── CASE WHEN p:7 IS NULL THEN column1:5 ELSE p:7 END [as=upsert_p:11]
+ └── cascade
+      └── update child_assn_cast_p2
+           ├── columns: <none>
+           ├── fetch columns: c:16 child_assn_cast_p2.p2:17
+           ├── update-mapping:
+           │    └── p2_cast:23 => child_assn_cast_p2.p2:13
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: p2_cast:23!null c:16!null child_assn_cast_p2.p2:17!null p2_old:20!null p2_new:21!null
+           │    ├── project
+           │    │    ├── columns: p2_new:22!null c:16!null child_assn_cast_p2.p2:17!null p2_old:20!null p2_new:21!null
+           │    │    ├── inner-join (cross)
+           │    │    │    ├── columns: c:16!null child_assn_cast_p2.p2:17!null p2_old:20!null p2_new:21!null
+           │    │    │    ├── scan child_assn_cast_p2
+           │    │    │    │    └── columns: c:16!null child_assn_cast_p2.p2:17
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: p2_old:20 p2_new:21!null
+           │    │    │    │    ├── with-scan &1
+           │    │    │    │    │    ├── columns: p2_old:20 p2_new:21!null
+           │    │    │    │    │    └── mapping:
+           │    │    │    │    │         ├──  parent_assn_cast.p2:8 => p2_old:20
+           │    │    │    │    │         └──  column2:6 => p2_new:21
+           │    │    │    │    └── filters
+           │    │    │    │         └── p2_old:20 IS DISTINCT FROM p2_new:21
+           │    │    │    └── filters
+           │    │    │         └── child_assn_cast_p2.p2:17 = p2_old:20
+           │    │    └── projections
+           │    │         └── 1.45::DECIMAL(10,2) [as=p2_new:22]
+           │    └── projections
+           │         └── assignment-cast: DECIMAL(10) [as=p2_cast:23]
+           │              └── p2_new:22
+           └── f-k-checks
+                └── f-k-checks-item: child_assn_cast_p2(p2) -> parent_assn_cast(p2)
+                     └── anti-join (cross)
+                          ├── columns: p2:24!null
+                          ├── with-scan &2
+                          │    ├── columns: p2:24!null
+                          │    └── mapping:
+                          │         └──  p2_cast:23 => p2:24
+                          ├── scan parent_assn_cast
+                          │    └── columns: parent_assn_cast.p2:26
+                          └── filters
+                               └── p2:24 = parent_assn_cast.p2:26
+
+build-cascades
+INSERT INTO parent_assn_cast (p, p2) VALUES (1, 2) ON CONFLICT (p) DO UPDATE SET p2 = 3
+----
+root
+ ├── upsert parent_assn_cast
+ │    ├── columns: <none>
+ │    ├── arbiter indexes: parent_assn_cast_pkey
+ │    ├── canary column: p:7
+ │    ├── fetch columns: p:7 p2:8
+ │    ├── insert-mapping:
+ │    │    ├── column1:5 => p:1
+ │    │    └── column2:6 => p2:2
+ │    ├── update-mapping:
+ │    │    └── upsert_p2:13 => p2:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_assn_cast_p2_p2_fkey
+ │    └── project
+ │         ├── columns: upsert_p:12 upsert_p2:13!null column1:5!null column2:6!null p:7 p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10 p2_new:11!null
+ │         ├── project
+ │         │    ├── columns: p2_new:11!null column1:5!null column2:6!null p:7 p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    ├── left-join (hash)
+ │         │    │    ├── columns: column1:5!null column2:6!null p:7 p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    │    ├── ensure-upsert-distinct-on
+ │         │    │    │    ├── columns: column1:5!null column2:6!null
+ │         │    │    │    ├── grouping columns: column1:5!null
+ │         │    │    │    ├── values
+ │         │    │    │    │    ├── columns: column1:5!null column2:6!null
+ │         │    │    │    │    └── (1, 2)
+ │         │    │    │    └── aggregations
+ │         │    │    │         └── first-agg [as=column2:6]
+ │         │    │    │              └── column2:6
+ │         │    │    ├── scan parent_assn_cast
+ │         │    │    │    └── columns: p:7!null p2:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    │    └── filters
+ │         │    │         └── column1:5 = p:7
+ │         │    └── projections
+ │         │         └── 3 [as=p2_new:11]
+ │         └── projections
+ │              ├── CASE WHEN p:7 IS NULL THEN column1:5 ELSE p:7 END [as=upsert_p:12]
+ │              └── CASE WHEN p:7 IS NULL THEN column2:6 ELSE p2_new:11 END [as=upsert_p2:13]
+ └── cascade
+      └── update child_assn_cast_p2
+           ├── columns: <none>
+           ├── fetch columns: c:18 child_assn_cast_p2.p2:19
+           ├── update-mapping:
+           │    └── p2_cast:25 => child_assn_cast_p2.p2:15
+           ├── input binding: &2
+           ├── project
+           │    ├── columns: p2_cast:25!null c:18!null child_assn_cast_p2.p2:19!null p2_old:22!null p2_new:23!null
+           │    ├── project
+           │    │    ├── columns: p2_new:24!null c:18!null child_assn_cast_p2.p2:19!null p2_old:22!null p2_new:23!null
+           │    │    ├── inner-join (cross)
+           │    │    │    ├── columns: c:18!null child_assn_cast_p2.p2:19!null p2_old:22!null p2_new:23!null
+           │    │    │    ├── scan child_assn_cast_p2
+           │    │    │    │    └── columns: c:18!null child_assn_cast_p2.p2:19
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: p2_old:22 p2_new:23!null
+           │    │    │    │    ├── with-scan &1
+           │    │    │    │    │    ├── columns: p2_old:22 p2_new:23!null
+           │    │    │    │    │    └── mapping:
+           │    │    │    │    │         ├──  parent_assn_cast.p2:8 => p2_old:22
+           │    │    │    │    │         └──  upsert_p2:13 => p2_new:23
+           │    │    │    │    └── filters
+           │    │    │    │         └── p2_old:22 IS DISTINCT FROM p2_new:23
+           │    │    │    └── filters
+           │    │    │         └── child_assn_cast_p2.p2:19 = p2_old:22
+           │    │    └── projections
+           │    │         └── 1.45::DECIMAL(10,2) [as=p2_new:24]
+           │    └── projections
+           │         └── assignment-cast: DECIMAL(10) [as=p2_cast:25]
+           │              └── p2_new:24
+           └── f-k-checks
+                └── f-k-checks-item: child_assn_cast_p2(p2) -> parent_assn_cast(p2)
+                     └── anti-join (cross)
+                          ├── columns: p2:26!null
+                          ├── with-scan &2
+                          │    ├── columns: p2:26!null
+                          │    └── mapping:
+                          │         └──  p2_cast:25 => p2:26
+                          ├── scan parent_assn_cast
+                          │    └── columns: parent_assn_cast.p2:28
+                          └── filters
+                               └── p2:26 = parent_assn_cast.p2:28
 
 # Test a cascade to a child with a partial index.
 exec-ddl
