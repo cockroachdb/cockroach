@@ -393,7 +393,8 @@ Next ==
         \/ \E tid \in DOMAIN Record : PipeLineWrite(tid)
         \/ \E tid \in DOMAIN Record : CommitTransaction(tid)
         \/ \E k \in KEYS : CleanIntentWrite(k)
-     
+
+   
 -----------------------------------------------------------------------------------------------------------------------------     
 
                                         
@@ -485,6 +486,7 @@ invOthers ==
           \* Without txn committed, MVCCData has no other values.
           /\ ~ /\ \A i \in DOMAIN Record : Record[i].status /= "committed" 
                /\ \E k \in KEYS : Len(MVCCData[k]) /= 1
+          
                                
 TxnInv == /\ invCorrect 
           /\ invTs
@@ -555,6 +557,8 @@ Properties ==
     /\ [][\A k \in KEYS: Tscache'[k] >= Tscache[k]]_Tscache
     \* System_ts increases monotonically.
     /\ [][System_ts' > System_ts]_System_ts
+    /\ <>[](/\ \A i \in DOMAIN Record : Record[i].status \in {"committed","aborted"}
+            /\ Cardinality(DOMAIN Record) = 3)
                 
 ==============================================================================================================================
 
