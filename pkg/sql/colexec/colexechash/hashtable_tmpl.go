@@ -84,6 +84,7 @@ func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 // When it is true, the HashTable uses 'visited' slice to mark previously
 // matched tuples as "deleted" so they won't get matched again.
 func _CHECK_COL_BODY(
+	_GLOBAL interface{},
 	_PROBE_HAS_NULLS bool,
 	_BUILD_HAS_NULLS bool,
 	_SELECT_DISTINCT bool,
@@ -203,20 +204,21 @@ func _CHECK_COL_WITH_NULLS(
 	_DELETING_PROBE_MODE bool,
 ) { // */}}
 	// {{define "checkColWithNulls" -}}
+	// {{$global := .Global}}
 	// {{$selectDistinct := .SelectDistinct}}
 	// {{$probingAgainstItself := .ProbingAgainstItself}}
 	// {{$deletingProbeMode := .DeletingProbeMode}}
 	if probeVec.MaybeHasNulls() {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(true, true, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+			_CHECK_COL_BODY(_GLOBAL, true, true, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 		} else {
-			_CHECK_COL_BODY(true, false, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+			_CHECK_COL_BODY(_GLOBAL, true, false, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 		}
 	} else {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(false, true, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+			_CHECK_COL_BODY(_GLOBAL, false, true, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 		} else {
-			_CHECK_COL_BODY(false, false, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+			_CHECK_COL_BODY(_GLOBAL, false, false, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 		}
 	}
 	// {{end}}
@@ -335,27 +337,6 @@ func (ht *HashTable) checkColDeleting(
 
 // {{end}}
 
-// {{/*
-func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(_USE_PROBE_SEL bool) { // */}}
-	// {{define "checkColForDistinctWithNulls" -}}
-	if probeVec.MaybeHasNulls() {
-		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(true, true, true, _USE_PROBE_SEL, false, false)
-		} else {
-			_CHECK_COL_BODY(true, false, true, _USE_PROBE_SEL, false, false)
-		}
-	} else {
-		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(false, true, true, _USE_PROBE_SEL, false, false)
-		} else {
-			_CHECK_COL_BODY(false, false, true, _USE_PROBE_SEL, false, false)
-		}
-	}
-
-	// {{end}}
-	// {{/*
-} // */}}
-
 // {{if .HashTableMode.IsDistinctBuild}}
 // {{with .Overloads}}
 
@@ -389,10 +370,19 @@ func (ht *HashTable) checkColForDistinctTuples(
 				case _RIGHT_TYPE_WIDTH:
 					probeKeys := probeVec._ProbeType()
 					buildKeys := buildVec._ProbeType()
-					if probeSel != nil {
-						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(true)
+					// {{$global := .}}
+					if probeVec.MaybeHasNulls() {
+						if buildVec.MaybeHasNulls() {
+							_CHECK_COL_BODY(_GLOBAL, true, true, true, true, false, false)
+						} else {
+							_CHECK_COL_BODY(_GLOBAL, true, false, true, true, false, false)
+						}
 					} else {
-						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(false)
+						if buildVec.MaybeHasNulls() {
+							_CHECK_COL_BODY(_GLOBAL, false, true, true, true, false, false)
+						} else {
+							_CHECK_COL_BODY(_GLOBAL, false, false, true, true, false, false)
+						}
 					}
 					// {{end}}
 					// {{end}}
