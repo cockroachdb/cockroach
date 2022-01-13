@@ -398,6 +398,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
+		{`ALTER FUNCTION a`, 17511, `alter function`, ``},
+
 		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
