@@ -60,12 +60,15 @@ const (
 var _ = InOrder
 
 // Result describes the result of performing a single KV request.
+//
+// The recipient of the Result is required to call Release() when the Result is
+// not in use any more so that its memory is returned to the Streamer's budget.
 type Result struct {
 	// GetResp and ScanResp represent the response to a request. Only one of the
 	// two will be populated.
 	//
 	// The responses are to be considered immutable; the Streamer might hold on
-	// to the respective memory. Calling MemoryTok.Release() tells the Streamer
+	// to the respective memory. Calling Result.Release() tells the Streamer
 	// that the response is no longer needed.
 	GetResp *roachpb.GetResponse
 	// ScanResp can contain a partial response to a ScanRequest (when Complete
@@ -92,16 +95,12 @@ type Result struct {
 	// requests. In InOrder mode a Result can only satisfy multiple consecutive
 	// requests.
 	EnqueueKeysSatisfied []int
-	// MemoryTok.Release() needs to be called by the recipient once it's not
-	// referencing this Result any more. If this was the last (or only)
-	// reference to this Result, the memory used by this Result is made
-	// available in the Streamer's budget.
-	//
-	// Internally, Results are refcounted. Multiple Results referencing the same
-	// GetResp/ScanResp can be returned from separate `GetResults()` calls, and
-	// the Streamer internally does buffering and caching of Results - which
-	// also contributes to the refcounts.
-	MemoryTok ResultMemoryToken
+	// memoryTok describes the memory reservation of this Result that needs to
+	// be released back to the budget when the Result is Release()'d.
+	memoryTok struct {
+		budget    *budget
+		toRelease int64
+	}
 	// position tracks the ordinal among all originally enqueued requests that
 	// this result satisfies. See singleRangeBatch.positions for more details.
 	//
@@ -114,14 +113,6 @@ type Result struct {
 	position int
 }
 
-// ResultMemoryToken represents a handle to a Result's memory tracking. The
-// recipient of a Result is required to call Release() when the Result is not in
-// use any more so that its memory is returned to the Streamer's budget.
-type ResultMemoryToken interface {
-	// Release decrements the refcount.
-	Release(context.Context)
-}
-
 // Hints provides different hints to the Streamer for optimization purposes.
 type Hints struct {
 	// UniqueRequests tells the Streamer that the requests will be unique. As
@@ -129,15 +120,19 @@ type Hints struct {
 	UniqueRequests bool
 }
 
-type resultMemoryToken struct {
-	budget    *budget
-	toRelease int64
-}
-
-var _ ResultMemoryToken = &resultMemoryToken{}
-
-func (t *resultMemoryToken) Release(ctx context.Context) {
-	t.budget.release(ctx, t.toRelease)
+// Release needs to be called by the recipient of the Result exactly once when
+// this Result is not needed any more. If this was the last (or only) reference
+// to this Result, the memory used by this Result is made available in the
+// Streamer's budget.
+//
+// Internally, Results are refcounted. Multiple Results referencing the same
+// GetResp/ScanResp can be returned from separate `GetResults()` calls, and the
+// Streamer internally does buffering and caching of Results - which also
+// contributes to the refcounts.
+func (r Result) Release(ctx context.Context) {
+	if r.memoryTok.budget != nil {
+		r.memoryTok.budget.release(ctx, r.memoryTok.toRelease)
+	}
 }
 
 // Streamer provides a streaming oriented API for reading from the KV layer. At
@@ -162,6 +157,8 @@ func (t *resultMemoryToken) Release(ctx context.Context) {
 //    if len(results) > 0 {
 //      processResults(results)
 //      // return to the client
+//      ...
+//      // when results are no longer needed, Release() them
 //    }
 //    // All previously enqueued requests have already been responded to.
 //    if moreRequestsToEnqueue {
@@ -863,7 +860,7 @@ func (w *workerCoordinator) asyncRequestCleanup() {
 // reconciles the budget so that the actual footprint of the response is
 // consumed. Each Result produced based on that response will track a part of
 // the memory reservation (according to the Result's footprint) that will be
-// returned back to the budget once Result.MemoryTok.Release is called.
+// returned back to the budget once Result.Release() is called.
 //
 // headOfLine indicates whether this request is the current head of the line.
 // Head-of-the-line requests are treated specially in a sense that they are
@@ -927,8 +924,8 @@ func (w *workerCoordinator) performRequestAsync(
 			var results []Result
 			var numCompleteGetResponses int
 			// memoryFootprintBytes tracks the total memory footprint of
-			// non-empty responses. This will be equal to the sum of the all
-			// resultMemoryTokens created.
+			// non-empty responses. This will be equal to the sum of memory
+			// tokens created for all Results.
 			var memoryFootprintBytes int64
 			var hasNonEmptyScanResponse bool
 			for i, resp := range br.Responses {
@@ -959,12 +956,10 @@ func (w *workerCoordinator) performRequestAsync(
 							// This currently only works because all requests
 							// are unique.
 							EnqueueKeysSatisfied: []int{enqueueKey},
-							MemoryTok: &resultMemoryToken{
-								toRelease: toRelease,
-								budget:    w.s.budget,
-							},
-							position: req.positions[i],
+							position:             req.positions[i],
 						}
+						result.memoryTok.budget = w.s.budget
+						result.memoryTok.toRelease = toRelease
 						memoryFootprintBytes += toRelease
 						results = append(results, result)
 						numCompleteGetResponses++
@@ -979,12 +974,10 @@ func (w *workerCoordinator) performRequestAsync(
 							// This currently only works because all requests
 							// are unique.
 							EnqueueKeysSatisfied: []int{enqueueKey},
-							MemoryTok: &resultMemoryToken{
-								toRelease: toRelease,
-								budget:    w.s.budget,
-							},
-							position: req.positions[i],
+							position:             req.positions[i],
 						}
+						result.memoryTok.budget = w.s.budget
+						result.memoryTok.toRelease = toRelease
 						result.ScanResp.ScanResponse = scan
 						// Complete field will be set below.
 						memoryFootprintBytes += toRelease
