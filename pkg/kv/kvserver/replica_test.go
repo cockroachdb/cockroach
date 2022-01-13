@@ -1286,7 +1286,17 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	}
 
 	for i, test := range testCases {
+		// Make a unique ProposedTS. Without this, we don't have replay protection.
+		// This can bite us at i=2, where the lease stays entirely identical and
+		// thus matches the predecessor lease even when replayed, meaning that the
+		// replay will also apply. This wouldn't be an issue (after all, the lease
+		// stays the same) but it does mean that the corresponding pending inflight
+		// proposal gets finished twice, which tickles an assertion in
+		// ApplySideEffects.
+		propTS := test.start.UnsafeToClockTimestamp()
+		propTS.Logical = int32(i)
 		if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+			ProposedTS: &propTS,
 			Start:      test.start.UnsafeToClockTimestamp(),
 			Expiration: test.expiration.Clone(),
 			Replica: roachpb.ReplicaDescriptor{
