@@ -64,17 +64,31 @@ func (ds *DistSender) RangeFeed(
 	withDiff bool,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
-	if len(spans) == 0 {
-		return errors.AssertionFailedf("expected at least 1 span, got none")
+	it := &fixedTimeIterator{
+		spans:     spans,
+		startTime: startFrom,
 	}
+	return ds.RangeFeedSpans(ctx, it, withDiff, eventCh)
+}
 
+// RangeFeedSpans is the same as RangeFeed, but gives the caller flexibility of specifying
+// different starting points for each range.
+func (ds *DistSender) RangeFeedSpans(
+	ctx context.Context,
+	spanIter TimeBoundSpanIterator,
+	withDiff bool,
+	eventCh chan<- *roachpb.RangeFeedEvent,
+) error {
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
-	rr := newRangeFeedRegistry(ctx, startFrom, withDiff)
+	rr := newRangeFeedRegistry(ctx, withDiff)
 	ds.activeRangeFeeds.Store(rr, nil)
 	defer ds.activeRangeFeeds.Delete(rr)
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	g := ctxgroup.WithContext(ctx)
 	// Goroutine that processes subdivided ranges and creates a rangefeed for
@@ -95,16 +109,49 @@ func (ds *DistSender) RangeFeed(
 	})
 
 	// Kick off the initial set of ranges.
-	for _, span := range spans {
-		rs, err := keys.SpanAddr(span)
+	numSpans := 0
+	for !spanIter.Done() {
+		sp, startFrom := spanIter.Next()
+		rs, err := keys.SpanAddr(sp)
 		if err != nil {
 			return err
 		}
+		numSpans++
 		g.GoCtx(func(ctx context.Context) error {
 			return ds.divideAndSendRangeFeedToRanges(ctx, rs, startFrom, rangeCh)
 		})
 	}
+
+	if numSpans == 0 {
+		return errors.AssertionFailedf("expected at least 1 span, got none")
+	}
+
 	return g.Wait()
+}
+
+// TimeBoundSpanIterator is an iterator that returns the set of spans along with their
+// start time.
+type TimeBoundSpanIterator interface {
+	Done() bool
+	Next() (roachpb.Span, hlc.Timestamp)
+}
+
+var _ TimeBoundSpanIterator = (*fixedTimeIterator)(nil)
+
+type fixedTimeIterator struct {
+	spans     []roachpb.Span
+	startTime hlc.Timestamp
+	pos       int
+}
+
+func (it *fixedTimeIterator) Done() bool {
+	return it.pos == len(it.spans)
+}
+
+func (it *fixedTimeIterator) Next() (roachpb.Span, hlc.Timestamp) {
+	s := it.spans[it.pos]
+	it.pos++
+	return s, it.startTime
 }
 
 // RangeFeedContext is the structure containing arguments passed to
@@ -113,9 +160,8 @@ type RangeFeedContext struct {
 	ID      int64  // unique ID identifying range feed.
 	CtxTags string // context tags
 
-	// StartFrom and withDiff options passed to RangeFeed call.
-	StartFrom hlc.Timestamp
-	WithDiff  bool
+	// WithDiff options passed to RangeFeed call.
+	WithDiff bool
 }
 
 // PartialRangeFeed structure describes the state of currently executing partial range feed.
@@ -192,13 +238,10 @@ type rangeFeedRegistry struct {
 	ranges sync.Map // map[*activeRangeFeed]nil
 }
 
-func newRangeFeedRegistry(
-	ctx context.Context, startFrom hlc.Timestamp, withDiff bool,
-) *rangeFeedRegistry {
+func newRangeFeedRegistry(ctx context.Context, withDiff bool) *rangeFeedRegistry {
 	rr := &rangeFeedRegistry{
 		RangeFeedContext: RangeFeedContext{
-			StartFrom: startFrom,
-			WithDiff:  withDiff,
+			WithDiff: withDiff,
 		},
 	}
 	rr.ID = *(*int64)(unsafe.Pointer(&rr))

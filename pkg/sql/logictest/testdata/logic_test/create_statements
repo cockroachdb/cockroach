@@ -35,7 +35,6 @@ create_statement  create_nofks  alter_statements  validate_statements
 CREATE TABLE crdb_internal.active_range_feeds (
    id INT8 NULL,
    tags STRING NULL,
-   startts STRING NULL,
    diff BOOL NULL,
    node_id INT8 NULL,
    range_id INT8 NULL,
@@ -46,7 +45,6 @@ CREATE TABLE crdb_internal.active_range_feeds (
 )  CREATE TABLE crdb_internal.active_range_feeds (
    id INT8 NULL,
    tags STRING NULL,
-   startts STRING NULL,
    diff BOOL NULL,
    node_id INT8 NULL,
    range_id INT8 NULL,
