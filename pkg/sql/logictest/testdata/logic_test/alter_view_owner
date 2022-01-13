@@ -58,10 +58,10 @@ ALTER VIEW s.vx OWNER TO root;
 # Other users must be owner to alter the owner.
 user testuser
 
-statement error pq: must be owner of table vx
+statement error pq: must be owner of table \"vx\"
 ALTER VIEW vx OWNER TO testuser2
 
-statement error pq: must be owner of table mvx
+statement error pq: must be owner of table \"mvx\"
 ALTER MATERIALIZED VIEW mvx OWNER TO testuser2
 
 # Non-superusers also must be a member of the new owning role.
