@@ -263,7 +263,5 @@ go_path(
     mode = "link",
     deps = [
         "//pkg/cmd/cockroach-short",
-        "//pkg/cmd/roachprod",
-        "//pkg/cmd/roachtest",
     ],
 )
