@@ -217,6 +217,8 @@ type Streamer struct {
 	waitForResults chan struct{}
 
 	mu struct {
+		// If the budget's mutex also needs to be locked, the budget's mutex
+		// must be acquired first.
 		syncutil.Mutex
 
 		avgResponseEstimator avgResponseEstimator
@@ -388,13 +390,22 @@ func (s *Streamer) Enqueue(
 	// TODO(yuzefovich): we might want to have more fine-grained lock
 	// acquisitions once pipelining is implemented.
 	s.mu.Lock()
+	locked := true
 	defer func() {
-		if retErr != nil && s.mu.err == nil {
-			// Set the error so that mainLoop of the worker coordinator exits
-			// as soon as possible, without issuing any more requests.
-			s.mu.err = retErr
+		if retErr != nil {
+			if !locked {
+				s.mu.Lock()
+				locked = true
+			}
+			if s.mu.err == nil {
+				// Set the error so that mainLoop of the worker coordinator
+				// exits as soon as possible, without issuing any more requests.
+				s.mu.err = retErr
+			}
 		}
-		s.mu.Unlock()
+		if locked {
+			s.mu.Unlock()
+		}
 	}()
 
 	if enqueueKeys != nil && len(enqueueKeys) != len(reqs) {
@@ -499,6 +510,12 @@ func (s *Streamer) Enqueue(
 			return err
 		}
 	}
+
+	// Release the Streamer's mutex so that there is no overlap with the
+	// budget's mutex - the budget's mutex needs to be acquired first in order
+	// to eliminate a potential deadlock.
+	s.mu.Unlock()
+	locked = false
 
 	// Account for the memory used by all the requests. We allow the budget to
 	// go into debt iff a single request was enqueued. This is needed to support

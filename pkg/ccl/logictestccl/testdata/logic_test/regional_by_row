@@ -293,7 +293,7 @@ public       regional_by_row_table_explicit_crdb_region_column  table  root   0 
 
 # Add a gc.ttlseconds to a partition and ensure it displays.
 statement ok
-SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = true;
+SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true;
 ALTER PARTITION "us-east-1" OF INDEX public.regional_by_row_table@regional_by_row_table_a_idx
 CONFIGURE ZONE USING gc.ttlseconds = 10
 

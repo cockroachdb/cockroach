@@ -27,6 +27,8 @@ import (
 // the budget provides blocking (via waitCh) until it gets out of debt.
 type budget struct {
 	mu struct {
+		// If the Streamer's mutex also needs to be locked, the budget's mutex
+		// must be acquired first.
 		syncutil.Mutex
 		// acc represents the current reservation of this budget against the
 		// root memory pool.
