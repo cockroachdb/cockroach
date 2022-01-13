@@ -105,6 +105,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterTransactionsTableID:       crdbInternalClusterTxnsTable,
 		catconstants.CrdbInternalClusterSessionsTableID:           crdbInternalClusterSessionsTable,
 		catconstants.CrdbInternalClusterSettingsTableID:           crdbInternalClusterSettingsTable,
+		catconstants.CrdbInternalClusterStmtStatsTableID:          crdbInternalClusterStmtStatsTable,
 		catconstants.CrdbInternalCreateSchemaStmtsTableID:         crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:               crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:           crdbInternalCreateTypeStmtsTable,
@@ -139,7 +140,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalSchemaChangesTableID:             crdbInternalSchemaChangesTable,
 		catconstants.CrdbInternalSessionTraceTableID:              crdbInternalSessionTraceTable,
 		catconstants.CrdbInternalSessionVariablesTableID:          crdbInternalSessionVariablesTable,
-		catconstants.CrdbInternalStmtStatsTableID:                 crdbInternalStmtStatsTable,
+		catconstants.CrdbInternalStmtStatsTableID:                 crdbInternalStmtStatsView,
 		catconstants.CrdbInternalTableColumnsTableID:              crdbInternalTableColumnsTable,
 		catconstants.CrdbInternalTableIndexesTableID:              crdbInternalTableIndexesTable,
 		catconstants.CrdbInternalTablesTableLastStatsID:           crdbInternalTablesTableLastStats,
@@ -1053,6 +1054,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}, statementVisitor)
 	},
 }
+
+var crdbInternalTransactionStatisticsTable2 = virtualSchemaView{}
 
 // TODO(arul): Explore updating the schema below to have key be an INT and
 // statement_ids be INT[] now that we've moved to having uint64 as the type of
@@ -4981,12 +4984,12 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 	},
 }
 
-var crdbInternalStmtStatsTable = virtualSchemaTable{
+var crdbInternalClusterStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (cluster-wide).` +
-		`Querying this table is an expensive operation since it creates a ` +
+		`Querying this table is a somewhat operation since it creates a ` +
 		`cluster-wide RPC-fanout.`,
 	schema: `
-CREATE TABLE crdb_internal.statement_statistics (
+CREATE TABLE crdb_internal.cluster_statement_statistics (
     aggregated_ts              TIMESTAMPTZ NOT NULL,
     fingerprint_id             BYTES NOT NULL,
     transaction_fingerprint_id BYTES NOT NULL,
@@ -5020,18 +5023,9 @@ CREATE TABLE crdb_internal.statement_statistics (
 			return nil, nil, err
 		}
 
-		execCfg := p.ExecCfg()
-		sqlStats := persistedsqlstats.New(&persistedsqlstats.Config{
-			Settings:         execCfg.Settings,
-			InternalExecutor: execCfg.InternalExecutor,
-			KvDB:             execCfg.DB,
-			SQLIDContainer:   execCfg.NodeID,
-			Knobs:            execCfg.SQLStatsTestingKnobs,
-		}, memSQLStats)
-
 		row := make(tree.Datums, 8 /* number of columns for this virtual table */)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
+			return memSQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
 			}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
@@ -5083,6 +5077,47 @@ CREATE TABLE crdb_internal.statement_statistics (
 			})
 		}
 		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+var crdbInternalStmtStatsView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.statement_statistics AS
+SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    metadata,
+    statistics,
+    sampled_plan,
+    aggregation_interval
+FROM
+    crdb_internal.cluster_statement_statistics
+UNION ALL
+    SELECT
+        aggregated_ts,
+        fingerprint_id,
+        transaction_fingerprint_id,
+        plan_hash,
+        app_name,
+        metadata,
+        statistics,
+        plan,
+        agg_interval
+    FROM
+        system.statement_statistics`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "transaction_fingerprint_id", Typ: types.Bytes},
+		{Name: "plan_hash", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "sampled_plan", Typ: types.Jsonb},
+		{Name: "aggregation_interval", Typ: types.Interval},
 	},
 }
 

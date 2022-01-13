@@ -96,6 +96,7 @@ const (
 	CrdbInternalClusterTransactionsTableID
 	CrdbInternalClusterSessionsTableID
 	CrdbInternalClusterSettingsTableID
+	CrdbInternalClusterStmtStatsTableID
 	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
