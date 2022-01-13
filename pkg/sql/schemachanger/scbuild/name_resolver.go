@@ -33,6 +33,9 @@ func (b buildCtx) ResolveDatabase(
 		if p.IsExistenceOptional {
 			return nil
 		}
+		if string(name) == "" {
+			panic(pgerror.New(pgcode.Syntax, "empty database name"))
+		}
 		panic(sqlerrors.NewUndefinedDatabaseError(name.String()))
 	}
 	if err := b.AuthorizationAccessor().CheckPrivilege(b, db, p.RequiredPrivilege); err != nil {
@@ -50,7 +53,7 @@ func (b buildCtx) ResolveSchema(
 		if p.IsExistenceOptional {
 			return db, nil
 		}
-		panic(sqlerrors.NewUndefinedSchemaError(name.String()))
+		panic(sqlerrors.NewUndefinedSchemaError(name.Schema()))
 	}
 	switch sc.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
