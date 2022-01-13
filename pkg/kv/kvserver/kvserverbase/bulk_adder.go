@@ -71,6 +71,15 @@ type BulkAdderOptions struct {
 	// WriteAtRequestTime is used to set the corresponding field when sending
 	// constructed SSTables to AddSSTable. See roachpb.AddSSTableRequest.
 	WriteAtRequestTime bool
+
+	// InitialSplitsIfUnordered specifies a number of splits to make before the
+	// first flush of the buffer if the contents of that buffer were unsorted.
+	// Being unsorted suggests the remaining input is likely unsorted as well and
+	// thus future flushes and flushes on other nodes will overlap, so we want to
+	// pre-split the target span now before we start filling it, using the keys in
+	// the first buffer to pick split points in the hope it is a representative
+	// sample of the overall input.
+	InitialSplitsIfUnordered int
 }
 
 // DisableExplicitSplits can be returned by a SplitAndScatterAfter function to
