@@ -244,6 +244,7 @@ export class StatementsPage extends React.Component<
 
   componentDidMount(): void {
     this.refreshStatements();
+    this.updateQueryParams();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
     }
@@ -282,8 +283,6 @@ export class StatementsPage extends React.Component<
   }
 
   componentDidUpdate = (): void => {
-    this.updateQueryParams();
-    this.refreshStatements();
     if (!this.props.isTenant) {
       this.props.refreshStatementDiagnosticsRequests();
     }
