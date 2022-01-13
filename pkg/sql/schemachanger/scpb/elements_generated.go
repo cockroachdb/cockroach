@@ -432,3 +432,81 @@ func ForEachCheckConstraintTypeReference(
 		}
 	})
 }
+
+func (e TableComment) element() {}
+
+// ForEachTableComment iterates over nodes of type TableComment.
+func ForEachTableComment(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *TableComment),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*TableComment); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
+
+func (e DatabaseComment) element() {}
+
+// ForEachDatabaseComment iterates over nodes of type DatabaseComment.
+func ForEachDatabaseComment(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *DatabaseComment),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*DatabaseComment); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
+
+func (e SchemaComment) element() {}
+
+// ForEachSchemaComment iterates over nodes of type SchemaComment.
+func ForEachSchemaComment(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *SchemaComment),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*SchemaComment); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
+
+func (e IndexComment) element() {}
+
+// ForEachIndexComment iterates over nodes of type IndexComment.
+func ForEachIndexComment(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *IndexComment),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*IndexComment); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
+
+func (e ColumnComment) element() {}
+
+// ForEachColumnComment iterates over nodes of type ColumnComment.
+func ForEachColumnComment(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *ColumnComment),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*ColumnComment); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
+
+func (e ConstraintComment) element() {}
+
+// ForEachConstraintComment iterates over nodes of type ConstraintComment.
+func ForEachConstraintComment(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *ConstraintComment),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*ConstraintComment); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}

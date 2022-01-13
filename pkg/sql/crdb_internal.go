@@ -4313,7 +4313,7 @@ CREATE TABLE crdb_internal.predefined_comments (
 	populate: func(
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
-		tableCommentKey := tree.NewDInt(keys.TableCommentType)
+		tableCommentKey := tree.NewDInt(tree.DInt(keys.TableCommentType))
 		vt := p.getVirtualTabler()
 		vEntries := vt.getSchemas()
 		vSchemaNames := vt.getSchemaNames()
