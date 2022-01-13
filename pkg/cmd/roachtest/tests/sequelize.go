@@ -23,7 +23,7 @@ import (
 )
 
 var sequelizeCockroachDBReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedSequelizeCockroachDBRelease = "v6.0.3"
+var supportedSequelizeCockroachDBRelease = "v6.0.5"
 
 // This test runs sequelize's full test suite against a single cockroach node.
 

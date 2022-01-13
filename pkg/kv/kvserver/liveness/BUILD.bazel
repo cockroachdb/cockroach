@@ -41,9 +41,6 @@ go_test(
     embed = [":liveness"],
     deps = [
         "//pkg/base",
-        "//pkg/config",
-        "//pkg/config/zonepb",
-        "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb:with-mocks",
@@ -63,7 +60,6 @@ go_test(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
-        "@com_github_gogo_protobuf//proto",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

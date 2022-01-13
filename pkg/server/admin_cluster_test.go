@@ -55,12 +55,17 @@ func TestAdminAPIDatabaseDetails(t *testing.T) {
 	require.NoError(t, serverutils.GetJSONProto(s, "/_admin/v1/databases/test", &resp))
 	assert.Nil(t, resp.Stats, "No Stats unless we ask for them explicitly.")
 
+	nodeIDs := []roachpb.NodeID{1, 2, 3}
 	testutils.SucceedsSoon(t, func() error {
 		var resp serverpb.DatabaseDetailsResponse
 		require.NoError(t, serverutils.GetJSONProto(s, "/_admin/v1/databases/test?include_stats=true", &resp))
 
-		nodeIDs := []roachpb.NodeID{1, 2, 3}
-		assert.Equal(t, int64(1), resp.Stats.RangeCount, "RangeCount")
+		if resp.Stats.RangeCount != int64(1) {
+			return errors.Newf("expected range-count=1, got %d", resp.Stats.RangeCount)
+		}
+		if len(resp.Stats.NodeIDs) != len(nodeIDs) {
+			return errors.Newf("expected node-ids=%s, got %s", nodeIDs, resp.Stats.NodeIDs)
+		}
 		assert.Equal(t, nodeIDs, resp.Stats.NodeIDs, "NodeIDs")
 
 		// TODO(todd): Find a way to produce a non-zero value here that doesn't require writing a million rows.

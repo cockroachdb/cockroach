@@ -32,17 +32,21 @@ import (
 // cluster while providing convenient, scoped access to each tenant's specific
 // span config primitives. It's not safe for concurrent use.
 type Handle struct {
-	t  *testing.T
-	tc *testcluster.TestCluster
-	ts map[roachpb.TenantID]*Tenant
+	t       *testing.T
+	tc      *testcluster.TestCluster
+	ts      map[roachpb.TenantID]*Tenant
+	scKnobs *spanconfig.TestingKnobs
 }
 
 // NewHandle returns a new Handle.
-func NewHandle(t *testing.T, tc *testcluster.TestCluster) *Handle {
+func NewHandle(
+	t *testing.T, tc *testcluster.TestCluster, scKnobs *spanconfig.TestingKnobs,
+) *Handle {
 	return &Handle{
-		t:  t,
-		tc: tc,
-		ts: make(map[roachpb.TenantID]*Tenant),
+		t:       t,
+		tc:      tc,
+		ts:      make(map[roachpb.TenantID]*Tenant),
+		scKnobs: scKnobs,
 	}
 }
 
@@ -56,7 +60,12 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		tenantState.db = sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
 		tenantState.cleanup = func() {} // noop
 	} else {
-		tenantArgs := base.TestTenantArgs{TenantID: tenID}
+		tenantArgs := base.TestTenantArgs{
+			TenantID: tenID,
+			TestingKnobs: base.TestingKnobs{
+				SpanConfig: h.scKnobs,
+			},
+		}
 		var err error
 		tenantState.TestTenantInterface, err = testServer.StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)

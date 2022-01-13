@@ -31,11 +31,11 @@ import (
 // checkReconciliationJobInterval is a cluster setting to control how often we
 // check if the span config reconciliation job exists. If it's not found, it
 // will be started. It has no effect unless
-// spanconfig.experimental_reconciliation.enabled is configured. For host
+// spanconfig.reconciliation_job.enabled is configured. For host
 // tenants, COCKROACH_EXPERIMENTAL_SPAN_CONFIGS needs to be additionally set.
 var checkReconciliationJobInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
-	"spanconfig.experimental_reconciliation_job.check_interval",
+	"spanconfig.reconciliation_job.check_interval",
 	"the frequency at which to check if the span config reconciliation job exists (and to start it if not)",
 	10*time.Minute,
 	settings.NonNegativeDuration,
@@ -45,9 +45,12 @@ var checkReconciliationJobInterval = settings.RegisterDurationSetting(
 //
 // For the host tenant it has no effect unless
 // COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is also set.
+//
+// TODO(irfansharif): This should be a tenant read-only setting once the work
+// for #73349 is completed.
 var jobEnabledSetting = settings.RegisterBoolSetting(
 	settings.TenantWritable,
-	"spanconfig.experimental_reconciliation_job.enabled",
+	"spanconfig.reconciliation_job.enabled",
 	"enable the use of the kv accessor", false)
 
 // Manager is the coordinator of the span config subsystem. It ensures that

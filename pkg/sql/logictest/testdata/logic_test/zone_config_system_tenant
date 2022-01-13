@@ -9,7 +9,7 @@ ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
 
 # Should have no effect on the system tenant.
 statement ok
-SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = false
+SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = false
 
 statement ok
 ALTER TABLE t CONFIGURE ZONE USING num_replicas = 3;

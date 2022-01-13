@@ -15,7 +15,7 @@ INSERT INTO t VALUES (1);
 # read, we should always be looking at the leaseholder in the nearest_only=False
 # case. We always do bounded staleness reads from node_idx 2, as node_idx 0 in a
 # TestCluster is always the leaseholder.
-query idx=2
+query idx=2 wait-until-match
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1μs') WHERE pk = 1
 ----
 1
