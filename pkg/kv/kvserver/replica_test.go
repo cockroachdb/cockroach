@@ -7801,7 +7801,8 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	}
 
 	// Test LeaseRequest since it's special: MaxLeaseIndex plays no role and so
-	// there is no re-evaluation of the request.
+	// there is no re-evaluation of the request. Replay protection is conferred
+	// by the lease sequence.
 	atomic.StoreInt32(&c, 0)
 	{
 		prevLease, _ := tc.repl.GetLease()
@@ -7810,6 +7811,8 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 		lease := prevLease
 		lease.Sequence = 0
+		now := tc.Clock().Now().UnsafeToClockTimestamp()
+		lease.ProposedTS = &now
 
 		ba.Add(&roachpb.RequestLeaseRequest{
 			RequestHeader: roachpb.RequestHeader{
