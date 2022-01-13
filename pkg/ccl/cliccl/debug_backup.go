@@ -600,8 +600,7 @@ func makeRowFetcher(
 		false, /*reverse*/
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /*isCheck*/
+		0, /* lockTimeout */
 		&tree.DatumAlloc{},
 		nil, /*mon.BytesMonitor*/
 		table,

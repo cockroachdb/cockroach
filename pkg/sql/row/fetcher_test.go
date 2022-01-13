@@ -69,8 +69,7 @@ func initFetcher(
 		reverseScan,
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		alloc,
 		memMon,
 		fetcherArgs,
@@ -766,8 +765,7 @@ func TestRowFetcherReset(t *testing.T) {
 		false, /*reverse*/
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&da,
 		nil, /* memMonitor */
 		fetcherArgs,

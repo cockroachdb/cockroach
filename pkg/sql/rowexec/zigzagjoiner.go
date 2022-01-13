@@ -489,7 +489,6 @@ func (z *zigzagJoiner) setupInfo(
 		catalog.ColumnIDToOrdinalMap(info.table.PublicColumns()),
 		false, /* reverse */
 		neededCols,
-		false, /* check */
 		flowCtx.EvalCtx.Mon,
 		info.alloc,
 		execinfra.ScanVisibilityPublic,

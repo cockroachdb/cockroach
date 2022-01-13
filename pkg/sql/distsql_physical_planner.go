@@ -1102,11 +1102,13 @@ func getIndexIdx(index catalog.Index, desc catalog.TableDescriptor) (uint32, err
 func initTableReaderSpec(
 	n *scanNode,
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
+	if n.isCheck {
+		return nil, execinfrapb.PostProcessSpec{}, errors.AssertionFailedf("isCheck no longer supported")
+	}
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
 		Table:             *n.desc.TableDesc(),
 		Reverse:           n.reverse,
-		IsCheck:           n.isCheck,
 		Visibility:        n.colCfg.visibility,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
@@ -1121,13 +1123,6 @@ func initTableReaderSpec(
 		return nil, execinfrapb.PostProcessSpec{}, err
 	}
 	s.IndexIdx = indexIdx
-
-	// When a TableReader is running scrub checks, do not allow a
-	// post-processor. This is because the outgoing stream is a fixed
-	// format (rowexec.ScrubTypes).
-	if n.isCheck {
-		return s, execinfrapb.PostProcessSpec{}, nil
-	}
 
 	var post execinfrapb.PostProcessSpec
 	if n.hardLimit != 0 {
@@ -4044,7 +4039,6 @@ func checkScanParallelizationIfLocal(
 				}
 				return true, nil
 			case *scanNode:
-				prohibitParallelization = n.isCheck
 				if len(n.reqOrdering) == 0 && n.parallelize {
 					hasScanNodeToParallelize = true
 				}

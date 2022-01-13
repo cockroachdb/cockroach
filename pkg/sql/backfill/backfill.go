@@ -156,8 +156,7 @@ func (cb *ColumnBackfiller) init(
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&cb.alloc,
 		cb.mon,
 		tableArgs,
@@ -839,8 +838,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&ib.alloc,
 		ib.mon,
 		tableArgs,

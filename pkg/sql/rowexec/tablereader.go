@@ -153,7 +153,6 @@ func newTableReader(
 		columnIdxMap,
 		spec.Reverse,
 		neededColumns,
-		spec.IsCheck,
 		flowCtx.EvalCtx.Mon,
 		&tr.alloc,
 		spec.Visibility,
