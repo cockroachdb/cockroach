@@ -309,6 +309,12 @@ func (r *Replica) adminSplitWithDescriptor(
 
 	var reply roachpb.AdminSplitResponse
 
+	for _, k := range args.PredicateKeys {
+		if !kvserverbase.ContainsKey(desc, k) {
+			return reply, errors.Errorf("requested predicate key %s out of bounds of %s", k, r)
+		}
+	}
+
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
