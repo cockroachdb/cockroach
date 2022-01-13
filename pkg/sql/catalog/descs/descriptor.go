@@ -277,10 +277,7 @@ func getSchemaByName(
 			AvoidLeased:    avoidLeased,
 			AvoidSynthetic: avoidSynthetic,
 		})
-		// Deal with the fact that ByID retrieval always uses required and the
-		// logic here never returns an error if the descriptor does not exist.
-		if errors.Is(err, catalog.ErrDescriptorNotFound) ||
-			errors.Is(err, catalog.ErrDescriptorDropped) {
+		if errors.Is(err, catalog.ErrDescriptorDropped) {
 			err = nil
 		}
 		return sc != nil, sc, err

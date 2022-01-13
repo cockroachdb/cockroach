@@ -31,8 +31,8 @@ type commentOnConstraintNode struct {
 	commenter scexec.CommentUpdater
 }
 
-//CommentOnConstraint add comment on a constraint
-//Privileges: CREATE on table
+// CommentOnConstraint add comment on a constraint
+// Privileges: CREATE on table
 func (p *planner) CommentOnConstraint(
 	ctx context.Context, n *tree.CommentOnConstraint,
 ) (planNode, error) {
@@ -70,7 +70,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 		return err
 	}
 	schema, err := params.p.Descriptors().GetImmutableSchemaByID(
-		params.ctx, params.extendedEvalCtx.Txn, n.tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{},
+		params.ctx, params.extendedEvalCtx.Txn, n.tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true},
 	)
 	if err != nil {
 		return err

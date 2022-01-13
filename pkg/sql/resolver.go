@@ -455,7 +455,7 @@ func (p *planner) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	sc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+		ctx, p.txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
@@ -731,9 +731,9 @@ func (p *planner) getQualifiedTableName(
 			AvoidLeased:    true,
 		})
 	switch {
-	case err == nil:
+	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())
-	case desc.IsTemporary() && errors.Is(err, catalog.ErrDescriptorNotFound):
+	case desc.IsTemporary() && scDesc == nil:
 		// We've lost track of the session which owned this schema, but we
 		// can come up with a name that is also going to be unique and
 		// informative and looks like a pg_temp_<session_id> name.
@@ -809,7 +809,7 @@ func (p *planner) getQualifiedTypeName(
 
 	schemaID := desc.GetParentSchemaID()
 	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.txn, schemaID, tree.SchemaLookupFlags{},
+		ctx, p.txn, schemaID, tree.SchemaLookupFlags{Required: true},
 	)
 	if err != nil {
 		return nil, err

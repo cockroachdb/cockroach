@@ -1178,7 +1178,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		if len(rows) > 0 {
 			// Use an FQN in the error message.
 			parentSchema, err := descsCol.GetImmutableSchemaByID(
-				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
 			if err != nil {
 				return err
 			}
