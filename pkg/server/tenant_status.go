@@ -463,7 +463,7 @@ func (t *tenantStatusServer) CombinedStatementStats(
 	}
 
 	return getCombinedStatementStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
-		t.sqlServer.internalExecutor)
+		t.sqlServer.internalExecutor, t.st, t.sqlServer.execCfg.SQLStatsTestingKnobs)
 }
 
 // Statements implements the relevant endpoint on the StatusServer by
