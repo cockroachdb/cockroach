@@ -351,14 +351,15 @@ func ingestKvs(
 	minBufferSize, maxBufferSize, stepSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
 		true /* isPKAdder */)
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
-		Name:                   "pkAdder",
-		DisallowShadowingBelow: writeTS,
-		SkipDuplicates:         true,
-		MinBufferSize:          minBufferSize,
-		MaxBufferSize:          maxBufferSize,
-		StepBufferSize:         stepSize,
-		SSTSize:                flushSize,
-		WriteAtRequestTime:     writeAtRequestTime,
+		Name:                     "pkAdder",
+		DisallowShadowingBelow:   writeTS,
+		SkipDuplicates:           true,
+		MinBufferSize:            minBufferSize,
+		MaxBufferSize:            maxBufferSize,
+		StepBufferSize:           stepSize,
+		SSTSize:                  flushSize,
+		InitialSplitsIfUnordered: int(spec.InitialSplits),
+		WriteAtRequestTime:       writeAtRequestTime,
 	})
 	if err != nil {
 		return nil, err
@@ -368,14 +369,15 @@ func ingestKvs(
 	minBufferSize, maxBufferSize, stepSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
 		false /* isPKAdder */)
 	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
-		Name:                   "indexAdder",
-		DisallowShadowingBelow: writeTS,
-		SkipDuplicates:         true,
-		MinBufferSize:          minBufferSize,
-		MaxBufferSize:          maxBufferSize,
-		StepBufferSize:         stepSize,
-		SSTSize:                flushSize,
-		WriteAtRequestTime:     writeAtRequestTime,
+		Name:                     "indexAdder",
+		DisallowShadowingBelow:   writeTS,
+		SkipDuplicates:           true,
+		MinBufferSize:            minBufferSize,
+		MaxBufferSize:            maxBufferSize,
+		StepBufferSize:           stepSize,
+		SSTSize:                  flushSize,
+		InitialSplitsIfUnordered: int(spec.InitialSplits),
+		WriteAtRequestTime:       writeAtRequestTime,
 	})
 	if err != nil {
 		return nil, err
