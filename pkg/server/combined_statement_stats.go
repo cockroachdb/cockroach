@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -68,11 +69,27 @@ func getCombinedStatementStats(
 		return nil, err
 	}
 
+	earliestStatementAggregatedTs, err := statsProvider.(*persistedsqlstats.PersistedSQLStats).GetEarliestStatementAggregatedTs(
+		ctx,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	earliestTransactionAggregatedTs, err := statsProvider.(*persistedsqlstats.PersistedSQLStats).GetEarliestTransactionAggregatedTs(
+		ctx,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	response := &serverpb.StatementsResponse{
-		Statements:            statements,
-		Transactions:          transactions,
-		LastReset:             statsProvider.GetLastReset(),
-		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
+		Statements:                      statements,
+		Transactions:                    transactions,
+		LastReset:                       statsProvider.GetLastReset(),
+		InternalAppNamePrefix:           catconstants.InternalAppNamePrefix,
+		EarliestStatementAggregatedTs:   earliestStatementAggregatedTs,
+		EarliestTransactionAggregatedTs: earliestTransactionAggregatedTs,
 	}
 
 	return response, nil
