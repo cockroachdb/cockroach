@@ -141,6 +141,7 @@ WHERE
   s.app_name = 'test' AND
   encode(s.transaction_fingerprint_id, 'hex') = encode(t.fingerprint_id, 'hex') AND
   jsonb_array_length(t.metadata -> 'stmtFingerprintIDs') >= 3
+ORDER BY s.transaction_fingerprint_id, s.metadata ->> 'query'
 ----
 df3c70bf7729b43f,175a20896dca7754,SELECT _,1
 15c74af7a18bd6d6,175a20896dca7754,SELECT _, _,2
