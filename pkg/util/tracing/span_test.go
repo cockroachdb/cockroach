@@ -548,6 +548,31 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	require.Equal(t, 2, int(counter))
 }
 
+// Check that recordings have the "_verbose" marker tag only while the
+// respective span is recording verbosely.
+func TestVerboseTag(t *testing.T) {
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
+	sp := tr.StartSpan("root")
+	defer sp.Finish()
+
+	sp.SetRecordingType(RecordingStructured)
+	rec := sp.GetRecording(RecordingVerbose)
+	_, ok := rec[0].Tags["_verbose"]
+	require.False(t, ok)
+
+	// The tag is present while the span is recording verbosely.
+	sp.SetRecordingType(RecordingVerbose)
+	rec = sp.GetRecording(RecordingVerbose)
+	_, ok = rec[0].Tags["_verbose"]
+	require.True(t, ok)
+
+	// After we stop recording, the tag goes away.
+	sp.SetRecordingType(RecordingStructured)
+	rec = sp.GetRecording(RecordingVerbose)
+	_, ok = rec[0].Tags["_verbose"]
+	require.False(t, ok)
+}
+
 func TestStructureRecording(t *testing.T) {
 	for _, finishCh1 := range []bool{true, false} {
 		t.Run(fmt.Sprintf("finish1=%t", finishCh1), func(t *testing.T) {

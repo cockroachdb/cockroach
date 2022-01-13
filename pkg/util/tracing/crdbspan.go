@@ -674,7 +674,9 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		if !finishing && !s.mu.finished {
 			addTag("_unfinished", "1")
 		}
-		addTag("_verbose", "1")
+		if s.recordingType() == RecordingVerbose {
+			addTag("_verbose", "1")
+		}
 		if s.mu.recording.dropped {
 			addTag("_dropped", "1")
 		}
