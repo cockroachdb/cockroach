@@ -105,6 +105,10 @@ func dropViewDependents(b BuildCtx, view catalog.TableDescriptor, behavior tree.
 					name.Object(), depViewName.Object()))
 			}
 		}
+		onErrPanic(b.AuthorizationAccessor().CheckPrivilege(
+			b.EvalCtx().Ctx(),
+			dependentDesc,
+			privilege.DROP))
 		// Decompose and recursively attempt to drop.
 		dropView(b, dependentDesc, behavior)
 	})
