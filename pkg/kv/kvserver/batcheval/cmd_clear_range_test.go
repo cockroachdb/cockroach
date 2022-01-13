@@ -64,6 +64,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	overFull := ClearRangeBytesThreshold/len(valueStr) + 1
 	tests := []struct {
 		keyCount           int
+		estimatedStats     bool
 		expClearIterCount  int
 		expClearRangeCount int
 	}{
@@ -84,6 +85,13 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			expClearIterCount:  0,
 			expClearRangeCount: 1,
 		},
+		// Estimated stats always use ClearRange.
+		{
+			keyCount:           1,
+			estimatedStats:     true,
+			expClearIterCount:  0,
+			expClearRangeCount: 1,
+		},
 	}
 
 	for _, test := range tests {
@@ -98,6 +106,9 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 				if err := storage.MVCCPut(ctx, eng, &stats, key, hlc.Timestamp{WallTime: int64(i % 2)}, value, nil); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if test.estimatedStats {
+				stats.ContainsEstimates++
 			}
 
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
@@ -120,10 +131,12 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Verify cArgs.Stats is equal to the stats we wrote.
+			// Verify cArgs.Stats is equal to the stats we wrote, ignoring some values.
 			newStats := stats
-			newStats.SysBytes, newStats.SysCount, newStats.AbortSpanBytes = 0, 0, 0          // ignore these values
-			cArgs.Stats.SysBytes, cArgs.Stats.SysCount, cArgs.Stats.AbortSpanBytes = 0, 0, 0 // these too, as GC threshold is updated
+			newStats.ContainsEstimates, cArgs.Stats.ContainsEstimates = 0, 0
+			newStats.SysBytes, cArgs.Stats.SysBytes = 0, 0
+			newStats.SysCount, cArgs.Stats.SysCount = 0, 0
+			newStats.AbortSpanBytes, cArgs.Stats.AbortSpanBytes = 0, 0
 			newStats.Add(*cArgs.Stats)
 			newStats.AgeTo(0) // pin at LastUpdateNanos==0
 			if !newStats.Equal(enginepb.MVCCStats{}) {
