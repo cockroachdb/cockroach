@@ -1,0 +1,84 @@
+# Create a database with some tables and write protected timestamps on the
+# tables and database. Check that span configurations are as we expect.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1(id INT);
+CREATE TABLE db.t2();
+----
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t1'
+----
+56
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t2'
+----
+57
+
+# We only expect there to be span config entries for tables t1 and t2.
+translate database=db
+----
+/Table/5{6-7}                              range default
+/Table/5{7-8}                              range default
+
+# Alter zone config fields on the database and one of the tables to ensure
+# things are cascading.
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
+----
+
+# Write a protected timestamp on t1.
+protect database=db table=t1 id=1 ts=1
+----
+
+translate database=db
+----
+/Table/5{6-7}                              num_replicas=7 num_voters=5 pts=[1]
+/Table/5{7-8}                              num_replicas=7
+
+# Write a protected timestamp on db, so we should see it on both t1 and t2.
+protect database=db id=2 ts=2
+----
+
+translate database=db
+----
+/Table/5{6-7}                              num_replicas=7 num_voters=5 pts=[1 2]
+/Table/5{7-8}                              num_replicas=7 pts=[2]
+
+# Release the protected timestamp on table t1
+release id=1
+----
+
+translate database=db
+----
+/Table/5{6-7}                              num_replicas=7 num_voters=5 pts=[2]
+/Table/5{7-8}                              num_replicas=7 pts=[2]
+
+# Release the protected timestamp on database db
+release id=2
+----
+
+translate database=db
+----
+/Table/5{6-7}                              num_replicas=7 num_voters=5
+/Table/5{7-8}                              num_replicas=7
+
+# Create an index on t1 to ensure that subzones also see protected timestamps.
+exec-sql
+CREATE INDEX idx ON db.t1(id);
+ALTER INDEX db.t1@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+protect database=db table=t1 id=3 ts=3
+----
+
+translate database=db
+----
+/Table/56{-/2}                             num_replicas=7 num_voters=5 pts=[3]
+/Table/56/{2-3}                            ttl_seconds=1 num_replicas=7 num_voters=5 pts=[3]
+/Table/5{6/3-7}                            num_replicas=7 num_voters=5 pts=[3]
+/Table/5{7-8}                              num_replicas=7
+

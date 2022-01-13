@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -69,6 +70,14 @@ func (s *SQLTranslator) Translate(
 		// attempts.
 		entries = entries[:0]
 
+		// Construct an in-memory view of the system.protected_ts_records table to
+		// populate the protected timestamp field on the emitted span configs.
+		ptsTableReader, err := spanconfigprotectedts.New(ctx,
+			spanconfigprotectedts.ProdSystemProtectedTimestampTable, s.execCfg.InternalExecutor, txn)
+		if err != nil {
+			return errors.Wrap(err, "failed to initialize protectedts table reader")
+		}
+
 		// For every ID we want to translate, first expand it to descendant leaf
 		// IDs that have span configurations associated for them. We also
 		// de-duplicate leaf IDs to not generate redundant entries.
@@ -95,7 +104,7 @@ func (s *SQLTranslator) Translate(
 
 		// For every unique leaf ID, generate span configurations.
 		for _, leafID := range leafIDs {
-			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol)
+			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol, ptsTableReader)
 			if err != nil {
 				return err
 			}
@@ -126,7 +135,11 @@ var descLookupFlags = tree.CommonLookupFlags{
 // ID. The ID must belong to an object that has a span configuration associated
 // with it, i.e, it should either belong to a table or a named zone.
 func (s *SQLTranslator) generateSpanConfigurations(
-	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
+	ctx context.Context,
+	id descpb.ID,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	ptsTableReader spanconfig.ProtectedTimestampTableReader,
 ) (entries []roachpb.SpanConfigEntry, err error) {
 	if zonepb.IsNamedZoneID(id) {
 		return s.generateSpanConfigurationsForNamedZone(ctx, txn, id)
@@ -150,7 +163,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 		)
 	}
 
-	return s.generateSpanConfigurationsForTable(ctx, txn, desc)
+	return s.generateSpanConfigurationsForTable(ctx, txn, desc, ptsTableReader)
 }
 
 // generateSpanConfigurationsForNamedZone expects an ID corresponding to a named
@@ -214,11 +227,55 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 	return entries, nil
 }
 
+// setProtectedTimestampsForTable aggregates the protected timestamps that apply
+// to the table and sets the field in the table's generated span configs.
+// This includes protected timestamps that apply to the table, and its parent
+// database.
+//
+// This method mutates the passed in `entries`.
+func setProtectedTimestampsForTable(
+	entries *[]roachpb.SpanConfigEntry,
+	desc catalog.Descriptor,
+	ptsTableReader spanconfig.ProtectedTimestampTableReader,
+) {
+	protectedTimestamps := make([]hlc.Timestamp, 0)
+	// Get protections that apply directly to the table.
+	protectedTimestamps = append(protectedTimestamps,
+		ptsTableReader.GetProtectedTimestampsForSchemaObject(desc.GetID())...)
+
+	// Get protections that apply to the database.
+	protectedTimestamps = append(protectedTimestamps,
+		ptsTableReader.GetProtectedTimestampsForSchemaObject(desc.GetParentID())...)
+
+	if len(protectedTimestamps) == 0 {
+		return
+	}
+
+	for i := range *entries {
+		(*entries)[i].Config.ProtectedTimestamps = protectedTimestamps
+	}
+}
+
+// hydrateSpanConfigurationsForTable hydrates fields in a table's span
+// configurations that are not derived from the table's zone configuration.
+//
+// This method mutates the passed in `entries`.
+func hydrateSpanConfigurationsForTable(
+	entries *[]roachpb.SpanConfigEntry,
+	desc catalog.Descriptor,
+	ptsTableReader spanconfig.ProtectedTimestampTableReader,
+) {
+	setProtectedTimestampsForTable(entries, desc, ptsTableReader)
+}
+
 // generateSpanConfigurationsForTable generates the span configurations
 // corresponding to the given tableID. It uses a transactional view of
 // system.zones and system.descriptors to do so.
 func (s *SQLTranslator) generateSpanConfigurationsForTable(
-	ctx context.Context, txn *kv.Txn, desc catalog.Descriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	desc catalog.Descriptor,
+	ptsTableReader spanconfig.ProtectedTimestampTableReader,
 ) ([]roachpb.SpanConfigEntry, error) {
 	if desc.DescriptorType() != catalog.Table {
 		return nil, errors.AssertionFailedf(
@@ -271,6 +328,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			})
 		}
 
+		hydrateSpanConfigurationsForTable(&entries, desc, ptsTableReader)
 		return entries, nil
 
 		// TODO(irfansharif): There's an attack vector here that we haven't
@@ -355,6 +413,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			},
 		)
 	}
+	hydrateSpanConfigurationsForTable(&entries, desc, ptsTableReader)
 	return entries, nil
 }
 

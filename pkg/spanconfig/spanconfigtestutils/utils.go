@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -235,6 +237,19 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 	}
 	if !reflect.DeepEqual(conf.LeasePreferences, defaultConf.LeasePreferences) {
 		diffs = append(diffs, fmt.Sprintf("lease_preferences=%v", conf.VoterConstraints))
+	}
+	if !reflect.DeepEqual(conf.ProtectedTimestamps, defaultConf.ProtectedTimestamps) {
+		sort.Slice(conf.ProtectedTimestamps, func(i, j int) bool {
+			return conf.ProtectedTimestamps[i].Less(conf.ProtectedTimestamps[j])
+		})
+		var s string
+		for i, pts := range conf.ProtectedTimestamps {
+			s += strconv.Itoa(int(pts.WallTime))
+			if i != len(conf.ProtectedTimestamps)-1 {
+				s += " "
+			}
+		}
+		diffs = append(diffs, fmt.Sprintf("pts=[%s]", s))
 	}
 
 	return strings.Join(diffs, " ")

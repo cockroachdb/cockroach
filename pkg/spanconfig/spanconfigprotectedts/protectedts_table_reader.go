@@ -83,11 +83,12 @@ var _ spanconfig.ProtectedTimestampTableReader = &ProtectedTimestampTableReader{
 // `ptsRecordSystemTable`.
 func New(
 	ctx context.Context, ptsRecordSystemTable string, ie sqlutil.InternalExecutor, txn *kv.Txn,
-) (*ProtectedTimestampTableReader, error) {
+) (spanconfig.ProtectedTimestampTableReader, error) {
 	reader := &ProtectedTimestampTableReader{protections: make(map[key][]hlc.Timestamp)}
 	if err := reader.loadProtectedTimestampRecords(ctx, ptsRecordSystemTable, ie, txn); err != nil {
 		return nil, err
 	}
+	fmt.Printf("this is the mapping: %+v\n\n", reader.protections)
 	return reader, nil
 }
 

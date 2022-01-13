@@ -458,7 +458,7 @@ func makeTenantSQLServerArgs(
 		if err != nil {
 			panic(err)
 		}
-		protectedTSProvider = dummyProtectedTSProvider{pp}
+		protectedTSProvider = dummyProtectedTSProvider{Provider: pp, st: st}
 	}
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
