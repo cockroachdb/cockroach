@@ -30,6 +30,15 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 		if sc == nil {
 			continue
 		}
+		if sc.GetName() == tree.PublicSchema {
+			panic(pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", sc.GetName()))
+		}
+		if sc.SchemaKind() == catalog.SchemaPublic ||
+			sc.SchemaKind() == catalog.SchemaVirtual ||
+			sc.SchemaKind() == catalog.SchemaTemporary {
+			panic(pgerror.Newf(pgcode.InvalidSchemaName,
+				"cannot drop schema %q", sc.GetName))
+		}
 		dropSchema(b, db, sc, n.DropBehavior)
 		b.IncrementSubWorkID()
 	}
