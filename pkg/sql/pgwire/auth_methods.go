@@ -111,7 +111,7 @@ func authPassword(
 	_ context.Context,
 	c AuthConn,
 	_ tls.ConnectionState,
-	_ *sql.ExecutorConfig,
+	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
 	_ *identmap.Conf,
 ) (*AuthBehaviors, error) {
@@ -123,7 +123,7 @@ func authPassword(
 		clientConnection bool,
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
-		return passwordAuthenticator(ctx, systemIdentity, clientConnection, pwRetrieveFn, c)
+		return passwordAuthenticator(ctx, systemIdentity, clientConnection, pwRetrieveFn, c, execCfg)
 	})
 	return b, nil
 }
@@ -138,6 +138,7 @@ func passwordAuthenticator(
 	clientConnection bool,
 	pwRetrieveFn PasswordRetrievalFn,
 	c AuthConn,
+	execCfg *sql.ExecutorConfig,
 ) error {
 	// First step: send a cleartext authentication request to the client.
 	if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
@@ -189,9 +190,25 @@ func passwordAuthenticator(
 	}
 
 	// Now check the cleartext password against the retrieved credentials.
-	return security.UserAuthPasswordHook(
+	err = security.UserAuthPasswordHook(
 		false /*insecure*/, password, hashedPassword,
 	)(ctx, systemIdentity, clientConnection)
+
+	if err == nil {
+		// Password authentication succeeded using cleartext.  If the
+		// stored hash was encoded using crdb-bcrypt, we might want to
+		// upgrade it to SCRAM instead.
+		//
+		// This auto-conversion is a CockroachDB-specific feature, which
+		// pushes clusters upgraded from a previous version into using
+		// SCRAM-SHA-256.
+		sql.MaybeUpgradeStoredPasswordHash(ctx,
+			execCfg,
+			systemIdentity,
+			password, hashedPassword)
+	}
+
+	return err
 }
 
 func passwordString(pwdData []byte) (string, error) {
@@ -500,7 +517,7 @@ func authAutoSelectPasswordProtocol(
 		if err == nil && hashedPassword.Method() == security.HashBCrypt {
 			// Yes: we have no choice but to request a cleartext password.
 			c.LogAuthInfof(ctx, "found stored crdb-bcrypt credentials; requesting cleartext password")
-			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c)
+			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
 		}
 
 		// Error, no credentials or stored SCRAM hash: use the
