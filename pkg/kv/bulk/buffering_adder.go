@@ -13,6 +13,7 @@ package bulk
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -308,8 +309,14 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 
 	for i := targetSize; i < b.curBuf.Len(); i += targetSize {
 		k := b.curBuf.Key(i)
+		prev := b.curBuf.Key(i - targetSize)
 		log.VEventf(ctx, 1, "splitting at key %d / %d: %s", i, b.curBuf.Len(), k)
-		if err := b.sink.db.SplitAndScatter(ctx, k, hour); err != nil {
+		if err := b.sink.db.SplitAndScatter(ctx, k, hour, prev); err != nil {
+			// TODO(dt): a typed error would be nice here.
+			if strings.Contains(err.Error(), "predicate") {
+				log.VEventf(ctx, 1, "split at %s rejected, had previously split and no longer included %s", k, prev)
+				continue
+			}
 			return err
 		}
 	}

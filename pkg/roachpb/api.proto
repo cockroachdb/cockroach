@@ -767,7 +767,7 @@ message AdminSplitRequest {
   // PredicateKeys specifies keys which if not contained within the range should
   // cause the split to be rejected. This can be used by a caller to effectively
   // send a "conditional split" request, i.e. a split if not already split.
-  repeated bytes predicate_keys = 5;
+  repeated bytes predicate_keys = 5 [(gogoproto.casttype) = "Key"];
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()

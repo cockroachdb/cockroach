@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // startTestWriter creates a writer which initiates a sequence of
@@ -311,4 +312,45 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	if desc.GetStickyBit().IsEmpty() {
 		t.Fatal("Sticky bit not set after splitting")
 	}
+}
+
+func TestSplitPredicates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
+		DisableScanner:    true,
+		DisableSplitQueue: true,
+		DisableMergeQueue: true,
+	})
+	defer s.Stop()
+
+	ctx := context.Background()
+
+	expire := hlc.MaxTimestamp
+
+	// Setup a known-span range [c, g) for some simple single predicate checks.
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("b"), expire))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("g"), expire))
+	// c is below split key f, and is in [b, g).
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("f"), expire, roachpb.Key("c")))
+	// e is above split key d, and is in [b, f).
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("d"), expire, roachpb.Key("e")))
+	// b is above split key c, and is in [b, d) although just barely.
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("c"), expire, roachpb.Key("b")))
+
+	// Setup another known span [g, n) and test rejections with it.
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("n"), expire))
+
+	// Reject split at h that wanted b to be in range [g, n).
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("b")))
+	// Reject split at h that wanted i, j, and z to be in range [g, n).
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("j"), roachpb.Key("z")))
+	// Reject split at h that wanted i, j, and n to be in range [g, n).
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("j"), roachpb.Key("n")))
+	// Reject split at h that wanted i, n and j to be in range [g, n).
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("n"), roachpb.Key("j")))
+
+	// Allow split at h that wanted i, k and j to be in range [g, n).
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("k"), roachpb.Key("j")))
 }
