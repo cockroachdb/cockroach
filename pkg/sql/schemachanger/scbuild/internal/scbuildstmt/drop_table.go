@@ -89,6 +89,10 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 					pgcode.DependentObjectsStillExist, "cannot drop relation %q because view %q depends on it",
 					name.Object(), depViewName.Object())
 			}
+			onErrPanic(b.AuthorizationAccessor().CheckPrivilege(
+				b.EvalCtx().Ctx(),
+				dependentDesc,
+				privilege.DROP))
 			dropView(c, dependentDesc, behavior)
 			return nil
 		}))
