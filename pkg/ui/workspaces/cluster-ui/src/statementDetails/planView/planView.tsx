@@ -55,6 +55,18 @@ function warnForAttribute(attr: IAttr): boolean {
   }
   return false;
 }
+// planNodeAttributesToString converts a FlatPlanNodeAttribute into a string.
+export function planNodeAttributesToString(
+  attrs: FlatPlanNodeAttribute[],
+): string {
+  let str = "";
+
+  attrs.forEach(function(attr) {
+    str = str.concat(attr.key, " ", attr.values.join(" "), " ");
+  });
+
+  return str;
+}
 
 // flattenAttributes takes a list of attrs (IAttr[]) and collapses
 // all the values for the same key (FlatPlanNodeAttribute). For example,

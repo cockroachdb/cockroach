@@ -76,6 +76,10 @@ import {
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
+import {
+  flattenTreeAttributes,
+  planNodeAttributesToString,
+} from "../statementDetails";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -410,11 +414,27 @@ export class StatementsPage extends React.Component<
       .filter(statement => (filters.fullScan ? statement.fullScan : true))
       .filter(statement =>
         search
-          ? search
-              .split(" ")
-              .every(val =>
-                statement.label.toLowerCase().includes(val.toLowerCase()),
-              )
+          ? search.split(" ").every(val =>
+              statement.label
+                .toLowerCase()
+                .concat(
+                  flattenTreeAttributes(
+                    statement.stats.sensitive_info &&
+                      statement.stats.sensitive_info
+                        .most_recent_plan_description,
+                  ).name.toLowerCase(),
+                  " ",
+                  planNodeAttributesToString(
+                    flattenTreeAttributes(
+                      statement.stats.sensitive_info &&
+                        statement.stats.sensitive_info
+                          .most_recent_plan_description,
+                    ).attrs,
+                  ).toLowerCase(),
+                  " ",
+                )
+                .includes(val.toLowerCase()),
+            )
           : true,
       )
       .filter(
