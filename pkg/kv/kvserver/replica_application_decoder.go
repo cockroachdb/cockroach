@@ -103,6 +103,12 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 			// version of the proposal in the pipeline, so don't remove the
 			// proposal from the map. We expect this entry to be rejected by
 			// checkForcedErr.
+			//
+			// Note that lease proposals always use a MaxLeaseIndex of zero (since
+			// they have their own replay protection), so they always meet this
+			// criterion. While such proposals can be reproposed, only the first
+			// instance that gets applied matters and so removing the command is
+			// always what we want to happen.
 			cmd.raftCmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
 		if shouldRemove {
 			// Delete the proposal from the proposals map. There may be reproposals
