@@ -40,7 +40,7 @@ ALTER SEQUENCE s.seq OWNER TO root;
 # Other users must be owner to alter the owner.
 user testuser
 
-statement error pq: must be owner of table seq
+statement error pq: must be owner of table \"seq\"
 ALTER SEQUENCE seq OWNER TO testuser2
 
 # Non-superusers also must be a member of the new owning role.

@@ -494,7 +494,7 @@ func (p *planner) canModifyType(ctx context.Context, desc *typedesc.Mutable) err
 	}
 	if !hasOwnership {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be owner of type %s", tree.Name(desc.GetName()))
+			"must be owner of type %q", tree.Name(desc.GetName()))
 	}
 	return nil
 }

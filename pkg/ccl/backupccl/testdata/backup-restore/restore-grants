@@ -247,7 +247,7 @@ restoredb public testtable_greeting_usage admin ALL
 exec-sql user=testuser
 ALTER TYPE restoredb.greeting_owner ADD VALUE 'new' BEFORE 'howdy';
 ----
-pq: must be owner of type greeting_owner
+pq: must be owner of type \"greeting_owner\"
 
 exec-sql
 ALTER TYPE restoredb.greeting_owner ADD VALUE 'new' BEFORE 'howdy';
