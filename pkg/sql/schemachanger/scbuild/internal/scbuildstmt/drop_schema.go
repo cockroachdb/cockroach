@@ -30,6 +30,17 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 		if sc == nil {
 			continue
 		}
+		// Block all unsupported schema types for drop schema statements. The
+		// underlying logic supports cleaning up things under public / temporary
+		// schemas, but those are non-user deletable.
+		if sc.GetName() == tree.PublicSchema {
+			panic(pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", sc.GetName()))
+		}
+		if sc.SchemaKind() == catalog.SchemaPublic ||
+			sc.SchemaKind() == catalog.SchemaTemporary {
+			panic(pgerror.Newf(pgcode.InvalidSchemaName,
+				"cannot drop schema %q", sc.GetName))
+		}
 		dropSchema(b, db, sc, n.DropBehavior)
 		b.IncrementSubWorkID()
 	}
@@ -41,6 +52,13 @@ func dropSchema(
 	sc catalog.SchemaDescriptor,
 	behavior tree.DropBehavior,
 ) (nodeAdded bool, dropIDs catalog.DescriptorIDSet) {
+	// Dropping virtual schemas is never allowed. This code is used for cascaded
+	// drops for databases. So, its valid for public schemas or temporary ones
+	// to be used here.
+	if sc.SchemaKind() == catalog.SchemaVirtual {
+		panic(pgerror.Newf(pgcode.InvalidSchemaName,
+			"cannot drop schema %q", sc.GetName))
+	}
 	descsThatNeedElements := catalog.DescriptorIDSet{}
 	_, objectIDs := b.CatalogReader().ReadObjectNamesAndIDs(b, db, sc)
 	for _, id := range objectIDs {
