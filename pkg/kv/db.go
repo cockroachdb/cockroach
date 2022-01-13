@@ -572,20 +572,23 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 //
 // The keys can be either byte slices or a strings.
 func (db *DB) AdminSplit(
-	ctx context.Context, splitKey interface{}, expirationTime hlc.Timestamp,
+	ctx context.Context, splitKey interface{}, expirationTime hlc.Timestamp, predicateKeys ...roachpb.Key,
 ) error {
 	b := &Batch{}
-	b.adminSplit(splitKey, expirationTime)
+	b.adminSplit(splitKey, expirationTime, predicateKeys)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
 // SplitAndScatter is a helper that wraps AdminSplit + AdminScatter.
 func (db *DB) SplitAndScatter(
-	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp,
+	ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp, predicateKeys ...roachpb.Key,
 ) error {
-	if err := db.AdminSplit(ctx, key, expirationTime); err != nil {
+	b := &Batch{}
+	b.adminSplit(key, expirationTime, predicateKeys)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return err
 	}
+
 	scatterReq := &roachpb.AdminScatterRequest{
 		RequestHeader:   roachpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
 		RandomizeLeases: true,
