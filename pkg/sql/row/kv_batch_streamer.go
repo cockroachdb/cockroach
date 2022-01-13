@@ -134,7 +134,7 @@ func (f *TxnKVStreamer) processedScanResponse() {
 }
 
 func (f *TxnKVStreamer) releaseLastResult(ctx context.Context) {
-	f.lastResultState.MemoryTok.Release(ctx)
+	f.lastResultState.Release(ctx)
 	f.lastResultState.Result = kvstreamer.Result{}
 }
 
@@ -207,11 +207,9 @@ func (f *TxnKVStreamer) nextBatch(
 
 // close releases the resources of this TxnKVStreamer.
 func (f *TxnKVStreamer) close(ctx context.Context) {
-	if f.lastResultState.MemoryTok != nil {
-		f.lastResultState.MemoryTok.Release(ctx)
-	}
+	f.lastResultState.Release(ctx)
 	for _, r := range f.results {
-		r.MemoryTok.Release(ctx)
+		r.Release(ctx)
 	}
 	*f = TxnKVStreamer{}
 }
