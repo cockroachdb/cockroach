@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -1125,23 +1124,6 @@ func (r *Replica) refreshProposalsLocked(
 				slowProposalCount++
 			}
 		}
-		// TODO(tbg): the enabled() call is a hack until we've figured out what to
-		// do about #74711. If leases are finished instead of reproposed, they can't
-		// ever trigger the breaker, which is bad as there usually isn't anything
-		// else around that will.
-		if p.command.MaxLeaseIndex == 0 && !r.breaker.enabled() {
-			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
-			// apply twice. We also don't want to ask the proposer to retry these
-			// special commands.
-			r.cleanupFailedProposalLocked(p)
-			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
-				"without MaxLeaseIndex: %v", reason, p.command)
-			p.finishApplication(ctx, proposalResult{Err: roachpb.NewError(
-				roachpb.NewAmbiguousResultError(
-					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
-						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
-			continue
-		}
 		switch reason {
 		case reasonSnapshotApplied:
 			// If we applied a snapshot, check the MaxLeaseIndexes of all
@@ -1149,6 +1131,9 @@ func (r *Replica) refreshProposalsLocked(
 			// applying, and if so make them return an ambiguous error. We
 			// can't tell at this point (which should be rare) whether they
 			// were included in the snapshot we received or not.
+			//
+			// NB: lease proposals have MaxLeaseIndex 0, so they are cleaned
+			// up here too.
 			if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
 				r.cleanupFailedProposalLocked(p)
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
