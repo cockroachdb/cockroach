@@ -398,9 +398,10 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
+		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
 		{`ALTER FUNCTION a`, 17511, `alter function`, ``},
 
-		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
+		{`CREATE AGGREGATE a`, 74775, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
 		{`CREATE CONVERSION a`, 0, `create conversion`, ``},
@@ -420,7 +421,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TRIGGER a`, 28296, `create`, ``},
 
 		{`DROP ACCESS METHOD a`, 0, `drop access method`, ``},
-		{`DROP AGGREGATE a`, 0, `drop aggregate`, ``},
+		{`DROP AGGREGATE a`, 74775, `drop aggregate`, ``},
 		{`DROP CAST a`, 0, `drop cast`, ``},
 		{`DROP COLLATION a`, 0, `drop collation`, ``},
 		{`DROP CONVERSION a`, 0, `drop conversion`, ``},
