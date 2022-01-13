@@ -13,6 +13,7 @@ go_library(
         "authentication.go",
         "auto_tls_init.go",
         "auto_upgrade.go",
+        "cluster_settings.go",
         "combined_statement_stats.go",
         "config.go",
         "config_unix.go",
