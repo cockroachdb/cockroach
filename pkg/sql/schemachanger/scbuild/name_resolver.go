@@ -95,8 +95,8 @@ func (b buildCtx) ResolveType(
 		// Implicit record types are not directly modifiable.
 		panic(pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
-			"cannot drop type %q because table %q requires it",
-			typ.GetName(), typ.GetName()))
+			"cannot modify table record type %q",
+			typ.GetName()))
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
