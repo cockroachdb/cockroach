@@ -3572,7 +3572,13 @@ create_extension_stmt:
 | CREATE EXTENSION name {
     $$.val = &tree.CreateExtension{Name: $3}
   }
-| CREATE EXTENSION IF NOT EXISTS name WITH error { return unimplemented(sqllex, "create extension if not exists with") }
+| CREATE EXTENSION IF NOT EXISTS name WITH error
+  {
+    return unimplementedWithIssueDetail(sqllex, 74777, "create extension if not exists with")
+  }
+| CREATE EXTENSION name WITH error {
+    return unimplementedWithIssueDetail(sqllex, 74777, "create extension with")
+  }
 | CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
 
 create_unsupported:
@@ -3615,8 +3621,8 @@ drop_unsupported:
 | DROP COLLATION error { return unimplemented(sqllex, "drop collation") }
 | DROP CONVERSION error { return unimplemented(sqllex, "drop conversion") }
 | DROP DOMAIN error { return unimplementedWithIssueDetail(sqllex, 27796, "drop") }
-| DROP EXTENSION IF EXISTS name error { return unimplemented(sqllex, "drop extension " + $5) }
-| DROP EXTENSION name error { return unimplemented(sqllex, "drop extension " + $3) }
+| DROP EXTENSION IF EXISTS name error { return unimplementedWithIssueDetail(sqllex, 74777, "drop extension if exists") }
+| DROP EXTENSION name error { return unimplementedWithIssueDetail(sqllex, 74777, "drop extension") }
 | DROP FOREIGN TABLE error { return unimplemented(sqllex, "drop foreign table") }
 | DROP FOREIGN DATA error { return unimplemented(sqllex, "drop fdw") }
 | DROP FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "drop function") }
