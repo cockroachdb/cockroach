@@ -30,6 +30,7 @@ application_name                                      ·
 avoid_buffering                                       off
 backslash_quote                                       safe_encoding
 bytea_output                                          hex
+check_function_bodies                                 on
 client_encoding                                       UTF8
 client_min_messages                                   notice
 database                                              test
