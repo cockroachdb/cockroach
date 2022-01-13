@@ -1236,6 +1236,8 @@ message StatementsResponse {
   // Transactions is transaction-level statistics for the collection of
   // statements in this response.
   repeated ExtendedCollectedTransactionStatistics transactions = 5 [(gogoproto.nullable) = false];
+  google.protobuf.Timestamp earliest_statement_aggregated_ts = 6 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp earliest_transaction_aggregated_ts = 7 [(gogoproto.nullable) = false,  (gogoproto.stdtime) = true];
 }
 
 message CombinedStatementsStatsRequest {
