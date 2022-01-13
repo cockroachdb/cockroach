@@ -47,6 +47,8 @@ type BufferingAdder struct {
 	// currently buffered kvs.
 	curBuf kvBuf
 
+	sorted bool
+
 	flushCounts struct {
 		total      int
 		bufferSize int
@@ -116,6 +118,7 @@ func MakeBulkAdder(
 		maxBufferSize:       opts.MaxBufferSize,
 		incrementBufferSize: opts.StepBufferSize,
 		bulkMon:             bulkMon,
+		sorted:              true,
 	}
 
 	// If no monitor is attached to the instance of a bulk adder, we do not
@@ -166,6 +169,11 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 
 // Add adds a key to the buffer and checks if it needs to flush.
 func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte) error {
+	if b.sorted {
+		if l := len(b.curBuf.entries); l > 0 && key.Compare(b.curBuf.Key(l-1)) < 0 {
+			b.sorted = false
+		}
+	}
 	if err := b.curBuf.append(key, value); err != nil {
 		return err
 	}
@@ -223,7 +231,9 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 
 	beforeSort := timeutil.Now()
 
-	sort.Sort(&b.curBuf)
+	if !b.sorted {
+		sort.Sort(&b.curBuf)
+	}
 	mvccKey := storage.MVCCKey{Timestamp: b.timestamp}
 
 	beforeFlush := timeutil.Now()
