@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -4073,6 +4074,65 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDBytes(tree.DBytes(out)), nil
 			},
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"crdb_internal.merge_statement_stats": makeBuiltin(arrayProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"input", types.AnyArray}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				var aggregatedStats roachpb.StatementStatistics
+				for _, statsDatum := range arr.Array {
+					var stats roachpb.StatementStatistics
+					statsJSON := tree.MustBeDJSON(statsDatum).JSON
+					if err := sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &stats); err != nil {
+						return nil, err
+					}
+
+					aggregatedStats.Add(&stats)
+				}
+
+				aggregatedJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&aggregatedStats)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDJSON(aggregatedJSON), nil
+			},
+			Info:       "Merge an array of roachpb.StatementStatistics into a single JSONB object",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"crdb_internal.merge_transaction_stats": makeBuiltin(arrayProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"input", types.AnyArray}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				var aggregatedStats roachpb.TransactionStatistics
+				for _, statsDatum := range arr.Array {
+					var stats roachpb.TransactionStatistics
+					statsJSON := tree.MustBeDJSON(statsDatum).JSON
+					if err := sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON, &stats); err != nil {
+						return nil, err
+					}
+
+					aggregatedStats.Add(&stats)
+				}
+
+				aggregatedJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(
+					&roachpb.CollectedTransactionStatistics{
+						Stats: aggregatedStats,
+					})
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDJSON(aggregatedJSON), nil
+			},
+			Info:       "Merge an array of roachpb.TransactionStatistics into a single JSONB object",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
