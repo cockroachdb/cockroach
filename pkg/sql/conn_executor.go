@@ -477,7 +477,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
 	s.reportedStats.Start(ctx, stopper)
 
-	s.txnIDCache.Start(ctx, stopper)
+	// s.txnIDCache.Start(ctx, stopper)
 }
 
 // GetSQLStatsController returns the persistedsqlstats.Controller for current
@@ -835,7 +835,7 @@ func (s *Server) newConnExecutor(
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
-		txnIDCacheWriter:          s.txnIDCache.GetWriter(),
+		// txnIDCacheWriter:          s.txnIDCache.GetWriter(),
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1006,7 +1006,7 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
-	ex.txnIDCacheWriter.Close()
+	// ex.txnIDCacheWriter.Close()
 
 	txnEv := noEvent
 	if _, noTxn := ex.machine.CurState().(stateNoTxn); !noTxn {
@@ -2651,12 +2651,15 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		txnIsOpen = true
 	}
 
-	ex.state.mu.RLock()
-	var txnID uuid.UUID
-	if ex.state.mu.txn != nil {
-		txnID = ex.state.mu.txn.ID()
-	}
-	ex.state.mu.RUnlock()
+	// TODO(azhng): wip: verify we aren't creating issues by reading txnID here.
+	//  hmm though it seems like unlikely
+	txnID := uuid.FastMakeV4()
+	// ex.state.mu.RLock()
+	// var txnID uuid.UUID
+	// if ex.state.mu.txn != nil {
+	// 	txnID = ex.state.mu.txn.ID()
+	// }
+	// ex.state.mu.RUnlock()
 
 	ex.mu.Lock()
 	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)

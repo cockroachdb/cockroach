@@ -630,7 +630,8 @@ func (p *planner) preparePlannerForCopy(
 			defer func() {
 				// Note: combine errors will return nil if both are nil and the
 				// non-nil error in the case that there's just one.
-				err = errors.CombineErrors(err, txnOpt.resetExtraTxnState(ctx, txn.ID()))
+				// err = errors.CombineErrors(err, txnOpt.resetExtraTxnState(ctx, txn.ID()))
+				err = errors.CombineErrors(err, txnOpt.resetExtraTxnState(ctx, uuid.FastMakeV4()))
 			}()
 		}
 		if prevErr == nil {
