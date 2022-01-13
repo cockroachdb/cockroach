@@ -530,6 +530,24 @@ SET standard_conforming_strings='true'
 statement ok
 SET standard_conforming_strings='on'
 
+subtest default_table_access_method_test
+
+query T
+SHOW default_table_access_method
+----
+heap
+
+statement ok
+SET default_table_access_method = 'heap'
+
+query T
+SHOW default_table_access_method
+----
+heap
+
+statement error invalid value for parameter "default_table_access_method": "not-heap"
+SET default_table_access_method = 'not-heap'
+
 subtest default_with_oids_test
 
 query T
