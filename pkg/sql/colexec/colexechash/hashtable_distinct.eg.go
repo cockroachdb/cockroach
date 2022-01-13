@@ -108,8 +108,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -172,8 +171,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -238,8 +236,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -301,8 +298,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -368,8 +364,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -430,8 +425,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -494,8 +488,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -555,8 +548,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -631,8 +623,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -687,8 +678,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -745,8 +735,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -800,8 +789,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -859,8 +847,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -913,8 +900,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -969,8 +955,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1022,8 +1007,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1098,8 +1082,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1154,8 +1137,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1212,8 +1194,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1267,8 +1248,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1326,8 +1306,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1380,8 +1359,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1436,8 +1414,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1489,8 +1466,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1574,8 +1550,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1641,8 +1616,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1710,8 +1684,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1776,8 +1749,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1846,8 +1818,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1911,8 +1882,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -1978,8 +1948,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2042,8 +2011,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2124,8 +2092,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2191,8 +2158,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2260,8 +2226,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2326,8 +2291,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2396,8 +2360,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2461,8 +2424,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2528,8 +2490,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2592,8 +2553,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2676,8 +2636,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2743,8 +2702,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2812,8 +2770,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2878,8 +2835,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -2948,8 +2904,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3013,8 +2968,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3080,8 +3034,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3144,8 +3097,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3239,8 +3191,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3314,8 +3265,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3391,8 +3341,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3465,8 +3414,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3543,8 +3491,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3616,8 +3563,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3691,8 +3637,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3763,8 +3708,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3846,8 +3790,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3909,8 +3852,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -3974,8 +3916,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4036,8 +3977,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4102,8 +4042,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4163,8 +4102,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4226,8 +4164,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4286,8 +4223,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4362,8 +4298,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4418,8 +4353,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4476,8 +4410,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4531,8 +4464,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4590,8 +4522,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4644,8 +4575,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4700,8 +4630,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4753,8 +4682,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4835,8 +4763,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4897,8 +4824,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -4961,8 +4887,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5022,8 +4947,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5087,8 +5011,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5147,8 +5070,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5209,8 +5131,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5268,8 +5189,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5346,8 +5266,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5404,8 +5323,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5464,8 +5382,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5521,8 +5438,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5582,8 +5498,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5638,8 +5553,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5696,8 +5610,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5751,8 +5664,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 										}
-									}
-									if keyID == 0 {
+									} else {
 										ht.ProbeScratch.distinct[toCheck] = true
 									}
 								}
@@ -5838,8 +5750,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -5899,8 +5810,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -5962,8 +5872,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6022,8 +5931,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6093,8 +6001,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6146,8 +6053,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6201,8 +6107,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6253,8 +6158,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6330,8 +6234,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6383,8 +6286,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6438,8 +6340,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6490,8 +6391,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6570,8 +6470,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6634,8 +6533,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6700,8 +6598,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6763,8 +6660,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6846,8 +6742,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6910,8 +6805,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -6976,8 +6870,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7039,8 +6932,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7124,8 +7016,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7188,8 +7079,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7254,8 +7144,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7317,8 +7206,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7416,8 +7304,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7488,8 +7375,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7562,8 +7448,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7633,8 +7518,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7714,8 +7598,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7774,8 +7657,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7836,8 +7718,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7895,8 +7776,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -7966,8 +7846,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8019,8 +7898,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8074,8 +7952,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8126,8 +8003,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8203,8 +8079,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8262,8 +8137,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8323,8 +8197,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8381,8 +8254,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8454,8 +8326,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8509,8 +8380,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8566,8 +8436,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
@@ -8620,8 +8489,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
-								}
-								if keyID == 0 {
+								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
