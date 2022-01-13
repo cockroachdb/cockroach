@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -37,10 +38,7 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 // another is expected.
 
 // ID is a custom type for {Database,Table}Descriptor IDs.
-type ID tree.ID
-
-// SafeValue implements the redact.SafeValue interface.
-func (ID) SafeValue() {}
+type ID = catid.DescID
 
 // InvalidID is the uninitialised descriptor id.
 const InvalidID ID = 0
@@ -71,16 +69,10 @@ const (
 )
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
-type FamilyID uint32
-
-// SafeValue implements the redact.SafeValue interface.
-func (FamilyID) SafeValue() {}
+type FamilyID = catid.FamilyID
 
 // IndexID is a custom type for IndexDescriptor IDs.
-type IndexID tree.IndexID
-
-// SafeValue implements the redact.SafeValue interface.
-func (IndexID) SafeValue() {}
+type IndexID = catid.IndexID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint64
@@ -135,10 +127,7 @@ const (
 )
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
-type ColumnID tree.ColumnID
-
-// SafeValue implements the redact.SafeValue interface.
-func (ColumnID) SafeValue() {}
+type ColumnID = catid.ColumnID
 
 // ColumnIDs is a slice of ColumnDescriptor IDs.
 type ColumnIDs []ColumnID

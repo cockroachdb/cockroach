@@ -10,9 +10,9 @@ import (
 
 	security "github.com/cockroachdb/cockroach/pkg/security"
 	catalog "github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	scexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	scmutationexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
+	catid "github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -52,7 +52,7 @@ func (mr *MockCatalogMockRecorder) AddSyntheticDescriptor(arg0 interface{}) *gom
 }
 
 // GetFullyQualifiedName mocks base method.
-func (m *MockCatalog) GetFullyQualifiedName(arg0 context.Context, arg1 descpb.ID) (string, error) {
+func (m *MockCatalog) GetFullyQualifiedName(arg0 context.Context, arg1 catid.DescID) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFullyQualifiedName", arg0, arg1)
 	ret0, _ := ret[0].(string)
@@ -67,7 +67,7 @@ func (mr *MockCatalogMockRecorder) GetFullyQualifiedName(arg0, arg1 interface{})
 }
 
 // MustReadImmutableDescriptor mocks base method.
-func (m *MockCatalog) MustReadImmutableDescriptor(arg0 context.Context, arg1 descpb.ID) (catalog.Descriptor, error) {
+func (m *MockCatalog) MustReadImmutableDescriptor(arg0 context.Context, arg1 catid.DescID) (catalog.Descriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MustReadImmutableDescriptor", arg0, arg1)
 	ret0, _ := ret[0].(catalog.Descriptor)
@@ -82,7 +82,7 @@ func (mr *MockCatalogMockRecorder) MustReadImmutableDescriptor(arg0, arg1 interf
 }
 
 // MustReadMutableDescriptor mocks base method.
-func (m *MockCatalog) MustReadMutableDescriptor(arg0 context.Context, arg1 descpb.ID) (catalog.MutableDescriptor, error) {
+func (m *MockCatalog) MustReadMutableDescriptor(arg0 context.Context, arg1 catid.DescID) (catalog.MutableDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MustReadMutableDescriptor", arg0, arg1)
 	ret0, _ := ret[0].(catalog.MutableDescriptor)
@@ -111,7 +111,7 @@ func (mr *MockCatalogMockRecorder) NewCatalogChangeBatcher() *gomock.Call {
 }
 
 // RemoveSyntheticDescriptor mocks base method.
-func (m *MockCatalog) RemoveSyntheticDescriptor(arg0 descpb.ID) {
+func (m *MockCatalog) RemoveSyntheticDescriptor(arg0 catid.DescID) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RemoveSyntheticDescriptor", arg0)
 }

@@ -418,7 +418,7 @@ message ImportDetails {
   // If the database being imported into is a multi-region database, then this
   // field stores the databases' primary region.
   string database_primary_region = 27 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.RegionName"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
   // next val: 28
