@@ -33,3 +33,13 @@ type TestingKnobs struct {
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
+
+// GetAOSTClause returns the appropriate AS OF SYSTEM TIME clause to be
+//used when reading from statements and transactions system tables.
+func (knobs *TestingKnobs) GetAOSTClause() string {
+	if knobs != nil {
+		return knobs.AOSTClause
+	}
+
+	return "AS OF SYSTEM TIME follower_read_timestamp()"
+}
