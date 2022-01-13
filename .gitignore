@@ -34,7 +34,6 @@ zcgo_flags*.go
 build/Railroad.jar
 
 # Bazel generated symlinks
-/bazel-*
 /_bazel
 
 # Per-user .bazelrc
