@@ -12,12 +12,16 @@ package spanconfigjob
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,6 +30,14 @@ type resumer struct {
 }
 
 var _ jobs.Resumer = (*resumer)(nil)
+
+var reconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"spanconfig.reconciliation_job.checkpoint_interval",
+	"the frequency at which the span config reconciliation job checkpoints itself",
+	5*time.Second,
+	settings.NonNegativeDuration,
+)
 
 // Resume implements the jobs.Resumer interface.
 func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
@@ -41,11 +53,28 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	// the job all over again after some time, it's just that the checks for
 	// failed jobs happen infrequently.
 
+	// TODO(irfansharif): We're still not using a persisted checkpoint, both
+	// here when starting at the empty timestamp and down in the reconciler
+	// (does the full reconciliation at every start). Once we do, it'll be
+	// possible that the checkpoint timestamp provided is too stale -- for a
+	// suspended tenant perhaps data was GC-ed from underneath it. When we
+	// bubble up said error, we want to retry at this level with an empty
+	// timestamp.
+
+	settingValues := &execCtx.ExecCfg().Settings.SV
+	persistCheckpoints := util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+	reconciliationJobCheckpointInterval.SetOnChange(settingValues, func(ctx context.Context) {
+		persistCheckpoints = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+	})
+
 	if err := rc.Reconcile(ctx, hlc.Timestamp{}, func() error {
-		// TODO(irfansharif): Stash this checkpoint somewhere and use it when
-		// starting back up.
-		_ = rc.Checkpoint()
-		return nil
+		if !persistCheckpoints.ShouldProcess(timeutil.Now()) {
+			return nil
+		}
+
+		return r.job.SetProgress(ctx, nil, jobspb.AutoSpanConfigReconciliationProgress{
+			Checkpoint: rc.Checkpoint(),
+		})
 	}); err != nil {
 		return err
 	}

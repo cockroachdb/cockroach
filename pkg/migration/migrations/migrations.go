@@ -80,6 +80,17 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		publicSchemaMigration,
 	),
+	migration.NewTenantMigration(
+		"enable span configs infrastructure",
+		toCV(clusterversion.EnsureSpanConfigReconciliation),
+		NoPrecondition,
+		ensureSpanConfigReconciliation,
+	),
+	migration.NewSystemMigration(
+		"enable span configs infrastructure",
+		toCV(clusterversion.EnsureSpanConfigSubscription),
+		ensureSpanConfigSubscription,
+	),
 }
 
 func init() {
