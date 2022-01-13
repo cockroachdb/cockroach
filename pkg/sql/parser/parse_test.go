@@ -443,6 +443,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`, ``},
 
+		{`CREATE MATERIALIZED VIEW a AS SELECT 1 WITH NO DATA`, 74083, ``, ``},
+
 		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT[1][2])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT ARRAY[1][2])`, 32552, ``, ``},
