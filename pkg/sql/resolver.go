@@ -728,9 +728,9 @@ func (p *planner) getQualifiedTableName(
 			AvoidLeased:    true,
 		})
 	switch {
-	case err == nil:
+	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())
-	case desc.IsTemporary() && errors.Is(err, catalog.ErrDescriptorNotFound):
+	case desc.IsTemporary() && scDesc == nil:
 		// We've lost track of the session which owned this schema, but we
 		// can come up with a name that is also going to be unique and
 		// informative and looks like a pg_temp_<session_id> name.
