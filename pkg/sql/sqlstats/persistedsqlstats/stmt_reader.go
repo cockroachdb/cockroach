@@ -39,7 +39,7 @@ func (s *PersistedSQLStats) IterateStatementStats(
 
 	// We compute the current aggregated_ts so that the in-memory stats can be
 	// merged with the persisted stats.
-	curAggTs := s.computeAggregatedTs()
+	curAggTs := s.ComputeAggregatedTs()
 	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
 	memIter := newMemStmtStatsIterator(s.SQLStats, options, curAggTs, aggInterval)
 
@@ -122,11 +122,7 @@ FROM
 	system.statement_statistics
 %[2]s`
 
-	followerReadClause := "AS OF SYSTEM TIME follower_read_timestamp()"
-
-	if s.cfg.Knobs != nil {
-		followerReadClause = s.cfg.Knobs.AOSTClause
-	}
+	followerReadClause := s.cfg.Knobs.GetAOSTClause()
 
 	query = fmt.Sprintf(query, strings.Join(selectedColumns, ","), followerReadClause)
 
