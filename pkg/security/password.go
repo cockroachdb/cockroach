@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -81,6 +82,8 @@ var SCRAMCost = settings.RegisterIntSetting(
 	// The default value 119680 incurs ~60ms latency on the sane hw.
 	// This default was calibrated to incur a similar check latency as the
 	// default value for BCryptCost above.
+	// For further discussion, see the explanation on bcryptCostToSCRAMIterCount
+	// below.
 	//
 	// For reference, value 250000 incurs ~125ms latency on the same hw,
 	// value 1000000 incurs ~500ms.
@@ -410,49 +413,53 @@ func HashPassword(ctx context.Context, sv *settings.Values, password string) ([]
 		return bcrypt.GenerateFromPassword(appendEmptySha256(password), int(BcryptCost.Get(sv)))
 
 	case HashSCRAMSHA256:
-		prepared, err := stringprep.SASLprep.Prepare(password)
-		if err != nil {
-			// Special PostgreSQL case, quoth comment at the top of
-			// auth-scram.c:
-			//
-			// * - If the password isn't valid UTF-8, or contains characters prohibited
-			// *	 by the SASLprep profile, we skip the SASLprep pre-processing and use
-			// *	 the raw bytes in calculating the hash.
-			prepared = password
-		}
-
-		// The computation of ServerKey and StoredKey is conveniently provided
-		// to us by xdg/scram in the Client method GetStoredCredentials().
-		// To use it, we need a client.
-		client, err := scram.SHA256.NewClientUnprepped("" /* username: unused */, prepared, "" /* authzID: unused */)
-		if err != nil {
-			return nil, errors.AssertionFailedf("programming error: client construction should never fail")
-		}
-
-		// We also need to generate a random salt ourselves.
-		const scramSaltSize = 16 // postgres: SCRAM_DEFAULT_SALT_LEN.
-		salt := make([]byte, scramSaltSize)
-		if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-			return nil, errors.Wrap(err, "generating random salt")
-		}
-
-		// The computation of the SCRAM hash is expensive. Use the shared
-		// semaphore for it. We reuse the same pattern as the bcrypt case above.
-		sem := getExpensiveHashComputeSem(ctx)
-		alloc, err := sem.Acquire(ctx, 1)
-		if err != nil {
-			return nil, err
-		}
-		defer alloc.Release()
-		// Compute the credentials.
 		cost := int(SCRAMCost.Get(sv))
-		creds := client.GetStoredCredentials(scram.KeyFactors{Iters: cost, Salt: string(salt)})
-		// Encode them in our standard hash format.
-		return encodeScramHash(salt, creds), nil
+		return hashPasswordUsingSCRAM(ctx, cost, password)
 
 	default:
 		return nil, errors.Newf("unsupported hash method: %v", method)
 	}
+}
+
+func hashPasswordUsingSCRAM(ctx context.Context, cost int, cleartext string) ([]byte, error) {
+	prepared, err := stringprep.SASLprep.Prepare(cleartext)
+	if err != nil {
+		// Special PostgreSQL case, quoth comment at the top of
+		// auth-scram.c:
+		//
+		// * - If the password isn't valid UTF-8, or contains characters prohibited
+		// *	 by the SASLprep profile, we skip the SASLprep pre-processing and use
+		// *	 the raw bytes in calculating the hash.
+		prepared = cleartext
+	}
+
+	// The computation of ServerKey and StoredKey is conveniently provided
+	// to us by xdg/scram in the Client method GetStoredCredentials().
+	// To use it, we need a client.
+	client, err := scram.SHA256.NewClientUnprepped("" /* username: unused */, prepared, "" /* authzID: unused */)
+	if err != nil {
+		return nil, errors.AssertionFailedf("programming error: client construction should never fail")
+	}
+
+	// We also need to generate a random salt ourselves.
+	const scramSaltSize = 16 // postgres: SCRAM_DEFAULT_SALT_LEN.
+	salt := make([]byte, scramSaltSize)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return nil, errors.Wrap(err, "generating random salt")
+	}
+
+	// The computation of the SCRAM hash is expensive. Use the shared
+	// semaphore for it. We reuse the same pattern as the bcrypt case above.
+	sem := getExpensiveHashComputeSem(ctx)
+	alloc, err := sem.Acquire(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	defer alloc.Release()
+	// Compute the credentials.
+	creds := client.GetStoredCredentials(scram.KeyFactors{Iters: cost, Salt: string(salt)})
+	// Encode them in our standard hash format.
+	return encodeScramHash(salt, creds), nil
 }
 
 // encodeScramHash encodes the provided SCRAM credentials using the
@@ -683,4 +690,179 @@ func getExpensiveHashComputeSem(ctx context.Context) *quotapool.IntPool {
 		expensiveHashComputeSemOnce.sem = quotapool.NewIntPool("password_hashes", uint64(n))
 	})
 	return expensiveHashComputeSemOnce.sem
+}
+
+// bcryptCostToSCRAMIterCount maps the bcrypt cost in a pre-hashed
+// password using the crdb-bcrypt method to an “equivalent” cost
+// (iteration count) for the scram-sha-256 method. This is used to
+// automatically upgrade clusters from crdb-bcrypt to scram-sha-256.
+//
+// This mapping was computed so that given a starting bcrypt cost, the
+// latency of authentication using SCRAM-SHA-256 with an iter count
+// computed by this mapping would be comparable to that when using bcrypt.
+//
+// For example, with bcrypt cost 10, if the authn latency is ~60ms
+// (an actual measurement on current hardware as of this writing),
+// the mapping gives SCRAM authn latency of ~60ms too.
+//
+// The actual values were computed as follows:
+// 1. measure the bcrypt authentication cost for costs 1-19.
+// 2. assuming the bcrypt latency is a_bcrypt*2^c + b_bcrypt, where c
+//    is the bcrypt cost, use statistical regression to derive
+//    a_bcrypt and b_bcrypt. (we found b_bcrypt to be negligible.)
+// 3. measure the SCRAM authn cost for iter counts 4096-1000000,
+//    *on the same hardware*.
+// 4. assuming the SCRAM latency is a_scram*c + b_scram,
+//    where c is the SCRAM iter count, use stat regression
+//    to derive a_scram and b_scram. (we found b_scram to be negligible).
+// 5. for each bcrypt cost, compute scram iter count = a_bcrypt * 2^cost_bcrypt / a_scram.
+//
+// The speed of the CPU used for the measurements is equally
+// represented in a_bcrypt and a_scram, so the formula eliminates any
+// CPU-specific factor.
+//
+// An alternative approach would have been to choose a SCRAM-SHA-256
+// mapping that gives equivalent difficulty at bruteforcing passwords
+// given access to the hashes and access to ASICs/GPUs. If that was
+// the goal, we would derive higher iteration counts by a factor of at
+// least 10x.
+// (From bdarnell's analysis: In 1 second, a CPU can do 1M iterations
+// of hmac-sha256 or 16k iterations of bcrypt, a ratio of 60:1. A GPU
+// can do 2G iterations of hmac-sha256 or 3M iterations of 600:1.)
+//
+// However, this would also increase the user login
+// latency by a factor of 10x, which we consider unacceptable from a
+// usability perspective for a *default* mapping.
+// Instead, for CockroachDB we will recommend in docs that
+// users define passwords with a high complexity, so that
+// the entropy of the password itself compounds with the complexity
+// of the SCRAM hash.
+// As of this writing this is already the approach taken in
+// CockroachCloud, where passwords are auto-generated.
+//
+// Meanwhile, we are also announcing this trade-off in release notes:
+// an operator who lets their end-users select their own passwords,
+// and wishes to prioritize bruteforcing hardness at the
+// expense of login latency, will be free to adjust the setting
+// server.user_login.password_hashes.default_cost.scram_sha_256 and
+// re-encode their passwords.
+var bcryptCostToSCRAMIterCount = []int64{
+	0,            // 0-3 are not valid bcrypt costs.
+	0,            // 0-3 are not valid bcrypt costs.
+	0,            // 0-3 are not valid bcrypt costs.
+	0,            // 0-3 are not valid bcrypt costs.
+	4096,         // 4 - special case to select lowest cost possible. Model would predict 7000.
+	9420,         // 5
+	12977,        // 6
+	20090,        // 7
+	34318,        // 8
+	62772,        // 9
+	119680,       // 10 - common default, 50-100ms login latency on 2021 hardware
+	233497,       // 11
+	461131,       // 12
+	916398,       // 13
+	1826932,      // 14
+	3648001,      // 15
+	7290139,      // 16
+	14574415,     // 17
+	29142967,     // 18
+	58280072,     // 19
+	116554280,    // 20
+	233102696,    // 21
+	466199529,    // 22
+	932393195,    // 23
+	1864780528,   // 24
+	3729555192,   // 25
+	7459104520,   // 26
+	14918203177,  // 27
+	29836400491,  // 28
+	59672795119,  // 29
+	119345584374, // 30
+	238691162884, // 31
+}
+
+var autoUpgradePasswordHashes = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled",
+	"whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256",
+	true,
+).WithPublic()
+
+// MaybeUpgradePasswordHash looks at the cleartext and the hashed
+// password and determines whether the hash can be upgraded from
+// crdb-bcrypt to scram-sha-256. If it can, it computes an equivalent
+// SCRAM hash and returns it.
+//
+// See the documentation on bcryptCostToSCRAMIterCount[] for details.
+func MaybeUpgradePasswordHash(
+	ctx context.Context, sv *settings.Values, cleartext string, hashed PasswordHash,
+) (converted bool, prevHashBytes, newHashBytes []byte, newMethod string, err error) {
+	bh, isBcrypt := hashed.(bcryptHash)
+
+	// Do we want to perform the conversion?
+	//
+	// We stop here in the following cases:
+	// - password not currently hashed using crdb-bcrypt: we can't convert.
+	// - conversion disabled by cluster setting.
+	// - some nodes don't know about SCRAM just yet during an upgrade.
+	//   (checked in GetConfiguredPasswordHashMethod)
+	// - the configured default method is not scram-sha-256.
+	if !isBcrypt || !autoUpgradePasswordHashes.Get(sv) ||
+		GetConfiguredPasswordHashMethod(ctx, sv) != HashSCRAMSHA256 {
+		// Nothing to do.
+		return false, nil, nil, "", nil
+	}
+
+	bcryptCost, err := bcrypt.Cost([]byte(bh))
+	if err != nil {
+		// The caller should only call this function after authentication
+		// has succeeded, so the bcrypt cost should have been validated
+		// already.
+		return false, nil, nil, "", errors.NewAssertionErrorWithWrappedErrf(err, "programming error: authn succeeded but invalid bcrypt hash")
+	}
+	if bcryptCost < 0 || bcryptCost >= len(bcryptCostToSCRAMIterCount) || bcryptCostToSCRAMIterCount[bcryptCost] == 0 {
+		// The bcryptCost was smaller than 4 or greater than 31? That's a violation of a bcrypt invariant.
+		// Or perhaps the bcryptCostToSCRAMIterCount was incorrectly modified and there's a hole with value zero.
+		return false, nil, nil, "", errors.AssertionFailedf("unexpected: bcrypt cost %d is out of bounds or has no mapping", bcryptCost)
+	}
+
+	scramIterCount := bcryptCostToSCRAMIterCount[bcryptCost]
+	if scramIterCount > math.MaxInt {
+		// scramIterCount is an int64. However, the SCRAM library we're using (xdg/scram) uses
+		// an int for the iteration count. This is not an issue when this code is running
+		// on a 64-bit platform, where sizeof(int) == sizeof(int64). However, when running
+		// on 32-bit, we can't allow a conversion to proceed because it would potentially
+		// truncate the iter count to a low value.
+		// However, this situation is not an error. The hash could still be converted later
+		// when the system is upgraded to 64-bit.
+		return false, nil, nil, "", nil
+	}
+
+	if bcryptCost > 10 {
+		// Tell the logs that we're doing a conversion. This is important
+		// if the new cost is high and the operation takes a long time, so
+		// the operator knows what's up.
+		log.Infof(ctx, "hash conversion: computing a SCRAM hash with iteration count %d (from bcrypt cost %d)", scramIterCount, bcryptCost)
+	}
+
+	rawHash, err := hashPasswordUsingSCRAM(ctx, int(scramIterCount), cleartext)
+	if err != nil {
+		// This call only fail with hard errors.
+		return false, nil, nil, "", err
+	}
+
+	// Check the raw hash can be decoded using our decoder. This accomplishes two things:
+	// - it checks that we're able to re-parse what we just generated,
+	//   which is a safety mechanism to ensure the result is valid.
+	// - it converts the raw bytes to the PasswordHash interface, which
+	//   the caller expects as return value.
+	expectedMethod := HashSCRAMSHA256
+	newHash := LoadPasswordHash(ctx, rawHash)
+	if newHash.Method() != expectedMethod {
+		// The conversion failed? That is very strange.
+		log.Errorf(ctx, "unexpected hash contents during bcrypt->scram conversion: %T %+v -> %T %+v", hashed, hashed, newHash, newHash)
+		// In contrast to logs, we don't want the details of the hash in the error with %+v.
+		return false, nil, nil, "", errors.AssertionFailedf("programming error: re-hash failed to produce SCRAM hash, produced %T instead", newHash)
+	}
+	return true, []byte(bh), rawHash, expectedMethod.String(), nil
 }
