@@ -221,6 +221,55 @@ func splitArgsAtDash(cmd *cobra.Command, args []string) (before, after []string)
 	return
 }
 
+// parsePkg decomposes and validates a "pkg/.*" argument passed to the test or
+// the bench commands.
+func (d *dev) parsePkg(pkg string) (dir string, isRecursive bool, tag string, _ error) {
+	dir = pkg
+
+	// Trim left.
+	dir = strings.TrimPrefix(dir, "//")
+	dir = strings.TrimPrefix(dir, "./")
+	if !strings.HasPrefix(dir, "pkg/") {
+		return "", false, "", fmt.Errorf(
+			"malformed package %q, expecting %q", pkg, "pkg/{...}")
+	}
+
+	// Trim right.
+	dir = strings.TrimRight(dir, "/")
+	{
+		parts := strings.Split(dir, ":")
+		switch len(parts) {
+		case 0:
+			return "", false, "", fmt.Errorf(
+				"malformed package %q, expecting %q", pkg, "pkg/{...}")
+		case 1:
+			break
+		case 2:
+			dir = parts[0]
+			tag = parts[1]
+		default:
+			return "", false, "", fmt.Errorf(
+				"malformed package %q, expected at most one ':'", pkg)
+		}
+	}
+	const recursiveSuffix = "/..."
+	isRecursive = strings.HasSuffix(dir, recursiveSuffix)
+	if isRecursive {
+		dir = dir[:len(dir)-len(recursiveSuffix)]
+		if tag != "" {
+			return "", false, "", fmt.Errorf(
+				"malformed package %q, cannot end in %q and be followed by a tag", pkg, recursiveSuffix)
+		}
+	}
+
+	// Check directory existence.
+	if ok, err := d.os.IsDir(dir); err != nil || !ok {
+		return "", false, "", fmt.Errorf(
+			"malformed package %q, %q is not an existing directory", pkg, dir)
+	}
+	return dir, isRecursive, tag, nil
+}
+
 func logCommand(cmd string, args ...string) {
 	var fullArgs []string
 	fullArgs = append(fullArgs, cmd)

@@ -167,6 +167,26 @@ func (o *OS) Readlink(filename string) (string, error) {
 	return ret, err
 }
 
+// IsDir wraps around os.Stat, which returns the os.FileInfo of the named
+// directory. IsDir returns true if and only if it is an existing directory.
+// If there is an error, it will be of type *PathError.
+func (o *OS) IsDir(dirname string) (bool, error) {
+	command := fmt.Sprintf("find %s -type d", dirname)
+	o.logger.Print(command)
+
+	if o.Recording == nil {
+		// Do the real thing.
+		stat, err := os.Stat(dirname)
+		if err != nil {
+			return false, err
+		}
+		return stat.IsDir(), nil
+	}
+
+	res, err := o.replay(command)
+	return err == nil && res != "", err
+}
+
 // ReadFile wraps around ioutil.ReadFile, reading a file from disk and
 // returning the contents.
 func (o *OS) ReadFile(filename string) (string, error) {
