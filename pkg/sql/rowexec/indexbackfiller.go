@@ -193,12 +193,13 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	sstSize := func() int64 { return backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	opts := kvserverbase.BulkAdderOptions{
-		SSTSize:        sstSize,
-		MinBufferSize:  minBufferSize,
-		MaxBufferSize:  maxBufferSize,
-		StepBufferSize: stepSize,
-		SkipDuplicates: ib.ContainsInvertedIndex(),
-		BatchTimestamp: ib.spec.ReadAsOf,
+		SSTSize:                  sstSize,
+		MinBufferSize:            minBufferSize,
+		MaxBufferSize:            maxBufferSize,
+		StepBufferSize:           stepSize,
+		SkipDuplicates:           ib.ContainsInvertedIndex(),
+		BatchTimestamp:           ib.spec.ReadAsOf,
+		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),
 	}
 	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.WriteAsOf, opts)
 	if err != nil {
