@@ -16,11 +16,11 @@ ALTER DATABASE d OWNER TO root
 # Other users must be owner to alter the owner.
 user testuser
 
-statement error must be owner of database d
+statement error must be owner of database \"d\"
 ALTER DATABASE d OWNER TO testuser
 
 # other users must be owner to alter the owner to the current owner again
-statement error must be owner of database d
+statement error must be owner of database \"d\"
 ALTER DATABASE d OWNER TO root
 
 # Non-superusers also must be a member of the new owning role.

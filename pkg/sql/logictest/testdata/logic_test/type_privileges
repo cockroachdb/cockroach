@@ -61,11 +61,11 @@ statement ok
 CREATE VIEW vx2 as SELECT x FROM for_view
 
 # Need to be owner of a type to alter it.
-statement error pq: must be owner of type test
+statement error pq: must be owner of type \"test\"
 ALTER TYPE test RENAME TO not_test
 
 # Need to be owner of a type to drop it.
-statement error pq: must be owner of type test
+statement error pq: must be owner of type \"test\"
 DROP TYPE test
 
 user root

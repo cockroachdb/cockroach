@@ -706,7 +706,7 @@ func (p *planner) checkCanAlterToNewOwner(
 	}
 	if !hasOwnership {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be owner of %s %s", tree.Name(objType), tree.Name(desc.GetName()))
+			"must be owner of %s %q", tree.Name(objType), tree.Name(desc.GetName()))
 	}
 
 	// To alter the owner, you must also be a direct or indirect member of the new
