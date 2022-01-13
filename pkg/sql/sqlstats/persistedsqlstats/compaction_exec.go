@@ -200,11 +200,8 @@ FROM %[1]s
 %[2]s
 WHERE %[3]s = $1
 `
-	followerReadClause := "AS OF SYSTEM TIME follower_read_timestamp()"
 
-	if c.knobs != nil {
-		followerReadClause = c.knobs.AOSTClause
-	}
+	followerReadClause := c.knobs.GetAOSTClause()
 
 	return fmt.Sprintf(existingRowCountQuery, tableName, followerReadClause, hashColumnName)
 }
