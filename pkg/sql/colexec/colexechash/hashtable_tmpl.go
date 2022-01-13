@@ -195,12 +195,11 @@ func _CHECK_COL_BODY(
 				_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
 				ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 			}
-			// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
-		}
-		// {{end}}
-		// {{if and .SelectDistinct (not .ProbingAgainstItself)}}
-		if keyID == 0 {
+			// {{if and .SelectDistinct (not .ProbingAgainstItself)}}
+		} else {
 			ht.ProbeScratch.distinct[toCheck] = true
+			// {{end}}
+			// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
 		}
 		// {{end}}
 	}
