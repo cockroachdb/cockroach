@@ -263,6 +263,7 @@ func makeImportReaderSpecs(
 				ResumePos:             make(map[int32]int64),
 				UserProto:             user.EncodeProto(),
 				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
+				InitialSplits:         int32(len(nodes)),
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
