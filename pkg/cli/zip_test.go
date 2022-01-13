@@ -86,8 +86,11 @@ table_name NOT IN (
 	'session_trace',
 	'session_variables',
 	'tables',
+	'cluster_statement_statistics',
+	'cluster_transaction_statistics',
 	'statement_statistics',
 	'transaction_statistics',
+	'cluster_transaction_statistics',
 	'tenant_usage_details'
 )
 ORDER BY name ASC`)

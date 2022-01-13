@@ -47,7 +47,8 @@ func (s *statusServer) CombinedStatementStats(
 		return nil, err
 	}
 
-	return getCombinedStatementStats(ctx, req, s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(), s.internalExecutor)
+	return getCombinedStatementStats(ctx, req, s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
+		s.internalExecutor, s.sqlServer.execCfg.SQLStatsTestingKnobs)
 }
 
 func getCombinedStatementStats(
@@ -55,15 +56,16 @@ func getCombinedStatementStats(
 	req *serverpb.CombinedStatementsStatsRequest,
 	statsProvider sqlstats.Provider,
 	ie *sql.InternalExecutor,
+	testingKnobs *sqlstats.TestingKnobs,
 ) (*serverpb.StatementsResponse, error) {
 	startTime := getTimeFromSeconds(req.Start)
 	endTime := getTimeFromSeconds(req.End)
-	statements, err := collectCombinedStatements(ctx, ie, startTime, endTime)
+	statements, err := collectCombinedStatements(ctx, ie, startTime, endTime, testingKnobs)
 	if err != nil {
 		return nil, err
 	}
 
-	transactions, err := collectCombinedTransactions(ctx, ie, startTime, endTime)
+	transactions, err := collectCombinedTransactions(ctx, ie, startTime, endTime, testingKnobs)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +80,9 @@ func getCombinedStatementStats(
 	return response, nil
 }
 
-func getFilterAndParams(start, end *time.Time) (string, []interface{}) {
+func getFilterAndParams(
+	start, end *time.Time, testingKnobs *sqlstats.TestingKnobs,
+) (string, []interface{}) {
 	var args []interface{}
 
 	if start == nil && end == nil {
@@ -102,13 +106,21 @@ func getFilterAndParams(start, end *time.Time) (string, []interface{}) {
 		args = append(args, *end)
 	}
 
-	return buffer.String(), args
+	followerReadClause := "AS OF SYSTEM TIME follower_read_timestamp()"
+	if testingKnobs != nil {
+		followerReadClause = testingKnobs.AOSTClause
+	}
+
+	return fmt.Sprintf("%s %s", followerReadClause, buffer.String()), args
 }
 
 func collectCombinedStatements(
-	ctx context.Context, ie *sql.InternalExecutor, start, end *time.Time,
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	start, end *time.Time,
+	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-	whereClause, qargs := getFilterAndParams(start, end)
+	whereClause, qargs := getFilterAndParams(start, end, testingKnobs)
 
 	query := fmt.Sprintf(
 		`SELECT
@@ -218,9 +230,12 @@ func collectCombinedStatements(
 }
 
 func collectCombinedTransactions(
-	ctx context.Context, ie *sql.InternalExecutor, start, end *time.Time,
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	start, end *time.Time,
+	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
-	whereClause, qargs := getFilterAndParams(start, end)
+	whereClause, qargs := getFilterAndParams(start, end, testingKnobs)
 
 	query := fmt.Sprintf(
 		`SELECT

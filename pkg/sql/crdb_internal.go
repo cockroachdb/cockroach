@@ -105,6 +105,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterTransactionsTableID:       crdbInternalClusterTxnsTable,
 		catconstants.CrdbInternalClusterSessionsTableID:           crdbInternalClusterSessionsTable,
 		catconstants.CrdbInternalClusterSettingsTableID:           crdbInternalClusterSettingsTable,
+		catconstants.CrdbInternalClusterStmtStatsTableID:          crdbInternalClusterStmtStatsTable,
 		catconstants.CrdbInternalCreateSchemaStmtsTableID:         crdbInternalCreateSchemaStmtsTable,
 		catconstants.CrdbInternalCreateStmtsTableID:               crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:           crdbInternalCreateTypeStmtsTable,
@@ -139,13 +140,14 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalSchemaChangesTableID:             crdbInternalSchemaChangesTable,
 		catconstants.CrdbInternalSessionTraceTableID:              crdbInternalSessionTraceTable,
 		catconstants.CrdbInternalSessionVariablesTableID:          crdbInternalSessionVariablesTable,
-		catconstants.CrdbInternalStmtStatsTableID:                 crdbInternalStmtStatsTable,
+		catconstants.CrdbInternalStmtStatsTableID:                 crdbInternalStmtStatsView,
 		catconstants.CrdbInternalTableColumnsTableID:              crdbInternalTableColumnsTable,
 		catconstants.CrdbInternalTableIndexesTableID:              crdbInternalTableIndexesTable,
 		catconstants.CrdbInternalTablesTableLastStatsID:           crdbInternalTablesTableLastStats,
 		catconstants.CrdbInternalTablesTableID:                    crdbInternalTablesTable,
+		catconstants.CrdbInternalClusterTxnStatsTableID:           crdbInternalClusterTxnStatsTable,
+		catconstants.CrdbInternalTxnStatsTableID:                  crdbInternalTxnStatsView,
 		catconstants.CrdbInternalTransactionStatsTableID:          crdbInternalTransactionStatisticsTable,
-		catconstants.CrdbInternalTxnStatsTableID:                  crdbInternalTxnStatsTable,
 		catconstants.CrdbInternalZonesTableID:                     crdbInternalZonesTable,
 		catconstants.CrdbInternalInvalidDescriptorsTableID:        crdbInternalInvalidDescriptorsTable,
 		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
@@ -4981,12 +4983,12 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 	},
 }
 
-var crdbInternalStmtStatsTable = virtualSchemaTable{
+var crdbInternalClusterStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (cluster-wide).` +
-		`Querying this table is an expensive operation since it creates a ` +
+		`Querying this table is a somewhat expensive operation since it creates a ` +
 		`cluster-wide RPC-fanout.`,
 	schema: `
-CREATE TABLE crdb_internal.statement_statistics (
+CREATE TABLE crdb_internal.cluster_statement_statistics (
     aggregated_ts              TIMESTAMPTZ NOT NULL,
     fingerprint_id             BYTES NOT NULL,
     transaction_fingerprint_id BYTES NOT NULL,
@@ -5020,23 +5022,18 @@ CREATE TABLE crdb_internal.statement_statistics (
 			return nil, nil, err
 		}
 
-		execCfg := p.ExecCfg()
-		sqlStats := persistedsqlstats.New(&persistedsqlstats.Config{
-			Settings:         execCfg.Settings,
-			InternalExecutor: execCfg.InternalExecutor,
-			KvDB:             execCfg.DB,
-			SQLIDContainer:   execCfg.NodeID,
-			Knobs:            execCfg.SQLStatsTestingKnobs,
-		}, memSQLStats)
+		s := p.extendedEvalCtx.statsProvider
+		curAggTs := s.ComputeAggregatedTs()
+		aggInterval := s.GetAggregationInterval()
 
 		row := make(tree.Datums, 8 /* number of columns for this virtual table */)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
+			return memSQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
 			}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
 
-				aggregatedTs, err := tree.MakeDTimestampTZ(statistics.AggregatedTs, time.Microsecond)
+				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
 				if err != nil {
 					return err
 				}
@@ -5063,7 +5060,7 @@ CREATE TABLE crdb_internal.statement_statistics (
 				plan := sqlstatsutil.ExplainTreePlanNodeToJSON(&statistics.Stats.SensitiveInfo.MostRecentPlanDescription)
 
 				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
+					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
 				row = row[:0]
@@ -5083,6 +5080,66 @@ CREATE TABLE crdb_internal.statement_statistics (
 			})
 		}
 		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+var crdbInternalStmtStatsView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.statement_statistics AS
+SELECT
+	aggregated_ts,
+	fingerprint_id,
+	transaction_fingerprint_id,
+	plan_hash,
+	app_name,
+	max(metadata) as metadata,
+	crdb_internal.merge_statement_stats(array_agg(statistics)),
+  max(sampled_plan),
+  aggregation_interval
+FROM (
+	SELECT
+			aggregated_ts,
+			fingerprint_id,
+			transaction_fingerprint_id,
+			plan_hash,
+			app_name,
+			metadata,
+			statistics,
+			sampled_plan,
+			aggregation_interval
+	FROM
+			crdb_internal.cluster_statement_statistics
+	UNION ALL
+			SELECT
+					aggregated_ts,
+					fingerprint_id,
+					transaction_fingerprint_id,
+					plan_hash,
+					app_name,
+					metadata,
+					statistics,
+					plan,
+					agg_interval
+			FROM
+					system.statement_statistics
+)
+GROUP BY
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  aggregation_interval`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "transaction_fingerprint_id", Typ: types.Bytes},
+		{Name: "plan_hash", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "sampled_plan", Typ: types.Jsonb},
+		{Name: "aggregation_interval", Typ: types.Interval},
 	},
 }
 
@@ -5128,12 +5185,12 @@ CREATE TABLE crdb_internal.active_range_feeds (
 	},
 }
 
-var crdbInternalTxnStatsTable = virtualSchemaTable{
+var crdbInternalClusterTxnStatsTable = virtualSchemaTable{
 	comment: `transaction statistics (cluster-wide).` +
-		`Querying this table is an expensive operation since it creates a ` +
+		`Querying this table is a somewhat expensive operation since it creates a ` +
 		`cluster-wide RPC-fanout.`,
 	schema: `
-CREATE TABLE crdb_internal.transaction_statistics (
+CREATE TABLE crdb_internal.cluster_transaction_statistics (
     aggregated_ts         TIMESTAMPTZ NOT NULL,
     fingerprint_id        BYTES NOT NULL,
     app_name              STRING NOT NULL,
@@ -5168,25 +5225,20 @@ CREATE TABLE crdb_internal.transaction_statistics (
 			return nil, nil, err
 		}
 
-		execCfg := p.ExecCfg()
-		sqlStats := persistedsqlstats.New(&persistedsqlstats.Config{
-			Settings:         execCfg.Settings,
-			InternalExecutor: execCfg.InternalExecutor,
-			KvDB:             execCfg.DB,
-			SQLIDContainer:   execCfg.NodeID,
-			Knobs:            execCfg.SQLStatsTestingKnobs,
-		}, memSQLStats)
+		s := p.extendedEvalCtx.statsProvider
+		curAggTs := s.ComputeAggregatedTs()
+		aggInterval := s.GetAggregationInterval()
 
 		row := make(tree.Datums, 5 /* number of columns for this virtual table */)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return sqlStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
+			return memSQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
 			}, func(
 				ctx context.Context,
 				statistics *roachpb.CollectedTransactionStatistics) error {
 
-				aggregatedTs, err := tree.MakeDTimestampTZ(statistics.AggregatedTs, time.Microsecond)
+				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
 				if err != nil {
 					return err
 				}
@@ -5204,7 +5256,7 @@ CREATE TABLE crdb_internal.transaction_statistics (
 				}
 
 				aggInterval := tree.NewDInterval(
-					duration.MakeDuration(statistics.AggregationInterval.Nanoseconds(), 0, 0),
+					duration.MakeDuration(aggInterval.Nanoseconds(), 0, 0),
 					types.DefaultIntervalTypeMetadata)
 
 				row = row[:0]
@@ -5221,6 +5273,52 @@ CREATE TABLE crdb_internal.transaction_statistics (
 			})
 		}
 		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+var crdbInternalTxnStatsView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.transaction_statistics AS
+SELECT
+	aggregated_ts,
+	fingerprint_id,
+	app_name,
+	max(metadata),
+	crdb_internal.merge_transaction_stats(array_agg(statistics)),
+  aggregation_interval
+FROM (
+	SELECT
+    aggregated_ts,
+    fingerprint_id,
+    app_name,
+    metadata,
+    statistics,
+    aggregation_interval
+	FROM
+		crdb_internal.cluster_transaction_statistics
+	UNION ALL
+			SELECT
+    		aggregated_ts,
+    		fingerprint_id,
+    		app_name,
+				metadata,
+    		statistics,
+    		agg_interval
+			FROM
+				system.transaction_statistics
+)
+GROUP BY
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  aggregation_interval`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "aggregation_interval", Typ: types.Interval},
 	},
 }
 
