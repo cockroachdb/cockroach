@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -513,7 +514,7 @@ func setupShardedIndex(
 		Direction: tree.Ascending,
 	}
 	newColumns = append(tree.IndexElemList{shardIdxElem}, columns...)
-	indexDesc.Sharded = descpb.ShardedDescriptor{
+	indexDesc.Sharded = catpb.ShardedDescriptor{
 		IsSharded:    true,
 		Name:         shardCol.GetName(),
 		ShardBuckets: buckets,

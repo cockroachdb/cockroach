@@ -49,6 +49,7 @@ go_proto_library(
         "//pkg/clusterversion",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",  # keep
+        "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",  # keep

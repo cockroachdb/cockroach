@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -349,11 +350,11 @@ func showForeignKeyConstraint(
 		buf.WriteByte(' ')
 		buf.WriteString(fk.Match.String())
 	}
-	if fk.OnDelete != descpb.ForeignKeyReference_NO_ACTION {
+	if fk.OnDelete != catpb.ForeignKeyAction_NO_ACTION {
 		buf.WriteString(" ON DELETE ")
 		buf.WriteString(fk.OnDelete.String())
 	}
-	if fk.OnUpdate != descpb.ForeignKeyReference_NO_ACTION {
+	if fk.OnUpdate != catpb.ForeignKeyAction_NO_ACTION {
 		buf.WriteString(" ON UPDATE ")
 		buf.WriteString(fk.OnUpdate.String())
 	}
@@ -450,7 +451,7 @@ func ShowCreatePartitioning(
 	// Do not print PARTITION ALL BY if we are a REGIONAL BY ROW table.
 	if c := tableDesc.GetLocalityConfig(); c != nil {
 		switch c.Locality.(type) {
-		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		case *catpb.LocalityConfig_RegionalByRow_:
 			return nil
 		}
 	}

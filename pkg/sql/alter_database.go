@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -206,7 +207,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 
 	if err := params.p.checkRegionIsCurrentlyActive(
 		params.ctx,
-		descpb.RegionName(n.n.Region),
+		catpb.RegionName(n.n.Region),
 	); err != nil {
 		return err
 	}
@@ -351,7 +352,7 @@ func (p *planner) AlterDatabaseDropRegion(
 	removingPrimaryRegion := false
 	var toDrop []*typedesc.Mutable
 
-	if dbDesc.RegionConfig.PrimaryRegion == descpb.RegionName(n.Region) {
+	if dbDesc.RegionConfig.PrimaryRegion == catpb.RegionName(n.Region) {
 		removingPrimaryRegion = true
 
 		typeID, err := dbDesc.MultiRegionEnumID()
@@ -519,7 +520,7 @@ func removeLocalityConfigFromAllTablesInDB(
 			}
 
 			switch t := tbDesc.LocalityConfig.Locality.(type) {
-			case *descpb.TableDescriptor_LocalityConfig_Global_:
+			case *catpb.LocalityConfig_Global_:
 				if err := ApplyZoneConfigForMultiRegionTable(
 					ctx,
 					p.txn,
@@ -530,7 +531,7 @@ func removeLocalityConfigFromAllTablesInDB(
 				); err != nil {
 					return err
 				}
-			case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+			case *catpb.LocalityConfig_RegionalByTable_:
 				if t.RegionalByTable.Region != nil {
 					// This should error during the type descriptor changes.
 					return errors.AssertionFailedf(
@@ -538,7 +539,7 @@ func removeLocalityConfigFromAllTablesInDB(
 						tbDesc.Name,
 					)
 				}
-			case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+			case *catpb.LocalityConfig_RegionalByRow_:
 				// This should error during the type descriptor changes.
 				return errors.AssertionFailedf(
 					"unexpected REGIONAL BY ROW on table %s during DROP REGION",
@@ -689,7 +690,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	}
 	found := false
 	for _, r := range prevRegionConfig.Regions() {
-		if r == descpb.RegionName(n.n.PrimaryRegion) {
+		if r == catpb.RegionName(n.n.PrimaryRegion) {
 			found = true
 			break
 		}
@@ -719,7 +720,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 
 	// To update the primary region we need to modify the database descriptor,
 	// update the multi-region enum, and write a new zone configuration.
-	n.desc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
+	n.desc.RegionConfig.PrimaryRegion = catpb.RegionName(n.n.PrimaryRegion)
 	if err := params.p.writeNonDropDatabaseChange(
 		params.ctx,
 		n.desc,
@@ -729,7 +730,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	}
 
 	// Update the primary region in the type descriptor, and write it back out.
-	typeDesc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
+	typeDesc.RegionConfig.PrimaryRegion = catpb.RegionName(n.n.PrimaryRegion)
 	if err := params.p.writeTypeDesc(params.ctx, typeDesc); err != nil {
 		return err
 	}

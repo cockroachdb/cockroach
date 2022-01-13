@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -276,7 +277,7 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetGeoConfig", idx.GetName())
 		require.Equal(t, idx == s4, idx.GetShardColumnName() != "",
 			errMsgFmt, "GetShardColumnName", idx.GetName())
-		require.Equal(t, idx == s4, !(&descpb.ShardedDescriptor{}).Equal(idx.GetSharded()),
+		require.Equal(t, idx == s4, !(&catpb.ShardedDescriptor{}).Equal(idx.GetSharded()),
 			errMsgFmt, "GetSharded", idx.GetName())
 		require.Equalf(t, idx != s3, idx.NumSecondaryStoredColumns() == 0,
 			errMsgFmt, "NumSecondaryStoredColumns", idx.GetName())

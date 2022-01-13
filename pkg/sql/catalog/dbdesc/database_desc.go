@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -154,7 +155,7 @@ func (desc *immutable) IsMultiRegion() bool {
 }
 
 // PrimaryRegionName implements the DatabaseDescriptor interface.
-func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
+func (desc *immutable) PrimaryRegionName() (catpb.RegionName, error) {
 	if !desc.IsMultiRegion() {
 		return "", errors.AssertionFailedf(
 			"can not get the primary region of a non multi-region database")

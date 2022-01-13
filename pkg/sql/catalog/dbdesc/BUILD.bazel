@@ -12,6 +12,7 @@ go_library(
         "//pkg/keys",
         "//pkg/security",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/multiregion",

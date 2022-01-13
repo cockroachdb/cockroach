@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -347,10 +348,10 @@ func (rf *Fetcher) Init(
 
 			// Set up any system column metadata, if this column is a system column.
 			switch colinfo.GetSystemColumnKindFromColumnID(col.GetID()) {
-			case descpb.SystemColumnKind_MVCCTIMESTAMP:
+			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
 				rf.mvccDecodeStrategy = MVCCDecodingRequired
-			case descpb.SystemColumnKind_TABLEOID:
+			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
 				table.tableOid = tree.NewDOid(tree.DInt(tableArgs.Desc.GetID()))
 			}

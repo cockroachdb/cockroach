@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -124,7 +125,7 @@ func TestSafeMessage(t *testing.T) {
 					ReferencedColumnIDs: []descpb.ColumnID{2},
 					ReferencedTableID:   112,
 					Validity:            descpb.ConstraintValidity_Validated,
-					OnDelete:            descpb.ForeignKeyReference_CASCADE,
+					OnDelete:            catpb.ForeignKeyAction_CASCADE,
 					Match:               descpb.ForeignKeyReference_PARTIAL,
 				})
 				mutable.OutboundFKs = append(mutable.OutboundFKs, descpb.ForeignKeyConstraint{
@@ -134,7 +135,7 @@ func TestSafeMessage(t *testing.T) {
 					ReferencedColumnIDs: []descpb.ColumnID{1},
 					ReferencedTableID:   3,
 					Validity:            descpb.ConstraintValidity_Validated,
-					OnDelete:            descpb.ForeignKeyReference_SET_DEFAULT,
+					OnDelete:            catpb.ForeignKeyAction_SET_DEFAULT,
 					Match:               descpb.ForeignKeyReference_SIMPLE,
 				})
 
@@ -150,9 +151,8 @@ func TestSafeMessage(t *testing.T) {
 								OriginColumnIDs:     []descpb.ColumnID{2},
 								ReferencedTableID:   2,
 								ReferencedColumnIDs: []descpb.ColumnID{3},
-								Validity:            descpb.ConstraintValidity_Unvalidated,
-								OnDelete:            descpb.ForeignKeyReference_SET_NULL,
-								Match:               descpb.ForeignKeyReference_FULL,
+								Validity:            descpb.ConstraintValidity_Unvalidated, OnDelete: catpb.ForeignKeyAction_SET_NULL,
+								Match: descpb.ForeignKeyReference_FULL,
 							},
 						},
 					},

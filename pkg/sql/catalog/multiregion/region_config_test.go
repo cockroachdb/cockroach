@@ -13,6 +13,7 @@ package multiregion_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -31,7 +32,7 @@ func TestValidateRegionConfig(t *testing.T) {
 	}{
 		{
 			err: "expected a valid multi-region enum ID",
-			regionConfig: multiregion.MakeRegionConfig(descpb.RegionNames{
+			regionConfig: multiregion.MakeRegionConfig(catpb.RegionNames{
 				"region_a",
 				"region_b",
 			},
@@ -43,7 +44,7 @@ func TestValidateRegionConfig(t *testing.T) {
 		},
 		{
 			err: "3 regions are required for surviving a region failure",
-			regionConfig: multiregion.MakeRegionConfig(descpb.RegionNames{
+			regionConfig: multiregion.MakeRegionConfig(catpb.RegionNames{
 				"region_a",
 				"region_b",
 			},
@@ -56,7 +57,7 @@ func TestValidateRegionConfig(t *testing.T) {
 		{
 			err: "expected > 0 number of regions in the region config",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{},
+				catpb.RegionNames{},
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
@@ -66,7 +67,7 @@ func TestValidateRegionConfig(t *testing.T) {
 		{
 			err: "cannot have a database with restricted placement that is also region survivable",
 			regionConfig: multiregion.MakeRegionConfig(
-				descpb.RegionNames{"region_a", "region_b", "region_c"},
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,

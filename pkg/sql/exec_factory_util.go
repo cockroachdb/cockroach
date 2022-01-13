@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -297,7 +296,7 @@ func constructVirtualScan(
 
 func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
 	for _, id := range colCfg.wantedColumns {
-		if colinfo.IsColIDSystemColumn(descpb.ColumnID(id)) {
+		if colinfo.IsColIDSystemColumn(id) {
 			return true
 		}
 	}

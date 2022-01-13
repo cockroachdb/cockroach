@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -106,7 +107,7 @@ func TestIndexForDisplay(t *testing.T) {
 	shardedIndex := baseIndex
 	shardedIndex.KeyColumnNames = []string{"bucket_col", "a"}
 	shardedIndex.KeyColumnIDs = descpb.ColumnIDs{0, 1}
-	shardedIndex.Sharded = descpb.ShardedDescriptor{
+	shardedIndex.Sharded = catpb.ShardedDescriptor{
 		IsSharded:    true,
 		ShardBuckets: 8,
 		ColumnNames:  []string{"a"},
