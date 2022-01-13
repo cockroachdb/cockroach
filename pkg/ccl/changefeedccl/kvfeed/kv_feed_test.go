@@ -79,15 +79,16 @@ func TestKVFeed(t *testing.T) {
 		}
 	}
 	type testCase struct {
-		name               string
-		needsInitialScan   bool
-		withDiff           bool
-		schemaChangeEvents changefeedbase.SchemaChangeEventClass
-		schemaChangePolicy changefeedbase.SchemaChangePolicy
-		initialHighWater   hlc.Timestamp
-		spans              []roachpb.Span
-		checkpoint         []roachpb.Span
-		events             []roachpb.RangeFeedEvent
+		name                string
+		needsInitialScan    bool
+		withDiff            bool
+		schemaChangeEvents  changefeedbase.SchemaChangeEventClass
+		schemaChangePolicy  changefeedbase.SchemaChangePolicy
+		initialHighWater    hlc.Timestamp
+		spans               []roachpb.Span
+		checkpointSpans     []roachpb.Span
+		checkpointTimestamp hlc.Timestamp
+		events              []roachpb.RangeFeedEvent
 
 		descs []catalog.TableDescriptor
 
@@ -118,7 +119,7 @@ func TestKVFeed(t *testing.T) {
 		})
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
-		f := newKVFeed(buf, tc.spans, tc.checkpoint,
+		f := newKVFeed(buf, tc.spans, tc.checkpointSpans, tc.checkpointTimestamp,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater,
@@ -129,7 +130,7 @@ func TestKVFeed(t *testing.T) {
 		g.GoCtx(func(ctx context.Context) error {
 			return f.run(ctx)
 		})
-		spansToScan := filterCheckpointSpans(tc.spans, tc.checkpoint)
+		spansToScan := filterCheckpointSpans(tc.spans, tc.checkpointSpans)
 		testG := ctxgroup.WithContext(ctx)
 		testG.GoCtx(func(ctx context.Context) error {
 			for expScans := tc.expScans; len(expScans) > 0; expScans = expScans[1:] {
@@ -162,6 +163,7 @@ func TestKVFeed(t *testing.T) {
 			require.Regexp(t, context.Canceled, runErr)
 		}
 	}
+
 	makeTableDesc := schematestutils.MakeTableDesc
 	addColumnDropBackfillMutation := schematestutils.AddColumnDropBackfillMutation
 
@@ -198,9 +200,10 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(42),
 			},
-			checkpoint: []roachpb.Span{
+			checkpointSpans: []roachpb.Span{
 				tableSpan(42),
 			},
+			checkpointTimestamp: ts(3),
 			events: []roachpb.RangeFeedEvent{
 				kvEvent(42, "a", "b", ts(3)),
 			},
@@ -216,9 +219,10 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(42),
 			},
-			checkpoint: []roachpb.Span{
+			checkpointSpans: []roachpb.Span{
 				makeSpan(42, "a", "q"),
 			},
+			checkpointTimestamp: ts(3),
 			events: []roachpb.RangeFeedEvent{
 				kvEvent(42, "a", "val", ts(3)),
 				kvEvent(42, "d", "val", ts(3)),
@@ -303,6 +307,31 @@ func TestKVFeed(t *testing.T) {
 			},
 			expEvents: 2,
 			expErrRE:  "schema change ...",
+		},
+		{
+			name:               "partial checkpoint outside of scan",
+			schemaChangeEvents: changefeedbase.OptSchemaChangeEventClassDefault,
+			schemaChangePolicy: changefeedbase.OptSchemaChangePolicyNoBackfill,
+			needsInitialScan:   false,
+			initialHighWater:   ts(2),
+			spans: []roachpb.Span{
+				makeSpan(42, "a", "h"),
+			},
+			checkpointSpans: []roachpb.Span{
+				makeSpan(42, "a", "b"),
+				makeSpan(42, "e", "f"),
+				makeSpan(42, "y", "z"),
+			},
+			checkpointTimestamp: ts(10),
+			events: []roachpb.RangeFeedEvent{
+				kvEvent(42, "a", "b", ts(3)), // should skip since checkpointed
+				kvEvent(42, "b", "b", ts(5)),
+				kvEvent(42, "e", "b", ts(9)), // should skip since checkpointed
+				kvEvent(42, "c", "b", ts(11)),
+				kvEvent(42, "a", "b", ts(12)),
+				kvEvent(42, "y", "b", ts(15)), // should skip since not in spans despite being in checkpoint
+			},
+			expEvents: 3,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -401,10 +430,18 @@ func (f rawEventFeed) run(
 			ev.Checkpoint != nil && startFrom.Less(ev.Checkpoint.ResolvedTS) {
 			break
 		}
-
 	}
+
 	f = f[i:]
+
+	var spanGroup roachpb.SpanGroup
+	spanGroup.Add(spans...)
+
 	for i := range f {
+		ev := f[i]
+		if ev.Checkpoint == nil && ev.Val != nil && !spanGroup.Contains(ev.Val.Key) {
+			continue
+		}
 		select {
 		case eventC <- &f[i]:
 		case <-ctx.Done():

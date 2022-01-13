@@ -36,22 +36,23 @@ import (
 
 // Config configures a kvfeed.
 type Config struct {
-	Settings           *cluster.Settings
-	DB                 *kv.DB
-	Codec              keys.SQLCodec
-	Clock              *hlc.Clock
-	Gossip             gossip.OptionalGossip
-	Spans              []roachpb.Span
-	BackfillCheckpoint []roachpb.Span
-	Targets            jobspb.ChangefeedTargets
-	Writer             kvevent.Writer
-	Metrics            *kvevent.Metrics
-	OnBackfillCallback func() func()
-	MM                 *mon.BytesMonitor
-	WithDiff           bool
-	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
-	SchemaChangePolicy changefeedbase.SchemaChangePolicy
-	SchemaFeed         schemafeed.SchemaFeed
+	Settings            *cluster.Settings
+	DB                  *kv.DB
+	Codec               keys.SQLCodec
+	Clock               *hlc.Clock
+	Gossip              gossip.OptionalGossip
+	Spans               []roachpb.Span
+	CheckpointSpans     []roachpb.Span
+	CheckpointTimestamp hlc.Timestamp
+	Targets             jobspb.ChangefeedTargets
+	Writer              kvevent.Writer
+	Metrics             *kvevent.Metrics
+	OnBackfillCallback  func() func()
+	MM                  *mon.BytesMonitor
+	WithDiff            bool
+	SchemaChangeEvents  changefeedbase.SchemaChangeEventClass
+	SchemaChangePolicy  changefeedbase.SchemaChangePolicy
+	SchemaFeed          schemafeed.SchemaFeed
 
 	// If true, the feed will begin with a dump of data at exactly the
 	// InitialHighWater. This is a peculiar behavior. In general the
@@ -92,7 +93,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	f := newKVFeed(
-		cfg.Writer, cfg.Spans, cfg.BackfillCheckpoint,
+		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater,
@@ -151,6 +152,7 @@ func (e schemaChangeDetectedError) Error() string {
 type kvFeed struct {
 	spans               []roachpb.Span
 	checkpoint          []roachpb.Span
+	checkpointTimestamp hlc.Timestamp
 	withDiff            bool
 	withInitialBackfill bool
 	initialHighWater    hlc.Timestamp
@@ -174,6 +176,7 @@ func newKVFeed(
 	writer kvevent.Writer,
 	spans []roachpb.Span,
 	checkpoint []roachpb.Span,
+	checkpointTimestamp hlc.Timestamp,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff bool,
@@ -189,6 +192,7 @@ func newKVFeed(
 		writer:              writer,
 		spans:               spans,
 		checkpoint:          checkpoint,
+		checkpointTimestamp: checkpointTimestamp,
 		withInitialBackfill: withInitialBackfill,
 		withDiff:            withDiff,
 		initialHighWater:    initialHighWater,
@@ -361,19 +365,42 @@ func (f *kvFeed) runUntilTableEvent(
 		err = errors.CombineErrors(err, memBuf.CloseWithReason(ctx, err))
 	}()
 
-	g := ctxgroup.WithContext(ctx)
-	physicalCfg := physicalConfig{
-		Spans:     f.spans,
+	// Uncheckpointed spans that are at the frontier
+	var frontierRange roachpb.SpanGroup
+	frontierRange.Add(f.spans...)
+	frontierRange.Sub(f.checkpoint...)
+	frontierSpans := frontierRange.Slice()
+	var checkpointRange roachpb.SpanGroup
+	checkpointRange.Add(f.spans...)
+	checkpointRange.Sub(frontierSpans...)
+	checkpointSpans := checkpointRange.Slice()
+
+	frontierSpansCfg := physicalConfig{
+		Spans:     frontierSpans,
 		Timestamp: startFrom,
 		WithDiff:  f.withDiff,
 		Knobs:     f.knobs,
 	}
+	checkpointSpansCfg := physicalConfig{
+		Spans:     checkpointSpans,
+		Timestamp: f.checkpointTimestamp,
+		WithDiff:  f.withDiff,
+		Knobs:     f.knobs,
+	}
+
+	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, physicalCfg, f.tableFeed)
+		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, f.spans, startFrom, f.tableFeed)
 	})
 	g.GoCtx(func(ctx context.Context) error {
-		return f.physicalFeed.Run(ctx, memBuf, physicalCfg)
+		return f.physicalFeed.Run(ctx, memBuf, frontierSpansCfg)
 	})
+
+	if len(checkpointSpansCfg.Spans) > 0 {
+		g.GoCtx(func(ctx context.Context) error {
+			return f.physicalFeed.Run(ctx, memBuf, checkpointSpansCfg)
+		})
+	}
 
 	// TODO(mrtracy): We are currently tearing down the entire rangefeed set in
 	// order to perform a scan; however, given that we have an intermediate
@@ -418,17 +445,18 @@ func copyFromSourceToDestUntilTableEvent(
 	ctx context.Context,
 	dest kvevent.Writer,
 	source kvevent.Reader,
-	cfg physicalConfig,
+	spans []roachpb.Span,
+	startFrom hlc.Timestamp,
 	tables schemafeed.SchemaFeed,
 ) error {
 	// Maintain a local spanfrontier to tell when all the component rangefeeds
 	// being watched have reached the Scan boundary.
-	frontier, err := span.MakeFrontier(cfg.Spans...)
+	frontier, err := span.MakeFrontier(spans...)
 	if err != nil {
 		return err
 	}
-	for _, span := range cfg.Spans {
-		if _, err := frontier.Forward(span, cfg.Timestamp); err != nil {
+	for _, span := range spans {
+		if _, err := frontier.Forward(span, startFrom); err != nil {
 			return err
 		}
 	}

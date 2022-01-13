@@ -1072,7 +1072,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		changefeedbase.FrontierCheckpointMaxBytes.Override(
 			context.Background(), &f.Server().ClusterSettings().SV, 100<<20)
 		changefeedbase.FrontierHighwaterLagCheckpointThreshold.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
+			context.Background(), &f.Server().ClusterSettings().SV, 1*time.Second)
 
 		// Resolve the non-lagging spans individually so that they have different
 		// frontier timestamps
@@ -1112,7 +1112,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 
 		// Allow the changefeed to catch up without re-emitting checkpointed spans
 		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
-			require.False(t, checkpointSpanGroup.Encloses(r.Span) && r.Timestamp.LessEq(jobCheckpoint.Timestamp))
+			require.False(t, checkpointSpanGroup.Encloses(r.Span) && (!r.Timestamp.IsEmpty() && r.Timestamp.LessEq(jobCheckpoint.Timestamp)))
 			return false
 		}
 
@@ -1345,9 +1345,16 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		}
 
 		// Collect spans we attempt to resolve after when we resume.
-		var resolved []roachpb.Span
 		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
-			resolved = append(resolved, r.Span)
+			// Verify that none of the resolved spans after resume were checkpointed.
+			require.Falsef(t,
+				!r.Timestamp.IsEmpty() &&
+					!r.Span.Equal(tableSpan) &&
+					secondCheckpoint.Contains(r.Span.Key) &&
+					r.Timestamp.LessEq(backfillTimestamp),
+				"span should not have been resolved: %s",
+				r,
+			)
 			return false
 		}
 
@@ -1365,11 +1372,6 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 		// Pause job to avoid race on the resolved array
 		require.NoError(t, jobFeed.Pause())
-
-		// Verify that none of the resolved spans after resume were checkpointed.
-		for _, sp := range resolved {
-			require.Falsef(t, !sp.Equal(tableSpan) && secondCheckpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
-		}
 	}
 
 	// TODO(ssd): Tenant testing disabled because of use of DB()
@@ -4810,7 +4812,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		// Collect spans we attempt to resolve after when we resume.
 		var resolved []roachpb.Span
 		knobs.ShouldSkipResolved = func(r *jobspb.ResolvedSpan) bool {
-			if !r.Span.Equal(tableSpan) {
+			if !r.Span.Equal(tableSpan) && !r.Timestamp.IsEmpty() && r.Timestamp.LessEq(jobCheckpoint.Timestamp) {
 				resolved = append(resolved, r.Span)
 			}
 			return false
