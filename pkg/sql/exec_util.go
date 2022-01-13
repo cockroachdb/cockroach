@@ -1164,6 +1164,7 @@ type ExecutorConfig struct {
 	StreamingTestingKnobs                *StreamingTestingKnobs
 	SQLStatsTestingKnobs                 *sqlstats.TestingKnobs
 	TelemetryLoggingTestingKnobs         *TelemetryLoggingTestingKnobs
+	SpanConfigTestingKnobs               *spanconfig.TestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 

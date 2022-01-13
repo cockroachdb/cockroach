@@ -136,6 +136,10 @@ func (r *Reconciler) Reconcile(
 	// pass every time the reconciliation job kicks us off.
 	_ = startTS
 
+	if fn := r.knobs.ReconcilerInitialInterceptor; fn != nil {
+		fn()
+	}
+
 	full := fullReconciler{
 		sqlTranslator: r.sqlTranslator,
 		kvAccessor:    r.kvAccessor,

@@ -2107,11 +2107,36 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return nil, errSysCfgUnavailable
 	}
 
-	if s.cfg.SpanConfigsEnabled && spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return s.cfg.SpanConfigSubscriber, nil
+	// We need a version gate here before switching over to the span configs
+	// infrastructure. In a mixed-version cluster we need to wait for
+	// the host tenant to have fully populated `system.span_configurations`
+	// (read: reconciled) at least once before using it as a view for all
+	// split/config decisions.
+	_ = clusterversion.EnsureSpanConfigReconciliation
+	//
+	// We also want to ensure that the KVSubscriber on each store is at least as
+	// up-to-date as some full reconciliation timestamp.
+	_ = clusterversion.EnsureSpanConfigSubscription
+	//
+	// Without a version gate, it would be possible for a replica on a
+	// new-binary-server to apply the static fallback config (assuming no
+	// entries in `system.span_configurations`), in violation of explicit
+	// configs directly set by the user. Though unlikely, it's also possible for
+	// us to merge all ranges into a single one -- with no entries in
+	// system.span_configurations, the infrastructure can erroneously conclude
+	// that there are zero split points.
+	//
+	// We achieve all this through a three-step migration process, culminating
+	// in the following cluster version gate:
+	_ = clusterversion.EnableSpanConfigStore
+
+	if !s.cfg.SpanConfigsEnabled ||
+		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
+		!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) {
+		return sysCfg, nil
 	}
 
-	return sysCfg, nil
+	return s.cfg.SpanConfigSubscriber, nil
 }
 
 // startLeaseRenewer runs an infinite loop in a goroutine which regularly
@@ -3344,6 +3369,25 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 	})
 
 	return g.Wait()
+}
+
+// WaitForSpanConfigSubscription waits until the store is wholly subscribed to
+// the global span configurations state.
+func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
+	if !s.cfg.SpanConfigsEnabled {
+		return nil // nothing to do here
+	}
+
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		if !s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
+			return nil
+		}
+
+		log.Warningf(ctx, "waiting for span config subscription...")
+		continue
+	}
+
+	return errors.Newf("unable to subscribe to span configs")
 }
 
 // registerLeaseholder registers the provided replica as a leaseholder in the
