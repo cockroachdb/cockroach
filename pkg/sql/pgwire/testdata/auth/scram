@@ -2,6 +2,8 @@ config secure
 ----
 
 sql
+-- prevent auto-converting passwords, so that each sub-test exercises its own hash method.
+SET CLUSTER SETTING server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled = false;
 -- Explicit hash.
 CREATE USER abc WITH PASSWORD 'SCRAM-SHA-256$4096:pAlYy62NTdETKb291V/Wow==$OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=:r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ=';
 -- Automatic hashes.
@@ -253,6 +255,62 @@ authlog 4
 78 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
 79 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 80 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+
+subtest end
+
+subtest hash_conversion
+
+sql
+-- enable auto-conversion of passwords.
+SET CLUSTER SETTING server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled = true;
+----
+ok
+
+# Verify the hash is still bcrypt at this point.
+sql
+SELECT crdb_internal.force_error('11111', substr(encode("hashedPassword",'escape'), 1, 4)) FROM system.users WHERE username='foo'
+----
+ERROR: $2a$ (SQLSTATE 11111)
+
+# The first time after conversion is enabled, a bcrypt-using account still uses bcrypt.
+connect user=foo password=abc
+----
+ok defaultdb
+
+# Assert the conn used a cleartext handshake.
+authlog 6
+.*client_connection_end
+----
+81 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+82 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+83 {"EventType":"client_authentication_info","Info":"no client cert nor SCRAM credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+84 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+85 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+86 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+# Verify the stored hash has been converted now.
+sql
+SELECT crdb_internal.force_error('11111', substr(encode("hashedPassword",'escape'), 1, 13)) FROM system.users WHERE username='foo'
+----
+ERROR: SCRAM-SHA-256 (SQLSTATE 11111)
+
+# So the next login uses SCRAM.
+connect user=foo password=abc
+----
+ok defaultdb
+
+# Assert the conn used a SCRAM handshake.
+authlog 6
+.*client_connection_end
+----
+87 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+88 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+89 {"EventType":"client_authentication_info","Info":"no client cert but SCRAM credentials found, proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+90 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+91 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+92 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
 
 
 subtest end
