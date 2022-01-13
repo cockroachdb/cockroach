@@ -25,8 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
@@ -242,9 +243,10 @@ type testRange struct {
 
 func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 	acc := rr.newAccumulator()
-	for _, r := range ranges {
-		repl := &Replica{store: s}
-		repl.mu.state.Desc = &roachpb.RangeDescriptor{}
+	for i, r := range ranges {
+		rangeID := roachpb.RangeID(i + 1)
+		repl := &Replica{store: s, RangeID: rangeID}
+		repl.mu.state.Desc = &roachpb.RangeDescriptor{RangeID: rangeID}
 		repl.mu.conf = s.cfg.DefaultSpanConfig
 		for _, storeID := range r.voters {
 			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
@@ -706,7 +708,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			name:                "no rebalance",
 			voters:              []roachpb.StoreID{3, 6, 9},
 			constraints:         oneReplicaPerRegion,
-			expRebalancedVoters: []roachpb.StoreID{9, 6, 3},
+			expRebalancedVoters: []roachpb.StoreID{},
 		},
 		// A replica is in a heavily loaded region, on a relatively heavily loaded
 		// store. We expect it to be moved to a less busy store within the same
@@ -876,6 +878,56 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			require.ElementsMatch(t, nonVoterStoreIDs, tc.expRebalancedNonVoters)
 		})
 	}
+}
+
+// TestChooseRangeToRebalanceIgnoresRangeOnBestStores tests that the store
+// rebalancer does not attempt to rebalance ranges unless it finds a better set
+// of target stores for it compared to its existing stores.
+func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+		context.Background(), tracing.NewTracer(), "test",
+	)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	stopper, g, _, a, _ := createTestAllocatorWithKnobs(ctx,
+		10,
+		false, /* deterministic */
+		&AllocatorTestingKnobs{AllowLeaseTransfersToReplicasNeedingSnapshots: true},
+	)
+	defer stopper.Stop(context.Background())
+	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+
+	localDesc := *noLocalityStores[len(noLocalityStores)-1]
+	cfg := TestStoreConfig(nil)
+	cfg.Gossip = g
+	cfg.StorePool = a.storePool
+	cfg.DefaultSpanConfig.NumVoters = 1
+	cfg.DefaultSpanConfig.NumReplicas = 1
+	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(noLocalityStores, t)
+	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
+	rq := newReplicateQueue(s, a)
+	rr := newReplicaRankings()
+
+	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+
+	// Load a fake hot range that's already on the best stores. We want to ensure
+	// that the store rebalancer doesn't attempt to rebalance ranges that it
+	// cannot find better rebalance opportunities for.
+	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{localDesc.StoreID}, qps: 100}})
+	hottestRanges := rr.topQPS()
+	sr.chooseRangeToRebalance(
+		ctx, &hottestRanges, &localDesc, storeList, qpsScorerOptions{qpsRebalanceThreshold: 0.05},
+	)
+	trace := finishAndGetRecording()
+	require.Regexpf(
+		t, "could not find.*opportunities for r1",
+		trace, "expected the store rebalancer to explicitly ignore r1; but found %s", trace,
+	)
 }
 
 func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
