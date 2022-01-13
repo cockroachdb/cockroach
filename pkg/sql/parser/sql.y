@@ -3143,7 +3143,7 @@ alter_unsupported_stmt:
   }
 | ALTER AGGREGATE error
   {
-    return unimplemented(sqllex, "alter aggregate")
+    return unimplementedWithIssueDetail(sqllex, 74775, "alter aggregate")
   }
 
 // %Help: IMPORT - load data from file in a distributed manner
@@ -3577,7 +3577,7 @@ create_extension_stmt:
 
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
-| CREATE AGGREGATE error { return unimplemented(sqllex, "create aggregate") }
+| CREATE AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "create aggregate") }
 | CREATE CAST error { return unimplemented(sqllex, "create cast") }
 | CREATE CONSTRAINT TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create constraint") }
 | CREATE CONVERSION error { return unimplemented(sqllex, "create conversion") }
@@ -3610,7 +3610,7 @@ opt_procedural:
 
 drop_unsupported:
   DROP ACCESS METHOD error { return unimplemented(sqllex, "drop access method") }
-| DROP AGGREGATE error { return unimplemented(sqllex, "drop aggregate") }
+| DROP AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "drop aggregate") }
 | DROP CAST error { return unimplemented(sqllex, "drop cast") }
 | DROP COLLATION error { return unimplemented(sqllex, "drop collation") }
 | DROP CONVERSION error { return unimplemented(sqllex, "drop conversion") }
