@@ -32,7 +32,7 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
 		s.SQLStats.GetTotalFingerprintCount(), s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
 
-	aggregatedTs := s.computeAggregatedTs()
+	aggregatedTs := s.ComputeAggregatedTs()
 	s.lastFlushStarted = s.getTimeNow()
 
 	s.flushStmtStats(ctx, aggregatedTs)
@@ -238,13 +238,21 @@ func (s *PersistedSQLStats) doInsertElseDoUpdate(
 	return nil
 }
 
-func (s *PersistedSQLStats) computeAggregatedTs() time.Time {
+// ComputeAggregatedTs returns the aggregation timestamp to assign
+// in-memory SQL stats during storage or aggregation.
+func (s *PersistedSQLStats) ComputeAggregatedTs() time.Time {
 	interval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
 	now := s.getTimeNow()
 
 	aggTs := now.Truncate(interval)
 
 	return aggTs
+}
+
+// GetAggregationInterval returns the current aggregation interval
+// used by PersistedSQLStats.
+func (s *PersistedSQLStats) GetAggregationInterval() time.Duration {
+	return SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
 }
 
 func (s *PersistedSQLStats) getTimeNow() time.Time {
