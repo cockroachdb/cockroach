@@ -50,6 +50,9 @@ type TxnKVStreamer struct {
 	// fully responded to yet.
 	numOutstandingRequests int
 
+	// getResponseScratch is reused to return the result of Get requests.
+	getResponseScratch [1]roachpb.KeyValue
+
 	results         []kvstreamer.Result
 	lastResultState struct {
 		kvstreamer.Result
@@ -107,7 +110,8 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 		origSpan := f.spans[pos]
 		f.lastResultState.numEmitted++
 		f.numOutstandingRequests--
-		return false, []roachpb.KeyValue{{Key: origSpan.Key, Value: *get.Value}}, nil, nil
+		f.getResponseScratch[0] = roachpb.KeyValue{Key: origSpan.Key, Value: *get.Value}
+		return false, f.getResponseScratch[:], nil, nil
 	}
 	scan := result.ScanResp
 	if len(scan.BatchResponses) > 0 {
