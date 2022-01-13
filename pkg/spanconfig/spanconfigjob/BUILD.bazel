@@ -8,9 +8,12 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
