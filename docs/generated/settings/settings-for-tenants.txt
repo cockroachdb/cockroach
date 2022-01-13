@@ -75,6 +75,7 @@ server.user_login.password_hashes.default_cost.crdb_bcrypt	integer	10	the hashin
 server.user_login.password_hashes.default_cost.scram_sha_256	integer	130000	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method scram-sha-256 (allowed range: 4096-10485760)
 server.user_login.store_client_pre_hashed_passwords.enabled	boolean	true	whether the server accepts to store passwords pre-hashed by clients
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
+server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256
 server.web_session.auto_logout.timeout	duration	168h0m0s	the duration that web sessions will survive before being periodically purged, since they were last used
 server.web_session.purge.max_deletions_per_cycle	integer	10	the maximum number of old sessions to delete for each purge
 server.web_session.purge.period	duration	1h0m0s	the time until old sessions are deleted

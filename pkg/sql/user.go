@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -607,4 +608,101 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQ
 		)
 	}
 	return nil
+}
+
+// MaybeUpgradeStoredPasswordHash attempts to convert
+// a stored hash that was encoded using crdb-bcrypt, to
+// the SCRAM-SHA-256 format instead.
+//
+// This auto-conversion is a CockroachDB-specific feature, which
+// pushes clusters upgraded from a previous version into using
+// SCRAM-SHA-256.
+//
+// The caller is responsible for ensuring this function is
+// only called after a successful authentication, that is,
+// the provided cleartext password is known to match
+// the previously-encoded prevHash.
+func MaybeUpgradeStoredPasswordHash(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	ie *InternalExecutor,
+	username security.SQLUsername,
+	cleartext string,
+	prevHash security.PasswordHash,
+) {
+	// This call also checks whether the conversion has been disabled
+	// by configuration.
+	converted, newHash, err := security.MaybeUpgradePasswordHash(ctx, &execCfg.Settings.SV, cleartext, prevHash)
+	if err != nil {
+		// We're not returning an error: clients should not be
+		// refused a session just because a password conversion failed.
+		// Simply explain what happened in logs for troubleshooting.
+		log.Warningf(ctx, "password hash conversion failed: %+v", err)
+		return
+	} else if !converted {
+		// No conversion happening. Nothing to do.
+		return
+	}
+
+	// The password hash was successfully converted. Store the new hash.
+	if err := updateUserPasswordHash(ctx, execCfg, ie, username, newHash); err != nil {
+		// Again, we don't want to fail with an error, because
+		// at this point authentication succeeded.
+		// Simply explain what happened in logs for troubleshooting.
+		log.Warningf(ctx, "storing the new password hash after conversion failed: %+v", err)
+	} else {
+		// Inform the security audit log that the hash was upgraded.
+		log.StructuredEvent(ctx, &eventpb.PasswordHashConverted{
+			RoleName:  username.Normalized(),
+			OldMethod: prevHash.Method().String(),
+			NewMethod: newHash.Method().String(),
+		})
+	}
+}
+
+func updateUserPasswordHash(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	ie *InternalExecutor,
+	username security.SQLUsername,
+	newHash security.PasswordHash,
+) error {
+	// Apply the same timeout for updating the hash as was
+	// used for the authentication itself.
+	timeout := userLoginTimeout.Get(&execCfg.Settings.SV)
+	// We don't like long timeouts for root.
+	// (4.5 seconds to not exceed the default 5s timeout configured in many clients.)
+	const maxRootTimeout = 4*time.Second + 500*time.Millisecond
+	if username.IsRootUser() && (timeout == 0 || timeout > maxRootTimeout) {
+		timeout = maxRootTimeout
+	}
+
+	runFn := func(fn func(ctx context.Context) error) error { return fn(ctx) }
+	if timeout != 0 {
+		runFn = func(fn func(ctx context.Context) error) error {
+			return contextutil.RunWithTimeout(ctx, "update-hash-timeout", timeout, fn)
+		}
+	}
+
+	return runFn(func(ctx context.Context) error {
+		return execCfg.CollectionFactory.Txn(
+			ctx, ie, execCfg.DB,
+			func(ctx context.Context, txn *kv.Txn, _ *descs.CollectionFactory) error {
+				_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+					ctx,
+					"set-password-hash",
+					txn,
+					`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
+					username.Normalized(),
+					newHash.Bytes(),
+				)
+				if err != nil {
+					return err
+				}
+				if sessioninit.CacheEnabled.Get(&execCfg.Settings.SV) {
+					// Bump user table versions to force a refresh of AuthInfo cache.
+					// FIXME
+				}
+			})
+	})
 }
