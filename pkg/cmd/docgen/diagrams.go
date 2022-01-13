@@ -953,6 +953,12 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
 	},
 	{
+		name: "not_visible_column_level",
+		stmt: "stmt_block",
+		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'NOT VISIBLE' ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
+		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
+	},
+	{
 		name: "opt_interleave",
 	},
 	{
