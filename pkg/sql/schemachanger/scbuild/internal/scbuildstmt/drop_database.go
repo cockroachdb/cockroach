@@ -49,6 +49,11 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 			if n.DropBehavior == tree.DropRestrict && (nodeAdded || !schemaDroppedIDs.Empty()) {
 				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 					"database %q is not empty and RESTRICT was specified", db.GetName()))
+			} else if b.SessionData().SafeUpdates &&
+				n.DropBehavior == tree.DropDefault && (nodeAdded || !schemaDroppedIDs.Empty()) {
+
+				panic(pgerror.DangerousStatementf(
+					"DROP DATABASE on non-empty database without explicit CASCADE"))
 			}
 			// If no schema exists to depend on, then depend on dropped IDs
 			if !nodeAdded {
