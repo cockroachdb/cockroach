@@ -1824,13 +1824,19 @@ func doRestorePlan(
 			KMSInfo: defaultKMSInfo}
 	}
 
-	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(
-		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
+	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+
+	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := resolveBackupManifests(
+		ctx, &mem, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
 		incFrom, endTime, encryption, p.User(),
 	)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		mem.Shrink(ctx, memReserved)
+	}()
 
 	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 	for i := range mainBackupManifests {
