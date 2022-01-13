@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,7 +48,13 @@ func (s *statusServer) CombinedStatementStats(
 		return nil, err
 	}
 
-	return getCombinedStatementStats(ctx, req, s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(), s.internalExecutor)
+	return getCombinedStatementStats(
+		ctx,
+		req,
+		s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
+		s.internalExecutor,
+		s.st,
+		s.sqlServer.execCfg.SQLStatsTestingKnobs)
 }
 
 func getCombinedStatementStats(
@@ -55,15 +62,19 @@ func getCombinedStatementStats(
 	req *serverpb.CombinedStatementsStatsRequest,
 	statsProvider sqlstats.Provider,
 	ie *sql.InternalExecutor,
+	settings *cluster.Settings,
+	testingKnobs *sqlstats.TestingKnobs,
 ) (*serverpb.StatementsResponse, error) {
 	startTime := getTimeFromSeconds(req.Start)
 	endTime := getTimeFromSeconds(req.End)
-	statements, err := collectCombinedStatements(ctx, ie, startTime, endTime)
+	limit := SQLStatsResponseMax.Get(&settings.SV)
+	whereClause, args := getFilterAndParams(startTime, endTime, limit, testingKnobs)
+	statements, err := collectCombinedStatements(ctx, ie, whereClause, args)
 	if err != nil {
 		return nil, err
 	}
 
-	transactions, err := collectCombinedTransactions(ctx, ie, startTime, endTime)
+	transactions, err := collectCombinedTransactions(ctx, ie, whereClause, args)
 	if err != nil {
 		return nil, err
 	}
@@ -78,37 +89,38 @@ func getCombinedStatementStats(
 	return response, nil
 }
 
-func getFilterAndParams(start, end *time.Time) (string, []interface{}) {
+func getFilterAndParams(
+	start, end *time.Time, limit int64, testingKnobs *sqlstats.TestingKnobs,
+) (string, []interface{}) {
 	var args []interface{}
-
-	if start == nil && end == nil {
-		return "", args
-	}
-
 	var buffer strings.Builder
-	buffer.WriteString("WHERE ")
+	buffer.WriteString(testingKnobs.GetAOSTClause())
+
+	// Filter out internal statements by app name.
+	buffer.WriteString(" WHERE app_name NOT LIKE '$ internal%'")
 
 	if start != nil {
-		buffer.WriteString("aggregated_ts >= $1")
+		buffer.WriteString(" AND aggregated_ts >= $1")
 		args = append(args, *start)
 	}
 
-	if start != nil && end != nil {
-		buffer.WriteString(" AND ")
-	}
-
 	if end != nil {
-		buffer.WriteString(fmt.Sprintf("aggregated_ts <= $%d", len(args)+1))
+		buffer.WriteString(fmt.Sprintf(" AND aggregated_ts <= $%d", len(args)+1))
 		args = append(args, *end)
 	}
+
+	// Retrieve the top rows ordered by aggregation time and service latency.
+	buffer.WriteString(fmt.Sprintf(`
+ORDER BY aggregated_ts DESC,(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float DESC
+LIMIT $%d`, len(args)+1))
+	args = append(args, limit)
 
 	return buffer.String(), args
 }
 
 func collectCombinedStatements(
-	ctx context.Context, ie *sql.InternalExecutor, start, end *time.Time,
+	ctx context.Context, ie *sql.InternalExecutor, whereClause string, qargs []interface{},
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-	whereClause, qargs := getFilterAndParams(start, end)
 
 	query := fmt.Sprintf(
 		`SELECT
@@ -119,7 +131,7 @@ func collectCombinedStatements(
 				metadata,
 				statistics,
 				sampled_plan,
-				aggregation_interval
+        aggregation_interval
 			FROM crdb_internal.statement_statistics
 			%s`, whereClause)
 
@@ -212,9 +224,8 @@ func collectCombinedStatements(
 }
 
 func collectCombinedTransactions(
-	ctx context.Context, ie *sql.InternalExecutor, start, end *time.Time,
+	ctx context.Context, ie *sql.InternalExecutor, whereClause string, qargs []interface{},
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
-	whereClause, qargs := getFilterAndParams(start, end)
 
 	query := fmt.Sprintf(
 		`SELECT

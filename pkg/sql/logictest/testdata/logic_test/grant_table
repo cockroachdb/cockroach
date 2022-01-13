@@ -39,6 +39,8 @@ test           crdb_internal       cluster_inflight_traces                public
 test           crdb_internal       cluster_queries                        public   SELECT
 test           crdb_internal       cluster_sessions                       public   SELECT
 test           crdb_internal       cluster_settings                       public   SELECT
+test           crdb_internal       cluster_statement_statistics           public   SELECT
+test           crdb_internal       cluster_transaction_statistics         public   SELECT
 test           crdb_internal       cluster_transactions                   public   SELECT
 test           crdb_internal       create_statements                      public   SELECT
 test           crdb_internal       create_type_statements                 public   SELECT

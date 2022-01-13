@@ -44,6 +44,8 @@ crdb_internal  cluster_inflight_traces      table  NULL  NULL  NULL
 crdb_internal  cluster_queries              table  NULL  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL  NULL
 crdb_internal  cluster_settings             table  NULL  NULL  NULL
+crdb_internal  cluster_statement_statistics    table  NULL  NULL  NULL
+crdb_internal  cluster_transaction_statistics  table  NULL  NULL  NULL
 crdb_internal  cluster_transactions         table  NULL  NULL  NULL
 crdb_internal  create_statements            table  NULL  NULL  NULL
 crdb_internal  create_type_statements       table  NULL  NULL  NULL
@@ -86,13 +88,13 @@ crdb_internal  regions                      table  NULL  NULL  NULL
 crdb_internal  schema_changes               table  NULL  NULL  NULL
 crdb_internal  session_trace                table  NULL  NULL  NULL
 crdb_internal  session_variables            table  NULL  NULL  NULL
-crdb_internal  statement_statistics         table  NULL  NULL  NULL
+crdb_internal  statement_statistics         view   NULL  NULL  NULL
 crdb_internal  table_columns                table  NULL  NULL  NULL
 crdb_internal  table_indexes                table  NULL  NULL  NULL
 crdb_internal  table_row_statistics         table  NULL  NULL  NULL
 crdb_internal  tables                       table  NULL  NULL  NULL
 crdb_internal  tenant_usage_details         view   NULL  NULL  NULL
-crdb_internal  transaction_statistics       table  NULL  NULL  NULL
+crdb_internal  transaction_statistics       view   NULL  NULL  NULL
 crdb_internal  zones                        table  NULL  NULL  NULL
 
 statement ok
