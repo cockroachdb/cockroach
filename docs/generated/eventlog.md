@@ -2254,6 +2254,26 @@ An event of type `drop_role` is recorded when a role is dropped.
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+### `password_hash_converted`
+
+An event of type `password_hash_converted` is recorded when the password credentials
+are automatically converted server-side.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RoleName` | The name of the user/role whose credentials have been converted. | yes |
+| `OldMethod` | The previous hash method. | no |
+| `NewMethod` | The new hash method. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Telemetry events
 
 
