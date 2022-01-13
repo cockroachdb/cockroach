@@ -294,7 +294,7 @@ func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManif
 	// upgraded from the old FK representation, or even older formats). If more
 	// fields are added to the output, the table descriptors may need to be
 	// upgraded.
-	backupManifest, err := backupccl.ReadBackupManifestFromURI(ctx, path, security.RootUserName(),
+	backupManifest, _, err := backupccl.ReadBackupManifestFromURI(ctx, nil /* mem */, path, security.RootUserName(),
 		externalStorageFromURIFactory, nil)
 	if err != nil {
 		return backupccl.BackupManifest{}, err
@@ -389,7 +389,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 			defer stores[i].Close()
 		}
 
-		manifest, err := backupccl.ReadBackupManifestFromStore(ctx, stores[i], nil)
+		manifest, _, err := backupccl.ReadBackupManifestFromStore(ctx, nil /* mem */, stores[i], nil)
 		if err != nil {
 			return err
 		}
