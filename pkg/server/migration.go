@@ -240,3 +240,30 @@ func (m *migrationServer) DeprecateBaseEncryptionRegistry(
 	resp := &serverpb.DeprecateBaseEncryptionRegistryResponse{}
 	return resp, nil
 }
+
+// WaitForSpanConfigSubscription implements the MigrationServer interface.
+func (m *migrationServer) WaitForSpanConfigSubscription(
+	ctx context.Context, _ *serverpb.WaitForSpanConfigSubscriptionRequest,
+) (*serverpb.WaitForSpanConfigSubscriptionResponse, error) {
+	const opName = "wait-for-spanconfig-subscription"
+	ctx, span := m.server.AnnotateCtxWithSpan(ctx, opName)
+	defer span.Finish()
+	ctx = logtags.AddTag(ctx, opName, nil)
+
+	if err := m.server.stopper.RunTaskWithErr(ctx, opName, func(
+		ctx context.Context,
+	) error {
+		// Same as in SyncAllEngines, because stores can be added asynchronously, we
+		// need to ensure that the bootstrap process has happened.
+		m.server.node.waitForAdditionalStoreInit()
+
+		return m.server.node.stores.VisitStores(func(s *kvserver.Store) error {
+			return s.WaitForSpanConfigSubscription(ctx)
+		})
+	}); err != nil {
+		return nil, err
+	}
+
+	resp := &serverpb.WaitForSpanConfigSubscriptionResponse{}
+	return resp, nil
+}
