@@ -56,6 +56,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			sc, err := tc.getSchemaByID(
 				ctx, txn, desc.ParentSchemaID,
 				tree.SchemaLookupFlags{
+					Required:       true,
 					IncludeOffline: true,
 					RequireMutable: true,
 				},
@@ -89,7 +90,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 				return tree.TypeName{}, nil, err
 			}
 			sc, err := tc.GetImmutableSchemaByID(
-				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}

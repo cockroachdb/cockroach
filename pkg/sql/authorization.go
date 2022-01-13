@@ -218,7 +218,7 @@ func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
 	return owner
 }
 
-//IsOwner returns if the role has ownership on the descriptor.
+// IsOwner returns if the role has ownership on the descriptor.
 func IsOwner(desc catalog.Descriptor, role security.SQLUsername) bool {
 	return role == getOwnerOfDesc(desc)
 }
@@ -345,7 +345,7 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 		return err
 	}
 	if !ok {
-		//raise error if user is not a super-user
+		// raise error if user is not a super-user
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only users with the admin role are allowed to %s", action)
 	}
@@ -610,7 +610,7 @@ func (p *planner) canCreateOnSchema(
 	checkPublicSchema shouldCheckPublicSchema,
 ) error {
 	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
+		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
@@ -735,7 +735,7 @@ func (p *planner) HasOwnershipOnSchema(
 		return p.User().IsNodeUser(), nil
 	}
 	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{},
+		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{Required: true},
 	)
 	if err != nil {
 		return false, err

@@ -78,7 +78,7 @@ type RewriteEvTypes string
 
 const evTypeSelect RewriteEvTypes = "1"
 
-//PGShDependType is an enumeration that lists pg_shdepend deptype column values
+// PGShDependType is an enumeration that lists pg_shdepend deptype column values
 type PGShDependType string
 
 const (
@@ -1417,13 +1417,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 				objID := h.rewriteOid(table.GetID(), dep.ID)
 				for _, colID := range dep.ColumnIDs {
 					if err := addRow(
-						pgRewriteTableOid,              //classid
-						objID,                          //objid
-						zeroVal,                        //objsubid
-						pgClassTableOid,                //refclassid
-						refObjOid,                      //refobjid
-						tree.NewDInt(tree.DInt(colID)), //refobjsubid
-						depTypeNormal,                  //deptype
+						pgRewriteTableOid,              // classid
+						objID,                          // objid
+						zeroVal,                        // objsubid
+						pgClassTableOid,                // refclassid
+						refObjOid,                      // refobjid
+						tree.NewDInt(tree.DInt(colID)), // refobjsubid
+						depTypeNormal,                  // deptype
 					); err != nil {
 						return err
 					}
@@ -2845,7 +2845,7 @@ func getSchemaAndTypeByTypeID(
 		ctx,
 		p.txn,
 		typDesc.GetParentSchemaID(),
-		tree.SchemaLookupFlags{},
+		tree.SchemaLookupFlags{Required: true},
 	)
 	if err != nil {
 		return "", nil, err
@@ -2956,7 +2956,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 						ctx,
 						p.txn,
 						table.GetParentSchemaID(),
-						tree.SchemaLookupFlags{},
+						tree.SchemaLookupFlags{Required: true},
 					)
 					if err != nil {
 						return false, err
@@ -4372,7 +4372,7 @@ func stringOid(s string) *tree.DOid {
 	return h.getOid()
 }
 
-//MakeConstraintOidBuilder constructs an OID builder.
+// MakeConstraintOidBuilder constructs an OID builder.
 func MakeConstraintOidBuilder() commenter.ConstraintOidBuilder {
 	return makeOidHasher()
 }

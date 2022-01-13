@@ -12,16 +12,16 @@ package descs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/errors"
 )
 
 // GetMutableSchemaByName resolves the schema and, if applicable, returns a
@@ -114,6 +114,15 @@ func (tc *Collection) getSchemaByID(
 	if sc, err := tc.virtual.getSchemaByID(
 		ctx, schemaID, flags.RequireMutable,
 	); sc != nil || err != nil {
+		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				if flags.Required {
+					return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
+				}
+				return nil, nil
+			}
+			return nil, err
+		}
 		return sc, err
 	}
 
@@ -126,13 +135,17 @@ func (tc *Collection) getSchemaByID(
 	// Otherwise, fall back to looking up the descriptor with the desired ID.
 	desc, err := tc.getDescriptorByID(ctx, txn, schemaID, flags)
 	if err != nil {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			if flags.Required {
+				return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
+			}
+			return nil, nil
+		}
 		return nil, err
 	}
-
 	schemaDesc, ok := desc.(catalog.SchemaDescriptor)
 	if !ok {
-		return nil, pgerror.Newf(pgcode.WrongObjectType,
-			"descriptor %d was not a schema", schemaID)
+		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
 	}
 
 	return schemaDesc, nil
