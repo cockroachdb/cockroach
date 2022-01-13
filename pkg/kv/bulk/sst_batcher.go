@@ -96,6 +96,9 @@ type SSTBatcher struct {
 	// produced SSTs.
 	batchTS hlc.Timestamp
 
+	// writeAtBatchTS is passed to the writeAtBatchTs argument to db.AddSStable.
+	writeAtBatchTS bool
+
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
@@ -135,9 +138,14 @@ func MakeSSTBatcher(
 	settings *cluster.Settings,
 	flushBytes func() int64,
 	disallowShadowingBelow hlc.Timestamp,
+	writeAtBatchTs bool,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
-		db: db, settings: settings, maxSize: flushBytes, disallowShadowingBelow: disallowShadowingBelow,
+		db:                     db,
+		settings:               settings,
+		maxSize:                flushBytes,
+		disallowShadowingBelow: disallowShadowingBelow,
+		writeAtBatchTS:         writeAtBatchTs,
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -347,7 +355,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	}
 
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowingBelow, b.ms, b.settings, b.batchTS)
+	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowingBelow, b.ms, b.settings, b.batchTS, b.writeAtBatchTS)
 	if err != nil {
 		return err
 	}
@@ -442,6 +450,7 @@ func AddSSTable(
 	ms enginepb.MVCCStats,
 	settings *cluster.Settings,
 	batchTs hlc.Timestamp,
+	writeAtBatchTs bool,
 ) (int, error) {
 	var files int
 	now := timeutil.Now()
@@ -489,7 +498,7 @@ func AddSSTable(
 				// This will fail if the range has split but we'll check for that below.
 				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, false, /* disallowConflicts */
 					!item.disallowShadowingBelow.IsEmpty(), item.disallowShadowingBelow, &item.stats,
-					ingestAsWriteBatch, batchTs, false /* writeAtBatchTs */)
+					ingestAsWriteBatch, batchTs, writeAtBatchTs)
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil

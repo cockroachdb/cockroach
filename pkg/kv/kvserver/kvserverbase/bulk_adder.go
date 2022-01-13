@@ -67,6 +67,10 @@ type BulkAdderOptions struct {
 	// different from the timestamp used to construct the adder which is what is
 	// actually applied to each key).
 	BatchTimestamp hlc.Timestamp
+
+	// WriteAtRequestTime is used to set the corresponding field when sending
+	// constructed SSTables to AddSSTable. See roachpb.AddSSTableRequest.
+	WriteAtRequestTime bool
 }
 
 // DisableExplicitSplits can be returned by a SplitAndScatterAfter function to

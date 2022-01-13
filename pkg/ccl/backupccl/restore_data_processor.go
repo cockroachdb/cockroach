@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -100,6 +101,13 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 		maxConcurrentRestoreWorkers),
 	int64(defaultNumWorkers),
 	settings.PositiveInt,
+)
+
+var restoreAtNow = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.restore_at_current_time.enabled",
+	"write restored data at the current timestamp",
+	false,
 )
 
 func newRestoreDataProcessor(
@@ -377,6 +385,13 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
+	writeAtBatchTS := restoreAtNow.Get(&evalCtx.Settings.SV)
+	if writeAtBatchTS && !evalCtx.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
+		return roachpb.BulkOpSummary{}, errors.Newf(
+			"cannot use %s until version %s", restoreAtNow.Key(), clusterversion.MVCCAddSSTable.String(),
+		)
+	}
+
 	// "disallowing" shadowing of anything older than logical=1 is i.e. allow all
 	// shadowing. We must allow shadowing in case the RESTORE has to retry any
 	// ingestions, but setting a (permissive) disallow like this serves to force
@@ -385,8 +400,13 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// this comes at the cost of said overlap check, but in the common case of
 	// non-overlapping ingestion into empty spans, that is just one seek.
 	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return rd.flushBytes }, disallowShadowingBelow)
+	batcher, err := bulk.MakeSSTBatcher(ctx,
+		db,
+		evalCtx.Settings,
+		func() int64 { return rd.flushBytes },
+		disallowShadowingBelow,
+		writeAtBatchTS,
+	)
 	if err != nil {
 		return summary, err
 	}

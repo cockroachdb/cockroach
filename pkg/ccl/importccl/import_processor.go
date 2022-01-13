@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -94,6 +95,13 @@ var importBufferIncrementSize = func() *settings.ByteSizeSetting {
 	)
 	return s
 }()
+
+var importAtNow = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.import_at_current_time.enabled",
+	"write imported data at the current timestamp, when each batch is flushed",
+	false,
+)
 
 // ImportBufferConfigSizes determines the minimum, maximum and step size for the
 // BulkAdder buffer used in import.
@@ -319,6 +327,15 @@ func ingestKvs(
 	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
+	writeAtRequestTime := false
+	if importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
+		if !flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
+			return nil, errors.Newf(
+				"cannot use %s until version %s", importAtNow.Key(), clusterversion.MVCCAddSSTable.String(),
+			)
+		}
+		writeAtRequestTime = true
+	}
 
 	flushSize := func() int64 { return storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings) }
 
@@ -341,6 +358,7 @@ func ingestKvs(
 		MaxBufferSize:          maxBufferSize,
 		StepBufferSize:         stepSize,
 		SSTSize:                flushSize,
+		WriteAtRequestTime:     writeAtRequestTime,
 	})
 	if err != nil {
 		return nil, err
@@ -357,6 +375,7 @@ func ingestKvs(
 		MaxBufferSize:          maxBufferSize,
 		StepBufferSize:         stepSize,
 		SSTSize:                flushSize,
+		WriteAtRequestTime:     writeAtRequestTime,
 	})
 	if err != nil {
 		return nil, err
