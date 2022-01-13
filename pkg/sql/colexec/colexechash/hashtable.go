@@ -518,6 +518,7 @@ func (ht *HashTable) checkCols(probeVecs []coldata.Vec, nToCheck uint64, probeSe
 
 // checkColsForDistinctTuples performs a column by column check to find distinct
 // tuples in the probe table that are not present in the build table.
+// NOTE: It assumes that probeSel has already been populated and it is not nil.
 func (ht *HashTable) checkColsForDistinctTuples(
 	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
 ) {
