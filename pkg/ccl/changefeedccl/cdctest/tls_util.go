@@ -125,8 +125,8 @@ func GenerateClientCertAndKey(caCert *tls.Certificate) ([]byte, []byte, error) {
 	clientCert := &x509.Certificate{
 		SerialNumber: big.NewInt(1658),
 		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().AddDate(10, 0, 0),
+		NotBefore:    timeutil.Now(),
+		NotAfter:     timeutil.Now().Add(certLifetime),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
