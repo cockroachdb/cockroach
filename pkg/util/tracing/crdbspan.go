@@ -325,6 +325,7 @@ func (s *crdbSpan) TraceID() tracingpb.TraceID {
 	return s.traceID
 }
 
+// SpanID is part of the RegistrySpan interface.
 func (s *crdbSpan) SpanID() tracingpb.SpanID {
 	return s.spanID
 }
@@ -696,10 +697,6 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 				addTag(remappedKey, tag.ValueStr())
 			})
 		}
-		for _, kv := range s.mu.tags {
-			// We encode the tag values as strings.
-			addTag(string(kv.Key), kv.Value.Emit())
-		}
 	}
 
 	if numLogs := s.mu.recording.logs.Len(); numLogs != 0 {
@@ -861,6 +858,11 @@ func (s *crdbSpan) SetRecordingType(to RecordingType) {
 	for _, child := range s.mu.openChildren {
 		child.SetRecordingType(to)
 	}
+}
+
+// RecordingType is part of the RegistrySpan interface.
+func (s *crdbSpan) RecordingType() RecordingType {
+	return s.recordingType()
 }
 
 // withLock calls f while holding s' lock.

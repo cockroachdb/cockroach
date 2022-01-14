@@ -20,6 +20,8 @@ import "roachpb/data.proto";
 import "roachpb/index_usage_stats.proto";
 import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
+import "util/tracing/tracingpb/recorded_span.proto";
+import "util/tracing/tracingpb/tracing.proto";
 import "server/status/statuspb/status.proto";
 import "sql/contentionpb/contention.proto";
 import "sql/execinfrapb/api.proto";
