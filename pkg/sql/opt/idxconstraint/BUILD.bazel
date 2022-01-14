@@ -10,6 +10,7 @@ go_library(
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/partition",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",
