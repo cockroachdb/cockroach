@@ -80,7 +80,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			params.Add(KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
-			_, err := cloud.KMSFromURI(uri, &testKMSEnv{externalIOConfig: &base.ExternalIODirConfig{}})
+			_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
 			require.EqualError(t, err, fmt.Sprintf(
 				`%s is set to '%s', but %s is not set`,
 				cloud.AuthParam,
@@ -106,8 +106,9 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			params.Add(KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
-			testEncryptDecrypt(t, uri, testKMSEnv{
-				cluster.NoSettings, &base.ExternalIODirConfig{},
+			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+				Settings:         cluster.NoSettings,
+				ExternalIOConfig: &base.ExternalIODirConfig{},
 			})
 		})
 
@@ -116,8 +117,9 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 
-			testEncryptDecrypt(t, uri, testKMSEnv{
-				cluster.NoSettings, &base.ExternalIODirConfig{},
+			cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+				Settings:         cluster.NoSettings,
+				ExternalIOConfig: &base.ExternalIODirConfig{},
 			})
 		})
 	}
@@ -148,15 +150,17 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 
 	t.Run("allow-endpoints", func(t *testing.T) {
 		uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-		testEncryptDecrypt(t, uri, testKMSEnv{
-			awsKMSTestSettings, &base.ExternalIODirConfig{},
+		cloud.KMSEncryptDecrypt(t, uri, cloud.TestKMSEnv{
+			Settings:         awsKMSTestSettings,
+			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
 	})
 
 	t.Run("disallow-endpoints", func(t *testing.T) {
 		uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-		_, err := cloud.KMSFromURI(uri, &testKMSEnv{awsKMSTestSettings,
-			&base.ExternalIODirConfig{DisableHTTP: true}})
+		_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
+			Settings:         awsKMSTestSettings,
+			ExternalIOConfig: &base.ExternalIODirConfig{DisableHTTP: true}})
 		require.True(t, testutils.IsError(err, "custom endpoints disallowed"))
 	})
 }
@@ -174,7 +178,8 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
 	}
 	uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-	_, err := cloud.KMSFromURI(uri, &testKMSEnv{cluster.NoSettings,
-		&base.ExternalIODirConfig{DisableImplicitCredentials: true}})
+	_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
+		Settings:         cluster.NoSettings,
+		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 	require.True(t, testutils.IsError(err, "implicit credentials disallowed"))
 }
