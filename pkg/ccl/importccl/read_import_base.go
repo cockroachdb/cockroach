@@ -153,24 +153,59 @@ func readInputFiles(
 
 	fileSizes := make(map[int32]int64, len(dataFiles))
 
-	// Attempt to fetch total number of bytes for all files.
+	// "Pre-import" work.
+	// Validate readability early, and attempt to fetch total number of bytes for
+	// all files to track progress.
 	for id, dataFile := range dataFiles {
-		conf, err := cloud.ExternalStorageConfFromURI(dataFile, user)
-		if err != nil {
+		if err := func() error {
+			// Run within an anonymous function to release each connection after each
+			// iteration, rather than all at once after the `for` loop.
+			conf, err := cloud.ExternalStorageConfFromURI(dataFile, user)
+			if err != nil {
+				return err
+			}
+			es, err := makeExternalStorage(ctx, conf)
+			if err != nil {
+				return err
+			}
+			defer es.Close()
+
+			sz, err := es.Size(ctx, "")
+
+			if sz <= 0 {
+				// Don't log dataFile here because it could leak auth information.
+				log.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
+			} else {
+				fileSizes[id] = sz
+			}
+
+			if len(dataFiles) > 1 {
+				// If there's more than one file, try to read a byte from each to verify
+				// readability (e.g. permissions).
+				// If there's only one file, skip that check because it provides no
+				// advantage.
+				raw, err := es.ReadFile(ctx, "")
+				if err != nil {
+					return err
+				}
+				defer raw.Close()
+
+				p := make([]byte, 1)
+				if _, err := raw.Read(p); err != nil && err != io.EOF {
+					// Check that we can read the file. We don't care about content yet,
+					// so we read a single byte and we don't process it in any way.
+					// If the file is empty -- and we can tell that -- that also counts
+					// as readable, so don't error.
+					return err
+				}
+
+			}
+
+			return nil
+		}(); err != nil {
 			return err
 		}
-		es, err := makeExternalStorage(ctx, conf)
-		if err != nil {
-			return err
-		}
-		sz, err := es.Size(ctx, "")
-		es.Close()
-		if sz <= 0 {
-			// Don't log dataFile here because it could leak auth information.
-			log.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
-			break
-		}
-		fileSizes[id] = sz
+
 	}
 
 	for dataFileIndex, dataFile := range dataFiles {
