@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
@@ -142,17 +141,10 @@ type FetcherTableArgs struct {
 
 // InitCols initializes the columns in FetcherTableArgs.
 func (fta *FetcherTableArgs) InitCols(
-	desc catalog.TableDescriptor,
-	scanVisibility execinfrapb.ScanVisibility,
-	withSystemColumns bool,
-	invertedColumn catalog.Column,
+	desc catalog.TableDescriptor, withSystemColumns bool, invertedColumn catalog.Column,
 ) {
 	cols := make([]catalog.Column, 0, len(desc.AllColumns()))
-	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
-		cols = append(cols, desc.ReadableColumns()...)
-	} else {
-		cols = append(cols, desc.PublicColumns()...)
-	}
+	cols = append(cols, desc.ReadableColumns()...)
 	if invertedColumn != nil {
 		for i, col := range cols {
 			if col.GetID() == invertedColumn.GetID() {

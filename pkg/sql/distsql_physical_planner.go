@@ -1114,7 +1114,6 @@ func initTableReaderSpec(
 	*s = execinfrapb.TableReaderSpec{
 		Table:             *n.desc.TableDesc(),
 		Reverse:           n.reverse,
-		Visibility:        execinfra.ScanVisibilityPublicAndNotPublic,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
 		HasSystemColumns:  n.containsSystemColumns,
@@ -2231,7 +2230,6 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		Table:             *n.table.desc.TableDesc(),
 		IndexIdx:          0,
 		Type:              descpb.InnerJoin,
-		Visibility:        execinfra.ScanVisibilityPublicAndNotPublic,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
@@ -2287,7 +2285,6 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:                    *n.table.desc.TableDesc(),
 		Type:                     n.joinType,
-		Visibility:               execinfra.ScanVisibilityPublicAndNotPublic,
 		LockingStrength:          n.table.lockingStrength,
 		LockingWaitPolicy:        n.table.lockingWaitPolicy,
 		MaintainOrdering:         len(n.reqOrdering) > 0,

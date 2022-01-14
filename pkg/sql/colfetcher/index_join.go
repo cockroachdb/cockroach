@@ -449,7 +449,7 @@ func NewColIndexJoin(
 	index := table.ActiveIndexes()[spec.IndexIdx]
 	tableArgs, neededColumns, err := populateTableArgs(
 		ctx, flowCtx, table, index, nil, /* invertedCol */
-		spec.Visibility, spec.HasSystemColumns, post, helper,
+		spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
 		return nil, err
