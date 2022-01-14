@@ -1021,6 +1021,9 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	// Record when the proposal was submitted to Raft so that we can later
 	// decide if/when to re-propose it.
 	p.proposedAtTicks = rp.mu.ticks
+	if p.createdAtTicks == 0 {
+		p.createdAtTicks = rp.mu.ticks
+	}
 	rp.mu.proposals[p.idKey] = p
 }
 

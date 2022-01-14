@@ -160,6 +160,16 @@ func (m *HybridManualClock) Increment(nanos int64) {
 	m.mu.Unlock()
 }
 
+// Forward sets the wall time to the supplied timestamp this moves the clock
+// forward in time.
+func (m *HybridManualClock) Forward(nanos int64) {
+	m.mu.Lock()
+	if nanos > m.mu.nanos {
+		m.mu.nanos = nanos
+	}
+	m.mu.Unlock()
+}
+
 // Pause pauses the hybrid manual clock; the passage of time no longer causes
 // the clock to tick. Increment can still be used, though.
 func (m *HybridManualClock) Pause() {
