@@ -1,0 +1,140 @@
+diff --git a/internal/node/launcher.sh b/internal/node/launcher.sh
+index 007b7279..93646035 100644
+--- a/internal/node/launcher.sh
++++ b/internal/node/launcher.sh
+@@ -113,6 +113,7 @@ else
+   case "${unameOs}" in
+       Linux*)     machine=linux ;;
+       Darwin*)    machine=darwin ;;
++      FreeBSD*)   machine=freebsd ;;
+       CYGWIN*)    machine=windows ;;
+       MINGW*)     machine=windows ;;
+       MSYS_NT*)   machine=windows ;;
+@@ -126,6 +127,12 @@ else
+   case "${machine}" in
+     # The following paths must match up with _download_node in node_repositories
+     windows) readonly node_toolchain="nodejs_windows_amd64/bin/nodejs/node.exe" ;;
++    freebsd)
++     case "${unameArch}" in
++       x86_64*) readonly node_toolchain="nodejs_freebsd_amd64/bin/nodejs/bin/node" ;;
++       *) readonly node_toolchain="nodejs_freebsd_arm64/bin/nodejs/bin/node" ;;
++     esac
++     ;;
+     darwin)
+       case "${unameArch}" in
+         x86_64*) readonly node_toolchain="nodejs_darwin_amd64/bin/nodejs/bin/node" ;;
+diff --git a/nodejs/private/node_versions.bzl b/nodejs/private/node_versions.bzl
+index cb6eae1e..c2c8037e 100644
+--- a/nodejs/private/node_versions.bzl
++++ b/nodejs/private/node_versions.bzl
+@@ -1759,5 +1759,6 @@ NODE_VERSIONS = {
+     "16.13.0-linux_ppc64le": ("node-v16.13.0-linux-ppc64le.tar.xz", "node-v16.13.0-linux-ppc64le", "46ae5cd3b4c554a600d1b3df5ead1567f6f223a7d4d4667a2be92a67ae70aea7"),
+     "16.13.0-linux_s390x": ("node-v16.13.0-linux-s390x.tar.xz", "node-v16.13.0-linux-s390x", "49e972bf3e969d621157df4c8f2fa18ff748c167d5ebd0efc87e1b9f0c6541cc"),
+     "16.13.0-linux_amd64": ("node-v16.13.0-linux-x64.tar.xz", "node-v16.13.0-linux-x64", "a876ce787133149abd1696afa54b0b5bc5ce3d5ae359081d407ff776e39b7ba8"),
++    "16.13.0-freebsd_amd64": ("node-v16.13.0-linux-x64.tar.xz", "node-v16.13.0-linux-x64", "a876ce787133149abd1696afa54b0b5bc5ce3d5ae359081d407ff776e39b7ba8"),
+     "16.13.0-windows_amd64": ("node-v16.13.0-win-x64.zip", "node-v16.13.0-win-x64", "5a39ec5d4786c2814a6c04488bebac6423c2aaa12832b24f0882456f2e4674e1"),
+ }
+diff --git a/nodejs/private/os_name.bzl b/nodejs/private/os_name.bzl
+index 1d1c9ba2..1e67bbc2 100644
+--- a/nodejs/private/os_name.bzl
++++ b/nodejs/private/os_name.bzl
+@@ -25,6 +25,7 @@ OS_ARCH_NAMES = [
+     ("linux", "arm64"),
+     ("linux", "s390x"),
+     ("linux", "ppc64le"),
++    ("freebsd", "amd64"),
+ ]
+ 
+ OS_NAMES = ["_".join(os_arch_name) for os_arch_name in OS_ARCH_NAMES]
+@@ -58,7 +59,9 @@ def os_name(rctx):
+             return OS_NAMES[5]
+         elif arch == "ppc64le":
+             return OS_NAMES[6]
+-
++    elif os_name.startswith("freebsd"):
++        if arch == "amd64":
++            return OS_NAMES[7]
+     fail("Unsupported operating system {} architecture {}".format(os_name, arch))
+ 
+ def is_windows_os(rctx):
+@@ -72,6 +75,10 @@ def is_linux_os(rctx):
+     name = os_name(rctx)
+     return name == OS_NAMES[3] or name == OS_NAMES[4] or name == OS_NAMES[5] or name == OS_NAMES[6]
+ 
++def is_freebsd_os(rctx):
++    name = os_name(rctx)
++    return name == OS_NAMES[7]
++
+ def node_exists_for_os(node_version, os_name):
+     return "-".join([node_version, os_name]) in NODE_VERSIONS.keys()
+ 
+diff --git a/nodejs/private/toolchains_repo.bzl b/nodejs/private/toolchains_repo.bzl
+index 9dcdc602..6fdfb979 100644
+--- a/nodejs/private/toolchains_repo.bzl
++++ b/nodejs/private/toolchains_repo.bzl
+@@ -60,6 +60,12 @@ PLATFORMS = {
+             "@platforms//cpu:ppc",
+         ],
+     ),
++    "freebsd_amd64": struct(
++        compatible_with = [
++            "@platforms//os:freebsd",
++            "@platforms//cpu:x86_64",
++        ],
++    ),
+ }
+ 
+ def _toolchains_repo_impl(repository_ctx):
+diff --git a/toolchains/node/BUILD.bazel b/toolchains/node/BUILD.bazel
+index 82f79044..fe107905 100644
+--- a/toolchains/node/BUILD.bazel
++++ b/toolchains/node/BUILD.bazel
+@@ -73,6 +73,14 @@ platform(
+     ],
+ )
+ 
++platform(
++    name = "freebsd_amd64",
++    constraint_values = [
++        "@platforms//os:freebsd",
++        "@platforms//cpu:x86_64",
++    ],
++)
++
+ bzl_library(
+     name = "bzl",
+     srcs = glob(["*.bzl"]),
+@@ -98,6 +106,9 @@ alias(
+     actual = select({
+         "@bazel_tools//src/conditions:darwin_arm64": "@nodejs_darwin_arm64_config//:toolchain",
+         "@bazel_tools//src/conditions:darwin_x86_64": "@nodejs_darwin_amd64_config//:toolchain",
++        # TODO: Add these conditions to
++        # https://github.com/bazelbuild/bazel/blob/master/src/conditions/BUILD
++        ":freebsd_amd64": "@nodejs_freebsd_amd64_config//:toolchain",
+         "@bazel_tools//src/conditions:linux_aarch64": "@nodejs_linux_arm64_config//:toolchain",
+         "@bazel_tools//src/conditions:linux_s390x": "@nodejs_linux_s390x_config//:toolchain",
+         "@bazel_tools//src/conditions:linux_x86_64": "@nodejs_linux_amd64_config//:toolchain",
+@@ -118,12 +129,23 @@ alias(
+         "@bazel_tools//src/conditions:linux_s390x": "@nodejs_linux_s390x//:node_bin",
+         "@bazel_tools//src/conditions:linux_x86_64": "@nodejs_linux_amd64//:node_bin",
+         "@bazel_tools//src/conditions:linux_ppc64le": "@nodejs_linux_ppc64le//:node_bin",
++	":freebsd_amd64": "@nodejs_freebsd_amd64//:node_bin",
+         "@bazel_tools//src/conditions:windows": "@nodejs_windows_amd64//:node_bin",
+         "//conditions:default": "@nodejs_linux_amd64//:node_bin",
+     }),
+     visibility = ["//visibility:public"],
+ )
+ 
++toolchain(
++    name = "node_freebsd_amd64_toolchain",
++    target_compatible_with = [
++        "@platforms//os:freebsd",
++        "@platforms//cpu:x86_64",
++    ],
++    toolchain = "@nodejs_freebsd_amd64_config//:toolchain",
++    toolchain_type = ":toolchain_type",
++)
++
+ toolchain(
+     name = "node_linux_amd64_toolchain",
+     target_compatible_with = [

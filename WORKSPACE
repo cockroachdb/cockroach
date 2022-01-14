@@ -29,6 +29,10 @@ http_archive(
     urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-4.4.6.tar.gz",
     ],
+    patch_args = ["-p1"],
+    patches = [
+      "@cockroach//build/patches:build_bazel_rules_nodejs.patch",
+    ],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
