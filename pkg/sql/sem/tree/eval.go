@@ -3120,12 +3120,18 @@ type EvalDatabase interface {
 }
 
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.
-// Only one of { DatabaseName, DatabaseOID, TableName, TableOID } is filled.
+// Only one of { DatabaseName, DatabaseOID, SchemaName, TableName, TableOID } is filled.
 type HasPrivilegeSpecifier struct {
 
 	// Database privilege
 	DatabaseName *string
 	DatabaseOID  *oid.Oid
+
+	// Schema privilege
+	// Schema OID must be converted to name before using HasPrivilegeSpecifier.
+	SchemaName *string
+	// SchemaDatabaseName is required when SchemaName is used
+	SchemaDatabaseName *string
 
 	// Table privilege
 	TableName *string

@@ -603,13 +603,13 @@ query BB
 SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal'), 'CREATE'),
        has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal'), 'USAGE')
 ----
-true  true
+false  false
 
 query BB
 SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog'), 'CREATE'),
        has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog'), 'USAGE')
 ----
-true  true
+false  false
 
 query BB
 SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'public'), 'CREATE'),
@@ -617,7 +617,7 @@ SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'publi
 ----
 true  true
 
-query error pgcode 3F000 schema 'does_not_exist' does not exist
+query error pgcode 3F000 unknown schema "does_not_exist"
 SELECT has_schema_privilege('does_not_exist', 'CREATE')
 
 query BBB
@@ -1308,7 +1308,7 @@ REVOKE USAGE ON SCHEMA s FROM testuser;
 query B
 SELECT has_schema_privilege('testuser', 's', 'usage')
 ----
-false
+true
 
 # Confirm privilege checks on all objects.
 query BBB
@@ -1337,7 +1337,7 @@ SELECT has_schema_privilege('testuser', 's', 'create'),
        has_schema_privilege('testuser2', 's', 'create'),
        has_schema_privilege('testuser2', 's', 'usage')
 ----
-true false true true
+true true true true
 
 # Confirm privilege checks on all objects with testuser2, should match testuser.
 query BBB
