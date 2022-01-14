@@ -62,6 +62,7 @@ import Nodes from "src/views/reports/containers/nodes";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
+import HotRanges from "src/views/reports/containers/hotranges";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
@@ -273,6 +274,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   exact
                   path="/debug/enqueue_range"
                   component={EnqueueRange}
+                />
+                <Route exact path="/debug/hotranges" component={HotRanges} />
+                <Route
+                  exact
+                  path="/debug/hotranges/:node_id"
+                  component={HotRanges}
                 />
 
                 <Route path="/raft">
