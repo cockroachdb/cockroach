@@ -282,10 +282,10 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 // simple hash function h(i) = i % 2 with two buckets in the hash table.
 //
 // I. we get a batch [-3, -3, -2, -1].
-//   1. a) compute hash buckets: ProbeScratch.next = [reserved, 1, 1, 0, 1]
-//      b) build 'next' chains between hash buckets:
-//           ProbeScratch.first = [3, 1] (length of first == # of hash buckets)
-//           ProbeScratch.next = [reserved, 2, 4, 0, 0]
+//   1. a) compute hash buckets: ProbeScratch.Next = [reserved, 1, 1, 0, 1]
+//      b) build 'Next' chains between hash buckets:
+//           ProbeScratch.First = [3, 1] (length of First == # of hash buckets)
+//           ProbeScratch.Next = [reserved, 2, 4, 0, 0]
 //         (Note that we have a hash collision in the bucket with hash 1.)
 //      c) find "equality" buckets (populate HeadID):
 //           ProbeScratch.HeadID = [1, 1, 3, 4]
@@ -306,10 +306,10 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 //   We have fully processed the first batch.
 //
 // II. we get a batch [-4, -1, -1, -4].
-//   1. a) compute hash buckets: ProbeScratch.next = [reserved, 0, 1, 1, 0]
+//   1. a) compute hash buckets: ProbeScratch.Next = [reserved, 0, 1, 1, 0]
 //      b) build 'next' chains between hash buckets:
-//           ProbeScratch.first = [1, 2]
-//           ProbeScratch.next = [reserved, 4, 3, 0, 0]
+//           ProbeScratch.First = [1, 2]
+//           ProbeScratch.Next = [reserved, 4, 3, 0, 0]
 //      c) find "equality" buckets:
 //           ProbeScratch.HeadID = [1, 2, 2, 1]
 //   2. divide all tuples into the equality chains based on HeadID:

@@ -11305,7 +11305,7 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 // DistinctCheck determines if the current key in the GroupID bucket matches the
 // equality column key. If there is a match, then the key is removed from
 // ToCheck. If the bucket has reached the end, the key is rejected. The ToCheck
-// list is reconstructed to only hold the indices of the eqCol keys that have
+// list is reconstructed to only hold the indices of the keyCols keys that have
 // not been found. The new length of ToCheck is returned by this function.
 func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
 	ht.checkCols(ht.Keys, nToCheck, probeSel)
