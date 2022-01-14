@@ -42,6 +42,7 @@ go_test(
         "projection_ops_test.go",
     ],
     embed = [":colexecproj"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

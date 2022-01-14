@@ -61,8 +61,8 @@ func (e *plannerJobExecContext) User() security.SQLUsername      { return e.p.Us
 func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
 	return e.p.MigrationJobDeps()
 }
-func (e *plannerJobExecContext) SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies {
-	return e.p.SpanConfigReconciliationJobDeps()
+func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
+	return e.p.SpanConfigReconciler()
 }
 
 // JobExecContext provides the execution environment for a job. It is what is
@@ -84,5 +84,5 @@ type JobExecContext interface {
 	LeaseMgr() *lease.Manager
 	User() security.SQLUsername
 	MigrationJobDeps() migration.JobDeps
-	SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies
+	SpanConfigReconciler() spanconfig.Reconciler
 }

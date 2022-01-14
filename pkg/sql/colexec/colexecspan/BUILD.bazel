@@ -39,6 +39,7 @@ go_test(
         "span_assembler_test.go",
     ],
     embed = [":colexecspan"],  # keep
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
