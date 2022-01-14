@@ -6,7 +6,14 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/cliccl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl/workloadccl",
+        "//pkg/cloud",
+        "//pkg/cloud/amazon",
+        "//pkg/cloud/azure",
+        "//pkg/cloud/gcp",
+        "//pkg/security",
+        "//pkg/settings/cluster",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/timeutil",
@@ -16,7 +23,5 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
-        "@com_google_cloud_go_storage//:storage",
-        "@org_golang_google_api//option",
     ],
 )

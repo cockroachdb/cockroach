@@ -117,8 +117,8 @@ func TestFixture(t *testing.T) {
 	}
 
 	config := workloadccl.FixtureConfig{
-		GCSBucket: gcsBucket,
-		GCSPrefix: fmt.Sprintf(`TestFixture-%d`, timeutil.Now().UnixNano()),
+		Bucket:   gcsBucket,
+		Basename: fmt.Sprintf(`TestFixture-%d`, timeutil.Now().UnixNano()),
 	}
 
 	if _, err := workloadccl.GetFixture(ctx, gcs, config, gen); !testutils.IsError(err, `fixture not found`) {
