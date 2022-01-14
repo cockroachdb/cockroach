@@ -50,10 +50,53 @@ func TestStatements(t *testing.T) {
 	resp, err := client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Statements)
+	require.NotEmpty(t, resp.Transactions)
 
 	queries := make([]string, len(resp.Statements))
 	for _, s := range resp.Statements {
 		queries = append(queries, s.Key.KeyData.Query)
 	}
 	require.Contains(t, queries, testQuery)
+}
+
+func TestStatementsExcludeStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	testServer, db, _ := serverutils.StartServer(t, params)
+	defer testServer.Stopper().Stop(ctx)
+
+	conn, err := testServer.RPCContext().GRPCDialNode(
+		testServer.RPCAddr(), testServer.NodeID(), rpc.DefaultClass,
+	).Connect(ctx)
+	require.NoError(t, err)
+
+	client := serverpb.NewStatusClient(conn)
+
+	testQuery := "CREATE TABLE foo (id INT8)"
+	_, err = db.Exec(testQuery)
+	require.NoError(t, err)
+
+	t.Run("exclude-statements", func(t *testing.T) {
+		resp, err := client.Statements(ctx, &serverpb.StatementsRequest{
+			NodeID:    "local",
+			FetchMode: serverpb.StatementsRequest_TxnStatsOnly,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Transactions)
+		require.Empty(t, resp.Statements)
+	})
+
+	t.Run("exclude-transactions", func(t *testing.T) {
+		resp, err := client.Statements(ctx, &serverpb.StatementsRequest{
+			NodeID:    "local",
+			FetchMode: serverpb.StatementsRequest_StmtStatsOnly,
+		})
+		require.NoError(t, err)
+		require.Empty(t, resp.Transactions)
+		require.NotEmpty(t, resp.Statements)
+	})
 }
