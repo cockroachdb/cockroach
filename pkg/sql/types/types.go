@@ -2739,6 +2739,15 @@ func IsSerialType(typ *T) bool {
 	return typ == &Serial2Type || typ == &Serial4Type || typ == &Serial8Type
 }
 
+// IsCRDBInternalRegionType returns whether or not the input type is of type
+// crdb_internal_region.
+func IsCRDBInternalRegionType(typ *T) bool {
+	if typ == nil {
+		return false
+	}
+	return typ.UserDefined() && typ.TypeMeta.Name.Name == "crdb_internal_region"
+}
+
 // unreservedTypeTokens contain type alias that we resolve during parsing.
 // Instead of adding a new token to the parser, add the type here.
 var unreservedTypeTokens = map[string]*T{

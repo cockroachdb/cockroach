@@ -325,6 +325,12 @@ func (tm *TableMeta) VirtualComputedColumns() ColSet {
 	return virtualCols
 }
 
+// FirstColumnIDOfIndex returns the ColumnID of the index with ordinal number
+// "index" of the table described by tabMeta.
+func (tm *TableMeta) FirstColumnIDOfIndex(index cat.IndexOrdinal) ColumnID {
+	return tm.MetaID.ColumnID(tm.Table.Index(index).Column(0).Ordinal())
+}
+
 // TableAnnotation returns the given annotation that is associated with the
 // given table. If the table has no such annotation, TableAnnotation returns
 // nil.

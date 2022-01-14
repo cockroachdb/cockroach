@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -110,21 +111,25 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 		return false
 	}
 
-	if scanPrivate.HardLimit != 0 {
-		// This optimization doesn't apply to limited scans.
-		return false
-	}
+	if scanPrivate.Constraint == nil {
+		// If not a limited scan, then we must have a constraint to analyze spans.
+		// If a limited scan, then use the heuristic that anything larger than a
+		// single KV batch should not use this optimization.
+		if scanPrivate.HardLimit == 0 || rowinfra.KeyLimit(scanPrivate.HardLimit) > rowinfra.ProductionKVBatchSize {
+			return false
+		}
+	} else {
+		// This scan should have at least two spans, or we won't be able to move one
+		// of the spans to a separate remote scan.
+		if scanPrivate.Constraint.Spans.Count() < 2 {
+			return false
+		}
 
-	// This scan should have at least two spans, or we won't be able to move one
-	// of the spans to a separate remote scan.
-	if scanPrivate.Constraint == nil || scanPrivate.Constraint.Spans.Count() < 2 {
-		return false
-	}
-
-	// Don't apply the rule if there are too many spans, since the rule code is
-	// O(# spans * # prefixes * # datums per prefix).
-	if scanPrivate.Constraint.Spans.Count() > 10000 {
-		return false
+		// Don't apply the rule if there are too many spans, since the rule code is
+		// O(# spans * # prefixes * # datums per prefix).
+		if scanPrivate.Constraint.Spans.Count() > 10000 {
+			return false
+		}
 	}
 
 	// There should be at least two partitions, or we won't be able to
@@ -154,7 +159,12 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	// we're scanning multiple batches.
 	// TODO(rytaft): Revisit this when we have a more accurate cost model for data
 	// distribution.
-	if rowinfra.KeyLimit(grp.Relational().Cardinality.Max) > rowinfra.ProductionKVBatchSize {
+	maxRows := rowinfra.KeyLimit(grp.Relational().Cardinality.Max)
+	hardLimit := rowinfra.KeyLimit(scanPrivate.HardLimit)
+	if hardLimit > 0 && hardLimit < maxRows {
+		maxRows = hardLimit
+	}
+	if maxRows > rowinfra.ProductionKVBatchSize {
 		return
 	}
 
@@ -179,20 +189,35 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		return
 	}
 
-	localSpans := c.getLocalSpans(index, localPartitions, scanPrivate.Constraint)
-	if localSpans.Len() == 0 || localSpans.Len() == scanPrivate.Constraint.Spans.Count() {
+	// If the Scan has no Constraint, lookup and use the implicit check constraint
+	// 'crdb_region IN (<region_1>, <region_2> ... <region_n>)' stored in the
+	// table metadata. That includes all regions in the database, so is equivalent
+	// to a nil Constraint.
+	var constraint *constraint.Constraint
+	var ok bool
+	if scanPrivate.Constraint == nil {
+		if constraint, ok = c.getCrdbRegionCheckConstraint(scanPrivate); !ok {
+			return
+		}
+	} else {
+		constraint = scanPrivate.Constraint
+	}
+
+	localSpans := c.getLocalSpans(index, localPartitions, constraint)
+	if localSpans.Len() == 0 || localSpans.Len() == constraint.Spans.Count() {
 		// The spans target all local or all remote partitions.
 		return
 	}
 
 	// Split the spans into local and remote sets.
-	localConstraint, remoteConstraint := c.splitSpans(scanPrivate.Constraint, localSpans)
+	localConstraint, remoteConstraint := c.splitSpans(constraint, localSpans)
 
 	// Create the local scan.
 	localScanPrivate := c.DuplicateScanPrivate(scanPrivate)
 	localScanPrivate.LocalityOptimized = true
 	localConstraint.Columns = localConstraint.Columns.RemapColumns(scanPrivate.Table, localScanPrivate.Table)
 	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
+	localScanPrivate.HardLimit = scanPrivate.HardLimit
 	localScan := c.e.f.ConstructScan(localScanPrivate)
 
 	// Create the remote scan.
@@ -200,6 +225,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	remoteScanPrivate.LocalityOptimized = true
 	remoteConstraint.Columns = remoteConstraint.Columns.RemapColumns(scanPrivate.Table, remoteScanPrivate.Table)
 	remoteScanPrivate.SetConstraint(c.e.evalCtx, &remoteConstraint)
+	remoteScanPrivate.HardLimit = scanPrivate.HardLimit
 	remoteScan := c.e.f.ConstructScan(remoteScanPrivate)
 
 	// Add the LocalityOptimizedSearchExpr to the same group as the original scan.
@@ -213,6 +239,53 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		},
 	}
 	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)
+}
+
+// getCrdbRegionCheckConstraint examines the Constraints in the metadata of the
+// table specified by scanPrivate and returns the Constraint which references
+// crdb_internal_region, if such a Constraint exists.
+func (c *CustomFuncs) getCrdbRegionCheckConstraint(
+	scanPrivate *memo.ScanPrivate,
+) (*constraint.Constraint, bool) {
+	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
+	var checkConstraints *memo.FiltersExpr
+	var ok bool
+	if checkConstraints, ok = tabMeta.Constraints.(*memo.FiltersExpr); !ok {
+		return nil, false
+	}
+	firstColOfIndex := tabMeta.FirstColumnIDOfIndex(scanPrivate.Index)
+
+	for chkIdx := 0; chkIdx < len(*checkConstraints); chkIdx++ {
+		checkConstraint := (*checkConstraints)[chkIdx]
+
+		firstSpan := checkConstraint.ScalarProps().Constraints.Constraint(0).Spans.Get(0)
+		if firstSpan.IsUnconstrained() {
+			continue
+		}
+		// If there are any user-defined check constraints on a column of type
+		// crdb_internal_region, they may take any form. The system-generated check
+		// constraint is always an IN expression, so let's only look at those.
+		if checkConstraint.Condition.Op() != opt.InOp {
+			continue
+		}
+		if checkConstraint.Condition.Child(0).Op() != opt.VariableOp {
+			continue
+		}
+		variableExpr := checkConstraint.Condition.Child(0).(*memo.VariableExpr)
+		// There may be a user-defined IN predicate check constraint on another
+		// crdb_internal_region column. The one we care about is always the first
+		// column of the index.
+		if variableExpr.Col != firstColOfIndex {
+			continue
+		}
+		keyType := firstSpan.StartKey().Value(0).ResolvedType()
+		// The last step is to verify the key column is of type
+		// crdb_internal_region. If it is, we've found the crdb_region constraint.
+		if types.IsCRDBInternalRegionType(keyType) {
+			return checkConstraint.ScalarProps().Constraints.Constraint(0), true
+		}
+	}
+	return nil, false
 }
 
 // getLocalSpans returns the indexes of the spans from the given constraint that

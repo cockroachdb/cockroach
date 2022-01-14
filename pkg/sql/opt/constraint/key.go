@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // EmptyKey has zero values. If it's a start key, then it sorts before all
@@ -274,6 +275,37 @@ func (k Key) Prev(keyCtx *KeyContext) (_ Key, ok bool) {
 	copy(vals[:col-1], k.otherVals)
 	vals[col-1] = prevVal
 	return Key{firstVal: k.firstVal, otherVals: vals}, true
+}
+
+// GetInternalRegionNameFromPrefix returns the region name contained in the
+// firstVal of Key k, if firstVal is of type crdb_internal region. Otherwise,
+// it returns a zero-length string. The second return value indicates success.
+func (k Key) GetInternalRegionNameFromPrefix() (string, bool) {
+	firstKeyColumn := k.firstVal
+	if firstKeyColumn != nil {
+		firstKeyColumnType := firstKeyColumn.ResolvedType()
+		if types.IsCRDBInternalRegionType(firstKeyColumnType) {
+			var enum *tree.DEnum
+			var ok bool
+			if enum, ok = firstKeyColumn.(*tree.DEnum); !ok {
+				return "", false
+			}
+			return enum.LogicalRep, true
+		}
+	}
+	return "", false
+}
+
+// PrefixIsInternalRegionType returns true if Key k's firstVal is of type
+// crdb_internal_region.
+func (k Key) PrefixIsInternalRegionType() bool {
+	var firstKeyColumnType *types.T
+	firstKeyColumn := k.firstVal
+	if firstKeyColumn != nil {
+		firstKeyColumnType = firstKeyColumn.ResolvedType()
+		return types.IsCRDBInternalRegionType(firstKeyColumnType)
+	}
+	return false
 }
 
 // String formats a key like this:

@@ -469,16 +469,68 @@ func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
 	}
 }
 
+// onlyOneSpanIsLocal is a helper function for ConsolidateSpans to determine
+// whether the end of the last span or the start of the current span are in
+// the local region, but not both.
+func onlyOneSpanIsLocal(
+	sp *Span, last *Span, localRegion string,
+) (onlyOneSpanIsLocal bool, firstColIsRegionType bool) {
+	firstColIsRegionType = true
+	var spanStartRegion string
+	var lastSpanEndRegion string
+	var spanStartRegionIsLocal, lastSpanEndRegionIsLocal bool
+	var ok bool
+	if spanStartRegion, ok = sp.start.GetInternalRegionNameFromPrefix(); !ok {
+		firstColIsRegionType = false
+	}
+	spanStartRegionIsLocal = spanStartRegion == localRegion
+	if lastSpanEndRegion, ok = last.end.GetInternalRegionNameFromPrefix(); !ok {
+		firstColIsRegionType = false
+	}
+	lastSpanEndRegionIsLocal = lastSpanEndRegion == localRegion
+	if spanStartRegionIsLocal || lastSpanEndRegionIsLocal {
+		onlyOneSpanIsLocal = spanStartRegionIsLocal != lastSpanEndRegionIsLocal
+	} else {
+		onlyOneSpanIsLocal = false
+	}
+	return onlyOneSpanIsLocal, firstColIsRegionType
+}
+
 // ConsolidateSpans merges spans that have consecutive boundaries. For example:
 //   [/1 - /2] [/3 - /4] becomes [/1 - /4].
 func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
 	var result Spans
+
+	if c.Spans.Count() < 1 {
+		return
+	}
+	firstColIsRegionType := c.Spans.Get(0).StartKey().PrefixIsInternalRegionType()
+	var localRegion string
+	if firstColIsRegionType {
+		// Reset firstColIsRegionType to false if we failed to find the local region
+		// name, for whatever reason. This prevents the comparison of the span
+		// prefix region names in the code below to an uninitialized region name.
+		localRegion, firstColIsRegionType = evalCtx.Locality.Find("region")
+	}
+
+	var localRemoteCrossover bool
 	for i := 1; i < c.Spans.Count(); i++ {
 		last := c.Spans.Get(i - 1)
 		sp := c.Spans.Get(i)
+		if firstColIsRegionType {
+			// Detect when there is a crossover between the last span and current span
+			// from a local region to remote, or remote to local.
+			localRemoteCrossover, firstColIsRegionType = onlyOneSpanIsLocal(sp, last, localRegion)
+		}
+		// Do not merge local spans with remote spans because a span must be 100%
+		// local in order to utilize locality optimized search.
+		// An example query on a LOCALITY REGIONAL BY ROW table which this
+		// benefits is:
+		// SELECT * FROM regional_by_row_table WHERE pk <> 4 LIMIT 3;
 		if last.endBoundary == IncludeBoundary && sp.startBoundary == IncludeBoundary &&
-			sp.start.IsNextKey(&keyCtx, last.end) {
+			sp.start.IsNextKey(&keyCtx, last.end) &&
+			(!firstColIsRegionType || !localRemoteCrossover) {
 			// We only initialize `result` if we need to change something.
 			if result.Count() == 0 {
 				result.Alloc(c.Spans.Count() - 1)
