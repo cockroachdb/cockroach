@@ -151,7 +151,9 @@ func registerBinOpOutputTypes() {
 			binOpOutputTypes[tree.Mult][typePair{types.IntervalFamily, anyWidth, numberTypeFamily, numberTypeWidth}] = types.Interval
 		}
 	}
-	binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.IntFamily, anyWidth}] = types.Interval
+	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.IntFamily, intWidth}] = types.Interval
+	}
 	binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Interval
 	binOpOutputTypes[tree.Plus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
 	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
