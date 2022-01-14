@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -692,10 +691,6 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	colCfg := scanColumnsConfig{wantedColumns: make([]tree.ColumnID, 0, wantedCols.Len())}
 	for c, ok := wantedCols.Next(0); ok; c, ok = wantedCols.Next(c + 1) {
 		colCfg.wantedColumns = append(colCfg.wantedColumns, desc.PublicColumns()[c].GetID())
-	}
-	ctx := e.planner.extendedEvalCtx.Ctx()
-	if err := e.planner.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-		return zigzagPlanningSide{}, err
 	}
 	cols, err := initColsForScan(desc, colCfg)
 	if err != nil {

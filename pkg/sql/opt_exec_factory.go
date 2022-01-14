@@ -88,13 +88,6 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	// initTable checks that the current user has the correct privilege to access
-	// the table. However, the privilege has already been checked in optbuilder,
-	// and does not need to be rechecked. In fact, it's an error to check the
-	// privilege if the table was originally part of a view, since lower privilege
-	// users might be able to access a view that uses a higher privilege table.
-	ef.planner.skipSelectPrivilegeChecks = true
-	defer func() { ef.planner.skipSelectPrivilegeChecks = false }()
 	ctx := ef.planner.extendedEvalCtx.Ctx()
 	if err := scan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
