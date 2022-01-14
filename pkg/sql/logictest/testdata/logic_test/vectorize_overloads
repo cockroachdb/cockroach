@@ -772,3 +772,24 @@ SELECT _int, _int2, _int // _int2 FROM many_types WHERE _int2 <> 0
 # Regression test for incorrectly propagating an error as internal (#57773).
 statement error .* value out of range
 SELECT ((-1.234E+401)::DECIMAL * '-53 years -10 mons -377 days -08:33:40.519057'::INTERVAL::INTERVAL)::INTERVAL FROM many_types
+
+# Regression test for #70738. There should be overloads for INTERVAL / INT4 and
+# INTERVAL / INT2.
+statement ok
+CREATE TABLE t70738 (
+    i INTERVAL,
+    i2 INT2,
+    i4 INT4,
+    i8 INT8
+);
+INSERT INTO t70738 VALUES ('1 day'::INTERVAL, 1, 1, 1);
+
+statement ok
+SELECT * FROM t70738 AS t1
+JOIN t70738 as t2 ON t1.i8 = t2.i4
+WHERE (t2.i / t1.i8) = '1 day'
+
+statement ok
+SELECT * FROM t70738 AS t1
+JOIN t70738 as t2 ON t1.i8 = t2.i2
+WHERE (t2.i / t1.i8) = '1 day'

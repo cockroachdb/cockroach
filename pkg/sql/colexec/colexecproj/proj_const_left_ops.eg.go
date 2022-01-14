@@ -17078,6 +17078,226 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 	return batch
 }
 
+type projDivIntervalConstInt16Op struct {
+	projConstOpBase
+	constArg duration.Duration
+}
+
+func (p projDivIntervalConstInt16Op) Next() coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the projection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Int16s
+	col = vec.Int16()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Interval()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						if arg == 0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = p.constArg.Div(int64(arg))
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						if arg == 0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = p.constArg.Div(int64(arg))
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					if arg == 0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					projCol[i] = p.constArg.Div(int64(arg))
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					if arg == 0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					projCol[i] = p.constArg.Div(int64(arg))
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		}
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
+	return batch
+}
+
+type projDivIntervalConstInt32Op struct {
+	projConstOpBase
+	constArg duration.Duration
+}
+
+func (p projDivIntervalConstInt32Op) Next() coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the projection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	batch := p.Input.Next()
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col coldata.Int32s
+	col = vec.Int32()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Interval()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						if arg == 0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = p.constArg.Div(int64(arg))
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
+						arg := col.Get(i)
+
+						if arg == 0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = p.constArg.Div(int64(arg))
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					if arg == 0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					projCol[i] = p.constArg.Div(int64(arg))
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg := col.Get(i)
+
+					if arg == 0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					projCol[i] = p.constArg.Div(int64(arg))
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		}
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
+	return batch
+}
+
 type projDivIntervalConstInt64Op struct {
 	projConstOpBase
 	constArg duration.Duration
@@ -30452,6 +30672,16 @@ func GetProjectionLConstOperator(
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
+						case 16:
+							return &projDivIntervalConstInt16Op{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(duration.Duration),
+							}, nil
+						case 32:
+							return &projDivIntervalConstInt32Op{
+								projConstOpBase: projConstOpBase,
+								constArg:        c.(duration.Duration),
+							}, nil
 						case -1:
 						default:
 							return &projDivIntervalConstInt64Op{
