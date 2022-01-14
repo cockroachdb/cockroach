@@ -436,6 +436,11 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
 			// lease to be applied.
 			if pErr == nil {
+				// The Replica circuit breakers together with round-tripping a ProbeRequest
+				// here before asking for the lease could provide an alternative, simpler
+				// solution to the the below issue:
+				//
+				// https://github.com/cockroachdb/cockroach/issues/37906
 				ba := roachpb.BatchRequest{}
 				ba.Timestamp = p.repl.store.Clock().Now()
 				ba.RangeID = p.repl.RangeID
