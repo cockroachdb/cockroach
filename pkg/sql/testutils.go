@@ -74,13 +74,13 @@ func CreateTestTableDescriptor(
 	case *tree.CreateSequence:
 		desc, err := NewSequenceTableDesc(
 			ctx,
+			nil, /* planner */
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			tree.PersistencePermanent,
-			nil,   /* params */
 			false, /* isMultiRegion */
 		)
 		return desc, err

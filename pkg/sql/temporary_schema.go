@@ -265,11 +265,16 @@ func cleanupSchemaObjects(
 
 		databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
 
-		if desc.GetSequenceOpts() != nil {
+		// If a sequence is owned by a table column, it is dropped when the owner
+		// table/column is dropped. So here we want to only drop sequences not
+		// owned.
+		if desc.IsSequence() &&
+			desc.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
+			desc.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
 			sequences = append(sequences, desc.GetID())
 		} else if desc.GetViewQuery() != "" {
 			views = append(views, desc.GetID())
-		} else {
+		} else if !desc.IsSequence() {
 			tables = append(tables, desc.GetID())
 		}
 	}

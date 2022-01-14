@@ -438,10 +438,11 @@ func setSequenceIntegerBounds(
 // assignSequenceOptions moves options from the AST node to the sequence options descriptor,
 // starting with defaults and overriding them with user-provided options.
 func assignSequenceOptions(
+	ctx context.Context,
+	p *planner,
 	opts *descpb.TableDescriptor_SequenceOpts,
 	optsNode tree.SequenceOptions,
 	setDefaults bool,
-	params *runParams,
 	sequenceID descpb.ID,
 	sequenceParentID descpb.ID,
 	existingType *types.T,
@@ -557,25 +558,25 @@ func assignSequenceOptions(
 		case tree.SeqOptVirtual:
 			opts.Virtual = true
 		case tree.SeqOptOwnedBy:
-			if params == nil {
+			if p == nil {
 				return pgerror.Newf(pgcode.Internal,
-					"Trying to add/remove Sequence Owner without access to context")
+					"Trying to add/remove Sequence Owner outside of context of a planner")
 			}
 			// The owner is being removed
 			if option.ColumnItemVal == nil {
-				if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
+				if err := removeSequenceOwnerIfExists(ctx, p, sequenceID, opts); err != nil {
 					return err
 				}
 			} else {
 				// The owner is being added/modified
 				tableDesc, col, err := resolveColumnItemToDescriptors(
-					params.ctx, params.p, option.ColumnItemVal,
+					ctx, p, option.ColumnItemVal,
 				)
 				if err != nil {
 					return err
 				}
 				if tableDesc.ParentID != sequenceParentID &&
-					!allowCrossDatabaseSeqOwner.Get(&params.p.execCfg.Settings.SV) {
+					!allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
 					return errors.WithHintf(
 						pgerror.Newf(pgcode.FeatureNotSupported,
 							"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
@@ -587,10 +588,10 @@ func assignSequenceOptions(
 				// want it to be.
 				if opts.SequenceOwner.OwnerTableID != tableDesc.ID ||
 					opts.SequenceOwner.OwnerColumnID != col.GetID() {
-					if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
+					if err := removeSequenceOwnerIfExists(ctx, p, sequenceID, opts); err != nil {
 						return err
 					}
-					err := addSequenceOwner(params.ctx, params.p, option.ColumnItemVal, sequenceID, opts)
+					err := addSequenceOwner(ctx, p, option.ColumnItemVal, sequenceID, opts)
 					if err != nil {
 						return err
 					}

@@ -430,6 +430,7 @@ func mysqlTableToCockroach(
 		privilegeDesc := descpb.NewBasePrivilegeDescriptor(owner)
 		seqDesc, err = sql.NewSequenceTableDesc(
 			ctx,
+			nil, /* planner */
 			seqName,
 			opts,
 			parentDB.GetID(),
@@ -438,7 +439,6 @@ func mysqlTableToCockroach(
 			time,
 			privilegeDesc,
 			tree.PersistencePermanent,
-			nil, /* params */
 			// If this is multi-region, this will get added by WriteDescriptors.
 			false, /* isMultiRegion */
 		)
