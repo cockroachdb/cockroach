@@ -79,7 +79,7 @@ import (
 // debug-disable-txn-pushes
 // debug-set-clock           ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
-// debug-set-max-locks <limit>
+// debug-set-max-locks n=<count>
 // reset
 //
 func TestConcurrencyManagerBasic(t *testing.T) {

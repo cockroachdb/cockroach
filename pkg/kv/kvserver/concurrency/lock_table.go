@@ -97,6 +97,11 @@ type waitingState struct {
 	// Represents the action that the request was trying to perform when
 	// it hit the conflict. E.g. was it trying to read or write?
 	guardAccess spanset.SpanAccess
+
+	// lockWaitStart represents the timestamp when the request started waiting on
+	// the lock that this waitingState refers to. If multiple consecutive states
+	// refer to the same lock, they share the same lockWaitStart.
+	lockWaitStart time.Time
 }
 
 // String implements the fmt.Stringer interface.
@@ -531,6 +536,16 @@ func (g *lockTableGuardImpl) CurState() waitingState {
 	return g.mu.state
 }
 
+func (g *lockTableGuardImpl) updateStateLocked(newState waitingState) {
+	g.mu.state = newState
+	switch newState.kind {
+	case waitFor, waitForDistinguished, waitSelf, waitElsewhere:
+		g.mu.state.lockWaitStart = g.mu.curLockWaitStart
+	default:
+		g.mu.state.lockWaitStart = time.Time{}
+	}
+}
+
 func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet) (ok bool) {
 	// Temporarily replace the SpanSet in the guard.
 	originalSpanSet := g.spans
@@ -668,7 +683,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.mu.state = waitingState{kind: doneWaiting}
+	g.updateStateLocked(waitingState{kind: doneWaiting})
 	// We are doneWaiting but may have some locks to resolve. There are
 	// two cases:
 	// - notify=false: the caller was already waiting and will look at this list
@@ -1237,7 +1252,7 @@ func (l *lockState) informActiveWaiters() {
 			findDistinguished = false
 		}
 		g.mu.Lock()
-		g.mu.state = state
+		g.updateStateLocked(state)
 		if l.distinguishedWaiter == g {
 			g.mu.state.kind = waitForDistinguished
 		}
@@ -1264,7 +1279,7 @@ func (l *lockState) informActiveWaiters() {
 			}
 		}
 		g.mu.Lock()
-		g.mu.state = state
+		g.updateStateLocked(state)
 		g.notify()
 		g.mu.Unlock()
 	}
@@ -1638,7 +1653,7 @@ func (l *lockState) tryActiveWait(
 				g.mu.startWait = true
 				state := waitForState
 				state.kind = waitQueueMaxLengthExceeded
-				g.mu.state = state
+				g.updateStateLocked(state)
 				if notify {
 					g.notify()
 				}
@@ -1691,14 +1706,14 @@ func (l *lockState) tryActiveWait(
 	if g.isSameTxnAsReservation(waitForState) {
 		state := waitForState
 		state.kind = waitSelf
-		g.mu.state = state
+		g.updateStateLocked(state)
 	} else {
 		state := waitForState
 		if l.distinguishedWaiter == nil {
 			l.distinguishedWaiter = g
 			state.kind = waitForDistinguished
 		}
-		g.mu.state = state
+		g.updateStateLocked(state)
 	}
 	if notify {
 		g.notify()
@@ -2037,7 +2052,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		l.waitingReaders.Remove(curr)
 
 		g.mu.Lock()
-		g.mu.state = waitState
+		g.updateStateLocked(waitState)
 		g.notify()
 		delete(g.mu.locks, l)
 		g.mu.Unlock()
@@ -2053,7 +2068,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		g := qg.guard
 		g.mu.Lock()
 		if qg.active {
-			g.mu.state = waitState
+			g.updateStateLocked(waitState)
 			g.notify()
 		}
 		delete(g.mu.locks, l)

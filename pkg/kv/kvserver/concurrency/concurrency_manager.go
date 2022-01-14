@@ -143,7 +143,8 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, timeutil.DefaultTimeSource{})
+	timeSource := timeutil.DefaultTimeSource{}
+	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, timeSource)
 	*m = managerImpl{
 		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
@@ -157,13 +158,14 @@ func NewManager(cfg Config) Manager {
 		},
 		lt: lt,
 		ltw: &lockTableWaiterImpl{
-			st:                cfg.Settings,
-			clock:             cfg.Clock,
-			stopper:           cfg.Stopper,
-			ir:                cfg.IntentResolver,
-			lt:                lt,
-			disableTxnPushing: cfg.DisableTxnPushing,
-			onContentionEvent: cfg.OnContentionEvent,
+			st:                   cfg.Settings,
+			clock:                cfg.Clock,
+			stopper:              cfg.Stopper,
+			ir:                   cfg.IntentResolver,
+			lt:                   lt,
+			contentionEventClock: timeSource,
+			disableTxnPushing:    cfg.DisableTxnPushing,
+			onContentionEvent:    cfg.OnContentionEvent,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
