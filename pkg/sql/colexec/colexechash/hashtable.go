@@ -30,13 +30,13 @@ type HashTableBuildMode int
 
 const (
 	// HashTableFullBuildMode is the mode where HashTable buffers all input
-	// tuples and populates first and next arrays for each hash bucket.
+	// tuples and populates First and Next arrays for each hash bucket.
 	HashTableFullBuildMode HashTableBuildMode = iota
 
 	// HashTableDistinctBuildMode is the mode where HashTable only buffers
 	// distinct tuples and discards the duplicates. In this mode the hash table
 	// actually stores only the equality columns, so the columns with positions
-	// not present in eqCols will remain zero-capacity vectors in Vals.
+	// not present in keyCols will remain zero-capacity vectors in Vals.
 	HashTableDistinctBuildMode
 )
 
@@ -50,6 +50,7 @@ const (
 	// HashTableDeletingProbeMode is the mode of probing the HashTable in which
 	// it "deletes" the tuples from itself once they are matched against
 	// probing tuples.
+	//
 	// For example, if we have a HashTable consisting of tuples {1, 1}, {1, 2},
 	// {2, 3}, and the probing tuples are {1, 4}, {1, 5}, {1, 6}, then we get
 	// the following when probing on the first column only:
@@ -61,30 +62,54 @@ const (
 	HashTableDeletingProbeMode
 )
 
-// hashTableBuildBuffer stores the information related to the build table.
-type hashTableBuildBuffer struct {
-	// First stores the first keyID of the key that resides in each bucket.
-	// This keyID is used to determine the corresponding equality column key as
-	// well as output column values.
+// hashChains describes the partitioning of a set of tuples into singly-linked
+// lists ("buckets") where all tuples in a list have the same hash.
+//
+// In order to iterate over the list corresponding to a particular hash value
+// 'bucket', the keyID of the head of the list can be looked up using
+// First[bucket], and the following keyIDs of the tuples in the list can be
+// found using Next[keyID] traversal. Whenever keyID of 0 is encountered, the
+// end of the list has been reached.
+//
+// For each tuple with the ordinal 'i' (the ordinal among all tuples in the
+// hash table or within a single probing batch), keyID is calculated as:
+//   keyID = i + 1.
+type hashChains struct {
+	// First stores the first keyID of the tuple that resides in each bucket.
+	// The tuple is the head of the corresponding hash chain.
+	//
+	// The length of this slice is equal to the number of buckets used in the
+	// hash table at the moment.
 	First []uint64
 
-	// Next is a densely-packed list that stores the keyID of the next key in the
-	// hash table bucket chain, where an id of 0 is reserved to represent end of
+	// Next is a densely-packed list that stores the keyID of the next tuple in
+	// the hash chain, where an ID of 0 is reserved to represent the end of the
 	// chain.
+	//
+	// The length of this slice is equal to the number of tuples stored in the
+	// hash table at the moment plus one (Next[0] is unused).
 	Next []uint64
 }
 
-// hashTableProbeBuffer stores the information related to the probe table.
+// hashTableProbeBuffer stores the information related to the probing batch.
+//
+// From the high level, this struct facilitates checking whether tuples from the
+// probing batch are equal to "candidate" tuples (those that have the same
+// hash). In other words, hashTableProbeBuffer helps the hash table to determine
+// whether there is a hash collision or an actual equality match.
+//
+// Given that this struct is tied to the probing batch, all slices are limited
+// by the length of the batch (in some cases plus one) in size.
 type hashTableProbeBuffer struct {
-	// First stores the first keyID of the key that resides in each bucket.
-	// This keyID is used to determine the corresponding equality column key as
-	// well as output column values.
-	First []uint64
-
-	// Next is a densely-packed list that stores the keyID of the next key in the
-	// hash table bucket chain, where an id of 0 is reserved to represent end of
-	// chain.
-	Next []uint64
+	// When the hash table is used by the hash aggregator or the unordered
+	// distinct, an implicit hash table is built on the probing batch itself,
+	// and it is stored in this hashChains object. The goal is to reuse the
+	// facilities of the hash table to partition all tuples in the batch into
+	// equality buckets (i.e. into lists where all tuples are equal on the hash
+	// columns).
+	//
+	// Not used by the hash joiner.
+	hashChains
 
 	// limitedSlicesAreAccountedFor indicates whether we have already
 	// accounted for the memory used by the slices below.
@@ -95,45 +120,97 @@ type hashTableProbeBuffer struct {
 	// coldata.BatchSize() in size.                              //
 	///////////////////////////////////////////////////////////////
 
-	// HeadID stores the first build table keyID that matched with the probe batch
-	// key at any given index.
-	HeadID []uint64
-
-	// differs stores whether the key at any index differs with the build table
-	// key.
-	differs []bool
-
-	// distinct stores whether the key in the probe batch is distinct in the build
-	// table.
-	distinct []bool
-
-	// GroupID stores the keyID that maps to the joining rows of the build table.
-	// The ith element of GroupID stores the keyID of the build table that
-	// corresponds to the ith key in the probe table.
-	GroupID []uint64
-
-	// ToCheck stores the indices of the eqCol rows that have yet to be found or
-	// rejected.
+	// ToCheck stores the indices of tuples from the probing batch for which we
+	// still want to keep traversing the hash chain trying to find equality
+	// matches.
+	//
+	// For example, if the probing batch has 4 tuples, then initially ToCheck
+	// will be [0, 1, 2, 3]. Say, tuples with ordinals 0 and 3 are determined to
+	// definitely not have any matches (e.g. because the corresponding hash
+	// chains are empty) while tuples with ordinals 1 and 2 have hash
+	// collisions against the current "candidates", then ToCheck will be updated
+	// to [1, 2].
 	ToCheck []uint64
 
-	// HashBuffer stores the hash values of each tuple in the probe table. It will
-	// be dynamically updated when the HashTable is build in distinct mode.
+	// GroupID stores the keyIDs of the current "candidate" matches for the
+	// tuples from the probing batch. Concretely, GroupID[i] is the keyID of the
+	// tuple in the hash table which we are currently comparing with the ith
+	// tuple of the probing batch. i is included in ToCheck. The result of the
+	// comparison is stored in 'differs' and/or 'distinct'.
+	//
+	// On the first iteration:
+	//   GroupID[i] = First[hash[i]]
+	// (i.e. we're comparing the ith probing tuple against the head of the hash
+	// chain). For the next iteration of probing, new values of GroupID are
+	// calculated as
+	//   GroupID[i] = Next[GroupID[i]].
+	// Whenever GroupID[i] becomes 0, there are no more matches for the ith
+	// probing tuple.
+	GroupID []uint64
+
+	// differs stores whether the probing tuple included in ToCheck differs
+	// from the corresponding "candidate" tuple specified in GroupID.
+	differs []bool
+
+	// distinct stores whether the probing tuple is distinct (i.e. it will
+	// differ from all possible "candidates"). Used only for the hash aggregator
+	// and the unordered distinct.
+	distinct []bool
+
+	// HeadID stores the keyID of the tuple that has an equality match with the
+	// tuple at any given index from the probing batch. Unlike First where we
+	// might have a hash collision, HeadID stores the actual equality matches.
+	//
+	// All three users of the hash table use HeadID differently.
+	//
+	// In the hash joiner, HeadID is used only when the hash table might contain
+	// duplicate values (this is not the case when the equality columns form a
+	// key). The hash table describes the partitioning of the build (right) side
+	// table, and the probing batch comes from the left side. During the probing
+	// phase, if a match is found for the probing tuple i, then HeadID[i] is set
+	// to the keyID of that match, then the HashTable.Same slice is used to
+	// traverse all equality matches for the given probing tuple.
+	//
+	// In the hash aggregator, then the hash table can describe the partitioning
+	// of the probing batch (via ProbeScratch) or of already found grouping
+	// buckets (via BuildScratch), depending on the phase of the algorithm. See
+	// an extensive comment on hashAggregator.onlineAgg for more details.
+	//
+	// The unordered distinct uses HeadID in the following manner:
+	// - in the first step of the probing phase (when duplicates are being
+	// removed from the probing batch), HeadID[i] is set to the first tuple that
+	// matches ith tuple. Since ith tuple always matches itself (and possibly
+	// others), HeadID values will never be zero in this step;
+	// - in the second step of the probing phase (once the batch only contains
+	// unique tuples), the non-zero HeadID value is set for a particular tuple
+	// once the tuple is determined to not have duplicates with any tuples
+	// already in the hash table.
+	// See a comment on DistinctBuild for an example.
+	HeadID []uint64
+
+	// HashBuffer stores the hash values of each tuple in the probing batch. It
+	// will be dynamically updated when the HashTable is built in distinct mode.
 	HashBuffer []uint64
 }
 
-// HashTable is a structure used by the hash joiner to store the build table
-// batches. Keys are stored according to the encoding of the equality column,
-// which point to the corresponding output keyID. The keyID is calculated
-// using the below equation:
+// HashTable is a structure used by the hash joiner, the hash aggregator, and
+// the unordered distinct in order to perform the equality checks and
+// de-duplication.
 //
-// keyID = keys.indexOf(key) + 1
+// When used by the hash joiner, the whole build (right) side table is inserted
+// into the hash table. Later, the left side table is read one batch at a time,
+// and that batch is used to probe against the hash table to find matches. On a
+// single probing iteration at most one match is found for each tuple in the
+// probing batch. In order to find all matches, for each probing tuple the
+// corresponding hash chain will be fully traversed. For more details see the
+// comment on colexecjoin.hashJoiner.
 //
-// and inversely:
-//
-// keys[keyID - 1] = key
-//
-// The table can then be probed in column batches to find at most one matching
-// row per column batch row.
+// When used by the hash aggregator and the unordered distinct, the hash table
+// is built in an incremental fashion. One batch is read from the input, then
+// using the hash table's facilities the batch is divided into "equality"
+// buckets. Next, the de-duplicated batch is probed against the hash table to
+// find possible matches for each tuple. For more details see the comments on
+// hashAggregator.onlineAgg and DistinctBuild.
 type HashTable struct {
 	allocator *colmem.Allocator
 
@@ -141,37 +218,40 @@ type HashTable struct {
 	// the unlimited slices that we have already accounted for.
 	unlimitedSlicesNumUint64AccountedFor int64
 
-	// BuildScratch contains the scratch buffers required for the build table.
-	BuildScratch hashTableBuildBuffer
+	// BuildScratch contains the hash chains among tuples of the hash table
+	// (those stored in Vals).
+	BuildScratch hashChains
 
-	// ProbeScratch contains the scratch buffers required for the probe table.
+	// ProbeScratch contains the scratch buffers that provide the facilities of
+	// the hash table (like equality checks) for the probing batch.
 	ProbeScratch hashTableProbeBuffer
 
-	// Keys is a scratch space that stores the equality columns (either of
-	// probe or build table, depending on the phase of algorithm).
+	// Keys is a scratch space that stores the equality columns of the tuples
+	// currently being probed.
 	Keys []coldata.Vec
 
 	// Same and Visited are only used when the HashTable contains non-distinct
 	// keys (in HashTableFullBuildMode mode).
 	//
-	// Same is a densely-packed list that stores the keyID of the next key in the
-	// hash table that has the same value as the current key. The HeadID of the key
-	// is the first key of that value found in the next linked list. This field
-	// will be lazily populated by the prober.
+	// Same is a densely-packed list that stores the keyID of the next key in
+	// the hash table that has the same value as the current key. The HeadID of
+	// the key is the first key of that value found in the next linked list.
+	// This field will be lazily populated by the prober.
 	Same []uint64
-	// Visited represents whether each of the corresponding keys have been touched
-	// by the prober.
+	// Visited represents whether each of the corresponding keys have been
+	// touched by the prober.
 	Visited []bool
 
-	// Vals stores columns of the build source that are specified in
-	// colsToStore in the constructor. The ID of a tuple at any index of Vals
-	// is index + 1.
+	// Vals stores columns of the build source that are specified in colsToStore
+	// in the constructor. The ID of a tuple at any index of Vals is index + 1.
 	Vals *colexecutils.AppendOnlyBufferedBatch
-	// keyCols stores the indices of Vals which are key columns.
+	// keyCols stores the indices of Vals which are used for equality
+	// comparison.
 	keyCols []uint32
 
-	// numBuckets returns the number of buckets the HashTable employs. This is
-	// equivalent to the size of first.
+	// numBuckets returns the number of buckets the HashTable employs at the
+	// moment. This number increases as more tuples are added into the hash
+	// table.
 	numBuckets uint64
 	// loadFactor determines the average number of tuples per bucket exceeding
 	// of which will trigger resizing the hash table.
@@ -219,7 +299,7 @@ func NewHashTable(
 	loadFactor float64,
 	initialNumHashBuckets uint64,
 	sourceTypes []*types.T,
-	eqCols []uint32,
+	keyCols []uint32,
 	allowNullEquality bool,
 	buildMode HashTableBuildMode,
 	probeMode HashTableProbeMode,
@@ -238,7 +318,7 @@ func NewHashTable(
 	// colsToStore indicates the positions of columns to actually store in the
 	// hash table depending on the build mode:
 	// - all columns are stored in the full build mode
-	// - only columns with indices in eqCols are stored in the distinct build
+	// - only columns with indices in keyCols are stored in the distinct build
 	// mode (columns with other indices will remain zero-capacity vectors in
 	// Vals).
 	var colsToStore []int
@@ -249,21 +329,21 @@ func NewHashTable(
 			colsToStore[i] = i
 		}
 	case HashTableDistinctBuildMode:
-		colsToStore = make([]int, len(eqCols))
+		colsToStore = make([]int, len(keyCols))
 		for i := range colsToStore {
-			colsToStore[i] = int(eqCols[i])
+			colsToStore[i] = int(keyCols[i])
 		}
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unknown HashTableBuildMode %d", buildMode))
 	}
 	ht := &HashTable{
 		allocator: allocator,
-		BuildScratch: hashTableBuildBuffer{
+		BuildScratch: hashChains{
 			First: make([]uint64, initialNumHashBuckets),
 		},
-		Keys:              make([]coldata.Vec, len(eqCols)),
+		Keys:              make([]coldata.Vec, len(keyCols)),
 		Vals:              colexecutils.NewAppendOnlyBufferedBatch(allocator, sourceTypes, colsToStore),
-		keyCols:           eqCols,
+		keyCols:           keyCols,
 		numBuckets:        initialNumHashBuckets,
 		loadFactor:        loadFactor,
 		allowNullEquality: allowNullEquality,
@@ -335,7 +415,7 @@ func (ht *HashTable) buildFromBufferedTuples() {
 	// Account for memory used by the internal auxiliary slices that are
 	// limited in size.
 	ht.ProbeScratch.accountForLimitedSlices(ht.allocator)
-	// Note that if ht.ProbeScratch.first is nil, it'll have zero capacity.
+	// Note that if ht.ProbeScratch.First is nil, it'll have zero capacity.
 	newUint64Count := int64(cap(ht.BuildScratch.First) + cap(ht.ProbeScratch.First) + cap(ht.BuildScratch.Next))
 	ht.allocator.AdjustMemoryUsage(memsize.Int64 * (newUint64Count - ht.unlimitedSlicesNumUint64AccountedFor))
 	ht.unlimitedSlicesNumUint64AccountedFor = newUint64Count
@@ -368,6 +448,125 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 // DistinctBuild appends all distinct tuples from batch to the hash table. Note
 // that the hash table is assumed to operate in HashTableDistinctBuildMode.
 // batch is updated to include only the distinct tuples.
+//
+// This is achieved by first removing duplicates within the batch itself and
+// then probing the de-duplicated batch against the hash table (which contains
+// already emitted distinct tuples). Duplicates of the emitted tuples are also
+// removed from the batch, and if there are any tuples left, all of them are
+// distinct and, thus, are appended into the hash table and outputted.
+//
+// Let's go through an example of how this function works: our input stream
+// contains the following tuples:
+//   {-6}, {-6}, {-7}, {-5}, {-8}, {-5}, {-5}, {-8}.
+// (Note that negative values are chosen in order to visually distinguish them
+// from the IDs that we'll be working with below.)
+// We will use coldata.BatchSize() == 4 and let's assume that we will use a
+// hash function
+//   h(-5) = 1, h(-6) = 1, h(-7) = 0, h(-8) = 0
+// with two buckets in the hash table.
+//
+// I. we get a batch [-6, -6, -7, -5].
+//   1. ComputeHashAndBuildChains:
+//      a) compute hash buckets:
+//           HashBuffer = [1, 1, 0, 1]
+//           ProbeScratch.Next = [reserved, 1, 1, 0, 1]
+//      b) build 'Next' chains between hash buckets:
+//           ProbeScratch.First = [3, 1] (length of First == # of hash buckets)
+//           ProbeScratch.Next  = [reserved, 2, 4, 0, 0]
+//         (Note that we have a hash collision in the bucket with hash 1.)
+//   2. RemoveDuplicates within the batch:
+//      1) first iteration in FindBuckets:
+//         a) all 4 tuples included to be checked against heads of their hash
+//            chains:
+//              ToCheck = [0, 1, 2, 3]
+//              GroupID = [1, 1, 3, 1]
+//         b) after performing the equality check using CheckProbeForDistinct,
+//            tuples 0, 1, 2 are found to be equal to the heads of their hash
+//            chains while tuple 3 (-5) has a hash collision with tuple 0 (-6),
+//            so it is kept for another iteration:
+//              ToCheck = [3]
+//              GroupID = [x, x, x, 2]
+//              HeadID  = [1, 1, 3, x]
+//      2) second iteration in FindBuckets finds that tuple 3 (-5) again has a
+//         hash collision with tuple 1 (-6), so it is kept for another
+//         iteration:
+//              ToCheck = [3]
+//              GroupID = [x, x, x, 4]
+//              HeadID  = [1, 1, 3, x]
+//      3) third iteration finds a match for tuple (the tuple itself), no more
+//         tuples to check, so the iterations stop:
+//              ToCheck = []
+//              HeadID  = [1, 1, 3, 4]
+//      4) the duplicates are represented by having the same HeadID values, and
+//         all duplicates are removed in updateSel:
+//           batch = [-6, -6, -7, -5]
+//           length = 3, sel = [0, 2, 3]
+//         Notably, HashBuffer is compacted accordingly:
+//           HashBuffer = [1, 0, 1]
+//   3. The hash table is empty, so RemoveDuplicates against the hash table is
+//      skipped.
+//   4. All 3 tuples still present in the batch are distinct, they are appended
+//      to the hash table and will be emitted to the output:
+//        Vals = [-6, -7, -5]
+//        BuildScratch.First = [2, 1]
+//        BuildScratch.Next  = [reserved, 3, 0, 0]
+//   We have fully processed the first batch.
+//
+// II. we get a batch [-8, -5, -5, -8].
+//   1. ComputeHashAndBuildChains:
+//      a) compute hash buckets:
+//           HashBuffer = [0, 1, 1, 0]
+//           ProbeScratch.Next = [reserved, 0, 1, 1, 0]
+//      b) build 'Next' chains between hash buckets:
+//           ProbeScratch.First = [1, 2]
+//           ProbeScratch.Next  = [reserved, 4, 3, 0, 0]
+//   2. RemoveDuplicates within the batch:
+//      1) first iteration in FindBuckets:
+//         a) all 4 tuples included to be checked against heads of their hash
+//            chains:
+//              ToCheck = [0, 1, 2, 3]
+//              GroupID = [1, 2, 2, 1]
+//         b) after performing the equality check using CheckProbeForDistinct,
+//            all tuples are found to be equal to the heads of their hash
+//            chains, no more tuples to check, so the iterations stop:
+//              ToCheck = []
+//              HeadID  = [1, 2, 2, 1]
+//      2) the duplicates are represented by having the same HeadID values, and
+//         all duplicates are removed in updateSel:
+//           batch = [-8, -5, -5, -8]
+//           length = 2, sel = [0, 1]
+//         Notably, HashBuffer is compacted accordingly:
+//           HashBuffer = [0, 1]
+//   3. RemoveDuplicates against the hash table:
+//      1) first iteration in FindBuckets:
+//         a) both tuples included to be checked against heads of their hash
+//            chains of the hash table (meaning BuildScratch.First and
+//            BuildScratch.Next are used to populate GroupID values):
+//              ToCheck = [0, 1]
+//              GroupID = [2, 1]
+//         b) after performing the equality check using CheckBuildForDistinct,
+//            both tuples are found to have hash collisions (-8 with -7 and -5
+//            with -6), so both are kept for another iteration:
+//              ToCheck = [0, 1]
+//              GroupID = [0, 2]
+//      2) second iteration in FindBuckets finds that tuple 1 (-5) has a match
+//         whereas tuple 0 (-8) is distinct (because its GroupID is 0), no more
+//         tuples to check:
+//              ToCheck = []
+//              HeadID  = [1, 0]
+//      3) duplicates are represented by having HeadID value of 0, so the batch
+//         is updated to only include tuple -8:
+//           batch = [-8, -5, -5, -8]
+//           length = 1, sel = [0]
+//           HashBuffer = [0]
+//   4. The single tuple still present in the batch is distinct, it is appended
+//      to the hash table and will be emitted to the output:
+//        Vals = [-6, -7, -5, -8]
+//        BuildScratch.First = [2, 1]
+//        BuildScratch.Next  = [reserved, 3, 4, 0, 0]
+//   We have fully processed the second batch and the input as a whole.
+//
+// NOTE: b *must* be a non-zero length batch.
 func (ht *HashTable) DistinctBuild(batch coldata.Batch) {
 	if ht.BuildMode != HashTableDistinctBuildMode {
 		colexecerror.InternalError(errors.AssertionFailedf(
@@ -386,9 +585,9 @@ func (ht *HashTable) DistinctBuild(batch coldata.Batch) {
 }
 
 // ComputeHashAndBuildChains computes the hash codes of the tuples in batch and
-// then builds 'next' chains between those tuples. The goal is to separate all
+// then builds 'First' chains between those tuples. The goal is to separate all
 // tuples in batch into singly linked lists containing only tuples with the
-// same hash code. Those 'next' chains are stored in ht.ProbeScratch.Next.
+// same hash code. Those 'Next' chains are stored in ht.ProbeScratch.Next.
 func (ht *HashTable) ComputeHashAndBuildChains(batch coldata.Batch) {
 	srcVecs := batch.ColVecs()
 	for i, keyCol := range ht.keyCols {
@@ -402,11 +601,11 @@ func (ht *HashTable) ComputeHashAndBuildChains(batch coldata.Batch) {
 	ht.ComputeBuckets(ht.ProbeScratch.Next[1:batchLength+1], ht.Keys, batchLength, batch.Selection())
 	ht.ProbeScratch.HashBuffer = append(ht.ProbeScratch.HashBuffer[:0], ht.ProbeScratch.Next[1:batchLength+1]...)
 
-	// We need to zero out 'first' buffer for all hash codes present in
+	// We need to zero out 'First' buffer for all hash codes present in
 	// HashBuffer, and there are two possible approaches that we choose from
 	// based on a heuristic - we can either iterate over all hash codes and
-	// zero out only the relevant elements (beneficial when 'first' buffer is
-	// at least batchLength in size) or zero out the whole 'first' buffer
+	// zero out only the relevant elements (beneficial when 'First' buffer is
+	// at least batchLength in size) or zero out the whole 'First' buffer
 	// (beneficial otherwise).
 	if batchLength < len(ht.ProbeScratch.First) {
 		for _, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
@@ -491,7 +690,7 @@ func (ht *HashTable) MaybeRepairAfterDistinctBuild() {
 	// reserved for the end of the chain.
 	if len(ht.BuildScratch.Next) < ht.Vals.Length()+1 {
 		// The hash table in such a state that some distinct tuples were
-		// appended to ht.Vals, but 'next' and 'first' slices were not updated
+		// appended to ht.Vals, but 'Next' and 'First' slices were not updated
 		// accordingly.
 		numConsistentTuples := len(ht.BuildScratch.Next) - 1
 		lastBatchNumDistinctTuples := ht.Vals.Length() - numConsistentTuples
@@ -696,7 +895,7 @@ func (ht *HashTable) CheckBuildForAggregation(
 // DistinctCheck determines if the current key in the GroupID bucket matches the
 // equality column key. If there is a match, then the key is removed from
 // ToCheck. If the bucket has reached the end, the key is rejected. The ToCheck
-// list is reconstructed to only hold the indices of the eqCol keys that have
+// list is reconstructed to only hold the indices of the keyCols keys that have
 // not been found. The new length of ToCheck is returned by this function.
 func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
 	ht.checkCols(ht.Keys, nToCheck, probeSel)
@@ -732,7 +931,7 @@ func (ht *HashTable) Reset(_ context.Context) {
 	// they are used (these slices are not used in all of the code paths).
 	// ht.ProbeScratch.HeadID, ht.ProbeScratch.differs, and
 	// ht.ProbeScratch.distinct are reset before they are used (these slices
-	// are limited in size by dynamically allocated).
+	// are limited in size and dynamically allocated).
 	// ht.ProbeScratch.GroupID and ht.ProbeScratch.ToCheck don't need to be
 	// reset because they are populated manually every time before checking the
 	// columns.
