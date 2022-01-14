@@ -508,6 +508,53 @@ func (i *countingStringer) String() string {
 	return fmt.Sprint(*i)
 }
 
+type testExpandingTag struct{}
+
+var _ LazyTag = testExpandingTag{}
+
+func (t testExpandingTag) Render() []attribute.KeyValue {
+	return []attribute.KeyValue{
+		{
+			Key:   "exp1",
+			Value: attribute.IntValue(1),
+		},
+		{
+			Key:   "exp2",
+			Value: attribute.IntValue(2),
+		},
+	}
+}
+
+type testStringerLazyTag struct{}
+
+func (t testStringerLazyTag) String() string {
+	return "lazy stringer"
+}
+
+func TestSpanTags(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
+	defer sp.Finish()
+	sp.SetTag("tag", attribute.IntValue(42))
+	sp.SetLazyTag("lazy expanding tag", testExpandingTag{})
+	sp.SetLazyTag("lazy tag", testStringerLazyTag{})
+
+	tag, ok := sp.GetLazyTag("lazy expanding tag")
+	require.True(t, ok)
+	require.IsType(t, testExpandingTag{}, tag)
+
+	rec := sp.GetRecording(RecordingVerbose)
+	tags := rec[0].Tags
+	require.Contains(t, tags, "tag")
+	require.Contains(t, tags, "lazy tag")
+	require.NotContains(t, tags, "lazy expanding tag")
+	require.Contains(t, tags, "exp1")
+	require.Contains(t, tags, "exp2")
+	require.Equal(t, tags["exp1"], "1")
+	require.Equal(t, tags["exp2"], "2")
+	require.Equal(t, tags["lazy tag"], "lazy stringer")
+}
+
 // TestSpanTagsInRecordings verifies that tags added before a recording started
 // are part of the recording.
 func TestSpanTagsInRecordings(t *testing.T) {
