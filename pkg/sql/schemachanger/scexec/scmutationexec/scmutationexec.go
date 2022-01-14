@@ -362,17 +362,21 @@ func (m *visitor) RemoveRelationDependedOnBy(
 	if err != nil {
 		return err
 	}
-	for depIdx, dependsOnBy := range tbl.DependedOnBy {
-		if dependsOnBy.ID == op.DependedOnBy {
-			tbl.DependedOnBy = append(tbl.DependedOnBy[:depIdx], tbl.DependedOnBy[depIdx+1:]...)
-			break
+	// DependedOnBy can contain multiple entries per-dependency, so
+	// this isn't a single delete operation.
+	newDependedOnBy := make([]descpb.TableDescriptor_Reference, 0, len(tbl.DependedOnBy))
+	for _, dependsOnBy := range tbl.DependedOnBy {
+		if dependsOnBy.ID != op.DependedOnBy {
+			newDependedOnBy = append(newDependedOnBy, dependsOnBy)
 		}
 	}
+	tbl.DependedOnBy = newDependedOnBy
 	// Intentionally set empty slices to nil, so that for our data driven tests
 	// these fields are omitted in the output.
 	if len(tbl.DependedOnBy) == 0 {
 		tbl.DependedOnBy = nil
 	}
+
 	for depIdx, dependsOn := range depDesc.DependsOn {
 		if dependsOn == op.TableID {
 			depDesc.DependsOn = append(depDesc.DependsOn[:depIdx], depDesc.DependsOn[depIdx+1:]...)
