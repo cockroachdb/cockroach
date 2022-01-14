@@ -927,47 +927,83 @@ func BenchmarkTxnCache(b *testing.B) {
 }
 
 func TestContentionEventHelper(t *testing.T) {
-	// This is mostly a regression test that ensures that we don't
-	// accidentally update tBegin when continuing to handle the same event.
-	// General coverage of the helper results from TestConcurrencyManagerBasic.
-
 	tr := tracing.NewTracer()
-	sp := tr.StartSpan("foo", tracing.WithForceRealSpan())
+	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracing.RecordingVerbose))
+	defer sp.Finish()
 
 	var sl []*roachpb.ContentionEvent
-	h := contentionEventHelper{
-		sp: sp,
-		onEvent: func(ev *roachpb.ContentionEvent) {
+
+	h := getOrCreateContentionEventHelper(ctx,
+		func(ev *roachpb.ContentionEvent) {
 			sl = append(sl, ev)
-		},
-	}
+		})
+	defer h.close()
 	txn := makeTxnProto("foo")
-	h.emitAndInit(waitingState{
+	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("a"),
 		txn:  &txn.TxnMeta,
 	})
+	require.Zero(t, h.mu.lockWait)
 	require.Empty(t, sl)
-	require.NotZero(t, h.tBegin)
-	tBegin := h.tBegin
+	require.NotZero(t, h.mu.curLockStart)
+	rec := sp.GetRecording(tracing.RecordingVerbose)
+	require.Equal(t, "1", rec[0].Tags[tagNumLocks])
+	require.NotContains(t, rec[0].Tags, tagWaited)
+	require.Contains(t, rec[0].Tags, tagWaitKey)
+	require.Contains(t, rec[0].Tags, tagWaitStart)
+	require.Contains(t, rec[0].Tags, tagLockHolderTxn)
+	tBegin := h.mu.curLockStart
 
-	// Another event for the same txn/key should not mutate tBegin
-	// or emit an event.
-	h.emitAndInit(waitingState{
+	// Another event for the same txn/key should not mutate curLockStart
+	// or emitLocked an event.
+	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("a"),
 		txn:  &txn.TxnMeta,
 	})
 	require.Empty(t, sl)
-	require.Equal(t, tBegin, h.tBegin)
+	require.Equal(t, tBegin, h.mu.curLockStart)
+	require.Zero(t, h.mu.lockWait)
 
-	h.emitAndInit(waitingState{
+	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("b"),
 		txn:  &txn.TxnMeta,
 	})
+	require.NotZero(t, h.mu.lockWait)
 	require.Len(t, sl, 1)
 	require.Equal(t, txn.TxnMeta, sl[0].TxnMeta)
 	require.Equal(t, roachpb.Key("a"), sl[0].Key)
 	require.NotZero(t, sl[0].Duration)
+
+	h.close()
+	require.Len(t, sl, 2)
+
+	oldH := h
+	h = getOrCreateContentionEventHelper(ctx,
+		func(ev *roachpb.ContentionEvent) {
+			sl = append(sl, ev)
+		})
+	require.Equal(t, oldH, h)
+	require.Equal(t, 2, h.mu.numLocks)
+	require.NotZero(t, h.mu.lockWait)
+	lockWaitBefore := h.mu.lockWait
+
+	h.notify(ctx, waitingState{
+		kind: waitFor,
+		key:  roachpb.Key("b"),
+		txn:  &txn.TxnMeta,
+	})
+	h.notify(ctx, waitingState{
+		kind: doneWaiting,
+	})
+	require.Len(t, sl, 3)
+	require.Less(t, lockWaitBefore, h.mu.lockWait)
+	rec = sp.GetRecording(tracing.RecordingVerbose)
+	require.Equal(t, "3", rec[0].Tags[tagNumLocks])
+	require.Contains(t, rec[0].Tags, tagWaited)
+	require.NotContains(t, rec[0].Tags, tagWaitKey)
+	require.NotContains(t, rec[0].Tags, tagWaitStart)
+	require.NotContains(t, rec[0].Tags, tagLockHolderTxn)
 }

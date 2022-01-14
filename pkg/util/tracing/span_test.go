@@ -504,6 +504,65 @@ func (i *countingStringer) String() string {
 	return fmt.Sprint(*i)
 }
 
+type testExpandingTag struct{}
+
+var _ ExpandingTag = testExpandingTag{}
+
+func (t testExpandingTag) ExpandToRecordingTags() []attribute.KeyValue {
+	return []attribute.KeyValue{
+		{
+			Key:   "exp1",
+			Value: attribute.IntValue(1),
+		},
+		{
+			Key:   "exp2",
+			Value: attribute.IntValue(2),
+		},
+	}
+}
+
+type testStringerLazyTag struct{}
+
+func (t testStringerLazyTag) String() string {
+	return "lazy stringer"
+}
+
+func TestSpanTags(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithRecording(RecordingVerbose))
+	defer sp.Finish()
+	sp.SetTag("tag", attribute.IntValue(42))
+	sp.SetLazyTag("lazy expanding tag", testExpandingTag{})
+	sp.SetLazyTag("lazy tag", testStringerLazyTag{})
+	sp.SetStatusTag("status tag", attribute.IntValue(44))
+	sp.SetLazyStatusTag("lazy status tag", testStringerLazyTag{})
+
+	tag, ok := sp.GetLazyTag("lazy expanding tag")
+	require.True(t, ok)
+	require.IsType(t, testExpandingTag{}, tag)
+
+	rec := sp.GetRecording(RecordingVerbose)
+	tags := rec[0].Tags
+	require.Contains(t, tags, "tag")
+	require.Contains(t, tags, "lazy tag")
+	require.NotContains(t, tags, "lazy expanding tag")
+	require.Contains(t, tags, "exp1")
+	require.Contains(t, tags, "exp2")
+	require.Contains(t, tags, "status tag")
+	require.Contains(t, tags, "lazy status tag")
+	require.Equal(t, tags["exp1"], "1")
+	require.Equal(t, tags["exp2"], "2")
+	require.Equal(t, tags["lazy tag"], "lazy stringer")
+	require.Equal(t, tags["lazy status tag"], "lazy stringer")
+
+	sp.ClearStatusTag("status tag")
+	sp.ClearStatusTag("lazy status tag")
+	rec = sp.GetRecording(RecordingVerbose)
+	tags = rec[0].Tags
+	require.NotContains(t, "status tag", tags)
+	require.NotContains(t, "lazy status tag", tags)
+}
+
 // TestSpanTagsInRecordings verifies that tags added before a recording started
 // are part of the recording.
 func TestSpanTagsInRecordings(t *testing.T) {

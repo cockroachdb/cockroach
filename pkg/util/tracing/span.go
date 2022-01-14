@@ -392,7 +392,74 @@ func (sp *Span) SetTag(key string, value attribute.Value) {
 	if sp.detectUseAfterFinish() {
 		return
 	}
-	sp.i.SetTag(key, value)
+	sp.i.SetTag(key, value, false /* statusTag */)
+}
+
+// ExpandingTag is a tag value that expands into a series of key-value tags when
+// included in a recording. ExpandingTags are can be used when it's useful to
+// maintain a single, structured tag in a Span (for example because the tag is
+// accessed through Span.GetTag(key)), but that tag should render as multiple
+// key-value pairs when the Span's recording is collected. Recordings can only
+// contain string tags, for simplicity.
+type ExpandingTag interface {
+	// ExpandToRecordingTags produces the list of key-value tags for the span's
+	// recording.
+	ExpandToRecordingTags() []attribute.KeyValue
+}
+
+// SetLazyTag adds a tag to the span. The tag's value is expected to implement
+// either fmt.Stringer or ExpandingTag, and is only stringified using one of
+// the two on demand:
+// - if the Span has an otel span or a net.Trace, the tag
+//   is stringified immediately and passed to the external trace (see
+//   SetLazyStatusTag if you want to avoid that).
+//- if/when the span's recording is collected, the tag is stringified on demand.
+//  If the recording is collected multiple times, the tag is stringified
+//  multiple times (so, the tag can evolve over time). Since generally the
+//  collection of a recording can happen asynchronously, the implementation of
+//  Stringer or ExpandingTag should be thread-safe.
+func (sp *Span) SetLazyTag(key string, value interface{}) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.SetLazyTag(key, value, false /* statusTag */)
+}
+
+// SetStatusTag is like SetTag, except the new tag can be removed from the Span
+// in the future via ClearStatusTag. Only the crdbSpan offers this
+// functionality, so the tag is not passed to the otel span or to net.Trace.
+func (sp *Span) SetStatusTag(key string, value attribute.Value) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.SetTag(key, value, true /* statusTag */)
+}
+
+// SetLazyStatusTag is like SetLazyTag, but the tag behaves like a "status tag"
+// - i.e. it is not passed to the otel span / net.Trace (if any) and it can be
+// clearer using ClearStatusTag.
+func (sp *Span) SetLazyStatusTag(key string, value interface{}) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.SetLazyTag(key, value, true /* statusTag */)
+}
+
+// ClearStatusTag removes a tag if it was previously added through SetStatusTag.
+func (sp *Span) ClearStatusTag(key string) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.ClearStatusTag(key)
+}
+
+// GetLazyTag returns the value of the tag with the given key. If that tag doesn't
+// exist, the bool retval is false.
+func (sp *Span) GetLazyTag(key string) (interface{}, bool) {
+	if sp.detectUseAfterFinish() {
+		return attribute.Value{}, false
+	}
+	return sp.i.GetLazyTag(key)
 }
 
 // TraceID retrieves a span's trace ID.
