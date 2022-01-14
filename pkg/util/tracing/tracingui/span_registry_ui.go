@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -67,6 +68,15 @@ type spansList struct {
 var spansTableTemplate *template.Template
 
 func init() {
+
+	hiddenTags := map[string]struct{}{
+		"_unfinished": {},
+		"_verbose":    {},
+		"_dropped":    {},
+		"node":        {},
+		"store":       {},
+	}
+
 	spansTableTemplate = template.Must(template.New("spans-list").Funcs(
 		template.FuncMap{
 			"formatTime":         formatTime,
@@ -75,6 +85,36 @@ func init() {
 				return fmt.Sprintf("(%s ago)", formatDuration(capturedAt.Sub(t)))
 			},
 			"timeRaw": func(t time.Time) int64 { return t.UnixMicro() },
+			"tags": func(sp tracingpb.RecordedSpan) string {
+				var b strings.Builder
+				for k, v := range sp.Tags {
+					if _, hidden := hiddenTags[k]; hidden {
+						continue
+					}
+					if b.Len() > 0 {
+						b.WriteString(", ")
+					}
+					b.WriteString(k)
+					b.WriteString(": ")
+					b.WriteString(v)
+				}
+				return b.String()
+			},
+			"hiddenTags": func(sp tracingpb.RecordedSpan) string {
+				var b strings.Builder
+				for k, v := range sp.Tags {
+					if _, hidden := hiddenTags[k]; !hidden {
+						continue
+					}
+					if b.Len() > 0 {
+						b.WriteString(", ")
+					}
+					b.WriteString(k)
+					b.WriteString(": ")
+					b.WriteString(v)
+				}
+				return b.String()
+			},
 		},
 	).Parse(ui.SpansTableTemplateSrc))
 }
