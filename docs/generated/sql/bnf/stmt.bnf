@@ -20,3 +20,4 @@ stmt ::=
 	| close_cursor_stmt
 	| declare_cursor_stmt
 	| fetch_cursor_stmt
+	| move_cursor_stmt

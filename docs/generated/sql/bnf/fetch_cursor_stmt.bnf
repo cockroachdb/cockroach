@@ -1,2 +1,2 @@
 fetch_cursor_stmt ::=
-	'FETCH' fetch_specifier
+	'FETCH' cursor_movement_specifier

@@ -181,3 +181,131 @@ CLOSE foo
 CLOSE foo -- fully parenthesized
 CLOSE foo -- literals removed
 CLOSE _ -- identifiers removed
+
+parse
+MOVE 10 foo
+----
+MOVE 10 foo
+MOVE 10 foo -- fully parenthesized
+MOVE 10 foo -- literals removed
+MOVE 10 _ -- identifiers removed
+
+parse
+MOVE 10 FROM foo
+----
+MOVE 10 foo -- normalized!
+MOVE 10 foo -- fully parenthesized
+MOVE 10 foo -- literals removed
+MOVE 10 _ -- identifiers removed
+
+parse
+MOVE 10 IN foo
+----
+MOVE 10 foo -- normalized!
+MOVE 10 foo -- fully parenthesized
+MOVE 10 foo -- literals removed
+MOVE 10 _ -- identifiers removed
+
+parse
+MOVE NEXT foo
+----
+MOVE 1 foo -- normalized!
+MOVE 1 foo -- fully parenthesized
+MOVE 1 foo -- literals removed
+MOVE 1 _ -- identifiers removed
+
+parse
+MOVE PRIOR foo
+----
+MOVE -1 foo -- normalized!
+MOVE -1 foo -- fully parenthesized
+MOVE -1 foo -- literals removed
+MOVE -1 _ -- identifiers removed
+
+parse
+MOVE FIRST foo
+----
+MOVE FIRST foo
+MOVE FIRST foo -- fully parenthesized
+MOVE FIRST foo -- literals removed
+MOVE FIRST _ -- identifiers removed
+
+parse
+MOVE LAST foo
+----
+MOVE LAST foo
+MOVE LAST foo -- fully parenthesized
+MOVE LAST foo -- literals removed
+MOVE LAST _ -- identifiers removed
+
+parse
+MOVE RELATIVE -3 foo
+----
+MOVE RELATIVE -3 foo
+MOVE RELATIVE -3 foo -- fully parenthesized
+MOVE RELATIVE -3 foo -- literals removed
+MOVE RELATIVE -3 _ -- identifiers removed
+
+parse
+MOVE ABSOLUTE 3 foo
+----
+MOVE ABSOLUTE 3 foo
+MOVE ABSOLUTE 3 foo -- fully parenthesized
+MOVE ABSOLUTE 3 foo -- literals removed
+MOVE ABSOLUTE 3 _ -- identifiers removed
+
+parse
+MOVE ALL foo
+----
+MOVE ALL foo
+MOVE ALL foo -- fully parenthesized
+MOVE ALL foo -- literals removed
+MOVE ALL _ -- identifiers removed
+
+parse
+MOVE FORWARD foo
+----
+MOVE 1 foo -- normalized!
+MOVE 1 foo -- fully parenthesized
+MOVE 1 foo -- literals removed
+MOVE 1 _ -- identifiers removed
+
+parse
+MOVE BACKWARD foo
+----
+MOVE -1 foo -- normalized!
+MOVE -1 foo -- fully parenthesized
+MOVE -1 foo -- literals removed
+MOVE -1 _ -- identifiers removed
+
+parse
+MOVE FORWARD ALL foo
+----
+MOVE ALL foo -- normalized!
+MOVE ALL foo -- fully parenthesized
+MOVE ALL foo -- literals removed
+MOVE ALL _ -- identifiers removed
+
+parse
+MOVE BACKWARD ALL foo
+----
+MOVE BACKWARD ALL foo
+MOVE BACKWARD ALL foo -- fully parenthesized
+MOVE BACKWARD ALL foo -- literals removed
+MOVE BACKWARD ALL _ -- identifiers removed
+
+parse
+MOVE FORWARD 10 foo
+----
+MOVE 10 foo -- normalized!
+MOVE 10 foo -- fully parenthesized
+MOVE 10 foo -- literals removed
+MOVE 10 _ -- identifiers removed
+
+parse
+MOVE BACKWARD 10 foo
+----
+MOVE -10 foo -- normalized!
+MOVE -10 foo -- fully parenthesized
+MOVE -10 foo -- literals removed
+MOVE -10 _ -- identifiers removed
