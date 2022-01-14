@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
-	"github.com/gorhill/cronexpr"
+	"github.com/robfig/cron/v3"
 )
 
 // SQLStatsFlushInterval is the cluster setting that controls how often the SQL
@@ -73,7 +73,7 @@ var SQLStatsCleanupRecurrence = settings.RegisterValidatedStringSetting(
 	"cron-tab recurrence for SQL Stats cleanup job",
 	"@hourly", /* defaultValue */
 	func(_ *settings.Values, s string) error {
-		if _, err := cronexpr.Parse(s); err != nil {
+		if _, err := cron.ParseStandard(s); err != nil {
 			return errors.Wrap(err, "invalid cron expression")
 		}
 		return nil
