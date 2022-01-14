@@ -115,8 +115,7 @@ type scanNode struct {
 type scanColumnsConfig struct {
 	// wantedColumns contains all the columns are part of the scan node schema,
 	// in this order (with the caveat that the addUnwantedAsHidden flag below
-	// can add more columns). Non public columns can only be added if allowed
-	// by the visibility flag below.
+	// can add more columns).
 	wantedColumns []tree.ColumnID
 
 	// invertedColumn maps the column ID of the inverted column (if it exists)
@@ -254,13 +253,6 @@ func initColsForScan(
 		col, err := desc.FindColumnWithID(id)
 		if err != nil {
 			return cols, err
-		}
-		if !col.IsSystemColumn() {
-			if colCfg.visibility != execinfra.ScanVisibilityPublic {
-				col = desc.ReadableColumns()[col.Ordinal()]
-			} else if !col.Public() {
-				return cols, fmt.Errorf("column-id \"%d\" does not exist", id)
-			}
 		}
 
 		// If this is an inverted column, create a new descriptor with the
