@@ -1605,6 +1605,78 @@ upsert t
                           ├── i:20 = t.i:16
                           └── rowid:21 != t.rowid:17
 
+# On conflict clause references unique without index constraint explicitly.
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT ON CONSTRAINT unique_w DO UPDATE SET v=1
+----
+upsert uniq
+ ├── columns: <none>
+ ├── arbiter constraints: unique_w
+ ├── canary column: uniq.k:13
+ ├── fetch columns: uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ ├── insert-mapping:
+ │    ├── column1:8 => uniq.k:1
+ │    ├── column2:9 => uniq.v:2
+ │    ├── column3:10 => uniq.w:3
+ │    ├── column4:11 => uniq.x:4
+ │    └── column5:12 => uniq.y:5
+ ├── update-mapping:
+ │    └── upsert_v:22 => uniq.v:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_k:21 upsert_v:22!null upsert_w:23 upsert_x:24 upsert_y:25 column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19 v_new:20!null
+ │    ├── project
+ │    │    ├── columns: v_new:20!null column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null uniq.k:13 uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+ │    │    │    ├── ensure-upsert-distinct-on
+ │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    │    │    ├── grouping columns: column3:10!null
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=column1:8]
+ │    │    │    │         │    └── column1:8
+ │    │    │    │         ├── first-agg [as=column2:9]
+ │    │    │    │         │    └── column2:9
+ │    │    │    │         ├── first-agg [as=column4:11]
+ │    │    │    │         │    └── column4:11
+ │    │    │    │         └── first-agg [as=column5:12]
+ │    │    │    │              └── column5:12
+ │    │    │    ├── scan uniq
+ │    │    │    │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+ │    │    │    └── filters
+ │    │    │         └── column3:10 = uniq.w:15
+ │    │    └── projections
+ │    │         └── 1 [as=v_new:20]
+ │    └── projections
+ │         ├── CASE WHEN uniq.k:13 IS NULL THEN column1:8 ELSE uniq.k:13 END [as=upsert_k:21]
+ │         ├── CASE WHEN uniq.k:13 IS NULL THEN column2:9 ELSE v_new:20 END [as=upsert_v:22]
+ │         ├── CASE WHEN uniq.k:13 IS NULL THEN column3:10 ELSE uniq.w:15 END [as=upsert_w:23]
+ │         ├── CASE WHEN uniq.k:13 IS NULL THEN column4:11 ELSE uniq.x:16 END [as=upsert_x:24]
+ │         └── CASE WHEN uniq.k:13 IS NULL THEN column5:12 ELSE uniq.y:17 END [as=upsert_y:25]
+ └── unique-checks
+      └── unique-checks-item: uniq(x,y)
+           └── project
+                ├── columns: x:36 y:37
+                └── semi-join (hash)
+                     ├── columns: k:33 v:34!null w:35 x:36 y:37
+                     ├── with-scan &1
+                     │    ├── columns: k:33 v:34!null w:35 x:36 y:37
+                     │    └── mapping:
+                     │         ├──  upsert_k:21 => k:33
+                     │         ├──  upsert_v:22 => v:34
+                     │         ├──  upsert_w:23 => w:35
+                     │         ├──  upsert_x:24 => x:36
+                     │         └──  upsert_y:25 => y:37
+                     ├── scan uniq
+                     │    └── columns: uniq.k:26!null uniq.v:27 uniq.w:28 uniq.x:29 uniq.y:30
+                     └── filters
+                          ├── x:36 = uniq.x:29
+                          ├── y:37 = uniq.y:30
+                          └── k:33 != uniq.k:26
+
 exec-ddl
 CREATE TABLE uniq_partial (
   k INT PRIMARY KEY,
@@ -1781,6 +1853,13 @@ build
 INSERT INTO uniq_partial VALUES (1, 1, 1) ON CONFLICT (a) DO UPDATE SET a = 2
 ----
 error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+
+# Error when trying to select a partial unique without index constraint
+# explicitly, which is not allowed.
+build
+INSERT INTO uniq_partial VALUES (1, 2, 3) ON CONFLICT ON CONSTRAINT unique_a DO UPDATE SET a = 2
+----
+error (42809): unique constraint "unique_a" for table "uniq_partial" is partial, so cannot be used as an arbiter via the ON CONSTRAINT syntax
 
 exec-ddl
 CREATE TABLE uniq_partial_constraint_and_index (
