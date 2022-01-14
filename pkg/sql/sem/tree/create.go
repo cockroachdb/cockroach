@@ -49,6 +49,7 @@ type CreateDatabase struct {
 	Regions         NameList
 	SurvivalGoal    SurvivalGoal
 	Placement       DataPlacement
+	Owner           RoleSpec
 }
 
 // Format implements the NodeFormatter interface.
@@ -114,6 +115,11 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.Placement != DataPlacementUnspecified {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.Placement)
+	}
+
+	if node.Owner.Name != "" {
+		ctx.WriteString(" OWNER = ")
+		ctx.FormatNode(&node.Owner)
 	}
 }
 
