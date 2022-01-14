@@ -144,10 +144,41 @@ func (s *spanInner) OperationName() string {
 	return s.crdb.operation
 }
 
-func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
+func (s *spanInner) SetTag(key string, value attribute.Value, statusTag bool) *spanInner {
 	if s.isNoop() {
 		return s
 	}
+	if !statusTag {
+		if s.otelSpan != nil {
+			s.otelSpan.SetAttributes(attribute.KeyValue{
+				Key:   attribute.Key(key),
+				Value: value,
+			})
+		}
+		if s.netTr != nil {
+			s.netTr.LazyPrintf("%s:%v", key, value)
+		}
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	s.crdb.setTagLocked(key, value)
+	return s
+}
+
+func (s *spanInner) SetLazyTag(key string, value interface{}, statusTag bool) *spanInner {
+	if s.isNoop() {
+		return s
+	}
+	if !statusTag {
+		s.setLazyTagOnExternalSyncs(key, value)
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	s.crdb.setLazyTagLocked(key, value)
+	return s
+}
+
+func (s *spanInner) setTagOnExternalSyncs(key string, value attribute.Value) {
 	if s.otelSpan != nil {
 		s.otelSpan.SetAttributes(attribute.KeyValue{
 			Key:   attribute.Key(key),
@@ -157,10 +188,37 @@ func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.netTr != nil {
 		s.netTr.LazyPrintf("%s:%v", key, value)
 	}
-	// The internal tags will be used if we start a recording on this Span.
+}
+
+func (s *spanInner) setLazyTagOnExternalSyncs(key string, value interface{}) {
+	switch v := value.(type) {
+	case ExpandingTag:
+		for _, tag := range v.ExpandToRecordingTags() {
+			s.setTagOnExternalSyncs(string(tag.Key), tag.Value)
+		}
+	case fmt.Stringer:
+		s.setTagOnExternalSyncs(key, attribute.StringValue(v.String()))
+	default:
+		s.setTagOnExternalSyncs(key, attribute.StringValue(fmt.Sprintf("<can't render %T>", value)))
+	}
+}
+
+// GetLazyTag returns the value of the tag with the given key. If that tag doesn't
+// exist, the bool retval is false.
+func (s *spanInner) GetLazyTag(key string) (interface{}, bool) {
+	if s.isNoop() {
+		return attribute.Value{}, false
+	}
 	s.crdb.mu.Lock()
 	defer s.crdb.mu.Unlock()
-	s.crdb.setTagLocked(key, value)
+	return s.crdb.getLazyTagLocked(key)
+}
+
+func (s *spanInner) ClearStatusTag(key string) *spanInner {
+	if s.isNoop() {
+		return s
+	}
+	s.crdb.clearTag(key)
 	return s
 }
 
