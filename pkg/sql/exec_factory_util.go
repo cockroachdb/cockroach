@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -90,14 +89,8 @@ func constructPlan(
 // list of descriptor IDs for columns in the given cols set. Columns are
 // identified by their ordinal position in the table schema.
 func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) scanColumnsConfig {
-	// Set visibility=execinfra.ScanVisibilityPublicAndNotPublic, since all
-	// columns in the "cols" set should be projected, regardless of whether
-	// they're public or non-public. The caller decides which columns to
-	// include (or not include). Note that when wantedColumns is non-empty,
-	// the visibility flag will never trigger the addition of more columns.
 	colCfg := scanColumnsConfig{
 		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
-		visibility:    execinfra.ScanVisibilityPublicAndNotPublic,
 	}
 	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
 		col := table.Column(ord)
