@@ -42,6 +42,9 @@ const (
 	// CredentialsParam is the query parameter for the base64-encoded contents of
 	// the Google Application Credentials JSON file.
 	CredentialsParam = "CREDENTIALS"
+	// GoogleApplicationCredentialsParam is the query parameter for the file location
+	// of the Google Application Credentials JSON file. Used with implicit authentication
+	GoogleApplicationCredentialsParam = "GOOGLE_APPLICATION_CREDENTIALS"
 )
 
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
