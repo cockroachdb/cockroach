@@ -535,47 +535,6 @@ func runSinglePrivilegeCheck(
 	return d, nil
 }
 
-// evalPrivilegeCheck performs a privilege check for the specified privilege.
-// The function takes an information_schema table name for which to run a query
-// against, along with an arbitrary predicate to run against the table and the
-// user to perform the check on.
-func evalPrivilegeCheck(
-	ctx *tree.EvalContext,
-	schema string,
-	infoTable string,
-	user security.SQLUsername,
-	pred string,
-	priv privilege.Kind,
-) (tree.Datum, error) {
-	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
-	if err != nil {
-		return nil, err
-	}
-
-	// Slice containing all roles user is a direct and indirect member of.
-	allRoles := []string{security.PublicRole, user.Normalized()}
-	for role := range allRoleMemberships {
-		allRoles = append(allRoles, role.Normalized())
-	}
-
-	query := fmt.Sprintf(`
-			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE
-			FROM %s.%s WHERE grantee = ANY ($1) AND %s`,
-		privilege.ALL, priv, schema, infoTable, pred)
-	r, err := ctx.Planner.QueryRowEx(
-		ctx.Ctx(), "eval-privilege-check", ctx.Txn,
-		sessiondata.NoSessionDataOverride,
-		query, allRoles,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if r == nil {
-		return nil, errors.AssertionFailedf("failed to evaluate privilege check")
-	}
-	return r[0], nil
-}
-
 func makeCreateRegDef(typ *types.T) builtinDefinition {
 	return makeBuiltin(defProps(),
 		tree.Overload{
@@ -1619,25 +1578,10 @@ SELECT description
 		argTypeOpts{{"schema", strOrOidTypes}},
 		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			schemaArg := tree.UnwrapDatum(ctx, args[0])
-			schema, err := getNameForArg(ctx, schemaArg, "pg_namespace", "nspname")
+			databaseName := ctx.SessionData().Database
+			specifier, isOidSpecified, err := schemaHasPrivilegeSpecifier(ctx, schemaArg, databaseName)
 			if err != nil {
 				return nil, err
-			}
-			retNull := false
-			if schema == "" {
-				switch schemaArg.(type) {
-				case *tree.DString:
-					return nil, pgerror.Newf(pgcode.InvalidSchemaName,
-						"schema %s does not exist", schemaArg)
-				case *tree.DOid:
-					// Postgres returns NULL if no matching schema is found
-					// when given an OID.
-					retNull = true
-				}
-			}
-			if len(ctx.SessionData().Database) == 0 {
-				// If no database is set, return NULL.
-				retNull = true
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1649,14 +1593,14 @@ SELECT description
 			if err != nil {
 				return nil, err
 			}
-			if retNull {
+			if len(databaseName) == 0 {
+				// If no database is set, return NULL.
 				return tree.DNull, nil
 			}
-			pred := fmt.Sprintf("table_catalog = '%s' AND table_schema = '%s'",
-				ctx.SessionData().Database, schema)
+
 			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				return evalPrivilegeCheck(ctx, "information_schema", "schema_privileges",
-					user, pred, priv.Kind)
+				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
+				return handleSchemaHasPrivilegeError(isOidSpecified, ret, err)
 			})
 		},
 	),
@@ -2378,12 +2322,46 @@ func columnHasPrivilegeSpecifier(
 	return specifier, nil
 }
 
+func schemaHasPrivilegeSpecifier(
+	ctx *tree.EvalContext, schemaArg tree.Datum, databaseName string,
+) (tree.HasPrivilegeSpecifier, bool, error) {
+	specifier := tree.HasPrivilegeSpecifier{
+		SchemaDatabaseName: &databaseName,
+	}
+	switch t := schemaArg.(type) {
+	case *tree.DString:
+		s := string(*t)
+		specifier.SchemaName = &s
+		return specifier, false, nil
+	case *tree.DOid:
+		schemaName, err := getNameForArg(ctx, schemaArg, "pg_namespace", "nspname")
+		if err != nil {
+			return specifier, true, err
+		}
+		specifier.SchemaName = &schemaName
+		return specifier, true, nil
+	default:
+		return specifier, false, errors.AssertionFailedf("unknown privilege specifier: %#v", schemaArg)
+	}
+}
+
 func handleDatabaseHasPrivilegeError(
 	specifier tree.HasPrivilegeSpecifier, ret bool, err error,
 ) (tree.Datum, error) {
 	if err != nil {
 		// When a DatabaseOID is specified and the relation is not found, we return NULL.
 		if specifier.DatabaseOID != nil && sqlerrors.IsUndefinedDatabaseError(err) {
+			return tree.DNull, nil
+		}
+		return nil, err
+	}
+	return tree.MakeDBool(tree.DBool(ret)), nil
+}
+
+func handleSchemaHasPrivilegeError(isOidSpecified bool, ret bool, err error) (tree.Datum, error) {
+	if err != nil {
+		// When a Schema OID is specified and the relation is not found, we return NULL.
+		if isOidSpecified && sqlerrors.IsUndefinedSchemaError(err) {
 			return tree.DNull, nil
 		}
 		return nil, err
