@@ -9,8 +9,8 @@
 package streamproducer
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -42,7 +42,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 // UpdateReplicationStreamProgress implements ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) UpdateReplicationStreamProgress(
 	evalCtx *tree.EvalContext, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
-) (jobspb.StreamReplicationStatus, error) {
+) (streampb.StreamReplicationStatus, error) {
 	return heartbeatReplicationStream(evalCtx, streamID, frontier, txn)
 }
 
@@ -53,6 +53,13 @@ func (r *replicationStreamManagerImpl) StreamPartition(
 	evalCtx *tree.EvalContext, streamID streaming.StreamID, opaqueSpec []byte,
 ) (tree.ValueGenerator, error) {
 	return streamPartition(evalCtx, streamID, opaqueSpec)
+}
+
+// GetReplicationStreamSpec implements ReplicationStreamManager interface.
+func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
+) (*streampb.ReplicationStreamSpec, error) {
+	return getReplicationStreamSpec(evalCtx, txn, streamID)
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(

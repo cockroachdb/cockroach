@@ -11,7 +11,7 @@
 package streaming
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,8 +53,7 @@ type ReplicationStreamManager interface {
 		evalCtx *tree.EvalContext,
 		streamID StreamID,
 		frontier hlc.Timestamp,
-		txn *kv.Txn,
-	) (jobspb.StreamReplicationStatus, error)
+		txn *kv.Txn) (streampb.StreamReplicationStatus, error)
 
 	// StreamPartition starts streaming replication for the partition specified by opaqueSpec
 	// which contains serialized streampb.StreamPartitionSpec protocol message.
@@ -63,6 +62,13 @@ type ReplicationStreamManager interface {
 		streamID StreamID,
 		opaqueSpec []byte,
 	) (tree.ValueGenerator, error)
+
+	// GetReplicationStreamSpec gets a stream replication spec.
+	GetReplicationStreamSpec(
+		evalCtx *tree.EvalContext,
+		txn *kv.Txn,
+		streamID StreamID,
+	) (*streampb.ReplicationStreamSpec, error)
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.

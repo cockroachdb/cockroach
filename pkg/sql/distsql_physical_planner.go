@@ -193,6 +193,11 @@ func (dsp *DistSQLPlanner) shouldPlanTestMetadata() bool {
 	return dsp.distSQLSrv.TestingKnobs.MetadataTestLevel >= dsp.metadataTestTolerance
 }
 
+// GetNodeInfo gets a node descriptor by node ID.
+func (dsp *DistSQLPlanner) GetNodeInfo(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	return dsp.nodeDescs.GetNodeDescriptor(nodeID)
+}
+
 // SetNodeInfo sets the planner's node descriptor.
 // The first call to SetNodeInfo leads to the construction of the SpanResolver.
 func (dsp *DistSQLPlanner) SetNodeInfo(desc roachpb.NodeDescriptor) {
