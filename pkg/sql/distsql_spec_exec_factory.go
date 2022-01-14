@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -235,7 +234,6 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	*trSpec = execinfrapb.TableReaderSpec{
 		Table:            *tabDesc.TableDesc(),
 		Reverse:          params.Reverse,
-		Visibility:       execinfra.ScanVisibilityPublicAndNotPublic,
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 	}
 	if vc := getInvertedColumn(colCfg.invertedColumnID, cols); vc != nil {
