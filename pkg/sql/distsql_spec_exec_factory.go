@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -230,12 +231,12 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	// Phase 2: perform the table reader planning. This phase is equivalent to
 	// what DistSQLPlanner.createTableReaders does.
-	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc, colCfg.visibility)
+	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc)
 	trSpec := physicalplan.NewTableReaderSpec()
 	*trSpec = execinfrapb.TableReaderSpec{
 		Table:            *tabDesc.TableDesc(),
 		Reverse:          params.Reverse,
-		Visibility:       colCfg.visibility,
+		Visibility:       execinfra.ScanVisibilityPublicAndNotPublic,
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 	}
 	if vc := getInvertedColumn(colCfg.invertedColumn, cols); vc != nil {
@@ -277,7 +278,6 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			desc:                  tabDesc,
 			spans:                 spans,
 			reverse:               params.Reverse,
-			scanVisibility:        colCfg.visibility,
 			parallelize:           params.Parallelize,
 			estimatedRowCount:     uint64(params.EstimatedRowCount),
 			reqOrdering:           ReqOrdering(reqOrdering),

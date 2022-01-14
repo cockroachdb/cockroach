@@ -177,10 +177,9 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// If result rows need to be accumulated, do it.
 	if d.run.td.rows != nil {
-		// The new values can include all columns, the construction of the
-		// values has used execinfra.ScanVisibilityPublicAndNotPublic so the
-		// values may contain additional columns for every newly dropped column
-		// not visible. We do not want them to be available for RETURNING.
+		// The new values can include all columns, so the values may contain
+		// additional columns for every newly dropped column not visible. We do not
+		// want them to be available for RETURNING.
 		//
 		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
