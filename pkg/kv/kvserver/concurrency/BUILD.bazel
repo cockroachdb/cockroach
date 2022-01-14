@@ -27,6 +27,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
@@ -36,6 +37,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 

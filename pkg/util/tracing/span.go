@@ -433,7 +433,45 @@ func (sp *Span) SetTag(key string, value attribute.Value) {
 	if sp.detectUseAfterFinish() {
 		return
 	}
-	sp.i.SetTag(key, value)
+	sp.i.SetTag(key, value, false /* statusTag */)
+}
+
+// LazyTag is a tag value that expands into a series of key-value tags when
+// included in a recording. LazyTags can be used when it's useful to maintain a
+// single, structured tag in a Span (for example because the tag is accessed
+// through Span.GetLazyTag(key)), but that tag should render as multiple
+// key-value pairs when the Span's recording is collected. Recordings can only
+// contain string tags, for simplicity.
+type LazyTag interface {
+	// Render produces the list of key-value tags for the span's recording.
+	Render() []attribute.KeyValue
+}
+
+// SetLazyTag adds a tag to the span. The tag's value is expected to implement
+// either fmt.Stringer or LazyTag, and is only stringified using one of
+// the two on demand:
+// - if the Span has an otel span or a net.Trace, the tag
+//   is stringified immediately and passed to the external trace (see
+//   SetLazyStatusTag if you want to avoid that).
+//- if/when the span's recording is collected, the tag is stringified on demand.
+//  If the recording is collected multiple times, the tag is stringified
+//  multiple times (so, the tag can evolve over time). Since generally the
+//  collection of a recording can happen asynchronously, the implementation of
+//  Stringer or LazyTag should be thread-safe.
+func (sp *Span) SetLazyTag(key string, value interface{}) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.SetLazyTag(key, value)
+}
+
+// GetLazyTag returns the value of the tag with the given key. If that tag doesn't
+// exist, the bool retval is false.
+func (sp *Span) GetLazyTag(key string) (interface{}, bool) {
+	if sp.detectUseAfterFinish() {
+		return attribute.Value{}, false
+	}
+	return sp.i.GetLazyTag(key)
 }
 
 // TraceID retrieves a span's trace ID.
