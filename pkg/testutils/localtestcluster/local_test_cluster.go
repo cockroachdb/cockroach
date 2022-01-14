@@ -23,12 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedadaptor"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -110,14 +113,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	manualClock := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manualClock.UnixNano, 50*time.Millisecond)
 	cfg := kvserver.TestStoreConfig(clock)
-	// We use the system config span infra for the few (old) tests written using
-	// LocalTestCluster.
-	//
-	// TODO(irfansharif): This was because of circular dependency reasons.
-	// Because we create the stores from scratch here, enabling span configs
-	// requires initializing the spanconfigkvsubscriber -- a dependency we can't
-	// (easily) pick up here.
-	cfg.SpanConfigsDisabled = true
 	tr := cfg.AmbientCtx.Tracer
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
 	ltc.Manual = manualClock
@@ -217,6 +212,26 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
+
+	adaptor, err := rangefeedadaptor.New(ltc.DB, cfg.Settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangeFeedFactory, err := rangefeed.NewFactory(ltc.stopper, adaptor, nil /* knobs */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.SpanConfigSubscriber = spanconfigkvsubscriber.New(
+		ltc.stopper,
+		ltc.DB,
+		clock,
+		rangeFeedFactory,
+		keys.SpanConfigurationsTableID,
+		1<<20, /* 1 MB */
+		cfg.DefaultSpanConfig,
+		nil,
+	)
+
 	ltc.Store = kvserver.NewStore(ctx, cfg, ltc.Eng, nodeDesc)
 
 	var initialValues []roachpb.KeyValue
