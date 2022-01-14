@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedadaptor"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -68,7 +69,9 @@ func TestRangeFeedIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	adaptor, err := rangefeedadaptor.New(db, srv0.ClusterSettings())
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), adaptor, nil)
 	require.NoError(t, err)
 	rows := make(chan *roachpb.RangeFeedValue)
 	initialScanDone := make(chan struct{})
@@ -158,7 +161,9 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	_, _, err := tc.SplitRange(mkKey("b"))
 	require.NoError(t, err)
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	adaptor, err := rangefeedadaptor.New(db, srv0.ClusterSettings())
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), adaptor, nil)
 	require.NoError(t, err)
 
 	// mu protects secondWriteTS.
@@ -273,7 +278,9 @@ func TestWithOnCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	adaptor, err := rangefeedadaptor.New(db, srv0.ClusterSettings())
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), adaptor, nil)
 	require.NoError(t, err)
 
 	var mu syncutil.RWMutex
@@ -372,7 +379,9 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	adaptor, err := rangefeedadaptor.New(db, srv0.ClusterSettings())
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), adaptor, nil)
 	require.NoError(t, err)
 
 	rows := make(chan *roachpb.RangeFeedValue)
@@ -481,7 +490,9 @@ func TestUnrecoverableErrors(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db0, srv0.ClusterSettings(), nil)
+	adaptor, err := rangefeedadaptor.New(db0, srv0.ClusterSettings())
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), adaptor, nil)
 	require.NoError(t, err)
 
 	preGCThresholdTS := hlc.Timestamp{WallTime: 1}
@@ -581,7 +592,9 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 			m[defaultLabel.k] == defaultLabel.v && m[label1.k] == label1.v && m[label2.k] == label2.v
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	adaptor, err := rangefeedadaptor.New(db, srv0.ClusterSettings())
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv0.Stopper(), adaptor, nil)
 	require.NoError(t, err)
 	initialScanDone := make(chan struct{})
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedadaptor"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -133,7 +134,9 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 	m.set("str.foo", "override", "s")
 
 	st := cluster.MakeTestingClusterSettings()
-	f, err := rangefeed.NewFactory(stopper, kvDB, st, &rangefeed.TestingKnobs{})
+	adaptor, err := rangefeedadaptor.New(kvDB, st)
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(stopper, adaptor, &rangefeed.TestingKnobs{})
 	require.NoError(t, err)
 	w := settingswatcher.NewWithOverrides(ts.Clock(), keys.SystemSQLCodec, st, f, stopper, m)
 	require.NoError(t, w.Start(ctx))

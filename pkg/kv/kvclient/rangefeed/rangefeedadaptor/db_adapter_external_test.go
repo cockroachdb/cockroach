@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rangefeed_test
+package rangefeedadaptor_test
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedadaptor"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -43,7 +44,7 @@ func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
 	return mm
 }
 
-// TestDBClientScan tests that the logic in Scan on the dbAdapter is sane.
+// TestDBClientScan tests that the logic in Scan on the DBAdapter is sane.
 // The rangefeed logic is a literal passthrough so it's not getting a lot of
 // testing directly.
 func TestDBClientScan(t *testing.T) {
@@ -64,7 +65,7 @@ func TestDBClientScan(t *testing.T) {
 	afterB := db.Clock().Now()
 	require.NoError(t, db.Put(ctx, mkKey("c"), 3))
 
-	dba, err := rangefeed.NewDBAdapter(db, tc.Server(0).ClusterSettings())
+	dba, err := rangefeedadaptor.New(db, tc.Server(0).ClusterSettings())
 	require.NoError(t, err)
 	sp := roachpb.Span{
 		Key:    scratchKey,
@@ -75,7 +76,7 @@ func TestDBClientScan(t *testing.T) {
 	// values at the timestamp preceding writes.
 	t.Run("scan respects time bounds", func(t *testing.T) {
 		var responses []roachpb.KeyValue
-		require.NoError(t, dba.ScanWithOptions(
+		require.NoError(t, dba.TestingScanWithOptions(
 			ctx, []roachpb.Span{sp}, beforeAny, func(value roachpb.KeyValue) {
 				responses = append(responses, value)
 			}))
@@ -85,7 +86,7 @@ func TestDBClientScan(t *testing.T) {
 	// Ensure that expected values are seen at the intermediate timestamp.
 	t.Run("scan sees values at intermediate ts", func(t *testing.T) {
 		var responses []roachpb.KeyValue
-		require.NoError(t, dba.ScanWithOptions(
+		require.NoError(t, dba.TestingScanWithOptions(
 			ctx, []roachpb.Span{sp}, afterB, func(value roachpb.KeyValue) {
 				responses = append(responses, value)
 			}))
@@ -99,7 +100,7 @@ func TestDBClientScan(t *testing.T) {
 	// Ensure that pagination doesn't break anything.
 	t.Run("scan pagination works", func(t *testing.T) {
 		var responses []roachpb.KeyValue
-		require.NoError(t, dba.ScanWithOptions(ctx, []roachpb.Span{sp}, db.Clock().Now(),
+		require.NoError(t, dba.TestingScanWithOptions(ctx, []roachpb.Span{sp}, db.Clock().Now(),
 			func(value roachpb.KeyValue) {
 				responses = append(responses, value)
 			},
@@ -114,7 +115,7 @@ func TestDBClientScan(t *testing.T) {
 		defer mm.Stop(ctx)
 
 		require.Regexp(t, "memory budget exceeded",
-			dba.ScanWithOptions(ctx, []roachpb.Span{sp}, db.Clock().Now(),
+			dba.TestingScanWithOptions(ctx, []roachpb.Span{sp}, db.Clock().Now(),
 				func(value roachpb.KeyValue) {},
 				rangefeed.WithTargetScanBytes(2*memLimit),
 				rangefeed.WithMemoryMonitor(mm),
@@ -145,7 +146,7 @@ func TestDBClientScan(t *testing.T) {
 
 		g := ctxgroup.WithContext(context.Background())
 		g.GoCtx(func(ctx context.Context) error {
-			return dba.ScanWithOptions(ctx, []roachpb.Span{fooSpan}, db.Clock().Now(),
+			return dba.TestingScanWithOptions(ctx, []roachpb.Span{fooSpan}, db.Clock().Now(),
 				func(value roachpb.KeyValue) {},
 				rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),
 				rangefeed.WithOnScanCompleted(func(ctx context.Context, sp roachpb.Span) error {
@@ -191,7 +192,7 @@ func TestDBClientScan(t *testing.T) {
 		// We expect 11 splits.
 		// One span will fail.  Verify we retry only the spans that we have not attempted before.
 		var parallelism = 6
-		f := rangefeed.NewFactoryWithDB(tc.Server(0).Stopper(), dba, nil /* knobs */)
+		f := rangefeed.TestingNewFactoryWithDB(tc.Server(0).Stopper(), dba, nil /* knobs */)
 		scanComplete := make(chan struct{})
 		scanErr := make(chan error, 1)
 		retryScanErr := errors.New("retry scan")

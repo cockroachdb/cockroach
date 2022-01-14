@@ -69,7 +69,7 @@ func (m *mockClient) Scan(
 
 var _ rangefeed.KVDB = (*mockClient)(nil)
 
-// TestRangefeedMock utilizes the kvDB interface to test the behavior of the
+// TestRangefeedMock utilizes the KVDB interface to test the behavior of the
 // RangeFeed.
 func TestRangeFeedMock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -108,7 +108,7 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
+		f := rangefeed.TestingNewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		require.NotNil(t, f)
 		rows := make(chan *roachpb.RangeFeedValue)
 
@@ -227,7 +227,7 @@ func TestRangeFeedMock(t *testing.T) {
 				}
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
+		f := rangefeed.TestingNewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
 		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, initialTS, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
@@ -275,7 +275,7 @@ func TestRangeFeedMock(t *testing.T) {
 				return ctx.Err()
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
+		f := rangefeed.TestingNewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
 		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
@@ -294,7 +294,7 @@ func TestRangeFeedMock(t *testing.T) {
 			EndKey: roachpb.Key("c"),
 		}
 		stopper.Stop(ctx)
-		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{}, nil /* knobs */)
+		f := rangefeed.TestingNewFactoryWithDB(stopper, &mockClient{}, nil /* knobs */)
 		r, err := f.RangeFeed(ctx, "foo", []roachpb.Span{sp}, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
@@ -311,7 +311,7 @@ func TestRangeFeedMock(t *testing.T) {
 			EndKey: roachpb.Key("c"),
 		}
 		var called int
-		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{
+		f := rangefeed.TestingNewFactoryWithDB(stopper, &mockClient{
 			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
 				rowFn func(value roachpb.KeyValue), config rangefeed.ScanConfig) error {
 				return errors.New("boom")
@@ -347,7 +347,7 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	ctrl := gomock.NewController(t)
-	db := rangefeed.NewMockkvDB(ctrl)
+	db := rangefeed.NewMockKVDB(ctrl)
 
 	// Make sure scan failure gets retried.
 	db.EXPECT().Scan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("scan failed"))
@@ -364,7 +364,7 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 		}).
 		Return(nil)
 
-	f := rangefeed.NewFactoryWithDB(stopper, db, nil /* knobs */)
+	f := rangefeed.TestingNewFactoryWithDB(stopper, db, nil /* knobs */)
 	r, err := f.RangeFeed(ctx, "foo",
 		[]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}},
 		hlc.Timestamp{},

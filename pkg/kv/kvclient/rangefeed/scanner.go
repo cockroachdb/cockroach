@@ -57,7 +57,7 @@ func (f *RangeFeed) runInitialScan(
 
 	r.Reset()
 	for r.Next() {
-		if err := f.client.Scan(ctx, getSpansToScan(), f.initialTimestamp, onValue, f.scanConfig); err != nil {
+		if err := f.client.Scan(ctx, getSpansToScan(), f.initialTimestamp, onValue, f.ScanConfig); err != nil {
 			if f.onInitialScanError != nil {
 				if shouldStop := f.onInitialScanError(ctx, err); shouldStop {
 					log.VEventf(ctx, 1, "stopping due to error: %v", err)
@@ -83,7 +83,7 @@ func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
 		return f.spans
 	}
 
-	if f.retryBehavior == ScanRetryAll {
+	if f.RetryBehavior == ScanRetryAll {
 		return retryAll
 	}
 
@@ -101,8 +101,8 @@ func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
 	}
 
 	var fm syncutil.Mutex
-	userSpanDoneCallback := f.onSpanDone
-	f.onSpanDone = func(ctx context.Context, sp roachpb.Span) error {
+	userSpanDoneCallback := f.OnSpanDone
+	f.OnSpanDone = func(ctx context.Context, sp roachpb.Span) error {
 		if userSpanDoneCallback != nil {
 			if err := userSpanDoneCallback(ctx, sp); err != nil {
 				return err

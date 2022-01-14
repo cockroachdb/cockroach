@@ -565,6 +565,7 @@ go_test(
         "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvclient/rangecache:with-mocks",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed/rangefeedadaptor",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb:with-mocks",

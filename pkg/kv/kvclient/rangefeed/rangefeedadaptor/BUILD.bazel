@@ -1,63 +1,58 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+# This manual resolve is necessary due to counteract the one in the package
+# above.
+#
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed //pkg/kv/kvclient/rangefeed:with-mocks
+
 go_library(
-    name = "settingswatcher",
-    srcs = [
-        "overrides.go",
-        "row_decoder.go",
-        "settings_watcher.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/server/settingswatcher",
+    name = "rangefeedadaptor",
+    srcs = ["db_adapter.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedadaptor",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog",
-        "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/rowenc",
-        "//pkg/sql/rowenc/valueside",
-        "//pkg/sql/sem/tree",
-        "//pkg/sql/types",
-        "//pkg/util/grpcutil",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/limit",
         "//pkg/util/log",
-        "//pkg/util/protoutil",
-        "//pkg/util/stop",
+        "//pkg/util/mon",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
-    name = "settingswatcher_test",
+    name = "rangefeedadaptor_test",
     srcs = [
+        "db_adapter_external_test.go",
         "main_test.go",
-        "row_decoder_external_test.go",
-        "settings_watcher_external_test.go",
     ],
     deps = [
-        ":settingswatcher",
+        ":rangefeedadaptor",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
-        "//pkg/kv/kvclient/rangefeed/rangefeedadaptor",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql",
+        "//pkg/sql/catalog/catalogkv",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util/hlc",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/encoding",
         "//pkg/util/leaktest",
+        "//pkg/util/mon",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

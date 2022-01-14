@@ -74,6 +74,7 @@ go_library(
         "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed/rangefeedadaptor",
         "//pkg/kv/kvprober",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/ctpb",
