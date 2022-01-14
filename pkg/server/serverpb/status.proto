@@ -1158,6 +1158,8 @@ message HotRangesResponseV2 {
       (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
     ];
+    // schema_name provides the name of schema (if exists) for table in current range
+    string schema_name = 9;
   }
   // ranges contain list of hot ranges info that has highest number of QPS
   repeated HotRange ranges = 1;

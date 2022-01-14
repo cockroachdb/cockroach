@@ -1809,6 +1809,10 @@
           },
           "x-go-name": "ReplicaNodeIDs"
         },
+        "schema_name": {
+          "type": "string",
+          "x-go-name": "SchemaName"
+        },
         "table_name": {
           "type": "string",
           "x-go-name": "TableName"
