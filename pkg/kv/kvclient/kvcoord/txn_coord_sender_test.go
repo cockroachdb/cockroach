@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvcoord
+package kvcoord_test
 
 import (
 	"bytes"
@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -54,7 +55,7 @@ func createTestDBWithKnobs(
 	s := &localtestcluster.LocalTestCluster{
 		StoreTestingKnobs: knobs,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 	return s
 }
 
@@ -124,7 +125,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	if err := txn.DisablePipelining(); err != nil {
 		t.Fatal(err)
 	}
-	tc := txn.Sender().(*TxnCoordSender)
+	tc := txn.Sender().(*kvcoord.TxnCoordSender)
 
 	for _, rng := range ranges {
 		if rng.end != nil {
@@ -140,8 +141,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	// Verify that the transaction coordinator is only tracking two lock
 	// spans. "a" and range "aa"-"c".
-	tc.interceptorAlloc.txnPipeliner.lockFootprint.mergeAndSort()
-	lockSpans := tc.interceptorAlloc.txnPipeliner.lockFootprint.asSlice()
+	lockSpans := tc.TestingGetLockFootprint(true)
 	if len(lockSpans) != 2 {
 		t.Errorf("expected 2 entries in keys range group; got %v", lockSpans)
 	}
@@ -168,8 +168,8 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 
 	ambient := s.AmbientCtx
 	// Make a db with a short heartbeat interval.
-	tsf := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			// Short heartbeat interval.
 			HeartbeatInterval: time.Millisecond,
@@ -177,7 +177,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			Clock:             s.Clock,
 			Stopper:           s.Stopper(),
 		},
-		NewDistSenderForLocalTestCluster(
+		kvcoord.NewDistSenderForLocalTestCluster(
 			ctx,
 			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
 			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
@@ -198,7 +198,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		t.Run(fmt.Sprintf("pusher:%s", pusherKey), func(t *testing.T) {
 			// Make a db with a short heartbeat interval.
 			initialTxn := kv.NewTxn(ctx, quickHeartbeatDB, 0 /* gatewayNodeID */)
-			tc := initialTxn.Sender().(*TxnCoordSender)
+			tc := initialTxn.Sender().(*kvcoord.TxnCoordSender)
 
 			if err := initialTxn.Put(ctx, keyA, []byte("value")); err != nil {
 				t.Fatal(err)
@@ -278,7 +278,9 @@ func getTxn(ctx context.Context, txn *kv.Txn) (*roachpb.Transaction, *roachpb.Er
 	return &br.Responses[0].GetInner().(*roachpb.QueryTxnResponse).QueriedTxn, nil
 }
 
-func verifyCleanup(key roachpb.Key, eng storage.Engine, t *testing.T, coords ...*TxnCoordSender) {
+func verifyCleanup(
+	key roachpb.Key, eng storage.Engine, t *testing.T, coords ...*kvcoord.TxnCoordSender,
+) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, coord := range coords {
 			if coord.IsTracking() {
@@ -376,7 +378,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 				}
 			}
 		}
-		verifyCleanup(key, s.Eng, t, txn.Sender().(*TxnCoordSender))
+		verifyCleanup(key, s.Eng, t, txn.Sender().(*kvcoord.TxnCoordSender))
 	}
 }
 
@@ -470,7 +472,7 @@ func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 	// Create a transaction with intent at "x".
 	key := roachpb.Key("x")
 	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
-	tc := txn.Sender().(*TxnCoordSender)
+	tc := txn.Sender().(*kvcoord.TxnCoordSender)
 
 	// Write so that the coordinator begins tracking this txn.
 	if err := txn.Put(ctx, "x", "y"); err != nil {
@@ -482,8 +484,7 @@ func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	tc.interceptorAlloc.txnPipeliner.lockFootprint.mergeAndSort()
-	lockSpans := tc.interceptorAlloc.txnPipeliner.lockFootprint.asSlice()
+	lockSpans := tc.TestingGetLockFootprint(true)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(lockSpans, expSpans)
 	if err := txn.Rollback(ctx); err != nil {
@@ -549,7 +550,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	if err := txn2.CommitOrCleanup(ctx); err != nil {
 		t.Fatal(err)
 	}
-	verifyCleanup(key, s.Eng, t, txn1.Sender().(*TxnCoordSender), txn2.Sender().(*TxnCoordSender))
+	verifyCleanup(key, s.Eng, t, txn1.Sender().(*kvcoord.TxnCoordSender), txn2.Sender().(*kvcoord.TxnCoordSender))
 }
 
 // TestTxnCoordSenderCleanupOnCommitAfterRestart verifies that if a txn restarts
@@ -578,7 +579,7 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 	if err := txn.CommitOrCleanup(ctx); err != nil {
 		t.Fatal(err)
 	}
-	verifyCleanup(key, s.Eng, t, txn.Sender().(*TxnCoordSender))
+	verifyCleanup(key, s.Eng, t, txn.Sender().(*kvcoord.TxnCoordSender))
 }
 
 // TestTxnCoordSenderGCWithAmbiguousResultErr verifies that the coordinator
@@ -607,7 +608,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 
 		ctx := context.Background()
 		txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
-		tc := txn.Sender().(*TxnCoordSender)
+		tc := txn.Sender().(*kvcoord.TxnCoordSender)
 		if !errOnFirst {
 			otherKey := roachpb.Key("other")
 			if err := txn.Put(ctx, otherKey, []byte("value")); err != nil {
@@ -771,8 +772,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				return reply, pErr
 			}
 			ambient := log.MakeTestingAmbientCtxWithNewTracer()
-			tsf := NewTxnCoordSenderFactory(
-				TxnCoordSenderFactoryConfig{
+			tsf := kvcoord.NewTxnCoordSenderFactory(
+				kvcoord.TxnCoordSenderFactoryConfig{
 					AmbientCtx: ambient,
 					Clock:      clock,
 					Stopper:    stopper,
@@ -870,8 +871,8 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 
 	// Verify presence of both locks.
-	tcs := txn.Sender().(*TxnCoordSender)
-	refreshSpans := tcs.interceptorAlloc.txnSpanRefresher.refreshFootprint.asSlice()
+	tcs := txn.Sender().(*kvcoord.TxnCoordSender)
+	refreshSpans := tcs.TestingGetRefreshFootprint()
 	require.Equal(t, []roachpb.Span{{Key: key}, {Key: key2}}, refreshSpans)
 
 	ba := txn.NewBatch()
@@ -909,8 +910,8 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	}
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -969,7 +970,10 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 // values. This is done through a series of retries with increasing backoffs, to work around
 // the TxnCoordSender's asynchronous updating of metrics after a transaction ends.
 func checkTxnMetrics(
-	t *testing.T, metrics TxnMetrics, name string, commits, commits1PC, aborts, restarts int64,
+	t *testing.T,
+	metrics kvcoord.TxnMetrics,
+	name string,
+	commits, commits1PC, aborts, restarts int64,
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		return checkTxnMetricsOnce(t, metrics, name, commits, commits1PC, aborts, restarts)
@@ -977,7 +981,10 @@ func checkTxnMetrics(
 }
 
 func checkTxnMetricsOnce(
-	t *testing.T, metrics TxnMetrics, name string, commits, commits1PC, aborts, restarts int64,
+	t *testing.T,
+	metrics kvcoord.TxnMetrics,
+	name string,
+	commits, commits1PC, aborts, restarts int64,
 ) error {
 	testcases := []struct {
 		name string
@@ -1017,16 +1024,18 @@ func checkTxnMetricsOnce(
 // setupMetricsTest sets the txn coord sender factory's metrics to
 // have a faster sample interval and returns a cleanup function to be
 // executed by callers.
-func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, TxnMetrics, func()) {
+func setupMetricsTest(
+	t *testing.T,
+) (*localtestcluster.LocalTestCluster, kvcoord.TxnMetrics, func()) {
 	s := &localtestcluster.LocalTestCluster{
 		// Liveness heartbeat txns mess up the metrics.
 		DisableLivenessHeartbeat: true,
 		DontCreateSystemRanges:   true,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 
-	metrics := MakeTxnMetrics(metric.TestSampleInterval)
-	s.DB.GetFactory().(*TxnCoordSenderFactory).metrics = metrics
+	metrics := kvcoord.MakeTxnMetrics(metric.TestSampleInterval)
+	s.DB.GetFactory().(*kvcoord.TxnCoordSenderFactory).TestingSetMetrics(metrics)
 	return s, metrics, s.Stop
 }
 
@@ -1171,7 +1180,7 @@ func TestTxnRestartCount(t *testing.T) {
 	}
 
 	// Wait for heartbeat to start.
-	tc := txn.Sender().(*TxnCoordSender)
+	tc := txn.Sender().(*kvcoord.TxnCoordSender)
 	testutils.SucceedsSoon(t, func() error {
 		if !tc.IsTracking() {
 			return errors.New("expected heartbeat to start")
@@ -1243,7 +1252,7 @@ func TestTxnCommitWait(t *testing.T) {
 	//
 	testFn := func(t *testing.T, linearizable, commit, readOnly, futureTime, deferred bool) {
 		s, metrics, cleanupFn := setupMetricsTest(t)
-		s.DB.GetFactory().(*TxnCoordSenderFactory).linearizable = linearizable
+		s.DB.GetFactory().(*kvcoord.TxnCoordSenderFactory).TestingSetLinearizable(linearizable)
 		defer cleanupFn()
 
 		// maxClockOffset defines the maximum clock offset between nodes in the
@@ -1454,8 +1463,8 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				return br, nil
 			}
 			ambient := log.MakeTestingAmbientCtxWithNewTracer()
-			factory := NewTxnCoordSenderFactory(
-				TxnCoordSenderFactoryConfig{
+			factory := kvcoord.NewTxnCoordSenderFactory(
+				kvcoord.TxnCoordSenderFactoryConfig{
 					AmbientCtx: ambient,
 					Clock:      clock,
 					Stopper:    stopper,
@@ -1535,8 +1544,8 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 			Clock:      clock,
 			Stopper:    stopper,
@@ -1568,7 +1577,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
-	if !txn.Sender().(*TxnCoordSender).IsTracking() {
+	if !txn.Sender().(*kvcoord.TxnCoordSender).IsTracking() {
 		t.Fatalf("expected TxnCoordSender to be tracking after the write")
 	}
 
@@ -1580,7 +1589,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if txn.Sender().(*TxnCoordSender).IsTracking() {
+		if txn.Sender().(*kvcoord.TxnCoordSender).IsTracking() {
 			return fmt.Errorf("still tracking")
 		}
 		return nil
@@ -1603,8 +1612,8 @@ func TestOnePCErrorTracking(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
 			Clock:      clock,
 			Stopper:    stopper,
@@ -1669,7 +1678,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 
 	// As always, check that the rollback we just sent stops the heartbeat loop.
 	testutils.SucceedsSoon(t, func() error {
-		if txn.Sender().(*TxnCoordSender).IsTracking() {
+		if txn.Sender().(*kvcoord.TxnCoordSender).IsTracking() {
 			return fmt.Errorf("still tracking")
 		}
 		return nil
@@ -1694,8 +1703,8 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 		return nil, nil
 	})
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -1761,8 +1770,8 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		return br, nil
 	})
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -1849,8 +1858,8 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		return nil, nil
 	})
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -1901,13 +1910,13 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		return br, nil
 	})
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
 			Settings:   cluster.MakeTestingClusterSettings(),
-			TestingKnobs: ClientTestingKnobs{
+			TestingKnobs: kvcoord.ClientTestingKnobs{
 				// Disable span refresh, otherwise it kicks and retries batches by
 				// itself.
 				MaxTxnRefreshAttempts: -1,
@@ -1998,8 +2007,8 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		}
 		return br, nil
 	})
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -2054,8 +2063,8 @@ func TestSequenceNumbers(t *testing.T) {
 		return br, nil
 	})
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -2104,8 +2113,8 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 		return br, nil
 	})
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -2146,8 +2155,8 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -2222,8 +2231,8 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		return nil, nil
 	})
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -2278,7 +2287,7 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 	ctx := context.Background()
 	s := createTestDB(t)
 	defer s.Stop()
-	distSender := s.DB.GetFactory().(*TxnCoordSenderFactory).NonTransactionalSender()
+	distSender := s.DB.GetFactory().(*kvcoord.TxnCoordSenderFactory).NonTransactionalSender()
 
 	var calls []roachpb.Method
 	var senderFn kv.SenderFunc = func(
@@ -2292,7 +2301,7 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		return distSender.Send(ctx, ba)
 	}
 
-	tsf := NewTxnCoordSenderFactory(TxnCoordSenderFactoryConfig{
+	tsf := kvcoord.NewTxnCoordSenderFactory(kvcoord.TxnCoordSenderFactoryConfig{
 		AmbientCtx: s.AmbientCtx,
 		Settings:   s.Cfg.Settings,
 		Clock:      s.Clock,
@@ -2371,8 +2380,8 @@ func TestAnchorKey(t *testing.T) {
 		return br, nil
 	}
 
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
+	factory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
 			Clock:      clock,
 			Stopper:    stopper,
@@ -2512,7 +2521,7 @@ func TestPutsInStagingTxn(t *testing.T) {
 	// DistSender are send serially and the transaction is updated from one to
 	// another. See below.
 	settings := cluster.MakeTestingClusterSettings()
-	senderConcurrencyLimit.Override(ctx, &settings.SV, 0)
+	kvcoord.TestingSenderConcurrencyLimit.Override(ctx, &settings.SV, 0)
 
 	s, _, db := serverutils.StartServer(t,
 		base.TestServerArgs{
@@ -2737,8 +2746,8 @@ func TestTxnManualRefresh(t *testing.T) {
 			}
 		}
 		ambient := log.MakeTestingAmbientCtxWithNewTracer()
-		tsf := NewTxnCoordSenderFactory(
-			TxnCoordSenderFactoryConfig{
+		tsf := kvcoord.NewTxnCoordSenderFactory(
+			kvcoord.TxnCoordSenderFactoryConfig{
 				AmbientCtx:        ambient,
 				Clock:             clock,
 				Stopper:           stopper,

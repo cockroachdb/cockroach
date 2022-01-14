@@ -46,7 +46,7 @@ func init() {
 		lastKey = key
 	}
 	alphaRangeDescriptorDB = mockRangeDescriptorDBForDescs(
-		append(alphaRangeDescriptors, testMetaRangeDescriptor)...,
+		append(alphaRangeDescriptors, TestMetaRangeDescriptor)...,
 	)
 }
 

@@ -172,6 +172,8 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 	1e6,
 )
 
+// senderConcurrencyLimit controls the maximum number of asynchronous send
+// requests.
 var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"kv.dist_sender.concurrency_limit",
