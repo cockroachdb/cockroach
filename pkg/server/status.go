@@ -2098,6 +2098,7 @@ func (s *statusServer) HotRangesV2(
 				)
 				_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
 				if err != nil {
+					log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
 					continue
 				}
 				parent := rangeReportMetas[tableID].parentID
