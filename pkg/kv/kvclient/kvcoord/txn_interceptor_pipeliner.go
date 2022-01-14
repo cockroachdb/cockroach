@@ -51,7 +51,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// trackedWritesMaxSize is a byte threshold for the tracking of writes performed
+// TrackedWritesMaxSize is a byte threshold for the tracking of writes performed
 // a single transaction. This includes the tracking of lock spans and of
 // in-flight writes, both stored in the txnPipeliner.
 //
@@ -74,7 +74,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 // because it needs to hold broad latches and iterate through the range to
 // find matching intents.
 // See #54029 for more details.
-var trackedWritesMaxSize = settings.RegisterIntSetting(
+var TrackedWritesMaxSize = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track locks in transactions",
@@ -274,7 +274,7 @@ func (tp *txnPipeliner) SendLocked(
 	// request (think ResumeSpan); even if the check passes, we might end up over
 	// budget.
 	rejectOverBudget := rejectTxnOverTrackedWritesBudget.Get(&tp.st.SV)
-	maxBytes := trackedWritesMaxSize.Get(&tp.st.SV)
+	maxBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
 	if rejectOverBudget {
 		if err := tp.maybeRejectOverBudget(ba, maxBytes); err != nil {
 			return nil, roachpb.NewError(err)
@@ -437,7 +437,7 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba roachpb.Bat
 	// There's a memory budget for lock tracking. If this batch would push us over
 	// this setting, don't allow it to perform async consensus.
 	addedIFBytes := int64(0)
-	maxTrackingBytes := trackedWritesMaxSize.Get(&tp.st.SV)
+	maxTrackingBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
 
 	// We provide a setting to bound the number of writes we permit in a batch
 	// that uses async consensus. This is useful because we'll have to prove
