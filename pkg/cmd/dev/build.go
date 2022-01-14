@@ -131,7 +131,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err
 		}
-		return d.stageArtifacts(ctx, buildTargets, skipGenerate)
+		return d.stageArtifacts(ctx, buildTargets)
 	}
 	// Cross-compilation case.
 	for _, target := range buildTargets {
@@ -170,7 +170,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	return nil
 }
 
-func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget, skipGenerate bool) error {
+func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -230,7 +230,13 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget, skipGen
 		logSuccessfulBuild(target.fullName, rel)
 	}
 
-	if !skipGenerate {
+	shouldHoist := false
+	for _, target := range targets {
+		if target.fullName == "//:go_path" {
+			shouldHoist = true
+		}
+	}
+	if shouldHoist {
 		if err := d.hoistGeneratedCode(ctx, workspace, bazelBin); err != nil {
 			return err
 		}
@@ -309,10 +315,6 @@ func (d *dev) getBasicBuildArgs(
 		args = append(args, aliased)
 		buildTargets = append(buildTargets, buildTarget{fullName: aliased, isGoBinary: true})
 	}
-	// If we're hoisting generated code, we also want to build //:go_path.
-	if !skipGenerate {
-		args = append(args, "//:go_path")
-	}
 
 	// Add --config=with_ui iff we're building a target that needs it.
 	for _, target := range buildTargets {
@@ -320,6 +322,21 @@ func (d *dev) getBasicBuildArgs(
 			args = append(args, "--config=with_ui")
 			break
 		}
+	}
+	shouldSkipGenerate := true
+	for _, target := range buildTargets {
+		if strings.Contains(target.fullName, "//pkg/cmd/cockroach") {
+			shouldSkipGenerate = false
+			break
+		}
+	}
+	if shouldSkipGenerate {
+		skipGenerate = true
+	}
+	// If we're hoisting generated code, we also want to build //:go_path.
+	if !skipGenerate {
+		args = append(args, "//:go_path")
+		buildTargets = append(buildTargets, buildTarget{fullName: "//:go_path"})
 	}
 	if shouldBuildWithTestConfig {
 		args = append(args, "--config=test")

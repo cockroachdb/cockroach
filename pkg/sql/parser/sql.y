@@ -1199,7 +1199,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <[]tree.RangePartition> range_partitions
 %type <empty> opt_all_clause
 %type <empty> opt_privileges_clause
-%type <bool> distinct_clause
+%type <bool> distinct_clause opt_with_data
 %type <tree.DistinctOn> distinct_on_clause
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns query_stats_cols
 %type <tree.OrderBy> sort_clause single_sort_clause opt_sort_clause
@@ -7634,7 +7634,7 @@ create_view_stmt:
       Replace: false,
     }
   }
-| CREATE MATERIALIZED VIEW view_name opt_column_list AS select_stmt
+| CREATE MATERIALIZED VIEW view_name opt_column_list AS select_stmt opt_with_data
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
@@ -7644,7 +7644,7 @@ create_view_stmt:
       Materialized: true,
     }
   }
-| CREATE MATERIALIZED VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt
+| CREATE MATERIALIZED VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt opt_with_data
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateView{
@@ -7656,6 +7656,20 @@ create_view_stmt:
     }
   }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
+
+opt_with_data:
+  WITH NO DATA error
+  {
+    return unimplementedWithIssue(sqllex, 74083)
+  }
+| WITH DATA
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = true
+  }
 
 role_option:
   CREATEROLE
