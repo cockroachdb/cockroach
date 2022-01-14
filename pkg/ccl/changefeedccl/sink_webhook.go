@@ -323,6 +323,8 @@ func makeWebhookSink(
 	params := sinkURLParsed.Query()
 	params.Del(changefeedbase.SinkParamSkipTLSVerify)
 	params.Del(changefeedbase.SinkParamCACert)
+	params.Del(changefeedbase.SinkParamClientCert)
+	params.Del(changefeedbase.SinkParamClientKey)
 	sinkURLParsed.RawQuery = params.Encode()
 	sink.url = sinkURL{URL: sinkURLParsed}
 
@@ -354,6 +356,12 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 	if err := u.decodeBase64(changefeedbase.SinkParamCACert, &dialConfig.caCert); err != nil {
 		return nil, err
 	}
+	if err := u.decodeBase64(changefeedbase.SinkParamClientCert, &dialConfig.clientCert); err != nil {
+		return nil, err
+	}
+	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
+		return nil, err
+	}
 
 	transport.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: dialConfig.tlsSkipVerify,
@@ -371,6 +379,20 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 			return nil, errors.Errorf("failed to parse certificate data:%s", string(dialConfig.caCert))
 		}
 		transport.TLSClientConfig.RootCAs = caCertPool
+	}
+
+	if dialConfig.clientCert != nil && dialConfig.clientKey == nil {
+		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamClientKey)
+	} else if dialConfig.clientKey != nil && dialConfig.clientCert == nil {
+		return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientKey, changefeedbase.SinkParamClientCert)
+	}
+
+	if dialConfig.clientCert != nil && dialConfig.clientKey != nil {
+		cert, err := tls.X509KeyPair(dialConfig.clientCert, dialConfig.clientKey)
+		if err != nil {
+			return nil, errors.Wrap(err, `invalid client certificate data provided`)
+		}
+		transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
 	}
 
 	return client, nil

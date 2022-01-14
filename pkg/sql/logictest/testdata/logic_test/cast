@@ -1310,3 +1310,35 @@ query T
 EXECUTE s73450_c('foo')
 ----
 f
+
+# Regression test for #59489. Decimal scale should be enforced for literals
+# given in scientific notation.
+subtest regression_59489
+
+statement ok
+CREATE TABLE t59489 (
+  d12_3 DECIMAL(12, 3),
+  d4_2 DECIMAL(4, 2)
+)
+
+query R
+INSERT INTO t59489 (d12_3) VALUES (6000) RETURNING d12_3
+----
+6000.000
+
+query R
+INSERT INTO t59489 (d12_3) VALUES (6e3) RETURNING d12_3
+----
+6000.000
+
+query R
+SELECT d12_3 FROM t59489
+----
+6000.000
+6000.000
+
+statement error value with precision 4, scale 2 must round to an absolute value less than 10\^2
+INSERT INTO t59489 (d4_2) VALUES (600)
+
+statement error value with precision 4, scale 2 must round to an absolute value less than 10\^2
+INSERT INTO t59489 (d4_2) VALUES (6e2)
