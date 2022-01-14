@@ -298,6 +298,28 @@ var distinctTestCases = []distinctTestCase{
 		errorOnDup:              "\"duplicate\" distinct nulls",
 		noError:                 true,
 	},
+	{
+		distinctCols: []uint32{0, 1},
+		typs:         []*types.T{types.Int, types.Int},
+		// Tuples have been carefully constructed so that all of them have the
+		// same hash, only one tuple among first three is inserted into the hash
+		// table, and the last two tuples are distinct. This is a regression
+		// unit test for #74795.
+		tuples: colexectestutils.Tuples{
+			{1, 2},
+			{1, 2},
+			{1, 2},
+			{nil, 7},
+			{nil, 7},
+		},
+		expected: colexectestutils.Tuples{
+			{1, 2},
+			{nil, 7},
+			{nil, 7},
+		},
+		isOrderedOnDistinctCols: false,
+		nullsAreDistinct:        true,
+	},
 }
 
 func mustParseJSON(s string) json.JSON {
