@@ -975,6 +975,9 @@ func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
 
 	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
 		cond := pretty.Nil
+		if len(node.OnConflict.Constraint) > 0 {
+			cond = p.nestUnder(pretty.Text("ON CONSTRAINT"), p.Doc(&node.OnConflict.Constraint))
+		}
 		if len(node.OnConflict.Columns) > 0 {
 			cond = p.bracket("(", p.Doc(&node.OnConflict.Columns), ")")
 		}
