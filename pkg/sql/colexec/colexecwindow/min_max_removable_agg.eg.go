@@ -302,31 +302,37 @@ func (a *minBoolAggregator) aggregateOverIntervals(intervals []windowInterval) {
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Bool().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy bool
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Bool().Get(cmpIdx)
 
-					{
-						var cmpResult int
+						{
+							var cmpResult int
 
-						if !cmpVal && val {
-							cmpResult = -1
-						} else if cmpVal && !val {
-							cmpResult = 1
-						} else {
-							cmpResult = 0
+							if !cmpVal && valCopy {
+								cmpResult = -1
+							} else if cmpVal && !valCopy {
+								cmpResult = 1
+							} else {
+								cmpResult = 0
+							}
+
+							cmp = cmpResult < 0
 						}
 
-						cmp = cmpResult < 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -460,23 +466,29 @@ func (a *minBytesAggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Bytes().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy []byte
+					valCopy = append(valCopy[:0], val...)
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Bytes().Get(cmpIdx)
 
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(cmpVal, val)
-						cmp = cmpResult < 0
-					}
+						{
+							var cmpResult int
+							cmpResult = bytes.Compare(cmpVal, valCopy)
+							cmp = cmpResult < 0
+						}
 
-					if cmp {
-						break
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -612,23 +624,29 @@ func (a *minDecimalAggregator) aggregateOverIntervals(intervals []windowInterval
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Decimal().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy apd.Decimal
+					valCopy.Set(&val)
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Decimal().Get(cmpIdx)
 
-					{
-						var cmpResult int
-						cmpResult = tree.CompareDecimals(&cmpVal, &val)
-						cmp = cmpResult < 0
-					}
+						{
+							var cmpResult int
+							cmpResult = tree.CompareDecimals(&cmpVal, &valCopy)
+							cmp = cmpResult < 0
+						}
 
-					if cmp {
-						break
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -775,34 +793,40 @@ func (a *minInt16Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Int16().Get(cmpIdx)
-
-					{
-						var cmpResult int
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy int16
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Int16().Get(cmpIdx)
 
 						{
-							a, b := int64(cmpVal), int64(val)
-							if a < b {
-								cmpResult = -1
-							} else if a > b {
-								cmpResult = 1
-							} else {
-								cmpResult = 0
+							var cmpResult int
+
+							{
+								a, b := int64(cmpVal), int64(valCopy)
+								if a < b {
+									cmpResult = -1
+								} else if a > b {
+									cmpResult = 1
+								} else {
+									cmpResult = 0
+								}
 							}
+
+							cmp = cmpResult < 0
 						}
 
-						cmp = cmpResult < 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -949,34 +973,40 @@ func (a *minInt32Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Int32().Get(cmpIdx)
-
-					{
-						var cmpResult int
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy int32
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Int32().Get(cmpIdx)
 
 						{
-							a, b := int64(cmpVal), int64(val)
-							if a < b {
-								cmpResult = -1
-							} else if a > b {
-								cmpResult = 1
-							} else {
-								cmpResult = 0
+							var cmpResult int
+
+							{
+								a, b := int64(cmpVal), int64(valCopy)
+								if a < b {
+									cmpResult = -1
+								} else if a > b {
+									cmpResult = 1
+								} else {
+									cmpResult = 0
+								}
 							}
+
+							cmp = cmpResult < 0
 						}
 
-						cmp = cmpResult < 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -1123,34 +1153,40 @@ func (a *minInt64Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Int64().Get(cmpIdx)
-
-					{
-						var cmpResult int
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy int64
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Int64().Get(cmpIdx)
 
 						{
-							a, b := int64(cmpVal), int64(val)
-							if a < b {
-								cmpResult = -1
-							} else if a > b {
-								cmpResult = 1
-							} else {
-								cmpResult = 0
+							var cmpResult int
+
+							{
+								a, b := int64(cmpVal), int64(valCopy)
+								if a < b {
+									cmpResult = -1
+								} else if a > b {
+									cmpResult = 1
+								} else {
+									cmpResult = 0
+								}
 							}
+
+							cmp = cmpResult < 0
 						}
 
-						cmp = cmpResult < 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -1305,42 +1341,48 @@ func (a *minFloat64Aggregator) aggregateOverIntervals(intervals []windowInterval
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Float64().Get(cmpIdx)
-
-					{
-						var cmpResult int
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy float64
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Float64().Get(cmpIdx)
 
 						{
-							a, b := float64(cmpVal), float64(val)
-							if a < b {
-								cmpResult = -1
-							} else if a > b {
-								cmpResult = 1
-							} else if a == b {
-								cmpResult = 0
-							} else if math.IsNaN(a) {
-								if math.IsNaN(b) {
-									cmpResult = 0
-								} else {
+							var cmpResult int
+
+							{
+								a, b := float64(cmpVal), float64(valCopy)
+								if a < b {
 									cmpResult = -1
+								} else if a > b {
+									cmpResult = 1
+								} else if a == b {
+									cmpResult = 0
+								} else if math.IsNaN(a) {
+									if math.IsNaN(b) {
+										cmpResult = 0
+									} else {
+										cmpResult = -1
+									}
+								} else {
+									cmpResult = 1
 								}
-							} else {
-								cmpResult = 1
 							}
+
+							cmp = cmpResult < 0
 						}
 
-						cmp = cmpResult < 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -1483,30 +1525,36 @@ func (a *minTimestampAggregator) aggregateOverIntervals(intervals []windowInterv
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Timestamp().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy time.Time
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Timestamp().Get(cmpIdx)
 
-					{
-						var cmpResult int
+						{
+							var cmpResult int
 
-						if cmpVal.Before(val) {
-							cmpResult = -1
-						} else if val.Before(cmpVal) {
-							cmpResult = 1
-						} else {
-							cmpResult = 0
+							if cmpVal.Before(valCopy) {
+								cmpResult = -1
+							} else if valCopy.Before(cmpVal) {
+								cmpResult = 1
+							} else {
+								cmpResult = 0
+							}
+							cmp = cmpResult < 0
 						}
-						cmp = cmpResult < 0
-					}
 
-					if cmp {
-						break
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -1642,23 +1690,29 @@ func (a *minIntervalAggregator) aggregateOverIntervals(intervals []windowInterva
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Interval().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy duration.Duration
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Interval().Get(cmpIdx)
 
-					{
-						var cmpResult int
-						cmpResult = cmpVal.Compare(val)
-						cmp = cmpResult < 0
-					}
+						{
+							var cmpResult int
+							cmpResult = cmpVal.Compare(valCopy)
+							cmp = cmpResult < 0
+						}
 
-					if cmp {
-						break
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -1830,29 +1884,46 @@ func (a *minJSONAggregator) aggregateOverIntervals(intervals []windowInterval) {
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.JSON().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy json.JSON
 
-					{
-						var cmpResult int
+					var _err error
+					var _bytes []byte
+					_bytes, _err = json.EncodeJSON(nil, val)
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					valCopy, _err = json.FromEncoding(_bytes)
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
 
-						var err error
-						cmpResult, err = cmpVal.Compare(val)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.JSON().Get(cmpIdx)
+
+						{
+							var cmpResult int
+
+							var err error
+							cmpResult, err = cmpVal.Compare(valCopy)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							cmp = cmpResult < 0
 						}
 
-						cmp = cmpResult < 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -1990,25 +2061,31 @@ func (a *minDatumAggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Datum().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy interface{}
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Datum().Get(cmpIdx)
 
-					{
-						var cmpResult int
+						{
+							var cmpResult int
 
-						cmpResult = coldataext.CompareDatum(cmpVal, col, val)
+							cmpResult = coldataext.CompareDatum(cmpVal, col, valCopy)
 
-						cmp = cmpResult < 0
+							cmp = cmpResult < 0
+						}
+
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -2235,31 +2312,37 @@ func (a *maxBoolAggregator) aggregateOverIntervals(intervals []windowInterval) {
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Bool().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy bool
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Bool().Get(cmpIdx)
 
-					{
-						var cmpResult int
+						{
+							var cmpResult int
 
-						if !cmpVal && val {
-							cmpResult = -1
-						} else if cmpVal && !val {
-							cmpResult = 1
-						} else {
-							cmpResult = 0
+							if !cmpVal && valCopy {
+								cmpResult = -1
+							} else if cmpVal && !valCopy {
+								cmpResult = 1
+							} else {
+								cmpResult = 0
+							}
+
+							cmp = cmpResult > 0
 						}
 
-						cmp = cmpResult > 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -2393,23 +2476,29 @@ func (a *maxBytesAggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Bytes().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy []byte
+					valCopy = append(valCopy[:0], val...)
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Bytes().Get(cmpIdx)
 
-					{
-						var cmpResult int
-						cmpResult = bytes.Compare(cmpVal, val)
-						cmp = cmpResult > 0
-					}
+						{
+							var cmpResult int
+							cmpResult = bytes.Compare(cmpVal, valCopy)
+							cmp = cmpResult > 0
+						}
 
-					if cmp {
-						break
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -2545,23 +2634,29 @@ func (a *maxDecimalAggregator) aggregateOverIntervals(intervals []windowInterval
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Decimal().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy apd.Decimal
+					valCopy.Set(&val)
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Decimal().Get(cmpIdx)
 
-					{
-						var cmpResult int
-						cmpResult = tree.CompareDecimals(&cmpVal, &val)
-						cmp = cmpResult > 0
-					}
+						{
+							var cmpResult int
+							cmpResult = tree.CompareDecimals(&cmpVal, &valCopy)
+							cmp = cmpResult > 0
+						}
 
-					if cmp {
-						break
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -2708,34 +2803,40 @@ func (a *maxInt16Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Int16().Get(cmpIdx)
-
-					{
-						var cmpResult int
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy int16
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Int16().Get(cmpIdx)
 
 						{
-							a, b := int64(cmpVal), int64(val)
-							if a < b {
-								cmpResult = -1
-							} else if a > b {
-								cmpResult = 1
-							} else {
-								cmpResult = 0
+							var cmpResult int
+
+							{
+								a, b := int64(cmpVal), int64(valCopy)
+								if a < b {
+									cmpResult = -1
+								} else if a > b {
+									cmpResult = 1
+								} else {
+									cmpResult = 0
+								}
 							}
+
+							cmp = cmpResult > 0
 						}
 
-						cmp = cmpResult > 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -2882,34 +2983,40 @@ func (a *maxInt32Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Int32().Get(cmpIdx)
-
-					{
-						var cmpResult int
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy int32
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Int32().Get(cmpIdx)
 
 						{
-							a, b := int64(cmpVal), int64(val)
-							if a < b {
-								cmpResult = -1
-							} else if a > b {
-								cmpResult = 1
-							} else {
-								cmpResult = 0
+							var cmpResult int
+
+							{
+								a, b := int64(cmpVal), int64(valCopy)
+								if a < b {
+									cmpResult = -1
+								} else if a > b {
+									cmpResult = 1
+								} else {
+									cmpResult = 0
+								}
 							}
+
+							cmp = cmpResult > 0
 						}
 
-						cmp = cmpResult > 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -3056,34 +3163,40 @@ func (a *maxInt64Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Int64().Get(cmpIdx)
-
-					{
-						var cmpResult int
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy int64
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Int64().Get(cmpIdx)
 
 						{
-							a, b := int64(cmpVal), int64(val)
-							if a < b {
-								cmpResult = -1
-							} else if a > b {
-								cmpResult = 1
-							} else {
-								cmpResult = 0
+							var cmpResult int
+
+							{
+								a, b := int64(cmpVal), int64(valCopy)
+								if a < b {
+									cmpResult = -1
+								} else if a > b {
+									cmpResult = 1
+								} else {
+									cmpResult = 0
+								}
 							}
+
+							cmp = cmpResult > 0
 						}
 
-						cmp = cmpResult > 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -3238,42 +3351,48 @@ func (a *maxFloat64Aggregator) aggregateOverIntervals(intervals []windowInterval
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Float64().Get(cmpIdx)
-
-					{
-						var cmpResult int
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy float64
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Float64().Get(cmpIdx)
 
 						{
-							a, b := float64(cmpVal), float64(val)
-							if a < b {
-								cmpResult = -1
-							} else if a > b {
-								cmpResult = 1
-							} else if a == b {
-								cmpResult = 0
-							} else if math.IsNaN(a) {
-								if math.IsNaN(b) {
-									cmpResult = 0
-								} else {
+							var cmpResult int
+
+							{
+								a, b := float64(cmpVal), float64(valCopy)
+								if a < b {
 									cmpResult = -1
+								} else if a > b {
+									cmpResult = 1
+								} else if a == b {
+									cmpResult = 0
+								} else if math.IsNaN(a) {
+									if math.IsNaN(b) {
+										cmpResult = 0
+									} else {
+										cmpResult = -1
+									}
+								} else {
+									cmpResult = 1
 								}
-							} else {
-								cmpResult = 1
 							}
+
+							cmp = cmpResult > 0
 						}
 
-						cmp = cmpResult > 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -3416,30 +3535,36 @@ func (a *maxTimestampAggregator) aggregateOverIntervals(intervals []windowInterv
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Timestamp().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy time.Time
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Timestamp().Get(cmpIdx)
 
-					{
-						var cmpResult int
+						{
+							var cmpResult int
 
-						if cmpVal.Before(val) {
-							cmpResult = -1
-						} else if val.Before(cmpVal) {
-							cmpResult = 1
-						} else {
-							cmpResult = 0
+							if cmpVal.Before(valCopy) {
+								cmpResult = -1
+							} else if valCopy.Before(cmpVal) {
+								cmpResult = 1
+							} else {
+								cmpResult = 0
+							}
+							cmp = cmpResult > 0
 						}
-						cmp = cmpResult > 0
-					}
 
-					if cmp {
-						break
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -3575,23 +3700,29 @@ func (a *maxIntervalAggregator) aggregateOverIntervals(intervals []windowInterva
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Interval().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy duration.Duration
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Interval().Get(cmpIdx)
 
-					{
-						var cmpResult int
-						cmpResult = cmpVal.Compare(val)
-						cmp = cmpResult > 0
-					}
+						{
+							var cmpResult int
+							cmpResult = cmpVal.Compare(valCopy)
+							cmp = cmpResult > 0
+						}
 
-					if cmp {
-						break
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -3763,29 +3894,46 @@ func (a *maxJSONAggregator) aggregateOverIntervals(intervals []windowInterval) {
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.JSON().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy json.JSON
 
-					{
-						var cmpResult int
+					var _err error
+					var _bytes []byte
+					_bytes, _err = json.EncodeJSON(nil, val)
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					valCopy, _err = json.FromEncoding(_bytes)
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
 
-						var err error
-						cmpResult, err = cmpVal.Compare(val)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.JSON().Get(cmpIdx)
+
+						{
+							var cmpResult int
+
+							var err error
+							cmpResult, err = cmpVal.Compare(valCopy)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+
+							cmp = cmpResult > 0
 						}
 
-						cmp = cmpResult > 0
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index
@@ -3923,25 +4071,31 @@ func (a *maxDatumAggregator) aggregateOverIntervals(intervals []windowInterval) 
 				// keep it in the queue. Iterate from the end of the queue, removing any
 				// values that are dominated by the current one. Add the current value
 				// once the last value in the queue is better than the current one.
-				for !a.queue.isEmpty() {
-					cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
-					cmpVal := cmpVec.Datum().Get(cmpIdx)
+				if !a.queue.isEmpty() {
+					// We have to make a copy of val because GetVecWithTuple
+					// calls below might reuse the same underlying vector.
+					var valCopy interface{}
+					valCopy = val
+					for !a.queue.isEmpty() {
+						cmpVec, cmpIdx, _ := a.buffer.GetVecWithTuple(a.Ctx, argColIdx, int(a.queue.getLast()))
+						cmpVal := cmpVec.Datum().Get(cmpIdx)
 
-					{
-						var cmpResult int
+						{
+							var cmpResult int
 
-						cmpResult = coldataext.CompareDatum(cmpVal, col, val)
+							cmpResult = coldataext.CompareDatum(cmpVal, col, valCopy)
 
-						cmp = cmpResult > 0
+							cmp = cmpResult > 0
+						}
+
+						if cmp {
+							break
+						}
+						// Any values that could not fit in the queue would also have been
+						// dominated by the current one, so reset omittedIndex.
+						a.queue.removeLast()
+						a.omittedIndex = -1
 					}
-
-					if cmp {
-						break
-					}
-					// Any values that could not fit in the queue would also have been
-					// dominated by the current one, so reset omittedIndex.
-					a.queue.removeLast()
-					a.omittedIndex = -1
 				}
 				if a.queue.addLast(idxToAdd) && a.omittedIndex == -1 {
 					// The value couldn't fit in the queue. Keep track of the first index

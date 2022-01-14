@@ -217,6 +217,10 @@ func (b *SpillingBuffer) AppendTuples(
 // when tuples from a subsequent batch are accessed. If the index is less than
 // zero or greater than or equal to the buffer length, GetVecWithTuple will
 // panic.
+//
+// WARNING: the returned column vector is only valid until the next call to
+// GetVecWithTuple. If the caller wants to hold onto the vector, a copy must be
+// made.
 func (b *SpillingBuffer) GetVecWithTuple(
 	ctx context.Context, colIdx, idx int,
 ) (_ coldata.Vec, rowIdx int, length int) {
