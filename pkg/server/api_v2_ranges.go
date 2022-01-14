@@ -433,6 +433,7 @@ type hotRangeInfo struct {
 	TableName         string           `json:"table_name"`
 	DatabaseName      string           `json:"database_name"`
 	IndexName         string           `json:"index_name"`
+	SchemaName        string           `json:"schema_name"`
 	ReplicaNodeIDs    []roachpb.NodeID `json:"replica_node_ids"`
 }
 
@@ -512,6 +513,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 				DatabaseName:      r.DatabaseName,
 				IndexName:         r.IndexName,
 				ReplicaNodeIDs:    r.ReplicaNodeIds,
+				SchemaName:        r.SchemaName,
 			})
 		}
 		return hotRangeInfos, nil
