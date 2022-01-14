@@ -108,15 +108,13 @@ type scanColumnsConfig struct {
 	// in this order. Must not be nil (even if empty).
 	wantedColumns []tree.ColumnID
 
-	// invertedColumn maps the column ID of the inverted column (if it exists)
-	// to the column type actually stored in the index. For example, the
-	// inverted column of an inverted index has type bytes, even though the
-	// column descriptor matches the source column (Geometry, Geography, JSON or
-	// Array).
-	invertedColumn *struct {
-		colID tree.ColumnID
-		typ   *types.T
-	}
+	// invertedColumnID/invertedColumnType are used to map the column ID of the
+	// inverted column (if it exists) to the column type actually stored in the
+	// index. For example, the inverted column of an inverted index has type
+	// bytes, even though the column descriptor matches the source column
+	// (Geometry, Geography, JSON or Array).
+	invertedColumnID   tree.ColumnID
+	invertedColumnType *types.T
 }
 
 func (cfg scanColumnsConfig) assertValidReqOrdering(reqOrdering exec.OutputOrdering) error {
@@ -194,18 +192,17 @@ func initColsForScan(
 	}
 
 	cols = make([]catalog.Column, len(colCfg.wantedColumns))
-	for i, wc := range colCfg.wantedColumns {
-		id := wc
-		col, err := desc.FindColumnWithID(id)
+	for i, colID := range colCfg.wantedColumns {
+		col, err := desc.FindColumnWithID(colID)
 		if err != nil {
 			return cols, err
 		}
 
 		// If this is an inverted column, create a new descriptor with the
 		// correct type.
-		if vc := colCfg.invertedColumn; vc != nil && vc.colID == wc && !vc.typ.Identical(col.GetType()) {
+		if colCfg.invertedColumnID == colID && !colCfg.invertedColumnType.Identical(col.GetType()) {
 			col = col.DeepCopy()
-			col.ColumnDesc().Type = vc.typ
+			col.ColumnDesc().Type = colCfg.invertedColumnType
 		}
 		cols[i] = col
 	}
