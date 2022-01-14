@@ -96,7 +96,7 @@ func (ef *execFactory) ConstructScan(
 	ef.planner.skipSelectPrivilegeChecks = true
 	defer func() { ef.planner.skipSelectPrivilegeChecks = false }()
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := scan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
+	if err := scan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -610,7 +610,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan := ef.planner.Scan()
 
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -658,7 +658,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	tableScan := ef.planner.Scan()
 
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -741,7 +741,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	// column analysis.
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tableDesc, nil, colCfg); err != nil {
+	if err := tableScan.initTable(ctx, ef.planner, tableDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -793,7 +793,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tableScan := ef.planner.Scan()
 
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -858,7 +858,7 @@ func (ef *execFactory) constructScanForZigzag(
 
 	scan := ef.planner.Scan()
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := scan.initTable(ctx, ef.planner, tableDesc, nil, colCfg); err != nil {
+	if err := scan.initTable(ctx, ef.planner, tableDesc, colCfg); err != nil {
 		return nil, err
 	}
 
