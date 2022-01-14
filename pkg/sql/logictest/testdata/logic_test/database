@@ -274,3 +274,22 @@ CREATE TABLE db69713.s.pg_constraintdef_test (
 
 statement ok
 DROP DATABASE db69713;
+
+# Ensure user must exist to create with owner.
+statement error role/user "fake_user" does not exist
+CREATE DATABASE aa with owner fake_user
+
+statement ok
+CREATE DATABASE a with owner testuser
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name  owner     primary_region  regions  survival_goal
+a              testuser  NULL            {}       NULL
+b              root      NULL            {}       NULL
+c              root      NULL            {}       NULL
+defaultdb      root      NULL            {}       NULL
+postgres       root      NULL            {}       NULL
+system         node      NULL            {}       NULL
+test           root      NULL            {}       NULL

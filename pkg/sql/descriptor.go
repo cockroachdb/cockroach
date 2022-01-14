@@ -144,6 +144,29 @@ func (p *planner) createDatabase(
 	// Initialize the multi-region database by creating the multi-region enum and
 	// database-level zone configuration if there is a region config on the
 	// descriptor.
+	//p.setNewDatabaseOwner(ctx)
+	if database.Owner.Name != "" {
+		newOwner, err := database.Owner.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+		if err != nil {
+			return nil, true, err
+		}
+
+		if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
+			return nil, true, err
+		}
+
+		if err := p.setNewDatabaseOwner(ctx, desc, newOwner); err != nil {
+			return nil, true, err
+		}
+		if err := p.writeNonDropDatabaseChange(
+			ctx,
+			desc,
+			tree.AsStringWithFQNames(database, p.Ann()),
+		); err != nil {
+			return nil, true, err
+		}
+	}
+
 	if err := p.maybeInitializeMultiRegionDatabase(ctx, desc, regionConfig); err != nil {
 		return nil, true, err
 	}
