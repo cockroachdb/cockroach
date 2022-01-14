@@ -99,7 +99,19 @@ func _CHECK_COL_BODY(
 	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 		// keyID of 0 is reserved to represent the end of the next chain.
 		keyID := ht.ProbeScratch.GroupID[toCheck]
+		// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
+		// {{/*
+		//      When we're selecting distinct tuples and probing against itself,
+		//      we're in the code path of the unordered distinct where we're
+		//      trying to find duplicates within a single input batch. In such a
+		//      case we will never hit keyID of 0 because each tuple in the
+		//      batch is equal to itself (and possibly others). Once we find a
+		//      match, the tuple is no longer checked, so we never reach the end
+		//      of the corresponding hash chain which could result in keyID
+		//      being 0.
+		// */}}
 		if keyID != 0 {
+			// {{end}}
 			// the build table key (calculated using keys[keyID - 1] = key) is
 			// compared to the corresponding probe table to determine if a match is
 			// found.
@@ -175,8 +187,10 @@ func _CHECK_COL_BODY(
 				_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
 				ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 			}
+			// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
 		}
-		// {{if .SelectDistinct}}
+		// {{end}}
+		// {{if and .SelectDistinct (not .ProbingAgainstItself)}}
 		if keyID == 0 {
 			ht.ProbeScratch.distinct[toCheck] = true
 		}
