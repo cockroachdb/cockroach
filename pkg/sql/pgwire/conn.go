@@ -15,6 +15,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"go.opentelemetry.io/otel/attribute"
 	"io"
 	"net"
 	"strconv"
@@ -249,6 +251,7 @@ func (c *conn) serveImpl(
 	} else {
 		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 	}
+	tracing.SpanFromContext(ctx).SetTag("user", attribute.StringValue(c.sessionArgs.User.Normalized()))
 
 	inTestWithoutSQL := sqlServer == nil
 	if !inTestWithoutSQL {

@@ -14,6 +14,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"go.opentelemetry.io/otel/attribute"
 	"io"
 	"net"
 	"net/url"
@@ -650,7 +652,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	if clientErr != nil {
 		return s.sendErr(ctx, conn, clientErr)
 	}
-	ctx = logtags.AddTag(ctx, connType.String(), nil)
+	sp := tracing.SpanFromContext(ctx)
+	sp.SetTag("conn_type", attribute.StringValue(connType.String()))
 
 	// What does the client want to do?
 	switch version {
@@ -691,10 +694,11 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	// Populate the client address field in the context tags and the
 	// shared struct for structured logging.
-	// Only know do we know the remote client address for sure (it may have
+	// Only now do we know the remote client address for sure (it may have
 	// been overridden by a status parameter).
 	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
 	ctx = logtags.AddTag(ctx, "client", connDetails.RemoteAddress)
+	sp.SetTag("client", attribute.StringValue(connDetails.RemoteAddress))
 
 	// If a test is hooking in some authentication option, load it.
 	var testingAuthHook func(context.Context) error
