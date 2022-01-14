@@ -11,12 +11,14 @@
 package util
 
 import (
+	"flag"
 	"fmt"
 	"math/rand"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -127,6 +129,25 @@ func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
 	return defaultValue
 }
 
+var shouldLogMetamorphic bool
+
+func init() {
+	// The round about way of doing this is because we can't pick up a
+	// dependency on the log package.
+	//
+	// TODO(irfansharif): Alternatively, we could move these symbols out of
+	// pkg/util.
+	flags := flag.Lookup(logflags.ShowLogsName)
+	if flags == nil {
+		return // TODO(irfansharif): Should we panic here instead?
+	}
+	if flags.Value.String() == "true" {
+		shouldLogMetamorphic = true
+	}
+}
+
 func logMetamorphicValue(name string, value interface{}) {
-	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
+	if shouldLogMetamorphic {
+		fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
+	}
 }

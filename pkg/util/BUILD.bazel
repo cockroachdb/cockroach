@@ -33,6 +33,7 @@ go_library(
     deps = [
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
+        "//pkg/util/log/logflags",
         "//pkg/util/netutil/addr",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
