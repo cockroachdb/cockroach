@@ -12,12 +12,14 @@ package jobs
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gorhill/cronexpr"
 )
 
 // RunningJobExists checks that whether there are any other jobs (matched by
@@ -72,4 +74,19 @@ ORDER BY created`
 		}
 	}
 	return false /* exists */, err
+}
+
+// CronParseNext is a helper that parses the next time for the given expression
+// but captures any panic that may occur in the underlying library.
+func CronParseNext(
+	e *cronexpr.Expression, fromTime time.Time, cron string,
+) (t time.Time, err error) {
+	defer func() {
+		if recover() != nil {
+			t = time.Time{}
+			err = errors.Newf("failed to parse cron expression: %q", cron)
+		}
+	}()
+
+	return e.Next(fromTime), nil
 }
