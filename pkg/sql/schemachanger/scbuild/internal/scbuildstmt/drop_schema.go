@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,7 +41,7 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 			panic(pgerror.Newf(pgcode.InvalidSchemaName,
 				"cannot drop schema %q", sc.GetName))
 		}
-		dropSchema(b, db, sc, n.DropBehavior)
+		dropSchema(b, db, sc, n.DropBehavior, false /* parent drop*/)
 		b.IncrementSubWorkID()
 	}
 }
@@ -49,6 +51,7 @@ func dropSchema(
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 	behavior tree.DropBehavior,
+	parentDrop bool,
 ) (nodeAdded bool, dropIDs catalog.DescriptorIDSet) {
 	descsThatNeedElements := catalog.DescriptorIDSet{}
 	_, objectIDs := b.CatalogReader().ReadObjectNamesAndIDs(b, db, sc)
@@ -68,6 +71,7 @@ func dropSchema(
 	}
 	{
 		c := b.WithNewSourceElementID()
+		var droppedTypes []catalog.TypeDescriptor
 		for _, id := range descsThatNeedElements.Ordered() {
 			desc := c.CatalogReader().MustReadDescriptor(b, id)
 			switch t := desc.(type) {
@@ -84,9 +88,48 @@ func dropSchema(
 				}
 			case catalog.TypeDescriptor:
 				dropType(c, t, behavior)
+				droppedTypes = append(droppedTypes, t)
 			default:
 				panic(errors.AssertionFailedf("expected table or type descriptor, instead %q (%d) is %q",
 					t.GetName(), t.GetID(), t.DescriptorType()))
+			}
+		}
+		// For dropped types validate if any unsupported cascade is needed.
+		for _, typeDesc := range droppedTypes {
+			var dependentNames []*tree.TableName
+			for i := 0; i < typeDesc.NumReferencingDescriptors(); i++ {
+				id := typeDesc.GetReferencingDescriptorID(i)
+				foundDrop := false
+				b.ForEachElementStatus(func(status, targetStatus scpb.Status, elem scpb.Element) {
+					if targetStatus == scpb.Status_ABSENT && screl.GetDescID(elem) == id {
+						foundDrop = true
+					}
+				})
+				if !foundDrop && parentDrop {
+					tableDesc := b.MustReadTable(id)
+					if tableDesc.GetParentID() == sc.GetParentID() {
+						// Parent will clean up this object.
+						foundDrop = true
+					}
+				}
+				if !foundDrop {
+					name, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(id), tree.ResolveAnyTableKind)
+					onErrPanic(err)
+					dependentNames = append(dependentNames, name)
+				}
+			}
+			if len(dependentNames) > 0 {
+				prefix := tree.ObjectNamePrefix{
+					CatalogName:     tree.Name(db.GetName()),
+					SchemaName:      tree.Name(sc.GetName()),
+					ExplicitSchema:  true,
+					ExplicitCatalog: true,
+				}
+				fqName := tree.MakeTypeNameWithPrefix(prefix, typeDesc.GetName())
+				panic(unimplemented.NewWithIssueDetailf(51480, "DROP TYPE CASCADE is not yet supported",
+					"cannot drop type %q because other objects (%v) still depend on it",
+					fqName.FQString(),
+					dependentNames))
 			}
 		}
 	}

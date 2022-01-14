@@ -359,7 +359,7 @@ CREATE TYPE schema_to_drop.typ AS ENUM ('a');
 CREATE TABLE t (k schema_to_drop.typ PRIMARY KEY);
 CREATE TABLE schema_to_drop.t (k schema_to_drop.typ PRIMARY KEY);
 
-statement error pgcode 0A000 unimplemented: cannot drop type "test.schema_to_drop._typ" because other objects \(\[test\.public\.t\]\) still depend on it
+statement error pgcode 0A000 unimplemented: cannot drop type "test.schema_to_drop.(_)*typ" because other objects \(\[test\.public\.t\]\) still depend on it
 DROP SCHEMA schema_to_drop CASCADE;
 
 statement ok

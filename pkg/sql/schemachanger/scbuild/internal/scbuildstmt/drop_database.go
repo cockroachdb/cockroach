@@ -44,14 +44,13 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 			// The schemaDroppedIDs list will have the list of
 			// dependent objects, which that database will add
 			// direct dependencies on.
-			nodeAdded, schemaDroppedIDs := dropSchema(c, db, schema, tree.DropCascade)
+			nodeAdded, schemaDroppedIDs := dropSchema(c, db, schema, tree.DropCascade, true)
 			// Block drops if cascade is not set.
 			if n.DropBehavior == tree.DropRestrict && (nodeAdded || !schemaDroppedIDs.Empty()) {
 				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 					"database %q is not empty and RESTRICT was specified", db.GetName()))
 			} else if b.SessionData().SafeUpdates &&
 				n.DropBehavior == tree.DropDefault && (nodeAdded || !schemaDroppedIDs.Empty()) {
-
 				panic(pgerror.DangerousStatementf(
 					"DROP DATABASE on non-empty database without explicit CASCADE"))
 			}
