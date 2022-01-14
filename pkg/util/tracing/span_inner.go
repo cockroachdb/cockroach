@@ -149,10 +149,6 @@ func (s *spanInner) SetTag(key string, value attribute.Value) *spanInner {
 	if s.isNoop() {
 		return s
 	}
-	return s.setTagInner(key, value, false /* locked */)
-}
-
-func (s *spanInner) setTagInner(key string, value attribute.Value, locked bool) *spanInner {
 	if s.otelSpan != nil {
 		s.otelSpan.SetAttributes(attribute.KeyValue{
 			Key:   attribute.Key(key),
@@ -163,10 +159,8 @@ func (s *spanInner) setTagInner(key string, value attribute.Value, locked bool) 
 		s.netTr.LazyPrintf("%s:%v", key, value)
 	}
 	// The internal tags will be used if we start a recording on this Span.
-	if !locked {
-		s.crdb.mu.Lock()
-		defer s.crdb.mu.Unlock()
-	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
 	s.crdb.setTagLocked(key, value)
 	return s
 }
