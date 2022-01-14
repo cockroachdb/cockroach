@@ -5008,7 +5008,9 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 
 		// Perform RPC fanout.
 		stats, err :=
-			p.extendedEvalCtx.SQLStatusServer.Statements(ctx, &serverpb.StatementsRequest{})
+			p.extendedEvalCtx.SQLStatusServer.Statements(ctx, &serverpb.StatementsRequest{
+				FetchMode: serverpb.StatementsRequest_StmtStatsOnly,
+			})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -5215,7 +5217,9 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 
 		// Perform RPC fanout.
 		stats, err :=
-			p.extendedEvalCtx.SQLStatusServer.Statements(ctx, &serverpb.StatementsRequest{})
+			p.extendedEvalCtx.SQLStatusServer.Statements(ctx, &serverpb.StatementsRequest{
+				FetchMode: serverpb.StatementsRequest_TxnStatsOnly,
+			})
 
 		if err != nil {
 			return nil, nil, err
