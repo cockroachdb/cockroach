@@ -526,3 +526,76 @@ project
  │         └── bool_or:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
  └── projections
       └── 1 [as="?column?":6, type=int]
+
+# Regression test for #74667.
+exec-ddl
+CREATE TABLE t74667 (col TIMETZ PRIMARY KEY)
+----
+
+exec-ddl
+ALTER TABLE t74667 INJECT STATISTICS '[
+    {
+        "columns": [
+            "col"
+        ],
+        "created_at": "2000-01-01 00:00:00+00:00",
+        "distinct_count": 950814763580487611,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 3873172219268179689,
+                "num_range": 0,
+                "upper_bound": "00:00:00+15:59:00"
+            },
+            {
+                "distinct_range": 400000,
+                "num_eq": 3000000000,
+                "num_range": 400000,
+                "upper_bound": "04:40:23.558699+11:08:00"
+            },
+            {
+                "distinct_range": 381143202295070850,
+                "num_eq": 6399369578112136136,
+                "num_range": 381143202295070816,
+                "upper_bound": "06:12:15.740051+06:40:00"
+            }
+        ],
+        "histo_col_type": "TIMETZ",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1188522479222658429
+    }
+]'
+----
+
+norm
+SELECT count(*)
+FROM t74667
+WHERE col < '03:33:05.598931+07:11:00':::TIMETZ
+GROUP BY col;
+----
+project
+ ├── columns: count:4(int!null)
+ ├── stats: [rows=2.00509067e+16]
+ └── group-by (hash)
+      ├── columns: col:1(timetz!null) count_rows:4(int!null)
+      ├── grouping columns: col:1(timetz!null)
+      ├── stats: [rows=2.00509067e+16, distinct(1)=2.00509067e+16, null(1)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── select
+      │    ├── columns: col:1(timetz!null)
+      │    ├── stats: [rows=4.52141047e+17, distinct(1)=2.00509067e+16, null(1)=0]
+      │    │   histogram(1)=  0      4.3209e+17       44624          3.3468e+08          2.0051e+16              0
+      │    │                <--- '00:00:00+15:59:00' ------- '04:40:23.558699+11:08:00' ------------ '03:33:06.598931+07:11:01'
+      │    ├── key: (1)
+      │    ├── scan t74667
+      │    │    ├── columns: col:1(timetz!null)
+      │    │    ├── stats: [rows=1.18852248e+18, distinct(1)=9.50814764e+17, null(1)=0]
+      │    │    │   histogram(1)=  0      4.3209e+17       44624          3.3468e+08          4.252e+16          7.1391e+17
+      │    │    │                <--- '00:00:00+15:59:00' ------- '04:40:23.558699+11:08:00' ----------- '06:12:15.740051+06:40:00'
+      │    │    └── key: (1)
+      │    └── filters
+      │         └── col:1 < '03:33:05.598931+07:11:00' [type=bool, outer=(1), constraints=(/1: (/NULL - /'03:33:06.598931+07:11:01']; tight)]
+      └── aggregations
+           └── count-rows [as=count_rows:4, type=int]
