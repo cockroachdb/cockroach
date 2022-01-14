@@ -514,7 +514,8 @@ func (t *tenantStatusServer) Statements(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			return statementsLocal(ctx, roachpb.NodeID(t.sqlServer.SQLInstanceID()), t.sqlServer)
+			return statementsLocal(ctx, roachpb.NodeID(t.sqlServer.SQLInstanceID()), t.sqlServer,
+				req.ExcludeStatements, req.ExcludeTransactions)
 		}
 		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
 		if err != nil {

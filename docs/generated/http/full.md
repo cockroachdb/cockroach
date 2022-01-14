@@ -3437,6 +3437,8 @@ tenant pods.
 | combined | [bool](#cockroach.server.serverpb.StatementsRequest-bool) |  | If this field is set we will use the combined statements API instead. | [reserved](#support-status) |
 | start | [int64](#cockroach.server.serverpb.StatementsRequest-int64) |  | These fields are used for the combined statements API. | [reserved](#support-status) |
 | end | [int64](#cockroach.server.serverpb.StatementsRequest-int64) |  |  | [reserved](#support-status) |
+| exclude_statements | [bool](#cockroach.server.serverpb.StatementsRequest-bool) |  |  | [reserved](#support-status) |
+| exclude_transactions | [bool](#cockroach.server.serverpb.StatementsRequest-bool) |  |  | [reserved](#support-status) |
 
 
 

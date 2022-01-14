@@ -1200,6 +1200,8 @@ message StatementsRequest {
   // These fields are used for the combined statements API.
   int64 start = 3 [(gogoproto.nullable) = true];
   int64 end = 4 [(gogoproto.nullable) = true];
+  bool exclude_statements = 5;
+  bool exclude_transactions = 6;
 }
 
 message StatementsResponse {
