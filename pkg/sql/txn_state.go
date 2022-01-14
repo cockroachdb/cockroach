@@ -204,6 +204,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		}
 		ts.mu.txn = txn
 	}
+	sp.SetTag("txn", attribute.StringValue(ts.mu.txn.ID().String()))
 	ts.mu.txnStart = timeutil.Now()
 	ts.mu.Unlock()
 	if historicalTimestamp != nil {
