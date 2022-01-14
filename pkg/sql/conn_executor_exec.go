@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -259,6 +260,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
+	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
+	defer sp.Finish()
+
 	ast := parserStmt.AST
 	ctx = withStatement(ctx, ast)
 
