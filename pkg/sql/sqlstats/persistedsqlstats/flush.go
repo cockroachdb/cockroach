@@ -241,7 +241,7 @@ func (s *PersistedSQLStats) doInsertElseDoUpdate(
 // ComputeAggregatedTs returns the aggregation timestamp to assign
 // in-memory SQL stats during storage or aggregation.
 func (s *PersistedSQLStats) ComputeAggregatedTs() time.Time {
-	interval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	interval := SQLStatsAggregationInterval.Get(&s.cfg.Settings.SV)
 	now := s.getTimeNow()
 
 	aggTs := now.Truncate(interval)
@@ -252,7 +252,7 @@ func (s *PersistedSQLStats) ComputeAggregatedTs() time.Time {
 // GetAggregationInterval returns the current aggregation interval
 // used by PersistedSQLStats.
 func (s *PersistedSQLStats) GetAggregationInterval() time.Duration {
-	return SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	return SQLStatsAggregationInterval.Get(&s.cfg.Settings.SV)
 }
 
 func (s *PersistedSQLStats) getTimeNow() time.Time {
@@ -277,7 +277,7 @@ ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8
 DO NOTHING
 `
 
-	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	aggInterval := s.GetAggregationInterval()
 
 	// Prepare data for insertion.
 	metadataJSON, err := sqlstatsutil.BuildTxnMetadataJSON(stats)
@@ -439,7 +439,7 @@ ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_ha
              aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
 DO NOTHING
 `
-	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	aggInterval := s.GetAggregationInterval()
 
 	// Prepare data for insertion.
 	metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(stats)

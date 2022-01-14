@@ -40,7 +40,7 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 	// We compute the current aggregated_ts so that the in-memory stats can be
 	// merged with the persisted stats.
 	curAggTs := s.ComputeAggregatedTs()
-	aggInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
+	aggInterval := s.GetAggregationInterval()
 	memIter := newMemTxnStatsIterator(s.SQLStats, options, curAggTs, aggInterval)
 
 	var persistedIter sqlutil.InternalRows
