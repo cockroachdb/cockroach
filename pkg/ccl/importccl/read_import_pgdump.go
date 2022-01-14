@@ -316,6 +316,7 @@ func createPostgresSequences(
 		}
 		desc, err := sql.NewSequenceTableDesc(
 			ctx,
+			nil,
 			schemaAndTableName.table,
 			seq.Options,
 			parentID,
@@ -324,7 +325,6 @@ func createPostgresSequences(
 			hlc.Timestamp{WallTime: walltime},
 			descpb.NewBasePrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
-			nil, /* params */
 			// If this is multi-region, this will get added by WriteDescriptors.
 			false, /* isMultiRegion */
 		)

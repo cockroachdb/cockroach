@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -79,33 +81,37 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
-	return doCreateSequence(
-		params, n.dbDesc, schemaDesc, &n.n.Name, n.n.Persistence, n.n.Options,
+	_, err = doCreateSequence(
+		params.ctx, params.p, params.SessionData(), n.dbDesc, schemaDesc, &n.n.Name, n.n.Persistence, n.n.Options,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
+
+	return err
 }
 
 // doCreateSequence performs the creation of a sequence in KV. The
 // context argument is a string to use in the event log.
 func doCreateSequence(
-	params runParams,
+	ctx context.Context,
+	p *planner,
+	sessionData *sessiondata.SessionData,
 	dbDesc catalog.DatabaseDescriptor,
 	scDesc catalog.SchemaDescriptor,
 	name *tree.TableName,
 	persistence tree.Persistence,
 	opts tree.SequenceOptions,
 	jobDesc string,
-) error {
-	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+) (*tabledesc.Mutable, error) {
+	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		dbDesc.GetDefaultPrivilegeDescriptor(),
 		scDesc.GetDefaultPrivilegeDescriptor(),
 		dbDesc.GetID(),
-		params.SessionData().User(),
+		sessionData.User(),
 		tree.Sequences,
 		dbDesc.GetPrivileges(),
 	)
@@ -121,7 +127,8 @@ func doCreateSequence(
 	// currently relied on in import and restore code and tests.
 	var creationTime hlc.Timestamp
 	desc, err := NewSequenceTableDesc(
-		params.ctx,
+		ctx,
+		p,
 		name.Object(),
 		opts,
 		dbDesc.GetID(),
@@ -130,42 +137,99 @@ func doCreateSequence(
 		creationTime,
 		privs,
 		persistence,
-		&params,
 		dbDesc.IsMultiRegion(),
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateSelf() needed here.
 
-	key := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), scDesc.GetID(), name.Object())
-	if err = params.p.createDescriptorWithID(
-		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,
+	key := catalogkeys.MakeObjectNameKey(p.ExecCfg().Codec, dbDesc.GetID(), scDesc.GetID(), name.Object())
+	if err = p.createDescriptorWithID(
+		ctx, key, id, desc, p.EvalContext().Settings, jobDesc,
 	); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Initialize the sequence value.
-	seqValueKey := params.ExecCfg().Codec.SequenceKey(uint32(id))
+	seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(id))
 	b := &kv.Batch{}
 	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
-	if err := params.p.txn.Run(params.ctx, b); err != nil {
-		return err
+	if err := p.txn.Run(ctx, b); err != nil {
+		return nil, err
 	}
 
-	if err := validateDescriptor(params.ctx, params.p, desc); err != nil {
-		return err
+	if err := validateDescriptor(ctx, p, desc); err != nil {
+		return nil, err
 	}
 
 	// Log Create Sequence event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	return params.p.logEvent(params.ctx,
+	return desc, p.logEvent(ctx,
 		desc.ID,
 		&eventpb.CreateSequence{
 			SequenceName: name.FQString(),
 		})
+}
+
+func createSequencesForSerialColumns(
+	ctx context.Context,
+	p *planner,
+	sessionData *sessiondata.SessionData,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	n *tree.CreateTable,
+) (map[tree.Name]*tabledesc.Mutable, error) {
+	colNameToSeqDesc := make(map[tree.Name]*tabledesc.Mutable)
+	createStmt := n
+	ensureCopy := func() {
+		if createStmt == n {
+			newCreateStmt := *n
+			n.Defs = append(tree.TableDefs(nil), n.Defs...)
+			createStmt = &newCreateStmt
+		}
+	}
+
+	tn := tree.MakeTableNameFromPrefix(catalog.ResolvedObjectPrefix{
+		Database: db,
+		Schema:   sc,
+	}.NamePrefix(), tree.Name(n.Table.Table()))
+	for i, def := range n.Defs {
+		d, ok := def.(*tree.ColumnTableDef)
+		if !ok {
+			continue
+		}
+		newDef, prefix, seqName, seqOpts, err := p.processSerialLikeInColumnDef(ctx, d, &tn)
+		if err != nil {
+			return nil, err
+		}
+		// TODO (lucy): Have more consistent/informative names for dependent jobs.
+		if seqName != nil {
+			seqDesc, err := doCreateSequence(
+				ctx,
+				p,
+				sessionData,
+				prefix.Database,
+				prefix.Schema,
+				seqName,
+				n.Persistence,
+				seqOpts,
+				fmt.Sprintf("creating sequence %s for new table %s", seqName, n.Table.Table()),
+			)
+			if err != nil {
+				return nil, err
+			}
+			colNameToSeqDesc[d.Name] = seqDesc
+		}
+		if d != newDef {
+			ensureCopy()
+			n.Defs[i] = newDef
+		}
+	}
+
+	return colNameToSeqDesc, nil
 }
 
 func (*createSequenceNode) Next(runParams) (bool, error) { return false, nil }
@@ -175,6 +239,7 @@ func (*createSequenceNode) Close(context.Context)        {}
 // NewSequenceTableDesc creates a sequence descriptor.
 func NewSequenceTableDesc(
 	ctx context.Context,
+	p *planner,
 	sequenceName string,
 	sequenceOptions tree.SequenceOptions,
 	parentID descpb.ID,
@@ -183,7 +248,6 @@ func NewSequenceTableDesc(
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
-	params *runParams,
 	isMultiRegion bool,
 ) (*tabledesc.Mutable, error) {
 	desc := tabledesc.InitTableDescriptor(
@@ -228,10 +292,11 @@ func NewSequenceTableDesc(
 		Increment: 1,
 	}
 	if err := assignSequenceOptions(
+		ctx,
+		p,
 		opts,
 		sequenceOptions,
 		true, /* setDefaults */
-		params,
 		id,
 		parentID,
 		nil, /* existingType */
