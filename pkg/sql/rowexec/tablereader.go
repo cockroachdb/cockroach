@@ -106,10 +106,7 @@ func newTableReader(
 
 	tableDesc := flowCtx.TableDescriptor(&spec.Table)
 	invertedColumn := tabledesc.FindInvertedColumn(tableDesc, spec.InvertedColumn)
-	cols := tableDesc.PublicColumns()
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = tableDesc.DeletableColumns()
-	}
+	cols := tableDesc.DeletableColumns()
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
 	resultTypes := catalog.ColumnTypesWithInvertedCol(cols, invertedColumn)
 
@@ -155,7 +152,6 @@ func newTableReader(
 		neededColumns,
 		flowCtx.EvalCtx.Mon,
 		&tr.alloc,
-		spec.Visibility,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		spec.HasSystemColumns,
