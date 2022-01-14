@@ -17,6 +17,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
@@ -785,9 +787,18 @@ func getRangesBeforeAndAfter(
 			return rng, true
 
 		case types.TimeTZFamily:
-			lower := lowerBound.(*tree.DTimeTZ).TimeOfDay
-			upper := upperBound.(*tree.DTimeTZ).TimeOfDay
-			rng = float64(upper) - float64(lower)
+			// timeTZOffsetSecsRange is the total number of possible values for offset.
+			timeTZOffsetSecsRange := timetz.MaxTimeTZOffsetSecs - timetz.MinTimeTZOffsetSecs + 1
+
+			// Find the range in microseconds based on the absolute times of the range
+			// boundaries.
+			lower := lowerBound.(*tree.DTimeTZ)
+			upper := upperBound.(*tree.DTimeTZ)
+			rng = float64(upper.ToTime().Sub(lower.ToTime()) / time.Microsecond)
+
+			// Account for the offset.
+			rng *= float64(timeTZOffsetSecsRange)
+			rng += float64(upper.OffsetSecs - lower.OffsetSecs)
 			return rng, true
 
 		default:

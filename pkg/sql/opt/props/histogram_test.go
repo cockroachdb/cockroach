@@ -384,7 +384,7 @@ func TestFilterBucket(t *testing.T) {
 						t.Fatalf("for span %s expected an error", testCase.span)
 					}
 					if !reflect.DeepEqual(testCase.expected, actual) {
-						t.Fatalf("for span %s exected %v but found %v", testCase.span, testCase.expected, actual)
+						t.Errorf("for span %s exected %v but found %v", testCase.span, testCase.expected, actual)
 					}
 				}
 			}
@@ -612,17 +612,17 @@ func TestFilterBucket(t *testing.T) {
 	})
 
 	t.Run("timetz", func(t *testing.T) {
-		upperBound, _, err := tree.ParseDTimeTZ(&evalCtx, "05:00:00", time.Microsecond)
+		upperBound1, _, err := tree.ParseDTimeTZ(&evalCtx, "05:00:00", time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
-		lowerBound, _, err := tree.ParseDTimeTZ(&evalCtx, "04:00:00", time.Microsecond)
+		lowerBound1, _, err := tree.ParseDTimeTZ(&evalCtx, "04:00:00", time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
-		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
-			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
-			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
+		h1 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound1)},
+			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound1},
 		}}
 
 		ub1, _, err := tree.ParseDTimeTZ(&evalCtx, "04:15:00", time.Microsecond)
@@ -630,18 +630,70 @@ func TestFilterBucket(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		testData := []testCase{
+		testData1 := []testCase{
 			{
 				span:     "[/04:00:00 - /04:15:00]",
 				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 15.5, DistinctRange: 7.75, UpperBound: ub1},
 			},
 			{
 				span:     "[/04:30:00 - /05:00:00]",
-				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound},
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound1},
+			},
+			{
+				span:     "[/06:30:00+02:00:00 - /05:00:00]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound1},
+			},
+			{
+				span:     "[/08:30:00+04:00:00 - /05:00:00]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound1},
 			},
 		}
 
-		runTest(h, testData, types.TimeTZFamily)
+		// This test distinguishes between values that have the same time but
+		// different offsets.
+		upperBound2, _, err := tree.ParseDTimeTZ(&evalCtx, "05:00:00.000001", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h2 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: upperBound1},
+			{NumEq: 1, NumRange: 10000, DistinctRange: 1000, UpperBound: upperBound2},
+		}}
+
+		ub2, _, err := tree.ParseDTimeTZ(&evalCtx, "20:59:00.000001+15:59:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		testData2 := []testCase{
+			{
+				span:     "[/05:00:00.000001 - /05:00:00.000001]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 0, DistinctRange: 0, UpperBound: upperBound2},
+			},
+			{
+				span:     "[/07:00:00.000001+02:00:00 - /05:00:00.000001]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 625.65, DistinctRange: 62.57, UpperBound: upperBound2},
+			},
+			{
+				span:     "[/09:00:00.000001+04:00:00 - /05:00:00.000001]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 1251.3, DistinctRange: 125.13, UpperBound: upperBound2},
+			},
+			{
+				span:     "[/04:59:59-00:00:01 - /20:59:00.000001+15:59:00]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 5000, DistinctRange: 500, UpperBound: ub2},
+			},
+			{
+				span:     "[/20:59:00.000001+15:59:00 - /05:00:00.000001]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 5000, DistinctRange: 500, UpperBound: upperBound2},
+			},
+			{
+				span:     "[/04:59:58-00:00:02 - /05:00:00.000001]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 9999.91, DistinctRange: 999.99, UpperBound: upperBound2},
+			},
+		}
+
+		runTest(h1, testData1, types.TimeTZFamily)
+		runTest(h2, testData2, types.TimeTZFamily)
 	})
 
 	t.Run("string", func(t *testing.T) {
