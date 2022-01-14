@@ -1754,7 +1754,8 @@ service Status {
 
   rpc HotRangesV2(HotRangesRequest) returns (HotRangesResponseV2) {
     option (google.api.http) = {
-      get : "/_status/v2/hotranges"
+      post : "/_status/v2/hotranges"
+      body : "*"
     };
   }
 

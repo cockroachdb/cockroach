@@ -3098,7 +3098,7 @@ target node(s) selected in a HotRangesRequest.
 
 ## HotRangesV2
 
-`GET /_status/v2/hotranges`
+`POST /_status/v2/hotranges`
 
 
 
