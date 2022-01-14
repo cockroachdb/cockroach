@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedadaptor"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -440,7 +441,11 @@ func makeTenantSQLServerArgs(
 	)
 	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
 	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
-	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, st, rangeFeedKnobs)
+	adaptor, err := rangefeedadaptor.New(db, st)
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
+	rangeFeedFactory, err := rangefeed.NewFactory(stopper, adaptor, rangeFeedKnobs)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

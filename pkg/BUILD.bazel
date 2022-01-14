@@ -120,6 +120,7 @@ ALL_TESTS = [
     "//pkg/kv/kvclient/kvcoord:kvcoord_test",
     "//pkg/kv/kvclient/kvstreamer:kvstreamer_test",
     "//pkg/kv/kvclient/rangecache:rangecache_test",
+    "//pkg/kv/kvclient/rangefeed/rangefeedadaptor:rangefeedadaptor_test",
     "//pkg/kv/kvclient/rangefeed/rangefeedbuffer:rangefeedbuffer_test",
     "//pkg/kv/kvclient/rangefeed:rangefeed_test",
     "//pkg/kv/kvnemesis:kvnemesis_test",

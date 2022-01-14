@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rangefeed
+package rangefeedadaptor
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,14 +30,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// dbAdapter is an implementation of the kvDB interface using a real *kv.DB.
-type dbAdapter struct {
+// DBAdapter is an implementation of the rangefeed.KVDB interface using a real
+// *kv.DB.
+type DBAdapter struct {
 	db         *kv.DB
 	st         *cluster.Settings
 	distSender *kvcoord.DistSender
 }
 
-var _ kvDB = (*dbAdapter)(nil)
+var _ rangefeed.KVDB = (*DBAdapter)(nil)
 
 var maxScanParallelism = settings.RegisterIntSetting(
 	settings.TenantWritable,
@@ -45,8 +47,8 @@ var maxScanParallelism = settings.RegisterIntSetting(
 	64,
 )
 
-// newDBAdapter construct a kvDB using a *kv.DB.
-func newDBAdapter(db *kv.DB, st *cluster.Settings) (*dbAdapter, error) {
+// New constructs a DBAdaptor.
+func New(db *kv.DB, st *cluster.Settings) (*DBAdapter, error) {
 	var distSender *kvcoord.DistSender
 	{
 		txnWrapperSender, ok := db.NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender)
@@ -60,15 +62,15 @@ func newDBAdapter(db *kv.DB, st *cluster.Settings) (*dbAdapter, error) {
 				(*kvcoord.DistSender)(nil), txnWrapperSender.Wrapped())
 		}
 	}
-	return &dbAdapter{
+	return &DBAdapter{
 		db:         db,
 		st:         st,
 		distSender: distSender,
 	}, nil
 }
 
-// RangeFeed is part of the kvDB interface.
-func (dbc *dbAdapter) RangeFeed(
+// RangeFeed is part of the rangefeed.KVDB interface.
+func (dbc *DBAdapter) RangeFeed(
 	ctx context.Context,
 	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
@@ -96,36 +98,36 @@ func (ba *concurrentBoundAccount) Shrink(ctx context.Context, x int64) {
 	ba.BoundAccount.Shrink(ctx, x)
 }
 
-// Scan is part of the kvDB interface.
-func (dbc *dbAdapter) Scan(
+// Scan is part of the rangefeed.KVDB interface.
+func (dbc *DBAdapter) Scan(
 	ctx context.Context,
 	spans []roachpb.Span,
 	asOf hlc.Timestamp,
 	rowFn func(value roachpb.KeyValue),
-	cfg scanConfig,
+	cfg rangefeed.ScanConfig,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("expected at least 1 span, got none")
 	}
 
 	var acc *concurrentBoundAccount
-	if cfg.mon != nil {
-		ba := cfg.mon.MakeBoundAccount()
+	if cfg.Mon != nil {
+		ba := cfg.Mon.MakeBoundAccount()
 		defer ba.Close(ctx)
 		acc = &concurrentBoundAccount{BoundAccount: &ba}
 	}
 
 	// If we don't have parallelism configured, just scan each span in turn.
-	if cfg.scanParallelism == nil {
+	if cfg.ScanParallelism == nil {
 		for _, sp := range spans {
-			if err := dbc.scanSpan(ctx, sp, asOf, rowFn, cfg.targetScanBytes, cfg.onSpanDone, acc); err != nil {
+			if err := dbc.scanSpan(ctx, sp, asOf, rowFn, cfg.TargetScanBytes, cfg.OnSpanDone, acc); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 
-	parallelismFn := cfg.scanParallelism
+	parallelismFn := cfg.ScanParallelism
 	if parallelismFn == nil {
 		parallelismFn = func() int { return 1 }
 	} else {
@@ -154,20 +156,20 @@ func (dbc *dbAdapter) Scan(
 	g := ctxgroup.WithContext(ctx)
 	err := dbc.divideAndSendScanRequests(
 		ctx, &g, spans, asOf, rowFn,
-		parallelismFn, cfg.targetScanBytes, cfg.onSpanDone, acc)
+		parallelismFn, cfg.TargetScanBytes, cfg.OnSpanDone, acc)
 	if err != nil {
 		cancel()
 	}
 	return errors.CombineErrors(err, g.Wait())
 }
 
-func (dbc *dbAdapter) scanSpan(
+func (dbc *DBAdapter) scanSpan(
 	ctx context.Context,
 	span roachpb.Span,
 	asOf hlc.Timestamp,
 	rowFn func(value roachpb.KeyValue),
 	targetScanBytes int64,
-	onScanDone OnScanCompleted,
+	onScanDone rangefeed.OnScanCompleted,
 	acc *concurrentBoundAccount,
 ) error {
 	if acc != nil {
@@ -215,7 +217,7 @@ func (dbc *dbAdapter) scanSpan(
 // divideAndSendScanRequests divides spans into small ranges based on range boundaries,
 // and adds those scan requests to the workGroup.  The caller is expected to wait for
 // the workGroup completion, or to cancel the work group in case of an error.
-func (dbc *dbAdapter) divideAndSendScanRequests(
+func (dbc *DBAdapter) divideAndSendScanRequests(
 	ctx context.Context,
 	workGroup *ctxgroup.Group,
 	spans []roachpb.Span,
@@ -223,7 +225,7 @@ func (dbc *dbAdapter) divideAndSendScanRequests(
 	rowFn func(value roachpb.KeyValue),
 	parallelismFn func() int,
 	targetScanBytes int64,
-	onSpanDone OnScanCompleted,
+	onSpanDone rangefeed.OnScanCompleted,
 	acc *concurrentBoundAccount,
 ) error {
 	// Build a span group so that we can iterate spans in order.
@@ -274,4 +276,17 @@ func (dbc *dbAdapter) divideAndSendScanRequests(
 	}
 
 	return nil
+}
+
+// TestingScanWithOptions is exposed for testing in order to call Scan with a
+// rangefeed.ScanConfig extracted from the specified list of options.
+func (dbc *DBAdapter) TestingScanWithOptions(
+	ctx context.Context,
+	spans []roachpb.Span,
+	asOf hlc.Timestamp,
+	rowFn func(value roachpb.KeyValue),
+	opts ...rangefeed.Option,
+) error {
+	sc := rangefeed.TestingScanConfigWithOptions(opts)
+	return dbc.Scan(ctx, spans, asOf, rowFn, sc)
 }

@@ -19,9 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -41,8 +39,8 @@ import (
 // TODO(yevgeniy): Instead of rolling our own logic to parallelize scans, we should
 // use streamer API instead (https://github.com/cockroachdb/cockroach/pull/68430)
 
-// kvDB is an adapter to the underlying KV store.
-type kvDB interface {
+// KVDB is an adapter to the underlying KV store.
+type KVDB interface {
 
 	// RangeFeed runs a rangefeed on a given span with the given arguments.
 	// It encapsulates the RangeFeed method on roachpb.Internal.
@@ -63,14 +61,14 @@ type kvDB interface {
 		spans []roachpb.Span,
 		asOf hlc.Timestamp,
 		rowFn func(value roachpb.KeyValue),
-		cfg scanConfig,
+		cfg ScanConfig,
 	) error
 }
 
 // Factory is used to construct RangeFeeds.
 type Factory struct {
 	stopper *stop.Stopper
-	client  kvDB
+	client  KVDB
 	knobs   *TestingKnobs
 }
 
@@ -87,23 +85,21 @@ func (t TestingKnobs) ModuleTestingKnobs() {}
 var _ base.ModuleTestingKnobs = (*TestingKnobs)(nil)
 
 // NewFactory constructs a new Factory.
-func NewFactory(
-	stopper *stop.Stopper, db *kv.DB, st *cluster.Settings, knobs *TestingKnobs,
-) (*Factory, error) {
-	kvDB, err := newDBAdapter(db, st)
-	if err != nil {
-		return nil, err
-	}
+func NewFactory(stopper *stop.Stopper, kvDB KVDB, knobs *TestingKnobs) (*Factory, error) {
 	return newFactory(stopper, kvDB, knobs), nil
 }
 
-func newFactory(stopper *stop.Stopper, client kvDB, knobs *TestingKnobs) *Factory {
+func newFactory(stopper *stop.Stopper, client KVDB, knobs *TestingKnobs) *Factory {
 	return &Factory{
 		stopper: stopper,
 		client:  client,
 		knobs:   knobs,
 	}
 }
+
+// TestingNewFactoryWithDB allows tests to construct a factory with an injected
+// db.
+var TestingNewFactoryWithDB = newFactory
 
 // RangeFeed constructs a new rangefeed and runs it in an async task.
 //
@@ -153,7 +149,7 @@ type OnValue func(ctx context.Context, value *roachpb.RangeFeedValue)
 type RangeFeed struct {
 	config
 	name    string
-	client  kvDB
+	client  KVDB
 	stopper *stop.Stopper
 	knobs   *TestingKnobs
 

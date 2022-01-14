@@ -25,7 +25,7 @@ type Option interface {
 }
 
 type config struct {
-	scanConfig
+	ScanConfig
 	retryOptions         retry.Options
 	onInitialScanDone    OnInitialScanDone
 	withInitialScan      bool
@@ -37,24 +37,26 @@ type config struct {
 	extraPProfLabels     []string
 }
 
-type scanConfig struct {
-	// scanParallelism controls the number of concurrent scan requests
+// ScanConfig is used to configure rangefeed scans.
+type ScanConfig struct {
+	// ScanParallelism controls the number of concurrent scan requests
 	// that can be issued.  If unspecified, only 1 scan request at a time is issued.
-	scanParallelism func() int
+	ScanParallelism func() int
 
-	// targetScanBytes requests that many bytes to be returned per scan request.
+	// TargetScanBytes requests that many bytes to be returned per scan request.
 	// adjusting this setting should almost always be used together with the setting
 	// to configure memory monitor.
-	targetScanBytes int64
+	TargetScanBytes int64
 
-	// mon is the memory monitor to while scanning.
-	mon *mon.BytesMonitor
+	// Mon is the memory monitor to while scanning.
+	Mon *mon.BytesMonitor
 
-	// callback to invoke when initial scan of a span completed.
-	onSpanDone OnScanCompleted
+	// OnSpanDone is the callback invoked when initial scan of a span is
+	// completed.
+	OnSpanDone OnScanCompleted
 
-	// configures retry behavior
-	retryBehavior ScanRetryBehavior
+	// RetryBehavior configures retry behavior.
+	RetryBehavior ScanRetryBehavior
 }
 
 type optionFunc func(*config)
@@ -152,16 +154,24 @@ func initConfig(c *config, options []Option) {
 		o.set(c)
 	}
 
-	if c.targetScanBytes == 0 {
-		c.targetScanBytes = 1 << 19 // 512 KiB
+	if c.TargetScanBytes == 0 {
+		c.TargetScanBytes = 1 << 19 // 512 KiB
 	}
+}
+
+// TestingScanConfigWithOptions returns a ScanConfig for tests initialized using
+// the provided options.
+func TestingScanConfigWithOptions(options []Option) ScanConfig {
+	var c config
+	initConfig(&c, options)
+	return c.ScanConfig
 }
 
 // WithInitialScanParallelismFn configures rangefeed to issue up to specified number
 // of concurrent initial scan requests.
 func WithInitialScanParallelismFn(parallelismFn func() int) Option {
 	return optionFunc(func(c *config) {
-		c.scanParallelism = parallelismFn
+		c.ScanParallelism = parallelismFn
 	})
 }
 
@@ -169,14 +179,14 @@ func WithInitialScanParallelismFn(parallelismFn func() int) Option {
 // This option should be used together with the option to configure memory monitor.
 func WithTargetScanBytes(target int64) Option {
 	return optionFunc(func(c *config) {
-		c.targetScanBytes = target
+		c.TargetScanBytes = target
 	})
 }
 
 // WithMemoryMonitor configures rangefeed to use memory monitor when issuing scan requests.
 func WithMemoryMonitor(mon *mon.BytesMonitor) Option {
 	return optionFunc(func(c *config) {
-		c.mon = mon
+		c.Mon = mon
 	})
 }
 
@@ -190,7 +200,7 @@ type OnScanCompleted func(ctx context.Context, sp roachpb.Span) error
 // have been completed when performing an initial scan.
 func WithOnScanCompleted(fn OnScanCompleted) Option {
 	return optionFunc(func(c *config) {
-		c.onSpanDone = fn
+		c.OnSpanDone = fn
 	})
 }
 
@@ -207,7 +217,7 @@ const (
 // WithScanRetryBehavior configures range feed to retry initial scan as per specified behavior.
 func WithScanRetryBehavior(b ScanRetryBehavior) Option {
 	return optionFunc(func(c *config) {
-		c.retryBehavior = b
+		c.RetryBehavior = b
 	})
 }
 
