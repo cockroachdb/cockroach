@@ -286,7 +286,7 @@ func mergeTestXMLs(args parsedArgs) error {
 		}
 		xmlsToMerge = append(xmlsToMerge, testSuites)
 	}
-	return nil
+	return bazelutil.MergeTestXMLs(xmlsToMerge, os.Stdout)
 }
 
 func configArgList() []string {

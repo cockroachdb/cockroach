@@ -53,10 +53,10 @@ export PATH=/usr/local/opt/make/libexec/gnubin:/usr/local/bin:/usr/bin:/bin:/usr
 	osopts = append(osopts, os.WithRecording(r))
 	osopts = append(osopts, os.WithLogger(log.New(logger, "", 0)))
 	devExec := exec.New(exopts...)
-	devOS := os.New(osopts...)
+	os := os.New(osopts...)
 	dev := makeDevCmd()
 	dev.exec = devExec
-	dev.os = devOS
+	dev.os = os
 
 	require.NoError(t, setupPath(dev))
 }

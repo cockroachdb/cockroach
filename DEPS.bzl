@@ -1257,12 +1257,10 @@ def go_deps():
     go_repository(
         name = "com_github_cockroachdb_stress",
         build_file_proto_mode = "disable_global",
+        commit = "0d6df314e35257b3abb1eac509224530d103fcf6",
         importpath = "github.com/cockroachdb/stress",
-        sha256 = "2b7b584a4cafacd0d971adf1e150fe9c1f770eb2b56993af06a4ae7fa329a521",
-        strip_prefix = "github.com/cockroachdb/stress@v0.0.0-20170808184505-29b5d31b4c3a",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/stress/com_github_cockroachdb_stress-v0.0.0-20170808184505-29b5d31b4c3a.zip",
-        ],
+        remote = "https://github.com/cockroachdb/stress",
+        vcs = "git",
     )
     go_repository(
         name = "com_github_cockroachdb_tools",

@@ -227,3 +227,11 @@ func logCommand(cmd string, args ...string) {
 	fullArgs = append(fullArgs, args...)
 	log.Printf("$ %s", shellescape.QuoteCommand(fullArgs))
 }
+
+// getDevBin returns the path to the running dev executable.
+func getDevBin() string {
+	if isTesting {
+		return "dev"
+	}
+	return os.Args[0]
+}

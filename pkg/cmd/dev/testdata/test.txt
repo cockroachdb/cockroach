@@ -31,17 +31,17 @@ bazel test //pkg/util/tracing:tracing_test --nocache_test_results --test_env=GOT
 dev test --stress pkg/util/tracing --filter TestStartChild*
 ----
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress ' '--test_filter=TestStartChild*' --test_output streamed
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' '--test_filter=TestStartChild*' --test_output streamed
 
 dev test --stress pkg/util/tracing --filter TestStartChild* --cpus=12
 ----
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
-bazel test --local_cpu_resources=12 --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -p=12 ' '--test_filter=TestStartChild*' --test_output streamed
+bazel test --local_cpu_resources=12 --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' -p=12 ' '--test_filter=TestStartChild*' --test_output streamed
 
 dev test --stress pkg/util/tracing --filter TestStartChild* --timeout=10s -v
 ----
 bazel query 'kind(go_test, //pkg/util/tracing:all)'
-bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=70 --run_under '@com_github_cockroachdb_stress//:stress -maxtime=10s ' '--test_filter=TestStartChild*' --test_arg -test.v --test_output streamed
+bazel test --test_sharding_strategy=disabled //pkg/util/tracing:tracing_test --test_env=GOTRACEBACK=all --test_timeout=70 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' -maxtime=10s ' '--test_filter=TestStartChild*' --test_arg -test.v --test_output streamed
 
 dev test //pkg/testutils --timeout=10s
 ----
