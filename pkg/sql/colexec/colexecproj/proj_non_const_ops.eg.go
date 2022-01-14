@@ -18196,6 +18196,250 @@ func (p projDivFloat64Float64Op) Init() {
 	p.Input.Init()
 }
 
+type projDivIntervalInt16Op struct {
+	projOpBase
+}
+
+func (p projDivIntervalInt16Op) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the projection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	batch := p.Input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Interval()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Interval()
+		col2 := vec2.Int16()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						if arg2 == 0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = arg1.Div(int64(arg2))
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						if arg2 == 0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = arg1.Div(int64(arg2))
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					if arg2 == 0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					projCol[i] = arg1.Div(int64(arg2))
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					if arg2 == 0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					projCol[i] = arg1.Div(int64(arg2))
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		}
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
+	return batch
+}
+
+func (p projDivIntervalInt16Op) Init() {
+	p.Input.Init()
+}
+
+type projDivIntervalInt32Op struct {
+	projOpBase
+}
+
+func (p projDivIntervalInt32Op) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the projection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	batch := p.Input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Interval()
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.Interval()
+		col2 := vec2.Int32()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
+			col1Nulls := vec1.Nulls()
+			col2Nulls := vec2.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						arg1 := col1.Get(i)
+						arg2 := col2.Get(i)
+
+						if arg2 == 0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = arg1.Div(int64(arg2))
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
+						// We only want to perform the projection operation if both values are not
+						// null.
+						//gcassert:bce
+						arg1 := col1.Get(i)
+						//gcassert:bce
+						arg2 := col2.Get(i)
+
+						if arg2 == 0 {
+							colexecerror.ExpectedError(tree.ErrDivByZero)
+						}
+						projCol[i] = arg1.Div(int64(arg2))
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					if arg2 == 0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					projCol[i] = arg1.Div(int64(arg2))
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					//gcassert:bce
+					arg1 := col1.Get(i)
+					//gcassert:bce
+					arg2 := col2.Get(i)
+
+					if arg2 == 0 {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					projCol[i] = arg1.Div(int64(arg2))
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		}
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
+	return batch
+}
+
+func (p projDivIntervalInt32Op) Init() {
+	p.Input.Init()
+}
+
 type projDivIntervalInt64Op struct {
 	projOpBase
 }
@@ -61815,6 +62059,10 @@ func GetProjectionOperator(
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
 					case types.IntFamily:
 						switch rightType.Width() {
+						case 16:
+							return &projDivIntervalInt16Op{projOpBase: projOpBase}, nil
+						case 32:
+							return &projDivIntervalInt32Op{projOpBase: projOpBase}, nil
 						case -1:
 						default:
 							return &projDivIntervalInt64Op{projOpBase: projOpBase}, nil
