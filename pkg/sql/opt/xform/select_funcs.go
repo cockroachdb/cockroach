@@ -325,7 +325,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 			// Even though the partitioned constraints and the inBetween constraints
 			// were consolidated, we must make sure their Union is as well.
-			constraint.ConsolidateSpans(c.e.evalCtx)
+			constraint.ConsolidateSpans(c.e.evalCtx, index)
 
 			// Add all remaining filters that need to be present in the
 			// inBetween spans. Some of the remaining filters are common

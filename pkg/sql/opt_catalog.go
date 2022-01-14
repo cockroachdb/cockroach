@@ -447,7 +447,7 @@ func (oc *optCatalog) dataSourceForTable(
 		return ds, nil
 	}
 
-	ds, err := newOptTable(desc, oc.codec(), tableStats, zoneConfig)
+	ds, err := newOptTable(desc, oc.codec(), tableStats, zoneConfig, oc.planner.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -652,6 +652,7 @@ func newOptTable(
 	codec keys.SQLCodec,
 	stats []*stats.TableStatistic,
 	tblZone *zonepb.ZoneConfig,
+	evalCtx *tree.EvalContext,
 ) (*optTable, error) {
 	ot := &optTable{
 		desc:     desc,
@@ -827,9 +828,9 @@ func newOptTable(
 				false, /* nullable */
 				invertedSourceColOrdinal,
 			)
-			ot.indexes[i].init(ot, i, idx, idxZone, partZones, invertedColOrd)
+			ot.indexes[i].init(ot, i, idx, idxZone, partZones, invertedColOrd, evalCtx)
 		} else {
-			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* invertedColOrd */)
+			ot.indexes[i].init(ot, i, idx, idxZone, partZones, -1 /* invertedColOrd */, evalCtx)
 		}
 
 		// Add unique constraints for implicitly partitioned unique indexes.
@@ -1200,6 +1201,10 @@ type optIndex struct {
 	// the ordinal of the inverted column created to refer to the key of this
 	// index. It is -1 if this is not an inverted index.
 	invertedColOrd int
+
+	// A structure for matching spans to partitions to help determine if a span
+	// can be accessed wholly in the local region.
+	ps *cat.PrefixSorter
 }
 
 var _ cat.Index = &optIndex{}
@@ -1213,6 +1218,7 @@ func (oi *optIndex) init(
 	zone *zonepb.ZoneConfig,
 	partZones map[string]*zonepb.ZoneConfig,
 	invertedColOrd int,
+	evalCtx *tree.EvalContext,
 ) {
 	oi.tab = tab
 	oi.idx = idx
@@ -1328,6 +1334,21 @@ func (oi *optIndex) init(
 		}
 		oi.columnOrds[i] = ord
 	}
+	if oi.ps == nil {
+		if localPartitions, ok :=
+			cat.HasMixOfLocalAndRemotePartitions(evalCtx, oi); ok {
+			oi.ps = cat.GetSortedPrefixes(oi, *localPartitions, evalCtx)
+		}
+	}
+}
+
+// PrefixSorter returns a struct of the same name which helps distinguish
+// local spans from remote spans.
+func (oi *optIndex) PrefixSorter(evalCtx *tree.EvalContext) (*cat.PrefixSorter, bool) {
+	if oi.ps == nil {
+		return nil, false
+	}
+	return oi.ps, true
 }
 
 // ID is part of the cat.Index interface.
@@ -2216,6 +2237,11 @@ func (oi *optVirtualIndex) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (oi *optVirtualIndex) Partition(i int) cat.Partition {
 	return nil
+}
+
+// PrefixSorter is part of the cat.Index interface.
+func (oi *optVirtualIndex) PrefixSorter(evalCtx *tree.EvalContext) (*cat.PrefixSorter, bool) {
+	return nil, false
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

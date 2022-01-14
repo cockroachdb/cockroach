@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -469,16 +470,108 @@ func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
 	}
 }
 
+// makeLocalPartitionsConstraint builds a constraint with spans that cover the
+// local partition ranges. Spans are consolidated so they cover the widest
+// possible ranges.
+// TODO(msirek):  To make this complete, multiple constraints need to be built
+//                with different prefix lengths and remote partition spans of
+//                longer length subtracted out.
+//    e.g.  local spans: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]
+//         remote spans: [/1/2/3 - /1/2/3]
+//                The single remote partition prefix creates a hole in the local
+//                spans, so we cannot consolidate it to: [/1/2 - /1/4]
+//                Spans of shorter length have lower priority so do not get
+//                subtracted and spans of equal length could never overlap
+//                because of CREATE TABLE rules that prevent duplicate
+//                PARTITION BY values.
+//                The prefix length 2 Constraint would need to subtract length
+//                3 and above remote spans.
+//                The prefix length 1 Constraint would need to subtract length
+//                2 and above remote spans.
+//                Currently there is no method that subtracts one set of spans
+//                from another, so this work is deferred.
+//func (c *Constraint) makeLocalPartitionsConstraint(
+//	evalCtx *tree.EvalContext, ps *cat.PrefixSorter,
+//) *Constraint {
+//	spans := Spans{}
+//	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
+//	spans.Alloc(ps.LocalPartitions.Len())
+//	for _, localPrefix := range ps.LocalPrefixes {
+//		var span Span
+//		var key Key
+//		key = MakeCompositeKey(localPrefix...)
+//		span.Init(key, IncludeBoundary, key, IncludeBoundary)
+//		spans.Append(&span)
+//	}
+//	spans.SortAndMerge(&keyCtx)
+//	localPartitionsConstraint := Constraint{}
+//	localPartitionsConstraint.Init(&keyCtx, &spans)
+//	// Avoid infinite recursion and pass index as nil. We don't need the
+//	// PrefixSorter for this consolidation anyway.
+//	localPartitionsConstraint.ConsolidateSpans(evalCtx, nil)
+//	return &localPartitionsConstraint
+//}
+
 // ConsolidateSpans merges spans that have consecutive boundaries. For example:
 //   [/1 - /2] [/3 - /4] becomes [/1 - /4].
-func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
+// An optional "index" parameter describes the index used to build the
+// Constraint, and can be useful in detecting partitioning or other metadata.
+func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext, index cat.Index) {
 	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
 	var result Spans
+
+	if c.Spans.Count() < 1 {
+		return
+	}
+	var ps *cat.PrefixSorter
+	indexHasLocalAndRemoteParts := false
+	if index != nil {
+		ps, indexHasLocalAndRemoteParts = index.PrefixSorter(evalCtx)
+	}
+	spanIsLocal, lastSpanIsLocal, localRemoteCrossover := false, false, false
+
+	// Initializations for the first span so we avoid putting a conditional in the
+	// below 'for' loop
+	if indexHasLocalAndRemoteParts {
+		// TODO(msirek): Enable span-based locality checking.
+		//localPartitionsConstraint = c.makeLocalPartitionsConstraint(evalCtx, ps)
+		last := c.Spans.Get(0)
+		if match, ok := FindMatch(last, ps); ok {
+			if match.IsLocal {
+				lastSpanIsLocal = true
+			}
+		}
+		// TODO(msirek): Enable span-based locality checking.
+		//if !lastSpanIsLocal {
+		//	lastSpanIsLocal = localPartitionsConstraint.ContainsSpan(evalCtx, last)
+		//}
+	}
+
 	for i := 1; i < c.Spans.Count(); i++ {
 		last := c.Spans.Get(i - 1)
 		sp := c.Spans.Get(i)
+		if indexHasLocalAndRemoteParts {
+			spanIsLocal = false
+			if match, ok := FindMatch(sp, ps); ok {
+				if match.IsLocal {
+					spanIsLocal = true
+				}
+			}
+			// TODO(msirek): Enable span-based locality checking.
+			//if !spanIsLocal {
+			//	spanIsLocal = localPartitionsConstraint.ContainsSpan(evalCtx, sp)
+			//}
+			// If last span is in the local gateway region and the current span is
+			// not, or vice versa, save this info so we don't combine these spans.
+			localRemoteCrossover = spanIsLocal != lastSpanIsLocal
+		}
+		// Do not merge local spans with remote spans because a span must be 100%
+		// local in order to utilize locality optimized search.
+		// An example query on a LOCALITY REGIONAL BY ROW table which this
+		// benefits is:
+		// SELECT * FROM regional_by_row_table WHERE pk <> 4 LIMIT 3;
 		if last.endBoundary == IncludeBoundary && sp.startBoundary == IncludeBoundary &&
-			sp.start.IsNextKey(&keyCtx, last.end) {
+			sp.start.IsNextKey(&keyCtx, last.end) && !localRemoteCrossover {
 			// We only initialize `result` if we need to change something.
 			if result.Count() == 0 {
 				result.Alloc(c.Spans.Count() - 1)
@@ -494,6 +587,7 @@ func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 				result.Append(sp)
 			}
 		}
+		lastSpanIsLocal = spanIsLocal
 	}
 	if result.Count() != 0 {
 		c.Spans = result

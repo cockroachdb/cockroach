@@ -78,6 +78,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",

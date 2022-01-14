@@ -413,7 +413,7 @@ func constrainPrefixColumns(
 		filters, optionalFilters,
 		prefixColumns, notNullCols, tabMeta.ComputedCols,
 		false, /* consolidate */
-		evalCtx, factory,
+		evalCtx, factory, index,
 	)
 	constraint = ic.UnconsolidatedConstraint()
 	if constraint.Prefix(evalCtx) < prefixColumnCount {

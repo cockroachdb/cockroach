@@ -16,7 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -512,12 +515,120 @@ func TestConsolidateSpans(t *testing.T) {
 			spans := parseSpans(&evalCtx, tc.s)
 			var c Constraint
 			c.Init(kc, &spans)
-			c.ConsolidateSpans(kc.EvalCtx)
+			c.ConsolidateSpans(kc.EvalCtx, nil)
 			if res := c.Spans.String(); res != tc.e {
 				t.Errorf("expected  %s  got  %s", tc.e, res)
 			}
 		})
 	}
+}
+
+func TestConsolidateLocalAndRemoteSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		s string
+		// expected value
+		e string
+
+		// Partition Spans
+		// The start key of each span defines the PARTITION BY LIST value of a
+		// single partition, one span per partition.
+		// The end key is ignored.
+		p string
+
+		// Partition Localities.  true == local, false == remote
+		// There must be the same number of entries as partition spans.
+		l []bool
+	}{
+		{
+			p: "[/1 - /1] [/3 - /3] [/7 - /9]",
+			l: []bool{true, false, false},
+			s: "[/1/2 - /1/3] [/1/4 - /6] [/7 - /9]",
+			e: "[/1/2 - /1/3] [/1/4 - /9]",
+		},
+		// TODO(msirek):  This result is expected to change when span-based
+		//                partition locality checking is enabled.
+		{
+			p: "[/3 - /3] [/4 - /4]",
+			l: []bool{true, true},
+			s: "[/1 - /2] [/3 - /4] [/7 - /9]",
+			e: "[/1 - /4] [/7 - /9]",
+		},
+		{
+			p: "[/1/2 - /1/2] [/1/4 - /1/4] [/1 - /1]",
+			l: []bool{true, true, false},
+			s: "[/1/2 - /1/4] [/1/5 - /5]",
+			e: "[/1/2 - /5]",
+		},
+		// TODO(msirek):  This result is expected to change when span-based
+		//                partition locality checking is enabled.
+		{
+			p: "[/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4] [/1 - /1]",
+			l: []bool{true, true, true, false},
+			s: "[/1/2 - /1/4] [/1/5 - /5]",
+			e: "[/1/2 - /5]",
+		},
+		// TODO(msirek):  This result is expected to change when span-based
+		//                partition locality checking is enabled.
+		{
+			p: "[/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4] [/1/2/3 - /1/2/3]",
+			l: []bool{true, true, true, false},
+			s: "[/1/2 - /1/4] [/1/5 - /5]",
+			e: "[/1/2 - /5]",
+		},
+		{
+			p: "[/1/2/3 - /1/2/3] [/9 - /9]",
+			l: []bool{true, false},
+			s: "[/1/2/1 - /1/2/2] [/1/2/3 - /1/2/3] [/1/2/4 - /9]",
+			e: "[/1/2/1 - /1/2/2] [/1/2/3 - /1/2/3] [/1/2/4 - /9]",
+		},
+	}
+
+	kc := testKeyContext(1, 2, 3)
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			// Read the p and l entries to make an index that only has the partitions
+			// and ps (PrefixSorter) elements populated.
+			partitionSpans := parseSpans(&evalCtx, tc.p)
+			partitions := make([]testcat.Partition, partitionSpans.Count())
+			localPartitions := util.FastIntSet{}
+			for j := 0; j < partitionSpans.Count(); j++ {
+				span := partitionSpans.Get(j)
+				spanDatums := make([]tree.Datums, 1)
+				datumSlice := make(tree.Datums, span.StartKey().Length())
+				for k := 0; k < span.StartKey().Length(); k++ {
+					datumSlice[k] = span.StartKey().Value(k)
+				}
+				spanDatums[0] = datumSlice
+				partitions[j] = testcat.Partition{}
+				partitions[j].SetDatums(spanDatums)
+
+				if tc.l[j] {
+					localPartitions.Add(j)
+				}
+			}
+
+			// Make the index
+			index := &testcat.Index{}
+			index.SetPartitions(partitions)
+			// Make the PrefixSorter and assign it to the index.
+			ps := cat.GetSortedPrefixes(index, localPartitions, &evalCtx)
+			index.SetPrefixSorter(ps)
+
+			// Run the test.
+			spans := parseSpans(&evalCtx, tc.s)
+			var c Constraint
+			c.Init(kc, &spans)
+			c.ConsolidateSpans(kc.EvalCtx, index)
+			if res := c.Spans.String(); res != tc.e {
+				t.Errorf("expected  %s  got  %s", tc.e, res)
+			}
+		})
+	}
+
 }
 
 func TestExactPrefix(t *testing.T) {

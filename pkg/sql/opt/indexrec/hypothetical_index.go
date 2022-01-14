@@ -222,3 +222,8 @@ func (hi *hypotheticalIndex) PartitionCount() int {
 func (hi *hypotheticalIndex) Partition(i int) cat.Partition {
 	return nil
 }
+
+// PrefixSorter is part of the cat.Index interface.
+func (hi *hypotheticalIndex) PrefixSorter(evalCtx *tree.EvalContext) (*cat.PrefixSorter, bool) {
+	return nil, false
+}

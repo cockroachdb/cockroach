@@ -11,6 +11,8 @@
 package opt
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -40,10 +42,22 @@ func (t TableID) ColumnID(ord int) ColumnID {
 	return t.firstColID() + ColumnID(ord)
 }
 
-// IndexColumnID returns the metadata id of the idxOrd-th index column in the
+// IndexColumnID returns the metadata id of the ith ordinal index column in the
 // given index.
-func (t TableID) IndexColumnID(idx cat.Index, idxOrd int) ColumnID {
-	return t.ColumnID(idx.Column(idxOrd).Ordinal())
+func (t TableID) IndexColumnID(index cat.Index, i int) ColumnID {
+	return t.ColumnID(index.Column(i).Ordinal())
+}
+
+// IdxColumnID returns the "i"th ColumnID of the index with ordinal number
+// "index" of the table described by tm. Both index and i are zero-based.
+func (tm *TableMeta) IdxColumnID(index cat.IndexOrdinal, i int) ColumnID {
+	idx := tm.Table.Index(index)
+	tm.Table.Name()
+	if i < 0 || i >= idx.ColumnCount() {
+		panic(fmt.Sprintf("Attempt to lookup column %d in index %d of table %s. But it only has %d columns.",
+			i, index, tm.Table.Name(), idx.ColumnCount()))
+	}
+	return tm.MetaID.IndexColumnID(idx, i)
 }
 
 // ColumnOrdinal returns the ordinal position of the given column in its base
