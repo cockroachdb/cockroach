@@ -1108,7 +1108,7 @@ func TestHotRanges2Response(t *testing.T) {
 	defer ts.Stopper().Stop(context.Background())
 
 	var hotRangesResp serverpb.HotRangesResponseV2
-	if err := getStatusJSONProto(ts, "v2/hotranges", &hotRangesResp); err != nil {
+	if err := postStatusJSONProto(ts, "v2/hotranges", &serverpb.HotRangesRequest{}, &hotRangesResp); err != nil {
 		t.Fatal(err)
 	}
 	if len(hotRangesResp.Ranges) == 0 {

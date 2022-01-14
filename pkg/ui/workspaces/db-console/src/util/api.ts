@@ -142,6 +142,9 @@ export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.Rese
 export type ResetIndexUsageStatsRequestMessage = protos.cockroach.server.serverpb.ResetIndexUsageStatsRequest;
 export type ResetIndexUsageStatsResponseMessage = protos.cockroach.server.serverpb.ResetIndexUsageStatsResponse;
 
+export type HotRangesRequestMessage = protos.cockroach.server.serverpb.HotRangesRequest;
+export type HotRangesV2ResponseMessage = protos.cockroach.server.serverpb.HotRangesResponseV2;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -787,6 +790,18 @@ export function resetIndexUsageStats(
   return timeoutFetch(
     serverpb.ResetIndexUsageStatsResponse,
     `${STATUS_PREFIX}/resetindexusagestats`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getHotRanges(
+  req: HotRangesRequestMessage,
+  timeout?: moment.Duration,
+): Promise<HotRangesV2ResponseMessage> {
+  return timeoutFetch(
+    serverpb.HotRangesResponseV2,
+    `${STATUS_PREFIX}/v2/hotranges`,
     req as any,
     timeout,
   );
