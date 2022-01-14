@@ -603,13 +603,13 @@ query BB
 SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal'), 'CREATE'),
        has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal'), 'USAGE')
 ----
-true  true
+false  true
 
 query BB
 SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog'), 'CREATE'),
        has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog'), 'USAGE')
 ----
-true  true
+false  true
 
 query BB
 SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'public'), 'CREATE'),
@@ -617,7 +617,7 @@ SELECT has_schema_privilege((SELECT oid FROM pg_namespace WHERE nspname = 'publi
 ----
 true  true
 
-query error pgcode 3F000 schema 'does_not_exist' does not exist
+query error pgcode 3F000 unknown schema "does_not_exist"
 SELECT has_schema_privilege('does_not_exist', 'CREATE')
 
 query BBB
@@ -1285,8 +1285,6 @@ statement ok
 GRANT CREATE ON DATABASE my_db TO my_role;
 GRANT my_role TO testuser;
 
-user testuser
-
 statement ok
 use my_db
 
@@ -1299,7 +1297,6 @@ query B
 SELECT has_schema_privilege('testuser', 's', 'create')
 ----
 true
-
 
 statement ok
 REVOKE USAGE ON SCHEMA s FROM testuser;
@@ -1316,7 +1313,7 @@ SELECT has_database_privilege('testuser', 'my_db', 'create'),
        has_schema_privilege('testuser', 'public', 'usage'),
        has_table_privilege('testuser', 's.t', 'select')
 ----
-true  true  true
+true  true  false
 
 user root
 
@@ -1324,8 +1321,6 @@ statement ok
 CREATE USER testuser2;
 GRANT testuser TO testuser2;
 GRANT ALL ON SCHEMA my_db.s TO testuser2
-
-user testuser2
 
 statement ok
 use my_db
@@ -1345,4 +1340,20 @@ SELECT has_database_privilege('testuser2', 'my_db', 'create'),
        has_schema_privilege('testuser2', 'public', 'usage'),
        has_table_privilege('testuser2', 's.t', 'select')
 ----
-true  true  true
+true  true  false
+
+statement ok
+REVOKE my_role FROM testuser;
+REVOKE testuser FROM testuser2
+
+# Schema owner has all privileges
+statement ok
+CREATE SCHEMA owned_schema AUTHORIZATION testuser
+
+query BBBB
+SELECT has_schema_privilege('testuser', 'owned_schema', 'create'),
+       has_schema_privilege('testuser', 'owned_schema', 'usage'),
+       has_schema_privilege('testuser2', 'owned_schema', 'create'),
+       has_schema_privilege('testuser2', 'owned_schema', 'usage')
+----
+true true false false

@@ -132,6 +132,15 @@ func NewPublicSelectPrivilegeDescriptor() *PrivilegeDescriptor {
 	)
 }
 
+// NewPublicUsagePrivilegeDescriptor is used to construct a privilege descriptor
+// owned by the node user which has USAGE privilege for the public role. It is
+// used for virtual schemas.
+func NewPublicUsagePrivilegeDescriptor() *PrivilegeDescriptor {
+	return NewPrivilegeDescriptor(
+		security.PublicRoleName(), privilege.List{privilege.USAGE}, privilege.List{}, security.NodeUserName(),
+	)
+}
+
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
 func NewPrivilegeDescriptor(
