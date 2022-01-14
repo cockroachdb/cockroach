@@ -30,6 +30,12 @@
 
 <script src="/debug/assets/list.min.js" type="text/javascript"></script>
 
+<style>
+  .tags {
+    color: darkgray;
+  }
+</style>
+
 <a href="?snap=new">Take a snapshot of current operations</a>
 <div style="float:right">
 Stored snapshots (ID: capture time):
@@ -81,6 +87,8 @@ var values = [
   {{range .SpansList.Spans}}
     {
       operation: {{.Operation}},
+      tags: {{tags .}},
+      hidden_tags: {{hiddenTags .}},
       spanID: "{{.SpanID}}",
       startTime: {{formatTime .StartTime}},
       relativeTime: {{since .StartTime $capturedAt}},
@@ -101,6 +109,29 @@ function toggleStackVisibility(spanID) {
   }
 };
 
+function toggleVisibility(elementID) {
+  console.log(window.event.target);
+  var elem = document.getElementById(elementID);
+  if (elem.style.display === "none") {
+    elem.style.display = "block";
+  } else {
+    elem.style.display = "none";
+  }
+};
+
+function toggle(event) {
+  console.log(event.target);
+  console.log(event.target.dataset.toggleTarget);
+  btn = event.target;
+  var target = document.getElementById(btn.dataset.toggleTarget);
+  if (target.style.display === "none") {
+    target.style.display = "block";
+    btn.innerText = btn.dataset.hide;
+  } else {
+    target.style.display = "none";
+    btn.innerText = btn.dataset.show;
+  }
+};
 
 // openTrace opens the requested trace in a new window.
 function openTrace(traceID) {
@@ -115,7 +146,10 @@ var options = {
     return `
         <tr>
           <td>
-            ${values.operation} <a href="javascript:openTrace('${values.traceID}')">[+]</a>
+            ${values.operation} <a href="javascript:openTrace('${values.traceID}')">[+]</a><br>
+            <span class="tags">${values.tags}</span>
+            <button data-toggle-target='hiddenTags-${values.spanID}' data-show="more" data-hide="less" onclick="toggle(event)">more</button>
+            <div style="display:none;" class="tags" id="hiddenTags-${values.spanID}">${values.hidden_tags}</div>
           </td>
           <td>
             <div style="min-width:12em">
