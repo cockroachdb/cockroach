@@ -12,15 +12,12 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -114,8 +111,7 @@ type scanNode struct {
 // scanColumnsConfig controls the "schema" of a scan node.
 type scanColumnsConfig struct {
 	// wantedColumns contains all the columns are part of the scan node schema,
-	// in this order (with the caveat that the addUnwantedAsHidden flag below
-	// can add more columns).
+	// in this order. Must not be nil (even if empty).
 	wantedColumns []tree.ColumnID
 
 	// invertedColumn maps the column ID of the inverted column (if it exists)
@@ -127,14 +123,6 @@ type scanColumnsConfig struct {
 		colID tree.ColumnID
 		typ   *types.T
 	}
-
-	// When set, the columns that are not in the wantedColumns list are added to
-	// the list of columns as hidden columns.
-	addUnwantedAsHidden bool
-
-	// If visibility is set to execinfra.ScanVisibilityPublicAndNotPublic, then
-	// mutation columns can be added to the list of columns.
-	visibility execinfrapb.ScanVisibility
 }
 
 func (cfg scanColumnsConfig) assertValidReqOrdering(reqOrdering exec.OutputOrdering) error {
@@ -244,11 +232,11 @@ func initColsForScan(
 	desc catalog.TableDescriptor, colCfg scanColumnsConfig,
 ) (cols []catalog.Column, err error) {
 	if colCfg.wantedColumns == nil {
-		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
+		return nil, errors.AssertionFailedf("wantedColumns is nil")
 	}
 
-	cols = make([]catalog.Column, 0, len(desc.DeletableColumns()))
-	for _, wc := range colCfg.wantedColumns {
+	cols = make([]catalog.Column, len(colCfg.wantedColumns))
+	for i, wc := range colCfg.wantedColumns {
 		id := wc
 		col, err := desc.FindColumnWithID(id)
 		if err != nil {
@@ -261,27 +249,7 @@ func initColsForScan(
 			col = col.DeepCopy()
 			col.ColumnDesc().Type = vc.typ
 		}
-		cols = append(cols, col)
-	}
-
-	if colCfg.addUnwantedAsHidden {
-		for _, c := range desc.PublicColumns() {
-			found := false
-			for _, wc := range colCfg.wantedColumns {
-				if wc == c.GetID() {
-					found = true
-					break
-				}
-			}
-			if !found {
-				// NB: we could amortize this allocation using a second slice,
-				// but addUnwantedAsHidden is only used by scrub, so doing so
-				// doesn't seem worth it.
-				col := c.DeepCopy()
-				col.ColumnDesc().Hidden = true
-				cols = append(cols, col)
-			}
-		}
+		cols[i] = col
 	}
 
 	return cols, nil
