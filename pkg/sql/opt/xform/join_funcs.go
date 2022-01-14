@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1501,35 +1502,21 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	// value of private.LookupColsAreTableKey.
 	if private.JoinType != opt.AntiJoinOp {
 		if (private.JoinType != opt.SemiJoinOp || len(on) > 0) && !private.LookupColsAreTableKey {
-			return
+			return nil, nil, false
 		}
 	}
-
-	// The local region must be set, or we won't be able to determine which
-	// partitions are local.
-	localRegion, found := c.e.evalCtx.Locality.Find(regionKey)
-	if !found {
-		return nil, nil, false
-	}
-
-	// There should be at least two partitions, or we won't be able to
-	// differentiate between local and remote partitions.
 	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
 	index := tabMeta.Table.Index(private.Index)
-	if index.PartitionCount() < 2 {
-		return nil, nil, false
-	}
 
-	// Determine whether the index has both local and remote partitions.
-	var localPartitions util.FastIntSet
-	for i, n := 0, index.PartitionCount(); i < n; i++ {
-		part := index.Partition(i)
-		if isZoneLocal(part.Zone(), localRegion) {
-			localPartitions.Add(i)
-		}
-	}
-	if localPartitions.Len() == 0 || localPartitions.Len() == index.PartitionCount() {
-		// The partitions are either all local or all remote.
+	// The PrefixSorter has collected all the prefixes from all the different
+	// partitions (remembering which ones came from local partitions), and has
+	// sorted them so that longer prefixes come before shorter prefixes. For each
+	// span in the scanConstraint, we will iterate through the list of prefixes
+	// until we find a match, so ordering them with longer prefixes first ensures
+	// that the correct match is found. The PrefixSorter is only non-nil when this
+	// index has at least one local and one remote partition.
+	var ps *partition.PrefixSorter
+	if ps, ok = tabMeta.IndexPartitionLocality(private.Index, index, c.e.evalCtx); !ok {
 		return nil, nil, false
 	}
 
@@ -1549,7 +1536,7 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	}
 
 	// Determine whether the values target both local and remote partitions.
-	localValOrds := c.getLocalValues(index, localPartitions, vals)
+	localValOrds := c.getLocalValues(vals, ps)
 	if localValOrds.Len() == 0 || localValOrds.Len() == len(vals) {
 		// The values target all local or all remote partitions.
 		return nil, nil, false
@@ -1599,31 +1586,19 @@ func (c CustomFuncs) getConstPrefixFilter(
 // getLocalValues returns the indexes of the values in the given Datums slice
 // that target local partitions.
 func (c *CustomFuncs) getLocalValues(
-	index cat.Index, localPartitions util.FastIntSet, values tree.Datums,
+	values tree.Datums, ps *partition.PrefixSorter,
 ) util.FastIntSet {
-	// Collect all the prefixes from all the different partitions (remembering
-	// which ones came from local partitions), and sort them so that longer
-	// prefixes come before shorter prefixes. For each value in the given Datums,
-	// we will iterate through the list of prefixes until we find a match, so
-	// ordering them with longer prefixes first ensures that the correct match is
-	// found.
-	allPrefixes := getSortedPrefixes(index, localPartitions)
-
-	// TODO(rytaft): Sort the prefixes by key in addition to length, and use
-	// binary search here.
+	// The PrefixSorter has collected all the prefixes from all the different
+	// partitions (remembering which ones came from local partitions), and has
+	// sorted them so that longer prefixes come before shorter prefixes. For each
+	// span in the scanConstraint, we will iterate through the list of prefixes
+	// until we find a match, so ordering them with longer prefixes first ensures
+	// that the correct match is found.
 	var localVals util.FastIntSet
 	for i, val := range values {
-		for j := range allPrefixes {
-			prefix := allPrefixes[j].prefix
-			isLocal := allPrefixes[j].isLocal
-			if len(prefix) > 1 {
-				continue
-			}
-			if val.Compare(c.e.evalCtx, prefix[0]) == 0 {
-				if isLocal {
-					localVals.Add(i)
-				}
-				break
+		if match, ok := constraint.FindMatchOnSingleColumn(val, ps); ok {
+			if match.IsLocal {
+				localVals.Add(i)
 			}
 		}
 	}
