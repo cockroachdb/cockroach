@@ -138,6 +138,7 @@ DOCS_SRCS = [
   "//docs/generated/sql/bnf:joined_table.bnf",
   "//docs/generated/sql/bnf:like_table_option_list.bnf",
   "//docs/generated/sql/bnf:limit_clause.bnf",
+  "//docs/generated/sql/bnf:move_cursor_stmt.bnf",
   "//docs/generated/sql/bnf:not_null_column_level.bnf",
   "//docs/generated/sql/bnf:offset_clause.bnf",
   "//docs/generated/sql/bnf:on_conflict.bnf",

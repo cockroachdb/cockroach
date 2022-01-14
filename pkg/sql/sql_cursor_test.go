@@ -22,8 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Make sure that preparing a DECLARE doesn't cause problems.
-func TestPrepareDeclare(t *testing.T) {
+// Make sure that preparing cursor statements don't cause problems.
+func TestPrepareCursors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -66,6 +66,12 @@ func TestPrepareDeclare(t *testing.T) {
 		require.Equal(t, 2, actual)
 		more = r.Next()
 		require.Equal(t, false, more)
+
+		stmt, err = conn.PrepareContext(ctx, "MOVE 1 foo")
+		require.NoError(t, err)
+		_, err = stmt.Exec()
+		require.NoError(t, err)
+
 		_, err = conn.ExecContext(ctx, "COMMIT")
 		require.NoError(t, err)
 	})
@@ -93,6 +99,11 @@ func TestPrepareDeclare(t *testing.T) {
 		require.Equal(t, 2, actual)
 		more = r.Next()
 		require.Equal(t, false, more)
+
+		stmt, err = tx.Prepare("MOVE 1 foo")
+		require.NoError(t, err)
+		_, err = stmt.Exec()
+		require.NoError(t, err)
 
 		require.NoError(t, tx.Commit())
 	})
