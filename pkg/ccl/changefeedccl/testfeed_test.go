@@ -13,9 +13,11 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -1262,6 +1264,7 @@ func (k *kafkaFeed) Close() error {
 
 type webhookFeedFactory struct {
 	enterpriseFeedFactory
+	useSecureServer bool
 }
 
 var _ cdctest.TestFeedFactory = (*webhookFeedFactory)(nil)
@@ -1270,12 +1273,14 @@ var _ cdctest.TestFeedFactory = (*webhookFeedFactory)(nil)
 func makeWebhookFeedFactory(
 	srv serverutils.TestServerInterface, db *gosql.DB,
 ) cdctest.TestFeedFactory {
+	useSecure := rand.Float32() < 0.5
 	return &webhookFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
 			s:  srv,
 			db: db,
 			di: newDepInjector(srv),
 		},
+		useSecureServer: useSecure,
 	}
 }
 
@@ -1286,19 +1291,40 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
+	var sinkDest *cdctest.MockWebhookSink
+
 	cert, _, err := cdctest.NewCACertBase64Encoded()
 	if err != nil {
 		return nil, err
 	}
-	sinkDest, err := cdctest.StartMockWebhookSink(cert)
-	if err != nil {
-		return nil, err
+
+	if f.useSecureServer {
+		sinkDest, err = cdctest.StartMockWebhookSinkSecure(cert)
+		if err != nil {
+			return nil, err
+		}
+
+		clientCertPEM, clientKeyPEM, err := cdctest.GenerateClientCertAndKey(cert)
+		if err != nil {
+			return nil, err
+		}
+
+		if createStmt.SinkURI == nil {
+			createStmt.SinkURI = tree.NewStrVal(
+				fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true&client_cert=%s&client_key=%s", sinkDest.URL(), base64.StdEncoding.EncodeToString(clientCertPEM), base64.StdEncoding.EncodeToString(clientKeyPEM)))
+		}
+	} else {
+		sinkDest, err = cdctest.StartMockWebhookSink(cert)
+		if err != nil {
+			return nil, err
+		}
+
+		if createStmt.SinkURI == nil {
+			createStmt.SinkURI = tree.NewStrVal(
+				fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL()))
+		}
 	}
 
-	if createStmt.SinkURI == nil {
-		createStmt.SinkURI = tree.NewStrVal(
-			fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL()))
-	}
 	ss := &sinkSynchronizer{}
 	wrapSink := func(s Sink) Sink {
 		return &notifyFlushSink{Sink: s, sync: ss}

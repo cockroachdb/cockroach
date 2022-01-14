@@ -52,6 +52,23 @@ func StartMockWebhookSink(certificate *tls.Certificate) (*MockWebhookSink, error
 	return s, nil
 }
 
+// StartMockWebhookSinkSecure creates and starts a mock webhook sink server that
+// requires clients to provide client certificates for authentication
+func StartMockWebhookSinkSecure(certificate *tls.Certificate) (*MockWebhookSink, error) {
+	s := makeMockWebhookSink()
+	if certificate == nil {
+		return nil, errors.Errorf("Must pass a CA cert when creating a mock webhook sink.")
+	}
+
+	s.server.TLS = &tls.Config{
+		Certificates: []tls.Certificate{*certificate},
+		ClientAuth:   tls.RequireAnyClientCert,
+	}
+
+	s.server.StartTLS()
+	return s, nil
+}
+
 // StartMockWebhookSinkWithBasicAuth creates and starts a mock webhook sink for
 // tests with basic username/password auth.
 func StartMockWebhookSinkWithBasicAuth(

@@ -9,6 +9,7 @@
 package cdctest
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -116,6 +117,55 @@ func PemEncodePrivateKey(key *rsa.PrivateKey) (string, error) {
 // PemEncodeCert encodes cert in PEM format
 func PemEncodeCert(cert []byte) (string, error) {
 	return pemEncode("CERTIFICATE", cert)
+}
+
+// GenerateClientCertAndKey generates a client certificate and client key that
+// is signed by the given caCert
+func GenerateClientCertAndKey(caCert *tls.Certificate) ([]byte, []byte, error) {
+	clientCert := &x509.Certificate{
+		SerialNumber: big.NewInt(1658),
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		NotBefore:    timeutil.Now(),
+		NotAfter:     timeutil.Now().Add(certLifetime),
+		SubjectKeyId: []byte{1, 2, 3, 4, 6},
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+
+	clientKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cert, err := x509.ParseCertificate(caCert.Certificate[0])
+	if err != nil {
+		return nil, nil, err
+	}
+
+	clientCertBytes, err := x509.CreateCertificate(rand.Reader, clientCert, cert, &clientKey.PublicKey, caCert.PrivateKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	clientCertPEM := new(bytes.Buffer)
+	err = pem.Encode(clientCertPEM, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: clientCertBytes,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	clientKeyPEM := new(bytes.Buffer)
+	err = pem.Encode(clientKeyPEM, &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(clientKey),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return clientCertPEM.Bytes(), clientKeyPEM.Bytes(), nil
 }
 
 func randomSerial() (*big.Int, error) {
