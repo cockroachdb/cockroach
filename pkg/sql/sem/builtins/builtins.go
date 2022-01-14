@@ -6694,7 +6694,8 @@ func getTimeAdditionalDesc(preferTZOverload bool) (string, string) {
 }
 
 func txnTSOverloads(preferTZOverload bool) []tree.Overload {
-	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
+	// tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
+	tzAdditionalDesc, _ := getTimeAdditionalDesc(preferTZOverload)
 	return []tree.Overload{
 		{
 			Types:             tree.ArgTypes{},
@@ -6706,23 +6707,23 @@ func txnTSOverloads(preferTZOverload bool) []tree.Overload {
 			Info:       txnTSDoc + tzAdditionalDesc,
 			Volatility: tree.VolatilityStable,
 		},
-		{
-			Types:             tree.ArgTypes{},
-			ReturnType:        tree.FixedReturnType(types.Timestamp),
-			PreferredOverload: !preferTZOverload,
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
-			},
-			Info:       txnTSDoc + noTZAdditionalDesc,
-			Volatility: tree.VolatilityStable,
-		},
-		{
-			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.Date),
-			Fn:         currentDate,
-			Info:       txnTSDoc,
-			Volatility: tree.VolatilityStable,
-		},
+		// {
+		// 	Types:             tree.ArgTypes{},
+		// 	ReturnType:        tree.FixedReturnType(types.Timestamp),
+		// 	PreferredOverload: !preferTZOverload,
+		// 	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		// 		return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
+		// 	},
+		// 	Info:       txnTSDoc + noTZAdditionalDesc,
+		// 	Volatility: tree.VolatilityStable,
+		// },
+		// {
+		// 	Types:      tree.ArgTypes{},
+		// 	ReturnType: tree.FixedReturnType(types.Date),
+		// 	Fn:         currentDate,
+		// 	Info:       txnTSDoc,
+		// 	Volatility: tree.VolatilityStable,
+		// },
 	}
 }
 
