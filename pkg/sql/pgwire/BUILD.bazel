@@ -62,6 +62,7 @@ go_library(
         "//pkg/util/timetz",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
@@ -69,6 +70,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
         "@com_github_xdg_go_scram//:scram",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 
