@@ -43,9 +43,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq/oid"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // conn implements a pgwire network connection (version 3 of the protocol,
@@ -249,6 +251,7 @@ func (c *conn) serveImpl(
 	} else {
 		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 	}
+	tracing.SpanFromContext(ctx).SetTag("user", attribute.StringValue(c.sessionArgs.User.Normalized()))
 
 	inTestWithoutSQL := sqlServer == nil
 	if !inTestWithoutSQL {
