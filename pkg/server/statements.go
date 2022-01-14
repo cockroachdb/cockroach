@@ -51,7 +51,8 @@ func (s *statusServer) Statements(
 	}
 
 	localReq := &serverpb.StatementsRequest{
-		NodeID: "local",
+		NodeID:    "local",
+		FetchMode: req.FetchMode,
 	}
 
 	if len(req.NodeID) > 0 {
@@ -60,7 +61,11 @@ func (s *statusServer) Statements(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			return statementsLocal(ctx, s.gossip.NodeID.Get(), s.admin.server.sqlServer)
+			return statementsLocal(
+				ctx,
+				s.gossip.NodeID.Get(),
+				s.admin.server.sqlServer,
+				req.FetchMode)
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)
 		if err != nil {
@@ -100,16 +105,27 @@ func (s *statusServer) Statements(
 }
 
 func statementsLocal(
-	ctx context.Context, nodeID roachpb.NodeID, sqlServer *SQLServer,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	sqlServer *SQLServer,
+	fetchMode serverpb.StatementsRequest_FetchMode,
 ) (*serverpb.StatementsResponse, error) {
-	stmtStats, err := sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats(ctx)
-	if err != nil {
-		return nil, err
+	var stmtStats []roachpb.CollectedStatementStatistics
+	var txnStats []roachpb.CollectedTransactionStatistics
+	var err error
+
+	if fetchMode != serverpb.StatementsRequest_TxnStatsOnly {
+		stmtStats, err = sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	txnStats, err := sqlServer.pgServer.SQLServer.GetUnscrubbedTxnStats(ctx)
-	if err != nil {
-		return nil, err
+	if fetchMode != serverpb.StatementsRequest_StmtStatsOnly {
+		txnStats, err = sqlServer.pgServer.SQLServer.GetUnscrubbedTxnStats(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	lastReset := sqlServer.pgServer.SQLServer.GetStmtStatsLastReset()
