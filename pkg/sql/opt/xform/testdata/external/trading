@@ -714,7 +714,7 @@ project
       │    │    ├── stats: [rows=478.646617]
       │    │    ├── key: (3,5)
       │    │    ├── fd: ()-->(1,2,4,20,21), (3,5)-->(6,7)
-      │    │    ├── ordering: -3 opt(1,2,4) [actual: -3]
+      │    │    ├── ordering: -3 opt(1,2,4,20,21) [actual: -3]
       │    │    ├── limit hint: 100.00
       │    │    ├── index-join transactiondetails
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null
@@ -862,7 +862,7 @@ project
  │    │         │    │    │    ├── stats: [rows=19000]
  │    │         │    │    │    ├── key: (1)
  │    │         │    │    │    ├── fd: ()-->(42,43), (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │    │         │    │    │    ├── ordering: +1
+ │    │         │    │    │    ├── ordering: +1 opt(42,43) [actual: +1]
  │    │         │    │    │    ├── select
  │    │         │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
  │    │         │    │    │    │    ├── immutable
