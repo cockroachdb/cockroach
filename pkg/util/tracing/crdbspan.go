@@ -121,6 +121,14 @@ type crdbSpanMu struct {
 	// SetTag(). They will be appended to the tags in logTags when someone needs
 	// to actually observe the total set of tags that is a part of this Span.
 	tags []attribute.KeyValue
+	// lazyTags are tags whose values are only string-ified on demand. Each lazy
+	// tag is expected to implement either fmt.Stringer or LazyTag.
+	lazyTags []lazyTag
+}
+
+type lazyTag struct {
+	Key   string
+	Value interface{}
 }
 
 type recordingState struct {
@@ -497,6 +505,33 @@ func (s *crdbSpan) setTagLocked(key string, value attribute.Value) {
 	s.mu.tags = append(s.mu.tags, attribute.KeyValue{Key: k, Value: value})
 }
 
+// setLazyTagLocked sets a tag that's only stringified if s' recording is
+// collected.
+//
+// value is expected to implement either Stringer or LazyTag.
+//
+// key is expected to not match the key of a non-lazy tag.
+func (s *crdbSpan) setLazyTagLocked(key string, value interface{}) {
+	for i := range s.mu.lazyTags {
+		if s.mu.lazyTags[i].Key == key {
+			s.mu.lazyTags[i].Value = value
+			return
+		}
+	}
+	s.mu.lazyTags = append(s.mu.lazyTags, lazyTag{Key: key, Value: value})
+}
+
+// getLazyTagLocked returns the value of the tag with the given key. If that tag
+// doesn't exist, the bool retval is false.
+func (s *crdbSpan) getLazyTagLocked(key string) (interface{}, bool) {
+	for i := range s.mu.lazyTags {
+		if s.mu.lazyTags[i].Key == key {
+			return s.mu.lazyTags[i].Value, true
+		}
+	}
+	return nil, false
+}
+
 // record includes a log message in s' recording.
 func (s *crdbSpan) record(msg redact.RedactableString) {
 	if s.recordingType() != RecordingVerbose {
@@ -696,6 +731,18 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for _, kv := range s.mu.tags {
 			// We encode the tag values as strings.
 			addTag(string(kv.Key), kv.Value.Emit())
+		}
+		for _, kv := range s.mu.lazyTags {
+			switch v := kv.Value.(type) {
+			case LazyTag:
+				for _, tag := range v.Render() {
+					addTag(string(tag.Key), tag.Value.Emit())
+				}
+			case fmt.Stringer:
+				addTag(kv.Key, v.String())
+			default:
+				addTag(kv.Key, fmt.Sprintf("<can't render %T>", kv.Value))
+			}
 		}
 	}
 
