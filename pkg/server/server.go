@@ -1487,7 +1487,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
 	s.debug.RegisterClosedTimestampSideTransport(s.ctSender, s.node.storeCfg.ClosedTimestampReceiver)
-	s.debug.RegisterTracez(s.cfg.Tracer)
 
 	s.ctSender.Run(ctx, state.nodeID)
 
