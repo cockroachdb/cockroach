@@ -7,7 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-package amazon
+
+package cloud
 
 import (
 	"bytes"
@@ -15,29 +16,33 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/require"
 )
 
-type testKMSEnv struct {
-	settings         *cluster.Settings
-	externalIOConfig *base.ExternalIODirConfig
+// TestKMSEnv holds the KMS configuration and the cluster settings
+type TestKMSEnv struct {
+	Settings         *cluster.Settings
+	ExternalIOConfig *base.ExternalIODirConfig
 }
 
-var _ cloud.KMSEnv = &testKMSEnv{}
+var _ KMSEnv = &TestKMSEnv{}
 
-func (e *testKMSEnv) ClusterSettings() *cluster.Settings {
-	return e.settings
+// ClusterSettings returns the cluster settings
+func (e *TestKMSEnv) ClusterSettings() *cluster.Settings {
+	return e.Settings
 }
 
-func (e *testKMSEnv) KMSConfig() *base.ExternalIODirConfig {
-	return e.externalIOConfig
+// KMSConfig returns the configurable settings of the KMS
+func (e *TestKMSEnv) KMSConfig() *base.ExternalIODirConfig {
+	return e.ExternalIOConfig
 }
 
-func testEncryptDecrypt(t *testing.T, kmsURI string, env testKMSEnv) {
+// KMSEncryptDecrypt is the method used to test if the given KMS can
+// correctly encrypt and decrypt a string
+func KMSEncryptDecrypt(t *testing.T, kmsURI string, env TestKMSEnv) {
 	ctx := context.Background()
-	kms, err := cloud.KMSFromURI(kmsURI, &env)
+	kms, err := KMSFromURI(kmsURI, &env)
 	require.NoError(t, err)
 
 	t.Run("simple encrypt decrypt", func(t *testing.T) {
@@ -50,5 +55,7 @@ func testEncryptDecrypt(t *testing.T, kmsURI string, env testKMSEnv) {
 		require.NoError(t, err)
 
 		require.True(t, bytes.Equal(decryptedBytes, []byte(sampleBytes)))
+
+		require.NoError(t, kms.Close())
 	})
 }

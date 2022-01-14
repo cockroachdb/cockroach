@@ -163,7 +163,7 @@ require (
 
 require (
 	cloud.google.com/go v0.99.0 // indirect
-	cloud.google.com/go/kms v1.1.0 // indirect
+	cloud.google.com/go/kms v1.1.0
 	github.com/Azure/azure-pipeline-go v0.2.3 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
