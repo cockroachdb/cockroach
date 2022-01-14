@@ -163,10 +163,20 @@ func TestTenantAuthRequest(t *testing.T) {
 		h := roachpb.RequestHeaderFromSpan(s)
 		return &roachpb.ScanRequest{RequestHeader: h}
 	}
-	makeAdminReq := func(key string) roachpb.Request {
+	makeDisallowedAdminReq := func(key string) roachpb.Request {
+		s := makeSpan(key)
+		h := roachpb.RequestHeader{Key: s.Key}
+		return &roachpb.AdminUnsplitRequest{RequestHeader: h}
+	}
+	makeAdminSplitReq := func(key string) roachpb.Request {
 		s := makeSpan(key)
 		h := roachpb.RequestHeaderFromSpan(s)
 		return &roachpb.AdminSplitRequest{RequestHeader: h, SplitKey: s.Key}
+	}
+	makeAdminScatterReq := func(key string) roachpb.Request {
+		s := makeSpan(key)
+		h := roachpb.RequestHeaderFromSpan(s)
+		return &roachpb.AdminScatterRequest{RequestHeader: h}
 	}
 	makeReqs := func(reqs ...roachpb.Request) []roachpb.RequestUnion {
 		ru := make([]roachpb.RequestUnion, len(reqs))
@@ -249,35 +259,99 @@ func TestTenantAuthRequest(t *testing.T) {
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
-					makeAdminReq("a"),
+					makeDisallowedAdminReq("a"),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: `request \[1 AdmUnsplit\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
-					makeAdminReq(prefix(10, "a")),
+					makeDisallowedAdminReq(prefix(10, "a")),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: `request \[1 AdmUnsplit\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
-					makeAdminReq(prefix(50, "a")),
+					makeDisallowedAdminReq(prefix(50, "a")),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: `request \[1 AdmUnsplit\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
-					makeAdminReq(prefix(10, "a")),
+					makeDisallowedAdminReq(prefix(10, "a")),
 					makeReq(prefix(10, "a"), prefix(10, "b")),
 				)},
-				expErr: `request \[1 Scan, 1 AdmSplit\] not permitted`,
+				expErr: `request \[1 Scan, 1 AdmUnsplit\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq(prefix(10, "a"), prefix(10, "b")),
-					makeAdminReq(prefix(10, "a")),
+					makeDisallowedAdminReq(prefix(10, "a")),
 				)},
-				expErr: `request \[1 Scan, 1 AdmSplit\] not permitted`,
+				expErr: `request \[1 Scan, 1 AdmUnsplit\] not permitted`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminSplitReq("a"),
+				)},
+				expErr: `requested key span a{-\\x00} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminSplitReq(prefix(10, "a")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminSplitReq(prefix(50, "a")),
+				)},
+				expErr: `requested key span /Tenant/50"a{"-\\x00"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminSplitReq(prefix(10, "a")),
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+					makeAdminSplitReq(prefix(10, "a")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminScatterReq("a"),
+				)},
+				expErr: `requested key span a{-\\x00} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminScatterReq(prefix(10, "a")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminScatterReq(prefix(50, "a")),
+				)},
+				expErr: `requested key span /Tenant/50"a{"-\\x00"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminScatterReq(prefix(10, "a")),
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+					makeAdminScatterReq(prefix(10, "a")),
+				)},
+				expErr: noError,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
