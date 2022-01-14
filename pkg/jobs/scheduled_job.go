@@ -183,8 +183,14 @@ func (j *ScheduledJob) Frequency() (time.Duration, error) {
 			"parsing schedule expression: %q; it must be a valid cron expression",
 			j.rec.ScheduleExpr)
 	}
-	next := expr.Next(j.env.Now())
-	nextNext := expr.Next(next)
+	next, err := CronParseNext(expr, j.env.Now(), j.rec.ScheduleExpr)
+	if err != nil {
+		return 0, err
+	}
+	nextNext, err := CronParseNext(expr, next, j.rec.ScheduleExpr)
+	if err != nil {
+		return 0, err
+	}
 	return nextNext.Sub(next), nil
 }
 
@@ -198,7 +204,11 @@ func (j *ScheduledJob) ScheduleNextRun() error {
 	if err != nil {
 		return errors.Wrapf(err, "parsing schedule expression: %q", j.rec.ScheduleExpr)
 	}
-	j.SetNextRun(expr.Next(j.env.Now()))
+	nextRun, err := CronParseNext(expr, j.env.Now(), j.rec.ScheduleExpr)
+	if err != nil {
+		return err
+	}
+	j.SetNextRun(nextRun)
 	return nil
 }
 

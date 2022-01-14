@@ -74,7 +74,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 				}))
 
 			// Verify the job has expected nextRun time.
-			expectedRunTime := cronexpr.MustParse("@hourly").Next(h.env.Now())
+			expectedRunTime := getNextRunTime(t, "@hourly", h.env.Now())
 			loaded := h.loadSchedule(t, j.ScheduleID())
 			require.Equal(t, expectedRunTime, loaded.NextRun())
 
@@ -92,7 +92,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 			if wait == jobspb.ScheduleDetails_WAIT {
 				expectedRunTime = h.env.Now().Add(recheckRunningAfter)
 			} else {
-				expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
+				expectedRunTime = getNextRunTime(t, "@hourly", h.env.Now())
 			}
 			loaded = h.loadSchedule(t, j.ScheduleID())
 			require.Equal(t, expectedRunTime, loaded.NextRun())
@@ -132,7 +132,7 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 				}))
 
 			// Verify the job has expected nextRun time.
-			expectedRunTime := cronexpr.MustParse("@hourly").Next(h.env.Now())
+			expectedRunTime := getNextRunTime(t, "@hourly", h.env.Now())
 			loaded := h.loadSchedule(t, j.ScheduleID())
 			require.Equal(t, expectedRunTime, loaded.NextRun())
 
@@ -146,7 +146,7 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 					return s.executeSchedules(ctx, allSchedules, txn)
 				}))
 
-			expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
+			expectedRunTime = getNextRunTime(t, "@hourly", h.env.Now())
 			loaded = h.loadSchedule(t, j.ScheduleID())
 			require.Equal(t, expectedRunTime, loaded.NextRun())
 		})
@@ -172,7 +172,7 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 		}))
 
 	// Verify the job has expected nextRun time.
-	expectedRunTime := cronexpr.MustParse("@hourly").Next(h.env.Now())
+	expectedRunTime := getNextRunTime(t, "@hourly", h.env.Now())
 	loaded := h.loadSchedule(t, j.ScheduleID())
 	require.Equal(t, expectedRunTime, loaded.NextRun())
 
@@ -186,9 +186,17 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 			return s.executeSchedules(ctx, allSchedules, txn)
 		}))
 
-	expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
+	expectedRunTime = getNextRunTime(t, "@hourly", h.env.Now())
 	loaded = h.loadSchedule(t, j.ScheduleID())
 	require.Equal(t, expectedRunTime, loaded.NextRun())
+}
+
+func getNextRunTime(t *testing.T, cron string, fromNow time.Time) time.Time {
+	t.Helper()
+	expr := cronexpr.MustParse(cron)
+	nextRun, err := CronParseNext(expr, fromNow, cron)
+	require.NoError(t, err)
+	return nextRun
 }
 
 func TestJobSchedulerDaemonInitialScanDelay(t *testing.T) {
@@ -534,7 +542,11 @@ func TestJobSchedulerRetriesFailed(t *testing.T) {
 	}{
 		{jobspb.ScheduleDetails_PAUSE_SCHED, time.Time{}},
 		{jobspb.ScheduleDetails_RETRY_SOON, execTime.Add(retryFailedJobAfter).Round(time.Microsecond)},
-		{jobspb.ScheduleDetails_RETRY_SCHED, cron.Next(execTime).Round(time.Microsecond)},
+		{jobspb.ScheduleDetails_RETRY_SCHED, func() time.Time {
+			nextRun, err := CronParseNext(cron, execTime, "@hourly")
+			require.NoError(t, err)
+			return nextRun.Round(time.Microsecond)
+		}()},
 	} {
 		t.Run(tc.onError.String(), func(t *testing.T) {
 			h.env.SetTime(startTime)

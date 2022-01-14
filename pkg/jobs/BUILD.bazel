@@ -17,6 +17,7 @@ go_library(
         "scheduled_job_executor.go",
         "testing_knobs.go",
         "update.go",
+        "utils.go",
         "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs",
