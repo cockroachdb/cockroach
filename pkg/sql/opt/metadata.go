@@ -467,13 +467,14 @@ func (md *Metadata) DuplicateTable(
 	}
 
 	md.tables = append(md.tables, TableMeta{
-		MetaID:                 newTabID,
-		Table:                  tabMeta.Table,
-		Alias:                  tabMeta.Alias,
-		IgnoreForeignKeys:      tabMeta.IgnoreForeignKeys,
-		Constraints:            constraints,
-		ComputedCols:           computedCols,
-		partialIndexPredicates: partialIndexPredicates,
+		MetaID:                   newTabID,
+		Table:                    tabMeta.Table,
+		Alias:                    tabMeta.Alias,
+		IgnoreForeignKeys:        tabMeta.IgnoreForeignKeys,
+		Constraints:              constraints,
+		ComputedCols:             computedCols,
+		partialIndexPredicates:   partialIndexPredicates,
+		indexPartitionLocalities: tabMeta.indexPartitionLocalities,
 	})
 
 	return newTabID
