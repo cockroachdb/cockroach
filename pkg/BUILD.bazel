@@ -284,6 +284,7 @@ ALL_TESTS = [
     "//pkg/sql/opt/optgen/lang:lang_test",
     "//pkg/sql/opt/ordering:ordering_test",
     "//pkg/sql/opt/partialidx:partialidx_test",
+    "//pkg/sql/opt/partition:partition_test",
     "//pkg/sql/opt/props/physical:physical_test",
     "//pkg/sql/opt/props:props_test",
     "//pkg/sql/opt/testutils/opttester:opttester_test",

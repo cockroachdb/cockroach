@@ -592,6 +592,7 @@ func (b *Builder) buildScan(
 
 	b.addCheckConstraintsForTable(tabMeta)
 	b.addComputedColsForTable(tabMeta)
+	b.populateIndexPartitionLocalitiesForTable(tabMeta)
 
 	outScope.expr = b.factory.ConstructScan(&private)
 
@@ -712,6 +713,15 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	}
 	if len(filters) > 0 {
 		tabMeta.SetConstraints(&filters)
+	}
+}
+
+// populateIndexPartitionLocalitiesForTable populates the map in tabMeta
+// describing the localities of partitions in partitioned indexes.
+func (b *Builder) populateIndexPartitionLocalitiesForTable(tabMeta *opt.TableMeta) {
+	tab := tabMeta.Table
+	for i := 0; i < tab.IndexCount(); i++ {
+		_, _ = tabMeta.IndexPartitionLocality(i, tab.Index(i), b.evalCtx)
 	}
 }
 

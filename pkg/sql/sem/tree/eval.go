@@ -3821,6 +3821,14 @@ func (ctx *EvalContext) HasPlaceholders() bool {
 	return ctx.Placeholders != nil
 }
 
+const regionKey = "region"
+
+// GetLocalRegion returns the region name of the local processor
+// on which we're executing.
+func (ctx *EvalContext) GetLocalRegion() (regionName string, ok bool) {
+	return ctx.Locality.Find(regionKey)
+}
+
 // TimestampToDecimal converts the logical timestamp into a decimal
 // value with the number of nanoseconds in the integer part and the
 // logical counter in the decimal part.

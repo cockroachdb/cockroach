@@ -2265,3 +2265,509 @@ query I
 SELECT * FROM t73024
 ----
 100
+
+##############################################
+# Locality optimized scans with LIMIT clause #
+##############################################
+# In this section we are checking explains and tracing results of queries
+# similar to those in pkg/sql/opt/xform/testdata/rules/scan and
+# pkg/ccl/logictestccl/testdata/logic_test/regional_by_row, where rule firing
+# and query results are checked.
+
+statement ok
+SET database = multi_region_test_db
+
+# LIMIT clause enables locality optimized scan on a REGIONAL BY ROW table
+query T
+SELECT * FROM [
+EXPLAIN SELECT
+    pk, pk2, a, b, crdb_region
+FROM
+    regional_by_row_table
+LIMIT
+    1]
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ limit: 1
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@regional_by_row_table_pkey
+│     spans: [/'ap-southeast-2' - /'ap-southeast-2']
+│     limit: 1
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@regional_by_row_table_pkey
+      spans: [/'ca-central-1' - /'us-east-1']
+      limit: 1
+
+# Test partitioning on an index column
+statement ok
+CREATE TABLE regional_by_row_table_as4 (
+    pk
+        INT8 PRIMARY KEY,
+    a
+        INT8,
+    crdb_region_col
+        crdb_internal_region
+        AS (
+            CASE
+            WHEN (a % 3) = 0 THEN 'ap-southeast-2'
+            WHEN (a % 3) = 1 THEN 'ca-central-1'
+            ELSE 'us-east-1'
+            END
+        ) VIRTUAL
+        NOT NULL,
+    INDEX a_idx (a),
+    FAMILY (pk, a)
+)
+    LOCALITY REGIONAL BY ROW AS crdb_region_col
+
+statement ok
+INSERT
+INTO
+    regional_by_row_table_as4
+SELECT
+    g, g
+FROM
+    ROWS FROM (generate_series(1, 1000)) AS g (g)
+
+statement ok
+SET vectorize = "on"
+
+statement ok nodeidx=0
+SET database = multi_region_test_db;
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN 1 AND 100
+        LIMIT
+            10
+    );
+SET TRACING = off
+
+# If the rows are found in the local region, the other regions are not
+# searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/?/3/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/6/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/9/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/12/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/15/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/18/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/21/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/24/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/27/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/30/? -> <undecoded>
+output row: [10]
+
+statement ok
+SET vectorize = off
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN 1 AND 100
+        LIMIT
+            10
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/3/3 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/6/6 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/9/9 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/12/12 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/15/15 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/18/18 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/21/21 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/24/24 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/27/27 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/30/30 -> <undecoded>
+output row: [10]
+
+statement ok
+SET vectorize = "on"
+
+# Locality optimized scan with an IN list
+query T
+SELECT
+    *
+FROM
+    [
+        EXPLAIN (OPT)
+            SELECT
+                count(*)
+            FROM
+                (
+                    SELECT
+                        *
+                    FROM
+                        regional_by_row_table_as4@a_idx
+                    WHERE
+                        a
+                        IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+                            18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
+                    LIMIT
+                        5
+                )
+    ]
+OFFSET
+    2
+----
+ │    ├── scan regional_by_row_table_as4@a_idx
+ │    │    ├── constraint: /11/10/9
+ │    │    │    ├── [/'ap-southeast-2'/1 - /'ap-southeast-2'/2]
+ │    │    │    ├── [/'ap-southeast-2'/4 - /'ap-southeast-2'/6]
+ │    │    │    ├── [/'ap-southeast-2'/8 - /'ap-southeast-2'/8]
+ │    │    │    ├── [/'ap-southeast-2'/10 - /'ap-southeast-2'/12]
+ │    │    │    ├── [/'ap-southeast-2'/14 - /'ap-southeast-2'/19]
+ │    │    │    ├── [/'ap-southeast-2'/22 - /'ap-southeast-2'/25]
+ │    │    │    ├── [/'ap-southeast-2'/28 - /'ap-southeast-2'/28]
+ │    │    │    ├── [/'ap-southeast-2'/30 - /'ap-southeast-2'/30]
+ │    │    │    ├── [/'ap-southeast-2'/33 - /'ap-southeast-2'/34]
+ │    │    │    └── [/'ap-southeast-2'/39 - /'ap-southeast-2'/40]
+ │    │    ├── limit: 5
+ │    │    └── flags: force-index=a_idx
+ │    └── scan regional_by_row_table_as4@a_idx
+ │         ├── constraint: /16/15/14
+ │         │    ├── [/'ca-central-1'/1 - /'ca-central-1'/2]
+ │         │    ├── [/'ca-central-1'/4 - /'ca-central-1'/6]
+ │         │    ├── [/'ca-central-1'/8 - /'ca-central-1'/8]
+ │         │    ├── [/'ca-central-1'/10 - /'ca-central-1'/12]
+ │         │    ├── [/'ca-central-1'/14 - /'ca-central-1'/19]
+ │         │    ├── [/'ca-central-1'/22 - /'ca-central-1'/25]
+ │         │    ├── [/'ca-central-1'/28 - /'ca-central-1'/28]
+ │         │    ├── [/'ca-central-1'/30 - /'ca-central-1'/30]
+ │         │    ├── [/'ca-central-1'/33 - /'ca-central-1'/34]
+ │         │    ├── [/'ca-central-1'/39 - /'ca-central-1'/40]
+ │         │    ├── [/'us-east-1'/1 - /'us-east-1'/2]
+ │         │    ├── [/'us-east-1'/4 - /'us-east-1'/6]
+ │         │    ├── [/'us-east-1'/8 - /'us-east-1'/8]
+ │         │    ├── [/'us-east-1'/10 - /'us-east-1'/12]
+ │         │    ├── [/'us-east-1'/14 - /'us-east-1'/19]
+ │         │    ├── [/'us-east-1'/22 - /'us-east-1'/25]
+ │         │    ├── [/'us-east-1'/28 - /'us-east-1'/28]
+ │         │    ├── [/'us-east-1'/30 - /'us-east-1'/30]
+ │         │    ├── [/'us-east-1'/33 - /'us-east-1'/34]
+ │         │    └── [/'us-east-1'/39 - /'us-east-1'/40]
+ │         ├── limit: 5
+ │         └── flags: force-index=a_idx
+ └── aggregations
+      └── count-rows
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a
+            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+                18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
+        LIMIT
+            5
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/?/6/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/12/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/15/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/18/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/24/? -> <undecoded>
+output row: [5]
+
+statement ok
+SET vectorize = off
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a
+            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+                18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
+        LIMIT
+            5
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/6/6 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/12/12 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/15/15 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/18/18 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/24/24 -> <undecoded>
+output row: [5]
+
+statement ok
+SET vectorize = "on"
+
+# Locality optimized scan with multiple range predicates
+query T
+SELECT
+    *
+FROM
+    [
+        EXPLAIN (OPT)
+            SELECT
+                count(*)
+            FROM
+                (
+                    SELECT
+                        *
+                    FROM
+                        regional_by_row_table_as4@a_idx
+                    WHERE
+                        a BETWEEN -1 AND 10
+                        OR a BETWEEN 100 AND 110
+                        OR a BETWEEN 990 AND 1010
+                    LIMIT
+                        9
+                )
+    ]
+OFFSET
+    2
+----
+ │    ├── scan regional_by_row_table_as4@a_idx
+ │    │    ├── constraint: /11/10/9
+ │    │    │    ├── [/'ap-southeast-2'/-1 - /'ap-southeast-2'/10]
+ │    │    │    ├── [/'ap-southeast-2'/100 - /'ap-southeast-2'/110]
+ │    │    │    └── [/'ap-southeast-2'/990 - /'ap-southeast-2'/1010]
+ │    │    ├── limit: 9
+ │    │    └── flags: force-index=a_idx
+ │    └── scan regional_by_row_table_as4@a_idx
+ │         ├── constraint: /16/15/14
+ │         │    ├── [/'ca-central-1'/-1 - /'ca-central-1'/10]
+ │         │    ├── [/'ca-central-1'/100 - /'ca-central-1'/110]
+ │         │    ├── [/'ca-central-1'/990 - /'ca-central-1'/1010]
+ │         │    ├── [/'us-east-1'/-1 - /'us-east-1'/10]
+ │         │    ├── [/'us-east-1'/100 - /'us-east-1'/110]
+ │         │    └── [/'us-east-1'/990 - /'us-east-1'/1010]
+ │         ├── limit: 9
+ │         └── flags: force-index=a_idx
+ └── aggregations
+      └── count-rows
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN -1 AND 10
+            OR a BETWEEN 100 AND 110
+            OR a BETWEEN 990 AND 1010
+        LIMIT
+            9
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/?/3/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/6/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/9/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/102/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/105/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/108/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/990/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/993/? -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/?/996/? -> <undecoded>
+output row: [9]
+
+statement ok
+SET vectorize = off
+
+statement ok
+SET TRACING = "on", kv, results;
+SELECT
+    count(*)
+FROM
+    (
+        SELECT
+            *
+        FROM
+            regional_by_row_table_as4@a_idx
+        WHERE
+            a BETWEEN -1 AND 10
+            OR a BETWEEN 100 AND 110
+            OR a BETWEEN 990 AND 1010
+        LIMIT
+            9
+    );
+SET TRACING = off
+
+statement ok
+RESET vectorize
+
+# If the rows are found in the local region, the other regions are not searched.
+query T
+SELECT
+    message
+FROM
+    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+WHERE
+    message LIKE 'fetched:%' OR message LIKE 'output row%'
+ORDER BY
+    "ordinality" ASC
+----
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/3/3 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/6/6 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/9/9 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/102/102 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/105/105 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/108/108 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/990/990 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/993/993 -> <undecoded>
+fetched: /regional_by_row_table_as4/a_idx/'ap-southeast-2'/996/996 -> <undecoded>
+output row: [9]
+
+statement ok
+RESET vectorize
+
+# REGIONAL BY ROW AS table with an explicit crdb_internal_region check
+# constraint.
+statement ok
+CREATE TABLE regional_by_row_table_as1 (
+  pk int PRIMARY KEY,
+  a int,
+  b int,
+  crdb_region_col1 crdb_internal_region NOT NULL AS (
+    CASE
+      WHEN pk <= 10 THEN 'ca-central-1'
+      ELSE 'us-east-1'
+    END
+  ) VIRTUAL CHECK(crdb_region_col1 BETWEEN 'ap-southeast-2' AND 'us-east-1'),
+  crdb_region_col crdb_internal_region NOT NULL AS (
+    CASE
+      WHEN pk <= 1 THEN 'ca-central-1'
+      ELSE 'us-east-1'
+    END
+  ) VIRTUAL,
+  INDEX (a),
+  UNIQUE (b),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col1
+
+statement ok
+INSERT INTO regional_by_row_table_as1 (pk) VALUES (1), (2), (3), (10), (20)
+
+# An extra crdb_region check constraint should still allow locality optimized scan.
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as1 LIMIT 3] OFFSET 2
+----
+·
+• render
+│
+└── • union all
+    │ limit: 3
+    │
+    ├── • scan
+    │     missing stats
+    │     table: regional_by_row_table_as1@regional_by_row_table_as1_pkey
+    │     spans: [/'ap-southeast-2' - /'ap-southeast-2']
+    │     limit: 3
+    │
+    └── • scan
+          missing stats
+          table: regional_by_row_table_as1@regional_by_row_table_as1_pkey
+          spans: [/'ca-central-1' - /'us-east-1']
+          limit: 3
