@@ -93,6 +93,10 @@ type waitingState struct {
 	held          bool              // is the conflict a held lock?
 	queuedWriters int               // how many writers are waiting?
 	queuedReaders int               // how many readers are waiting?
+	// lockWaitStart represents the timestamp when the request started waiting on
+	// the lock that this waitingState refers to. If multiple consecutive states
+	// refer to the same lock, they share the same lockWaitStart.
+	lockWaitStart time.Time
 
 	// Represents the action that the request was trying to perform when
 	// it hit the conflict. E.g. was it trying to read or write?
@@ -1233,6 +1237,7 @@ func (l *lockState) informActiveWaiters() {
 			findDistinguished = false
 		}
 		g.mu.Lock()
+		state.lockWaitStart = g.mu.curLockWaitStart
 		g.mu.state = state
 		if l.distinguishedWaiter == g {
 			g.mu.state.kind = waitForDistinguished
@@ -1552,12 +1557,16 @@ func (l *lockState) tryActiveWait(
 			return false, false
 		}
 	}
+	g.mu.Lock()
+	lockWaitStart := g.mu.curLockWaitStart
+	g.mu.Unlock()
 
 	waitForState := waitingState{
 		kind:          waitFor,
 		key:           l.key,
 		queuedWriters: l.queuedWriters.Len(),
 		queuedReaders: l.waitingReaders.Len(),
+		lockWaitStart: lockWaitStart,
 		guardAccess:   sa,
 	}
 	if lockHolderTxn != nil {
@@ -2034,6 +2043,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 
 		g.mu.Lock()
 		g.mu.state = waitState
+		g.mu.state.lockWaitStart = g.mu.curLockWaitStart
 		g.notify()
 		delete(g.mu.locks, l)
 		g.mu.Unlock()
@@ -2050,6 +2060,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		g.mu.Lock()
 		if qg.active {
 			g.mu.state = waitState
+			g.mu.state.lockWaitStart = g.mu.curLockWaitStart
 			g.notify()
 		}
 		delete(g.mu.locks, l)
@@ -2940,6 +2951,11 @@ func (t *lockTableImpl) Metrics() LockTableMetrics {
 		snap.Reset()
 	}
 	return m
+}
+
+// Clock implements the lockTable interface.
+func (t *lockTableImpl) Clock() timeutil.TimeSource {
+	return t.timeProvider
 }
 
 // String implements the lockTable interface.

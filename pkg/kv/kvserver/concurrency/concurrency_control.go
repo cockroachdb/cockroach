@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -714,6 +715,9 @@ type lockTable interface {
 
 	// Metrics returns information about the state of the lockTable.
 	Metrics() LockTableMetrics
+
+	// Clock returns the lockTable's time source.
+	Clock() timeutil.TimeSource
 
 	// String returns a debug string representing the state of the lockTable.
 	String() string
