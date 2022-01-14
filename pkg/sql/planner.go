@@ -191,10 +191,6 @@ type planner struct {
 	// 2. Disable the use of the table cache in tests.
 	avoidLeasedDescriptors bool
 
-	// If set, the planner should skip checking for the SELECT privilege when
-	// initializing plans to read from a table. This should be used with care.
-	skipSelectPrivilegeChecks bool
-
 	// autoCommit indicates whether we're planning for an implicit transaction.
 	// If autoCommit is true, the plan is allowed (but not required) to commit the
 	// transaction along with other KV operations. Committing the txn might be

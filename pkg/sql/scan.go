@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -179,12 +178,6 @@ func (n *scanNode) initTable(
 	ctx context.Context, p *planner, desc catalog.TableDescriptor, colCfg scanColumnsConfig,
 ) error {
 	n.desc = desc
-
-	if !p.skipSelectPrivilegeChecks {
-		if err := p.CheckPrivilege(ctx, n.desc, privilege.SELECT); err != nil {
-			return err
-		}
-	}
 
 	// Check if any system columns are requested, as they need special handling.
 	n.containsSystemColumns = scanContainsSystemColumns(&colCfg)
