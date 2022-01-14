@@ -262,7 +262,25 @@ func (sp *Span) SetTag(key string, value attribute.Value) {
 	if sp.detectUseAfterFinish() {
 		return
 	}
-	sp.i.SetTag(key, value)
+	sp.i.SetTag(key, value, true /* statusTag */)
+}
+
+// SetStatusTag is like SetTag, except the new tag can be removed from the Span
+// in the future via ClearStatusTag. Only the crdbSpan offers this
+// functionality, so the tag is not passed to the otel span or to net.Trace.
+func (sp *Span) SetStatusTag(key string, value attribute.Value) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.SetTag(key, value, true /* statusTag */)
+}
+
+// ClearStatusTag removes a tag if it was previously added through SetStatusTag.
+func (sp *Span) ClearStatusTag(key string) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.ClearStatusTag(key)
 }
 
 // TraceID retrieves a span's trace ID.

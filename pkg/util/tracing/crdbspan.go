@@ -397,6 +397,20 @@ func (s *crdbSpan) setTagLocked(key string, value attribute.Value) {
 	s.mu.tags = append(s.mu.tags, attribute.KeyValue{Key: k, Value: value})
 }
 
+// clearTag removes a tag, if it exists.
+func (s *crdbSpan) clearTag(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := attribute.Key(key)
+	for i := range s.mu.tags {
+		if s.mu.tags[i].Key == k {
+			s.mu.tags[i] = s.mu.tags[len(s.mu.tags)-1]
+			s.mu.tags = s.mu.tags[:len(s.mu.tags)-1]
+			return
+		}
+	}
+}
+
 // record includes a log message in s' recording.
 func (s *crdbSpan) record(msg redact.RedactableString) {
 	if s.recordingType() != RecordingVerbose {
