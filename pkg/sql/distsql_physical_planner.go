@@ -1109,7 +1109,7 @@ func initTableReaderSpec(
 	*s = execinfrapb.TableReaderSpec{
 		Table:             *n.desc.TableDesc(),
 		Reverse:           n.reverse,
-		Visibility:        n.colCfg.visibility,
+		Visibility:        execinfra.ScanVisibilityPublicAndNotPublic,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
 		HasSystemColumns:  n.containsSystemColumns,
@@ -1293,12 +1293,9 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *PlanningCtx, n *scanNode,
 ) (*PhysicalPlan, error) {
-	if n.colCfg.addUnwantedAsHidden {
-		panic("addUnwantedAsHidden not supported")
-	}
 	// scanNodeToTableOrdinalMap is a map from scan node column ordinal to
 	// table reader column ordinal.
-	scanNodeToTableOrdinalMap := toTableOrdinals(n.cols, n.desc, n.colCfg.visibility)
+	scanNodeToTableOrdinalMap := toTableOrdinals(n.cols, n.desc, execinfra.ScanVisibilityPublicAndNotPublic)
 	spec, post, err := initTableReaderSpec(n)
 	if err != nil {
 		return nil, err
@@ -1314,7 +1311,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			desc:                  n.desc,
 			spans:                 n.spans,
 			reverse:               n.reverse,
-			scanVisibility:        n.colCfg.visibility,
+			scanVisibility:        execinfra.ScanVisibilityPublicAndNotPublic,
 			parallelize:           n.parallelize,
 			estimatedRowCount:     n.estimatedRowCount,
 			reqOrdering:           n.reqOrdering,
@@ -2259,7 +2256,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		Table:             *n.table.desc.TableDesc(),
 		IndexIdx:          0,
 		Type:              descpb.InnerJoin,
-		Visibility:        n.table.colCfg.visibility,
+		Visibility:        execinfra.ScanVisibilityPublicAndNotPublic,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
@@ -2275,7 +2272,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(n.cols))
 
 	for i := range n.cols {
-		ord := tableOrdinal(n.table.desc, n.cols[i].GetID(), n.table.colCfg.visibility)
+		ord := tableOrdinal(n.table.desc, n.cols[i].GetID(), execinfra.ScanVisibilityPublicAndNotPublic)
 		post.OutputColumns[i] = uint32(ord)
 	}
 
@@ -2315,7 +2312,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:                    *n.table.desc.TableDesc(),
 		Type:                     n.joinType,
-		Visibility:               n.table.colCfg.visibility,
+		Visibility:               execinfra.ScanVisibilityPublicAndNotPublic,
 		LockingStrength:          n.table.lockingStrength,
 		LockingWaitPolicy:        n.table.lockingWaitPolicy,
 		MaintainOrdering:         len(n.reqOrdering) > 0,
@@ -2429,13 +2426,13 @@ func mappingHelperForLookupJoins(
 	}
 	for i := range table.cols {
 		outTypes[numLeftCols+i] = table.cols[i].GetType()
-		ord := tableOrdinal(table.desc, table.cols[i].GetID(), table.colCfg.visibility)
+		ord := tableOrdinal(table.desc, table.cols[i].GetID(), execinfra.ScanVisibilityPublicAndNotPublic)
 		post.OutputColumns[numLeftCols+i] = uint32(numLeftCols + ord)
 	}
 	if addContinuationCol {
 		outTypes[numOutCols-1] = types.Bool
 		post.OutputColumns[numOutCols-1] =
-			uint32(numLeftCols + highestTableOrdinal(table.desc, table.colCfg.visibility) + 1)
+			uint32(numLeftCols + highestTableOrdinal(table.desc, execinfra.ScanVisibilityPublicAndNotPublic) + 1)
 	}
 
 	// Map the columns of the lookupJoinNode to the result streams of the
