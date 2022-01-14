@@ -2171,3 +2171,83 @@ NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
 
 statement error parameter "autovacuum_enabled" requires a Boolean value
 ALTER TABLE storage_param_table SET (autovacuum_enabled='11')
+
+# Test sequence is drop when a owner table/column is dropped
+subtest test_serial_ownership_add_column
+
+statement ok
+SET serial_normalization = sql_sequence;
+
+statement ok
+CREATE TABLE test_serial (
+	a INT PRIMARY KEY
+);
+
+statement ok
+ALTER TABLE test_serial ADD COLUMN b SERIAL;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name               state   refobjid
+154       test_serial_b_seq  PUBLIC  153
+153       test_serial        PUBLIC  NULL
+
+statement ok
+DROP TABLE test_serial;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name  state  refobjid
+
+statement ok
+CREATE TABLE test_serial (
+	a INT PRIMARY KEY
+);
+
+statement ok
+ALTER TABLE test_serial ADD COLUMN b SERIAL;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name               state   refobjid
+156       test_serial_b_seq  PUBLIC  155
+155       test_serial        PUBLIC  NULL
+
+statement ok
+ALTER TABLE test_serial DROP COLUMN b;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name         state   refobjid
+155       test_serial  PUBLIC  NULL
+
+statement ok
+DROP TABLE test_serial;
