@@ -1332,7 +1332,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <str> unrestricted_name type_function_name type_function_name_no_crdb_extra
 %type <str> non_reserved_word
 %type <str> non_reserved_word_or_sconst
-%type <tree.RoleSpec> role_spec
+%type <tree.RoleSpec> role_spec opt_owner_clause
 %type <tree.RoleSpecList> role_spec_list
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
@@ -7437,7 +7437,7 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  AS typename                  { 
+  AS typename                  {
                                   // Valid option values must be integer types (ex. int2, bigint)
                                   parsedType := $2.colType()
                                   if parsedType.Family() != types.IntFamily {
@@ -8792,7 +8792,7 @@ transaction_deferrable_mode:
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
 // %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
-  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
+  CREATE DATABASE database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause
   {
     $$.val = &tree.CreateDatabase{
       Name: tree.Name($3),
@@ -8805,6 +8805,7 @@ create_database_stmt:
       Regions: $11.nameList(),
       SurvivalGoal: $12.survivalGoal(),
       Placement: $13.dataPlacement(),
+      Owner: $14.roleSpec(),
     }
   }
 | CREATE DATABASE IF NOT EXISTS database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause
@@ -8949,6 +8950,18 @@ opt_connection_limit:
   {
     $$.val = int32(-1)
   }
+
+opt_owner_clause:
+  OWNER opt_equal role_spec
+  {
+    $$ = $3
+  }
+| /* EMPTY */
+   {
+		 $$.val = tree.RoleSpec{
+		   RoleSpecType: tree.CurrentUser,
+		 }
+   }
 
 opt_equal:
   '=' {}

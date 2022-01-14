@@ -129,13 +129,25 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
+	owner := p.SessionData().User()
+	if !database.Owner.Undefined() {
+		owner, err = database.Owner.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+		if err != nil {
+			return nil, true, err
+		}
+	}
+
 	desc := dbdesc.NewInitial(
 		id,
 		string(database.Name),
-		p.SessionData().User(),
+		owner,
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
 		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)
+
+	if err := p.checkCanAlterToNewOwner(ctx, desc, owner); err != nil {
+		return nil, true, err
+	}
 
 	if err := p.createDescriptorWithID(ctx, dKey, id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
@@ -144,6 +156,7 @@ func (p *planner) createDatabase(
 	// Initialize the multi-region database by creating the multi-region enum and
 	// database-level zone configuration if there is a region config on the
 	// descriptor.
+
 	if err := p.maybeInitializeMultiRegionDatabase(ctx, desc, regionConfig); err != nil {
 		return nil, true, err
 	}
