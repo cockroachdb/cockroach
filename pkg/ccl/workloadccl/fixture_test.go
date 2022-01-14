@@ -12,13 +12,11 @@ import (
 	"context"
 	"fmt"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
@@ -27,13 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/option"
 )
 
 const fixtureTestGenRows = 10
@@ -88,23 +85,26 @@ func TestFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	gcsBucket := os.Getenv(`GS_BUCKET`)
-	gcsKey := os.Getenv(`GS_JSONKEY`)
-	if gcsBucket == "" || gcsKey == "" {
-		skip.IgnoreLint(t, "GS_BUCKET and GS_JSONKEY env vars must be set")
+	storageProvider := envutil.EnvOrDefaultString("COCKROACH_FIXTURE_TEST_STORAGE_PROVIDER", "")
+	authParams := envutil.EnvOrDefaultString("COCKROACH_FIXTURE_TEST_AUTH_PARAMS", "AUTH=implicit")
+	bucket := envutil.EnvOrDefaultString("COCKROACH_FIXTURE_TEST_BUCKET", "fixture-test")
+
+	if storageProvider == "" {
+		skip.IgnoreLint(t, "FIXTURE_TEST_STORAGE_PROVIDER env var must be set")
 	}
 
-	source, err := google.JWTConfigFromJSON([]byte(gcsKey), storage.ScopeReadWrite)
+	es, err := workloadccl.GetStorage(ctx, workloadccl.FixtureConfig{
+		StorageProvider: "gs",
+		AuthParams:      authParams,
+		Bucket:          bucket,
+		Basename:        "workload",
+		CSVServerURL:    "",
+		TableStats:      false,
+	})
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
-	gcs, err := storage.NewClient(ctx,
-		option.WithScopes(storage.ScopeReadWrite),
-		option.WithTokenSource(source.TokenSource(ctx)))
-	if err != nil {
-		t.Fatalf(`%+v`, err)
-	}
-	defer func() { _ = gcs.Close() }()
+	defer func() { _ = es.Close() }()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -117,15 +117,15 @@ func TestFixture(t *testing.T) {
 	}
 
 	config := workloadccl.FixtureConfig{
-		GCSBucket: gcsBucket,
-		GCSPrefix: fmt.Sprintf(`TestFixture-%d`, timeutil.Now().UnixNano()),
+		Bucket:   bucket,
+		Basename: fmt.Sprintf(`TestFixture-%d`, timeutil.Now().UnixNano()),
 	}
 
-	if _, err := workloadccl.GetFixture(ctx, gcs, config, gen); !testutils.IsError(err, `fixture not found`) {
+	if _, err := workloadccl.GetFixture(ctx, es, config, gen); !testutils.IsError(err, `fixture not found`) {
 		t.Fatalf(`expected "fixture not found" error but got: %+v`, err)
 	}
 
-	fixtures, err := workloadccl.ListFixtures(ctx, gcs, config)
+	fixtures, err := workloadccl.ListFixtures(ctx, es, config)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
@@ -134,17 +134,17 @@ func TestFixture(t *testing.T) {
 	}
 
 	const filesPerNode = 1
-	fixture, err := workloadccl.MakeFixture(ctx, db, gcs, config, gen, filesPerNode)
+	fixture, err := workloadccl.MakeFixture(ctx, db, es, config, gen, filesPerNode)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 
-	_, err = workloadccl.MakeFixture(ctx, db, gcs, config, gen, filesPerNode)
+	_, err = workloadccl.MakeFixture(ctx, db, es, config, gen, filesPerNode)
 	if !testutils.IsError(err, `already exists`) {
 		t.Fatalf(`expected 'already exists' error got: %+v`, err)
 	}
 
-	fixtures, err = workloadccl.ListFixtures(ctx, gcs, config)
+	fixtures, err = workloadccl.ListFixtures(ctx, es, config)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}

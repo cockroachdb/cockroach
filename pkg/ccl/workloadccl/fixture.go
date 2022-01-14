@@ -21,20 +21,14 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"cloud.google.com/go/storage"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
-	"google.golang.org/api/iterator"
-)
-
-const (
-	fixtureGCSURIScheme = `gs`
 )
 
 func init() {
@@ -43,12 +37,21 @@ func init() {
 
 // FixtureConfig describes a storage place for fixtures.
 type FixtureConfig struct {
-	// GCSBucket is a Google Cloud Storage bucket.
-	GCSBucket string
+	// StorageProvider specifies the name of storage provider as supported by cloud
+	// storage.  Default "gs" (other providers include "s3", and "azure").
+	StorageProvider string
 
-	// GCSPrefix is a prefix to prepend to each Google Cloud Storage object
-	// path.
-	GCSPrefix string
+	// Bucket is a Cloud Storage bucket.
+	Bucket string
+
+	// Basename is appended to the bucket to form a path to the fixtures directory.
+	Basename string
+
+	// AuthParams are the authentication related query parameters added to the URI
+	// to be able to access fixture path.  By default, IMPLICIT authentication is used.
+	// Otherwise, it can be overriden to add cloud specific authentication parameters,
+	// such as access keys, billing projects, and others.
+	AuthParams string
 
 	// CSVServerURL is a url to a `./workload csv-server` to use as a source of
 	// CSV data. The url is anything accepted by our backup/restore. Notably, if
@@ -56,29 +59,15 @@ type FixtureConfig struct {
 	// `http://localhost:<port>` will work.
 	CSVServerURL string
 
-	// BillingProject if non-empty, is the Google Cloud project to bill for all
-	// storage requests. This is required to be set if using a "requestor pays"
-	// bucket.
-	BillingProject string
-
 	// If TableStats is true, CREATE STATISTICS is called on all tables before
 	// creating the fixture.
 	TableStats bool
 }
 
-func (s FixtureConfig) objectPathToURI(folder string) string {
-	u := &url.URL{
-		Scheme: fixtureGCSURIScheme,
-		Host:   s.GCSBucket,
-		Path:   folder,
-	}
-	q := url.Values{}
-	if s.BillingProject != `` {
-		q.Add("GOOGLE_BILLING_PROJECT", s.BillingProject)
-	}
-	q.Add("AUTH", "implicit")
-	u.RawQuery = q.Encode()
-	return u.String()
+// ObjectPathToURI returns URI for the optional folder path components.
+func (s FixtureConfig) ObjectPathToURI(folders ...string) string {
+	path := filepath.Join(folders...)
+	return fmt.Sprintf("%s://%s/%s/%s?%s", s.StorageProvider, s.Bucket, s.Basename, path, s.AuthParams)
 }
 
 // Fixture describes pre-computed data for a Generator, allowing quick
@@ -104,12 +93,25 @@ func serializeOptions(gen workload.Generator) string {
 		return ``
 	}
 	// NB: VisitAll visits in a deterministic (alphabetical) order.
+
 	var buf bytes.Buffer
 	flags := f.Flags()
 	flags.VisitAll(func(f *pflag.Flag) {
 		if flags.Meta != nil && flags.Meta[f.Name].RuntimeOnly {
 			return
 		}
+		// Only care about some of the options for naming.
+		// Keeping options, such as regions (which is an array), results in some issues
+		// with URL encoded paths (i.e. we think the name should be regions=%5B%5D, but providers
+		// interpret it as regions=[].).  Regardless, keeping *all* options is just too much.
+		// So, keep only some of the options, and ignore others.
+		// TODO: Would be nice to support name override.
+		switch f.Name {
+		case "version", "warehouses", "fks", "families", "seed":
+		default:
+			return
+		}
+
 		if buf.Len() > 0 {
 			buf.WriteString(`,`)
 		}
@@ -118,65 +120,47 @@ func serializeOptions(gen workload.Generator) string {
 	return buf.String()
 }
 
-func generatorToGCSFolder(config FixtureConfig, gen workload.Generator) string {
+func generatorToStorageFolder(config FixtureConfig, gen workload.Generator) string {
 	meta := gen.Meta()
-	return filepath.Join(
-		config.GCSPrefix,
-		meta.Name,
-		fmt.Sprintf(`version=%s,%s`, meta.Version, serializeOptions(gen)),
-	)
+	return filepath.Join(meta.Name,
+		fmt.Sprintf(`version=%s,%s`, meta.Version, serializeOptions(gen)))
 }
 
 // FixtureURL returns the URL for pre-computed Generator data stored on GCS.
 func FixtureURL(config FixtureConfig, gen workload.Generator) string {
-	return config.objectPathToURI(generatorToGCSFolder(config, gen))
+	return config.ObjectPathToURI(generatorToStorageFolder(config, gen))
 }
 
 // GetFixture returns a handle for pre-computed Generator data stored on GCS. It
 // is expected that the generator will have had Configure called on it.
 func GetFixture(
-	ctx context.Context, gcs *storage.Client, config FixtureConfig, gen workload.Generator,
+	ctx context.Context, es cloud.ExternalStorage, config FixtureConfig, gen workload.Generator,
 ) (Fixture, error) {
 	var fixture Fixture
-	var err error
-	var notFound bool
-	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 10}); r.Next(); {
-		err = func() error {
-			b := gcs.Bucket(config.GCSBucket)
-			if config.BillingProject != `` {
-				b = b.UserProject(config.BillingProject)
-			}
-
-			fixtureFolder := generatorToGCSFolder(config, gen)
-			_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
-			if errors.Is(err, iterator.Done) {
-				notFound = true
-				return errors.Errorf(`fixture not found: %s`, fixtureFolder)
-			} else if err != nil {
-				return err
-			}
-
-			fixture = Fixture{Config: config, Generator: gen}
-			for _, table := range gen.Tables() {
-				tableFolder := filepath.Join(fixtureFolder, table.Name)
-				_, err := b.Objects(ctx, &storage.Query{Prefix: tableFolder, Delimiter: `/`}).Next()
-				if errors.Is(err, iterator.Done) {
-					return errors.Errorf(`fixture table not found: %s`, tableFolder)
-				} else if err != nil {
-					return err
-				}
-				fixture.Tables = append(fixture.Tables, FixtureTable{
-					TableName: table.Name,
-					BackupURI: config.objectPathToURI(tableFolder),
-				})
-			}
+	fixtureFolder := generatorToStorageFolder(config, gen)
+	log.Infof(ctx, "Fixture folder: %s", fixtureFolder)
+	fixture = Fixture{Config: config, Generator: gen}
+	for _, table := range gen.Tables() {
+		tableFolder := filepath.Join(fixtureFolder, table.Name)
+		var files []string
+		if err := listDir(ctx, es, func(s string) error {
+			files = append(files, s)
 			return nil
-		}()
-		if err == nil || notFound {
-			break
+		}, tableFolder); err != nil {
+			return Fixture{}, err
 		}
+
+		if len(files) == 0 {
+			return Fixture{}, errors.Newf(
+				"expected non zero files for table %s in fixture folder %s", table.Name, tableFolder)
+		}
+
+		fixture.Tables = append(fixture.Tables, FixtureTable{
+			TableName: table.Name,
+			BackupURI: config.ObjectPathToURI(tableFolder),
+		})
 	}
-	return fixture, err
+	return fixture, nil
 }
 
 func csvServerPaths(
@@ -250,7 +234,7 @@ const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_livene
 func MakeFixture(
 	ctx context.Context,
 	sqlDB *gosql.DB,
-	gcs *storage.Client,
+	es cloud.ExternalStorage,
 	config FixtureConfig,
 	gen workload.Generator,
 	filesPerNode int,
@@ -263,10 +247,10 @@ func MakeFixture(
 		}
 	}
 
-	fixtureFolder := generatorToGCSFolder(config, gen)
-	if _, err := GetFixture(ctx, gcs, config, gen); err == nil {
+	fixtureFolder := generatorToStorageFolder(config, gen)
+	if _, err := GetFixture(ctx, es, config, gen); err == nil {
 		return Fixture{}, errors.Errorf(
-			`fixture %s already exists`, config.objectPathToURI(fixtureFolder))
+			`fixture %s already exists`, config.ObjectPathToURI(fixtureFolder))
 	}
 
 	dbName := gen.Meta().Name
@@ -313,7 +297,7 @@ func MakeFixture(
 		t := t
 		g.Go(func() error {
 			q := fmt.Sprintf(`BACKUP "%s"."%s" TO $1`, dbName, t.Name)
-			output := config.objectPathToURI(filepath.Join(fixtureFolder, t.Name))
+			output := config.ObjectPathToURI(filepath.Join(fixtureFolder, t.Name))
 			log.Infof(ctx, "Backing %s up to %q...", t.Name, output)
 			_, err := sqlDB.Exec(q, output)
 			return err
@@ -323,7 +307,7 @@ func MakeFixture(
 		return Fixture{}, err
 	}
 
-	return GetFixture(ctx, gcs, config, gen)
+	return GetFixture(ctx, es, config, gen)
 }
 
 // ImportDataLoader is an InitialDataLoader implementation that loads data with
@@ -666,32 +650,32 @@ func RestoreFixture(
 	return atomic.LoadInt64(&bytesAtomic), nil
 }
 
+func listDir(
+	ctx context.Context, es cloud.ExternalStorage, lsFn cloud.ListingFn, dirs ...string,
+) error {
+	// There is not directories in cloud storage; so, we simulate.
+	// Directory must end in "/".  And we use "/" as delimiter.  That is, we will list
+	// anything under "dir/", but stop before the next "/".
+	dir := filepath.Join(dirs...)
+	if dir[len(dir)-1] != '/' {
+		dir = dir + "/"
+	}
+	log.Infof(ctx, "Listing %s", dir)
+	return es.List(ctx, dir, "/", lsFn)
+}
+
 // ListFixtures returns the object paths to all fixtures stored in a FixtureConfig.
 func ListFixtures(
-	ctx context.Context, gcs *storage.Client, config FixtureConfig,
+	ctx context.Context, es cloud.ExternalStorage, config FixtureConfig,
 ) ([]string, error) {
-	b := gcs.Bucket(config.GCSBucket)
-	if config.BillingProject != `` {
-		b = b.UserProject(config.BillingProject)
-	}
-
 	var fixtures []string
-	gensPrefix := config.GCSPrefix + `/`
-	for genIter := b.Objects(ctx, &storage.Query{Prefix: gensPrefix, Delimiter: `/`}); ; {
-		gen, err := genIter.Next()
-		if errors.Is(err, iterator.Done) {
-			break
-		} else if err != nil {
+	for _, gen := range workload.Registered() {
+		if err := listDir(ctx, es, func(s string) error {
+			// Anything that looks like a directory is a fixture.
+			fixtures = append(fixtures, filepath.Join(gen.Name, s))
+			return nil
+		}, gen.Name); err != nil {
 			return nil, err
-		}
-		for genConfigIter := b.Objects(ctx, &storage.Query{Prefix: gen.Prefix, Delimiter: `/`}); ; {
-			genConfig, err := genConfigIter.Next()
-			if errors.Is(err, iterator.Done) {
-				break
-			} else if err != nil {
-				return nil, err
-			}
-			fixtures = append(fixtures, genConfig.Prefix)
 		}
 	}
 	return fixtures, nil
