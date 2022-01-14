@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"gopkg.in/yaml.v2"
@@ -101,7 +102,7 @@ func TestIsZoneLocal(t *testing.T) {
 			}
 		}
 
-		actual := isZoneLocal(zone, tc.localRegion)
+		actual := partition.IsZoneLocal(zone, tc.localRegion)
 		if actual != tc.expected {
 			t.Errorf("locality=%v, constraints=%v, voterConstraints=%v, leasePrefs=%v: expected %v, got %v",
 				tc.localRegion, tc.constraints, tc.voterConstraints, tc.leasePrefs, tc.expected, actual)

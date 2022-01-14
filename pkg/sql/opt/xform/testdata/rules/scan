@@ -790,7 +790,8 @@ distribute
            │         ├── columns: a:3!null
            │         ├── constraint: /1/2/5
            │         │    ├── [/'central'/1 - /'central'/3]
-           │         │    ├── [/'east'/1 - /'east'/3]
+           │         │    ├── [/'east'/1 - /'east'/2]
+           │         │    ├── [/'east'/3 - /'east'/3]
            │         │    └── [/'west'/1 - /'west'/3]
            │         └── key: (3)
            └── filters
@@ -822,30 +823,37 @@ distribute
            └── fd: ()-->(1,3,4)
 
 # The scan is limited.
-opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
 SELECT a FROM abc_part WHERE d = 1 LIMIT 1
 ----
-distribute
+project
  ├── columns: a:3!null
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(3)
  ├── distribution: east
- ├── input distribution: central,east,west
- └── project
-      ├── columns: a:3!null
+ └── locality-optimized-search
+      ├── columns: a:3!null d:6!null
+      ├── left columns: a:11 d:14
+      ├── right columns: a:19 d:22
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(3)
+      ├── fd: ()-->(3,6)
+      ├── distribution: east
+      ├── scan abc_part@d_idx
+      │    ├── columns: a:11!null d:14!null
+      │    ├── constraint: /9/14/11: [/'east'/1 - /'east'/1]
+      │    ├── limit: 1
+      │    ├── key: ()
+      │    └── fd: ()-->(11,14)
       └── scan abc_part@d_idx
-           ├── columns: a:3!null d:6!null
-           ├── constraint: /1/6/3
+           ├── columns: a:19!null d:22!null
+           ├── constraint: /17/22/19
            │    ├── [/'central'/1 - /'central'/1]
-           │    ├── [/'east'/1 - /'east'/1]
            │    └── [/'west'/1 - /'west'/1]
            ├── limit: 1
            ├── key: ()
-           └── fd: ()-->(3,6)
+           └── fd: ()-->(19,22)
 
 # The scan is limited, but b is known to be a key, so the limit is discarded.
 opt locality=(region=east) expect=GenerateLocalityOptimizedScan
@@ -879,3 +887,433 @@ project
            ├── cardinality: [0 - 1]
            ├── key: ()
            └── fd: ()-->(19,20)
+
+##############################################
+# Locality optimized scans with LIMIT clause #
+##############################################
+# LIMIT clause enables locality optimized scan.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part LIMIT 1
+----
+locality-optimized-search
+ ├── columns: a:3!null
+ ├── left columns: a:11
+ ├── right columns: a:19
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── distribution: east
+ ├── scan abc_part@b_idx
+ │    ├── columns: a:11!null
+ │    ├── constraint: /9/12: [/'east' - /'east']
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(11)
+ └── scan abc_part@b_idx
+      ├── columns: a:19!null
+      ├── constraint: /17/20
+      │    ├── [/'central' - /'central']
+      │    └── [/'west' - /'west']
+      ├── limit: 1
+      ├── key: ()
+      └── fd: ()-->(19)
+
+# LIMIT and OFFSET clause enables locality optimized scan.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part LIMIT 1 OFFSET 2
+----
+offset
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 1]
+ ├── key: (3)
+ ├── distribution: east
+ ├── locality-optimized-search
+ │    ├── columns: a:3!null
+ │    ├── left columns: a:11
+ │    ├── right columns: a:19
+ │    ├── cardinality: [0 - 3]
+ │    ├── key: (3)
+ │    ├── distribution: east
+ │    ├── scan abc_part@b_idx
+ │    │    ├── columns: a:11!null
+ │    │    ├── constraint: /9/12: [/'east' - /'east']
+ │    │    ├── limit: 3
+ │    │    └── key: (11)
+ │    └── scan abc_part@b_idx
+ │         ├── columns: a:19!null
+ │         ├── constraint: /17/20
+ │         │    ├── [/'central' - /'central']
+ │         │    └── [/'west' - /'west']
+ │         ├── limit: 3
+ │         └── key: (19)
+ └── 2
+
+# LIMIT in IN subquery enables locality optimized scan.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part WHERE a IN (SELECT a FROM abc_part LIMIT 3)
+----
+project
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5 d:6
+ ├── cardinality: [0 - 3]
+ ├── key: (3)
+ ├── fd: (3)-->(1,2,4-6), (4)~~>(1-3,5,6), (5)~~>(1-4,6)
+ ├── distribution: east
+ └── inner-join (lookup abc_part)
+      ├── columns: r:1!null t:2!null a:3!null b:4 c:5 d:6 a:11!null
+      ├── key columns: [11] = [3]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 3]
+      ├── key: (11)
+      ├── fd: (3)-->(1,2,4-6), (4)~~>(1-3,5,6), (5)~~>(1-4,6), (3)==(11), (11)==(3)
+      ├── distribution: east
+      ├── locality-optimized-search
+      │    ├── columns: a:11!null
+      │    ├── left columns: a:19
+      │    ├── right columns: a:27
+      │    ├── cardinality: [0 - 3]
+      │    ├── key: (11)
+      │    ├── distribution: east
+      │    ├── scan abc_part@b_idx
+      │    │    ├── columns: a:19!null
+      │    │    ├── constraint: /17/20: [/'east' - /'east']
+      │    │    ├── limit: 3
+      │    │    └── key: (19)
+      │    └── scan abc_part@b_idx
+      │         ├── columns: a:27!null
+      │         ├── constraint: /25/28
+      │         │    ├── [/'central' - /'central']
+      │         │    └── [/'west' - /'west']
+      │         ├── limit: 3
+      │         └── key: (27)
+      └── filters (true)
+
+# Correlated semijoin with LIMIT in outer query block should not enable
+# locality optimized scan.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part a WHERE EXISTS (SELECT 1 FROM abc_part b WHERE a.a=b.a)
+----
+scan abc_part [as=a]
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5 d:6
+ ├── check constraint expressions
+ │    ├── a.r:1 IN ('central', 'east', 'west') [outer=(1), constraints=(/1: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │    └── a.t:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ ├── key: (3)
+ ├── fd: (3)-->(1,2,4-6), (4)~~>(1-3,5,6), (5)~~>(1-4,6)
+ └── distribution: east
+
+# Uncorrelated semijoin with LIMIT can't enable locality optimized scan in the
+# outer query block yet.
+# TODO(msirek) Push the LIMIT into the outer table scan via issue #75301.
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT * FROM abc_part a WHERE EXISTS (SELECT 1 FROM abc_part)
+----
+distribute
+ ├── columns: r:1!null t:2!null a:3!null b:4 c:5 d:6
+ ├── key: (3)
+ ├── fd: (3)-->(1,2,4-6), (4)~~>(1-3,5,6), (5)~~>(1-4,6)
+ ├── distribution: east
+ ├── input distribution: east,west
+ └── index-join abc_part
+      ├── columns: a.r:1!null a.t:2!null a.a:3!null a.b:4 a.c:5 a.d:6
+      ├── key: (3)
+      ├── fd: (3)-->(1,2,4-6), (4)~~>(1-3,5,6), (5)~~>(1-4,6)
+      └── select
+           ├── columns: a.r:1!null a.t:2!null a.a:3!null a.c:5
+           ├── key: (3)
+           ├── fd: (3)-->(1,2,5), (5)~~>(1-3)
+           ├── scan abc_part@c_idx [as=a]
+           │    ├── columns: a.r:1!null a.t:2!null a.a:3!null a.c:5
+           │    ├── constraint: /1/2/5
+           │    │    ├── [/'central'/1 - /'central'/3]
+           │    │    ├── [/'east'/1 - /'east'/2]
+           │    │    ├── [/'east'/3 - /'east'/3]
+           │    │    └── [/'west'/1 - /'west'/3]
+           │    ├── key: (3)
+           │    └── fd: (3)-->(1,2,5), (5)~~>(1-3)
+           └── filters
+                └── exists [subquery]
+                     └── locality-optimized-search
+                          ├── cardinality: [0 - 1]
+                          ├── key: ()
+                          ├── scan abc_part@b_idx
+                          │    ├── constraint: /18/21: [/'east' - /'east']
+                          │    ├── limit: 1
+                          │    └── key: ()
+                          └── scan abc_part@b_idx
+                               ├── constraint: /26/29
+                               │    ├── [/'central' - /'central']
+                               │    └── [/'west' - /'west']
+                               ├── limit: 1
+                               └── key: ()
+
+# Partitioning without CHECK constraints
+exec-ddl
+CREATE TABLE abc_part_no_check (
+    r STRING NOT NULL,
+    t INT NOT NULL,
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    UNIQUE WITHOUT INDEX (b),
+    UNIQUE WITHOUT INDEX (c),
+    UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
+      PARTITION east VALUES IN (('east', 1), ('east', 3)),
+      PARTITION west VALUES IN (('west', DEFAULT)),
+      PARTITION default VALUES IN (DEFAULT)
+    )
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part_no_check@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part_no_check@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]'
+----
+
+exec-ddl
+ALTER PARTITION "default" OF INDEX abc_part_no_check@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  lease_preferences = '[[+region=central]]';
+----
+
+# Queries on most partitioned tables without CHECK constraints won't pick
+# locality optimized search until issue #75887 is implemented.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part_no_check@c_idx LIMIT 3
+----
+distribute
+ ├── columns: a:3!null
+ ├── cardinality: [0 - 3]
+ ├── key: (3)
+ ├── distribution: east
+ ├── input distribution: central,east,west
+ └── scan abc_part_no_check@c_idx
+      ├── columns: a:3!null
+      ├── limit: 3
+      ├── flags: force-index=c_idx
+      └── key: (3)
+
+# Simpler partitioned table without CHECK constraints
+exec-ddl
+CREATE TABLE abc_part_no_check2 (
+    r STRING NOT NULL,
+    t INT NOT NULL,
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    UNIQUE WITHOUT INDEX (b),
+    UNIQUE WITHOUT INDEX (c),
+    UNIQUE INDEX b_idx (r, b) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+# Queries on most partitioned tables without CHECK constraints won't pick
+# locality optimized search until issue #75887 is implemented.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
+SELECT a FROM abc_part_no_check2@b_idx LIMIT 5
+----
+scan abc_part_no_check2@b_idx
+ ├── columns: a:3!null
+ ├── limit: 5
+ ├── flags: force-index=b_idx
+ ├── key: (3)
+ └── distribution: east
+
+# Mimic a REGIONAL BY ROW table
+exec-ddl
+CREATE TABLE def_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west', 'central')),
+    d INT NOT NULL,
+    e INT,
+    f INT,
+    PRIMARY KEY (r, d),
+    UNIQUE WITHOUT INDEX (d),
+    UNIQUE WITHOUT INDEX (e),
+    UNIQUE INDEX e_idx (r, e) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    ),
+    INDEX f_idx (r, f) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+) PARTITION BY LIST (r) (
+  PARTITION east VALUES IN (('east')),
+  PARTITION west VALUES IN (('west')),
+  PARTITION central VALUES IN (('central'))
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+# Selecting from each of the indexes and the pkey should use locality optimized
+# search
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT e FROM def_part@e_idx LIMIT 3
+----
+locality-optimized-search
+ ├── columns: e:3
+ ├── left columns: e:9
+ ├── right columns: e:15
+ ├── cardinality: [0 - 3]
+ ├── lax-key: (3)
+ ├── distribution: east
+ ├── scan def_part@e_idx
+ │    ├── columns: e:9
+ │    ├── constraint: /7/9: [/'east' - /'east']
+ │    ├── limit: 3
+ │    ├── flags: force-index=e_idx
+ │    └── lax-key: (9)
+ └── scan def_part@e_idx
+      ├── columns: e:15
+      ├── constraint: /13/15
+      │    ├── [/'central' - /'central']
+      │    └── [/'west' - /'west']
+      ├── limit: 3
+      ├── flags: force-index=e_idx
+      └── lax-key: (15)
+
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT f FROM def_part@f_idx LIMIT 3
+----
+locality-optimized-search
+ ├── columns: f:4
+ ├── left columns: f:10
+ ├── right columns: f:16
+ ├── cardinality: [0 - 3]
+ ├── distribution: east
+ ├── scan def_part@f_idx
+ │    ├── columns: f:10
+ │    ├── constraint: /7/10/8: [/'east' - /'east']
+ │    ├── limit: 3
+ │    └── flags: force-index=f_idx
+ └── scan def_part@f_idx
+      ├── columns: f:16
+      ├── constraint: /13/16/14
+      │    ├── [/'central' - /'central']
+      │    └── [/'west' - /'west']
+      ├── limit: 3
+      └── flags: force-index=f_idx
+
+opt locality=(region=east) expect=GenerateLocalityOptimizedScan
+SELECT d FROM def_part@def_part_pkey LIMIT 3
+----
+locality-optimized-search
+ ├── columns: d:2!null
+ ├── left columns: d:8
+ ├── right columns: d:14
+ ├── cardinality: [0 - 3]
+ ├── key: (2)
+ ├── distribution: east
+ ├── scan def_part
+ │    ├── columns: d:8!null
+ │    ├── constraint: /7/8: [/'east' - /'east']
+ │    ├── limit: 3
+ │    ├── flags: force-index=def_part_pkey
+ │    └── key: (8)
+ └── scan def_part
+      ├── columns: d:14!null
+      ├── constraint: /13/14
+      │    ├── [/'central' - /'central']
+      │    └── [/'west' - /'west']
+      ├── limit: 3
+      ├── flags: force-index=def_part_pkey
+      └── key: (14)
