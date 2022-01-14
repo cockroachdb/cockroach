@@ -1019,7 +1019,7 @@ func TestDTimeTZPrev(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng, _ := randutil.NewTestRand()
+	rng, _ := randutil.NewPseudoRand()
 	evalCtx := &tree.EvalContext{
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
 			Location: time.UTC,
@@ -1094,7 +1094,7 @@ func TestDTimeTZNext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng, _ := randutil.NewTestRand()
+	rng, _ := randutil.NewPseudoRand()
 	evalCtx := &tree.EvalContext{
 		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
 			Location: time.UTC,
