@@ -45,11 +45,6 @@ type scanNode struct {
 	desc  catalog.TableDescriptor
 	index catalog.Index
 
-	// Set if an index was explicitly specified.
-	specifiedIndex catalog.Index
-	// Set if the NO_INDEX_JOIN hint was given.
-	noIndexJoin bool
-
 	colCfg scanColumnsConfig
 	// The table columns, possibly including ones currently in schema changes.
 	// TODO(radu/knz): currently we always load the entire row from KV and only
@@ -181,11 +176,7 @@ func (n *scanNode) disableBatchLimit() {
 
 // Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
-	ctx context.Context,
-	p *planner,
-	desc catalog.TableDescriptor,
-	indexFlags *tree.IndexFlags,
-	colCfg scanColumnsConfig,
+	ctx context.Context, p *planner, desc catalog.TableDescriptor, colCfg scanColumnsConfig,
 ) error {
 	n.desc = desc
 
@@ -195,36 +186,10 @@ func (n *scanNode) initTable(
 		}
 	}
 
-	if indexFlags != nil {
-		if err := n.lookupSpecifiedIndex(indexFlags); err != nil {
-			return err
-		}
-	}
-
 	// Check if any system columns are requested, as they need special handling.
 	n.containsSystemColumns = scanContainsSystemColumns(&colCfg)
 
-	n.noIndexJoin = (indexFlags != nil && indexFlags.NoIndexJoin)
 	return n.initDescDefaults(colCfg)
-}
-
-func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
-	if indexFlags.Index != "" {
-		// Search index by name.
-		foundIndex, _ := n.desc.FindIndexWithName(string(indexFlags.Index))
-		if foundIndex == nil || !foundIndex.Public() {
-			return errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
-		}
-		n.specifiedIndex = foundIndex
-	} else if indexFlags.IndexID != 0 {
-		// Search index by ID.
-		foundIndex, _ := n.desc.FindIndexWithID(indexFlags.IndexID)
-		if foundIndex == nil || !foundIndex.Public() {
-			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
-		}
-		n.specifiedIndex = foundIndex
-	}
-	return nil
 }
 
 // initColsForScan initializes cols according to desc and colCfg.
