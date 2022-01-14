@@ -23,6 +23,7 @@ stmt ::=
 	| close_cursor_stmt
 	| declare_cursor_stmt
 	| fetch_cursor_stmt
+	| move_cursor_stmt
 	| 
 
 preparable_stmt ::=
@@ -130,7 +131,10 @@ declare_cursor_stmt ::=
 	'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR' opt_hold 'FOR' select_stmt
 
 fetch_cursor_stmt ::=
-	'FETCH' fetch_specifier
+	'FETCH' cursor_movement_specifier
+
+move_cursor_stmt ::=
+	'MOVE' cursor_movement_specifier
 
 alter_stmt ::=
 	alter_ddl_stmt
@@ -419,7 +423,7 @@ opt_hold ::=
 	| 'WITHOUT' 'HOLD'
 	| 
 
-fetch_specifier ::=
+cursor_movement_specifier ::=
 	cursor_name
 	| from_or_in cursor_name
 	| next_prior opt_from_or_in cursor_name
@@ -1068,6 +1072,7 @@ unreserved_keyword ::=
 	| 'MULTIPOLYGONZ'
 	| 'MULTIPOLYGONZM'
 	| 'MONTH'
+	| 'MOVE'
 	| 'NAMES'
 	| 'NAN'
 	| 'NEVER'

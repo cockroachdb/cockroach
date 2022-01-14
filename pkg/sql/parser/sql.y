@@ -743,8 +743,8 @@ func (u *sqlSymUnion) cursorSensitivity() tree.CursorSensitivity {
 func (u *sqlSymUnion) cursorScrollOption() tree.CursorScrollOption {
     return u.val.(tree.CursorScrollOption)
 }
-func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
-    return u.val.(*tree.FetchCursor)
+func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
+    return u.val.(tree.CursorStmt)
 }
 %}
 
@@ -821,7 +821,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH
+%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
@@ -1119,7 +1119,8 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <tree.Statement> close_cursor_stmt
 %type <tree.Statement> declare_cursor_stmt
 %type <tree.Statement> fetch_cursor_stmt
-%type <*tree.FetchCursor> fetch_specifier
+%type <tree.Statement> move_cursor_stmt
+%type <tree.CursorStmt> cursor_movement_specifier
 %type <bool> opt_hold opt_binary
 %type <tree.CursorSensitivity> opt_sensitivity
 %type <tree.CursorScrollOption> opt_scroll
@@ -1524,6 +1525,7 @@ stmt:
 | close_cursor_stmt         // EXTEND WITH HELP: CLOSE
 | declare_cursor_stmt       // EXTEND WITH HELP: DECLARE
 | fetch_cursor_stmt         // EXTEND WITH HELP: FETCH
+| move_cursor_stmt          // EXTEND WITH HELP: MOVE
 | reindex_stmt
 | /* EMPTY */
   {
@@ -5159,46 +5161,61 @@ opt_hold:
 // %Help: FETCH - fetch rows from a SQL cursor
 // %Category: Misc
 // %Text: FETCH [ direction [ FROM | IN ] ] <name>
-// %SeeAlso: CLOSE, DECLARE
+// %SeeAlso: MOVE, CLOSE, DECLARE
 fetch_cursor_stmt:
-  FETCH fetch_specifier
+  FETCH cursor_movement_specifier
   {
-    $$.val = $2.fetchCursor()
+    $$.val = &tree.FetchCursor{
+      CursorStmt: $2.cursorStmt(),
+    }
   }
 | FETCH error // SHOW HELP: FETCH
 
-fetch_specifier:
+// %Help: MOVE - move a SQL cursor without fetching rows
+// %Category: Misc
+// %Text: MOVE [ direction [ FROM | IN ] ] <name>
+// %SeeAlso: FETCH, CLOSE, DECLARE
+move_cursor_stmt:
+  MOVE cursor_movement_specifier
+  {
+    $$.val = &tree.MoveCursor{
+      CursorStmt: $2.cursorStmt(),
+    }
+  }
+| MOVE error // SHOW HELP: MOVE
+
+cursor_movement_specifier:
   cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($1),
       Count: 1,
     }
   }
 | from_or_in cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($2),
       Count: 1,
     }
   }
 | next_prior opt_from_or_in cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($3),
       Count: $1.int64(),
     }
   }
 | forward_backward opt_from_or_in cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($3),
       Count: $1.int64(),
     }
   }
 | opt_forward_backward signed_iconst64 opt_from_or_in cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($4),
       Count: $2.int64() * $1.int64(),
     }
@@ -5210,14 +5227,14 @@ fetch_specifier:
     if count < 0 {
       fetchType = tree.FetchBackwardAll
     }
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($4),
       FetchType: fetchType,
     }
   }
 | ABSOLUTE signed_iconst64 opt_from_or_in cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($4),
       FetchType: tree.FetchAbsolute,
       Count: $2.int64(),
@@ -5225,7 +5242,7 @@ fetch_specifier:
   }
 | RELATIVE signed_iconst64 opt_from_or_in cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($4),
       FetchType: tree.FetchRelative,
       Count: $2.int64(),
@@ -5233,14 +5250,14 @@ fetch_specifier:
   }
 | FIRST opt_from_or_in cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($3),
       FetchType: tree.FetchFirst,
     }
   }
 | LAST opt_from_or_in cursor_name
   {
-    $$.val = &tree.FetchCursor{
+    $$.val = tree.CursorStmt{
       Name: tree.Name($3),
       FetchType: tree.FetchLast,
     }
@@ -13655,6 +13672,7 @@ unreserved_keyword:
 | MULTIPOLYGONZ
 | MULTIPOLYGONZM
 | MONTH
+| MOVE
 | NAMES
 | NAN
 | NEVER

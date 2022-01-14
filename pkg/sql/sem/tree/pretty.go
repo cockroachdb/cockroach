@@ -2319,8 +2319,8 @@ func (node *DeclareCursor) doc(p *PrettyCfg) pretty.Doc {
 	return p.rlTable(node.docTable(p)...)
 }
 
-func (node *FetchCursor) doc(p *PrettyCfg) pretty.Doc {
-	ret := pretty.Keyword("FETCH")
+func (node *CursorStmt) doc(p *PrettyCfg) pretty.Doc {
+	ret := pretty.Nil
 	fetchType := node.FetchType.String()
 	if fetchType != "" {
 		ret = pretty.ConcatSpace(ret, pretty.Keyword(fetchType))
@@ -2333,6 +2333,14 @@ func (node *FetchCursor) doc(p *PrettyCfg) pretty.Doc {
 		pretty.Keyword("FROM"),
 		p.Doc(&node.Name),
 	)
+}
+
+func (node *FetchCursor) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.ConcatSpace(pretty.Keyword("FETCH"), node.CursorStmt.doc(p))
+}
+
+func (node *MoveCursor) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.ConcatSpace(pretty.Keyword("MOVE"), node.CursorStmt.doc(p))
 }
 
 func (node *CloseCursor) doc(p *PrettyCfg) pretty.Doc {

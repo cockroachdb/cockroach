@@ -1,6 +1,6 @@
 statement ok
 CREATE TABLE a (a INT PRIMARY KEY, b INT);
-INSERT INTO a VALUES (1, 2), (2, 2)
+INSERT INTO a VALUES (1, 2), (2, 3)
 
 statement error DECLARE CURSOR can only be used in transaction blocks
 DECLARE foo CURSOR FOR SELECT * FROM a
@@ -32,7 +32,7 @@ FETCH 1 foo
 query II
 FETCH 1 foo
 ----
-2  2
+2  3
 
 query II
 FETCH 2 foo
@@ -58,13 +58,13 @@ DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
 # are not visible to the cursor. We mimic this behavior.
 
 statement ok
-INSERT INTO a VALUES(3, 2)
+INSERT INTO a VALUES(3, 4)
 
 query II
 FETCH 3 foo
 ----
 1  2
-2  2
+2  3
 
 statement ok
 CLOSE foo;
@@ -74,8 +74,8 @@ query II
 FETCH 3 foo
 ----
 1  2
-2  2
-3  2
+2  3
+3  4
 
 statement ok
 COMMIT
@@ -116,8 +116,8 @@ query II
 FETCH ALL foo
 ----
 1  2
-2  2
-3  2
+2  3
+3  4
 
 query II
 FETCH ALL foo
@@ -131,8 +131,8 @@ query II
 FETCH FORWARD ALL foo
 ----
 1  2
-2  2
-3  2
+2  3
+3  4
 
 query II
 FETCH FORWARD ALL foo
@@ -161,12 +161,12 @@ FETCH FIRST foo
 query II
 FETCH NEXT foo
 ----
-2  2
+2  3
 
 query II
 FETCH NEXT foo
 ----
-3  2
+3  4
 
 query II
 FETCH FORWARD 3 foo
@@ -279,9 +279,155 @@ statement error cursor can only scan forward
 ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
 FETCH BACKWARD ALL foo
 
+# Error cases for MOVE.
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE -1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE BACKWARD 1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE FORWARD -1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE LAST foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE LAST foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE 10 foo;
+MOVE ABSOLUTE 9 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE 10 foo;
+MOVE RELATIVE -1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE 10 foo;
+MOVE FIRST foo;
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE ABSOLUTE -1 foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE PRIOR foo
+
+statement error cursor can only scan forward
+ROLLBACK; BEGIN; DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a;
+MOVE BACKWARD ALL foo
+
 statement ok
 ROLLBACK
 
+# Test MOVE.
+statement ok
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+query II
+FETCH 1 foo
+----
+1  2
+
+statement ok
+MOVE 1 foo
+
+query II
+FETCH 1 foo
+----
+3  4
+
+statement ok
+MOVE 10 foo
+
+query II
+FETCH 1 foo
+----
+14  15
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+statement ok
+MOVE 0 foo
+
+statement ok
+MOVE FIRST foo
+
+query II
+FETCH FIRST foo
+----
+1  2
+
+statement ok
+MOVE FIRST foo
+
+statement ok
+MOVE NEXT foo
+
+query II
+FETCH 1 foo
+----
+3  4
+
+statement ok
+MOVE FORWARD 3 foo
+
+query II
+FETCH 1 foo
+----
+7  8
+
+statement ok
+MOVE RELATIVE 3 foo
+
+query II
+FETCH 1 foo
+----
+11  12
+
+statement ok
+MOVE FORWARD foo
+
+query II
+FETCH 1 foo
+----
+13  14
+
+statement ok
+MOVE ABSOLUTE 15 foo
+
+statement ok
+MOVE ABSOLUTE 15 foo
+
+query II
+FETCH 1 foo
+----
+16 17
+
+statement ok
+MOVE ABSOLUTE 100 foo
+
+query II
+FETCH 1 foo
+----
+
+statement ok
+ROLLBACK
 
 # Test pg_catalog.pg_cursors
 query TTBBBT colnames

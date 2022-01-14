@@ -101,9 +101,11 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 
 var errBackwardScan = pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cursor can only scan forward")
 
-// FetchCursor implements the FETCH statement.
+// FetchCursor implements the FETCH and MOVE statements.
 // See https://www.postgresql.org/docs/current/sql-fetch.html for details.
-func (p *planner) FetchCursor(_ context.Context, s *tree.FetchCursor) (planNode, error) {
+func (p *planner) FetchCursor(
+	_ context.Context, s *tree.CursorStmt, isMove bool,
+) (planNode, error) {
 	cursor, err := p.sqlCursors.getCursor(s.Name.String())
 	if err != nil {
 		return nil, err
@@ -115,6 +117,7 @@ func (p *planner) FetchCursor(_ context.Context, s *tree.FetchCursor) (planNode,
 		n:         s.Count,
 		fetchType: s.FetchType,
 		cursor:    cursor,
+		isMove:    isMove,
 	}
 	if s.FetchType != tree.FetchNormal {
 		node.n = 0
@@ -131,6 +134,10 @@ type fetchNode struct {
 	// mode.
 	offset    int64
 	fetchType tree.FetchType
+	// isMove is true if this is a MOVE statement, which is identical to a FETCH
+	// statement but returns only a statement tag of how many rows would have been
+	// fetched.
+	isMove bool
 
 	seeked bool
 

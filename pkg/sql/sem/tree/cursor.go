@@ -104,14 +104,24 @@ func (o CursorSensitivity) String() string {
 	return ""
 }
 
-// FetchCursor represents a FETCH statement.
-type FetchCursor struct {
+// CursorStmt represents the shared structure between a FETCH and MOVE statement.
+type CursorStmt struct {
 	Name      Name
 	FetchType FetchType
 	Count     int64
 }
 
-// FetchType represents the type of a FETCH statement.
+// FetchCursor represents a FETCH statement.
+type FetchCursor struct {
+	CursorStmt
+}
+
+// MoveCursor represents a MOVE statement.
+type MoveCursor struct {
+	CursorStmt
+}
+
+// FetchType represents the type of a FETCH (or MOVE) statement.
 type FetchType int
 
 const (
@@ -163,18 +173,29 @@ func (o FetchType) HasCount() bool {
 }
 
 // Format implements the NodeFormatter interface.
-func (f FetchCursor) Format(ctx *FmtCtx) {
-	ctx.WriteString("FETCH ")
-	fetchType := f.FetchType.String()
+func (c CursorStmt) Format(ctx *FmtCtx) {
+	fetchType := c.FetchType.String()
 	if fetchType != "" {
 		ctx.WriteString(fetchType)
 		ctx.WriteString(" ")
 	}
-	if f.FetchType.HasCount() {
-		ctx.WriteString(strconv.Itoa(int(f.Count)))
+	if c.FetchType.HasCount() {
+		ctx.WriteString(strconv.Itoa(int(c.Count)))
 		ctx.WriteString(" ")
 	}
-	ctx.FormatNode(&f.Name)
+	ctx.FormatNode(&c.Name)
+}
+
+// Format implements the NodeFormatter interface.
+func (f FetchCursor) Format(ctx *FmtCtx) {
+	ctx.WriteString("FETCH ")
+	f.CursorStmt.Format(ctx)
+}
+
+// Format implements the NodeFormatter interface.
+func (m MoveCursor) Format(ctx *FmtCtx) {
+	ctx.WriteString("MOVE ")
+	m.CursorStmt.Format(ctx)
 }
 
 // CloseCursor represents a CLOSE statement.

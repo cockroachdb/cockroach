@@ -1,0 +1,2 @@
+move_cursor_stmt ::=
+	'MOVE' cursor_movement_specifier

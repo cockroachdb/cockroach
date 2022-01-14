@@ -228,6 +228,9 @@ func TestContextualHelp(t *testing.T) {
 		{`FETCH ??`, `FETCH`},
 		{`FETCH 1 ??`, `FETCH`},
 
+		{`MOVE ??`, `MOVE`},
+		{`MOVE 1 ??`, `MOVE`},
+
 		{`INSERT INTO ??`, `INSERT`},
 		{`INSERT INTO blah (??`, `<SELECTCLAUSE>`},
 		{`INSERT INTO blah VALUES (1) RETURNING ??`, `INSERT`},

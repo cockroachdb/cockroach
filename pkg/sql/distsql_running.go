@@ -1054,10 +1054,11 @@ func (r *DistSQLReceiver) Push(
 	}
 
 	if r.stmtType != tree.Rows {
+		n := int(tree.MustBeDInt(row[0].Datum))
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriter.IncrementRowsAffected(r.ctx, int(tree.MustBeDInt(row[0].Datum)))
+		r.resultWriter.IncrementRowsAffected(r.ctx, n)
 		return r.status
 	}
 

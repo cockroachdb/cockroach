@@ -847,6 +847,15 @@ func (*FetchCursor) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*FetchCursor) StatementTag() string { return "FETCH" }
 
+// StatementReturnType implements the Statement interface.
+func (n *MoveCursor) StatementReturnType() StatementReturnType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*MoveCursor) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*MoveCursor) StatementTag() string { return "MOVE" }
+
 // StatementType implements the Statement interface.
 func (*Grant) StatementType() StatementType { return TypeDCL }
 
@@ -1751,6 +1760,7 @@ func (n *Export) String() string                         { return AsString(n) }
 func (n *FetchCursor) String() string                    { return AsString(n) }
 func (n *Grant) String() string                          { return AsString(n) }
 func (n *GrantRole) String() string                      { return AsString(n) }
+func (n *MoveCursor) String() string                     { return AsString(n) }
 func (n *Insert) String() string                         { return AsString(n) }
 func (n *Import) String() string                         { return AsString(n) }
 func (n *ParenSelect) String() string                    { return AsString(n) }
