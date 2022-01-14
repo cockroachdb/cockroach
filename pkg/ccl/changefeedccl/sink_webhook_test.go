@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -187,11 +188,38 @@ func TestWebhookSink(t *testing.T) {
 		require.EqualError(t, sinkSrcWrongProtocol.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
 			`context canceled`)
 
+		sinkDestSecure, err := cdctest.StartMockWebhookSinkSecure(cert)
+		require.NoError(t, err)
+
+		sinkDestSecureHost, err := url.Parse(sinkDestSecure.URL())
+		require.NoError(t, err)
+
+		clientCertPEM, clientKeyPEM, err := cdctest.GenerateClientCertAndKey(cert)
+		require.NoError(t, err)
+
+		params = sinkDestSecureHost.Query()
+		params.Set(changefeedbase.SinkParamSkipTLSVerify, "true")
+		params.Set(changefeedbase.SinkParamClientCert, base64.StdEncoding.EncodeToString(clientCertPEM))
+		params.Set(changefeedbase.SinkParamClientKey, base64.StdEncoding.EncodeToString(clientKeyPEM))
+		sinkDestSecureHost.RawQuery = params.Encode()
+
+		details = jobspb.ChangefeedDetails{
+			SinkURI: fmt.Sprintf("webhook-%s", sinkDestSecureHost.String()),
+			Opts:    opts,
+		}
+
+		sinkSrc, err = setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
+		require.NoError(t, err)
+
+		// sink with client accepting server cert should pass
+		testSendAndReceiveRows(t, sinkSrc, sinkDestSecure)
+
 		require.NoError(t, sinkSrc.Close())
 		require.NoError(t, sinkSrcNoCert.Close())
 		require.NoError(t, sinkSrcInsecure.Close())
 		require.NoError(t, sinkSrcWrongProtocol.Close())
 		sinkDestHTTP.Close()
+		sinkDestSecure.Close()
 	}
 
 	// run tests with parallelism from 1-4
