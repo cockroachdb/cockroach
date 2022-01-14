@@ -54,8 +54,11 @@ var jobEnabledSetting = settings.RegisterBoolSetting(
 	"enable the use of the kv accessor", false)
 
 // Manager is the coordinator of the span config subsystem. It ensures that
-// there's only one span config reconciliation job for every tenant. It also
+// there's only one span config reconciliation job[1] for every tenant. It also
 // captures all relevant dependencies for the job.
+//
+// [1]: The reconciliation job is responsible for reconciling a tenant's zone
+//      configurations with the clusters span configurations.
 type Manager struct {
 	db       *kv.DB
 	jr       *jobs.Registry
@@ -66,8 +69,6 @@ type Manager struct {
 
 	spanconfig.Reconciler
 }
-
-var _ spanconfig.ReconciliationDependencies = &Manager{}
 
 // New constructs a new Manager.
 func New(

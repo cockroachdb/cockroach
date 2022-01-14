@@ -561,9 +561,9 @@ func (p *planner) MigrationJobDeps() migration.JobDeps {
 	return p.execCfg.MigrationJobDeps
 }
 
-// SpanConfigReconciliationJobDeps returns the spanconfig.ReconciliationJobDeps.
-func (p *planner) SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies {
-	return p.execCfg.SpanConfigReconciliationJobDeps
+// SpanConfigReconciler returns the spanconfig.Reconciler.
+func (p *planner) SpanConfigReconciler() spanconfig.Reconciler {
+	return p.execCfg.SpanConfigReconciler
 }
 
 // GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.

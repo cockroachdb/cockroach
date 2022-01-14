@@ -132,6 +132,7 @@ go_test(
         "zigzagjoiner_test.go",
     ],
     embed = [":rowexec"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/base",
         "//pkg/gossip",

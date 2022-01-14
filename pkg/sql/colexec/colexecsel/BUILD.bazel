@@ -37,6 +37,7 @@ go_test(
         "selection_ops_test.go",
     ],
     embed = [":colexecsel"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

@@ -26,11 +26,11 @@ func (bq *baseQueue) testingAdd(
 	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
 }
 
-func forceScanAndProcess(s *Store, q *baseQueue) error {
+func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
 	// Check that the system config is available. It is needed by many queues. If
 	// it's not available, some queues silently fail to process any replicas,
 	// which is undesirable for this method.
-	if _, err := s.GetConfReader(); err != nil {
+	if _, err := s.GetConfReader(ctx); err != nil {
 		return errors.Wrap(err, "unable to retrieve conf reader")
 	}
 
@@ -44,7 +44,7 @@ func forceScanAndProcess(s *Store, q *baseQueue) error {
 }
 
 func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
-	if err := forceScanAndProcess(s, q); err != nil {
+	if err := forceScanAndProcess(ctx, s, q); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 }
@@ -52,7 +52,7 @@ func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
 // ForceReplicationScanAndProcess iterates over all ranges and
 // enqueues any that need to be replicated.
 func (s *Store) ForceReplicationScanAndProcess() error {
-	return forceScanAndProcess(s, s.replicateQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.replicateQueue.baseQueue)
 }
 
 // MustForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
@@ -70,7 +70,7 @@ func (s *Store) MustForceMergeScanAndProcess() {
 // ForceSplitScanAndProcess iterates over all ranges and enqueues any that
 // may need to be split.
 func (s *Store) ForceSplitScanAndProcess() error {
-	return forceScanAndProcess(s, s.splitQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.splitQueue.baseQueue)
 }
 
 // MustForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
@@ -83,20 +83,20 @@ func (s *Store) MustForceRaftLogScanAndProcess() {
 // any that need time series maintenance, then processes the time series
 // maintenance queue.
 func (s *Store) ForceTimeSeriesMaintenanceQueueProcess() error {
-	return forceScanAndProcess(s, s.tsMaintenanceQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.tsMaintenanceQueue.baseQueue)
 }
 
 // ForceRaftSnapshotQueueProcess iterates over all ranges, enqueuing
 // any that need raft snapshots, then processes the raft snapshot
 // queue.
 func (s *Store) ForceRaftSnapshotQueueProcess() error {
-	return forceScanAndProcess(s, s.raftSnapshotQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.raftSnapshotQueue.baseQueue)
 }
 
 // ForceConsistencyQueueProcess runs all the ranges through the consistency
 // queue.
 func (s *Store) ForceConsistencyQueueProcess() error {
-	return forceScanAndProcess(s, s.consistencyQueue.baseQueue)
+	return forceScanAndProcess(context.TODO(), s, s.consistencyQueue.baseQueue)
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

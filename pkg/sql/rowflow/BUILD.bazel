@@ -38,6 +38,7 @@ go_test(
         "routers_test.go",
     ],
     embed = [":rowflow"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

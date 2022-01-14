@@ -50,6 +50,7 @@ go_test(
         "ordinality_test.go",
         "simple_project_test.go",
     ],
+    tags = ["no-remote"],
     deps = [
         ":colexecbase",
         "//pkg/col/coldata",
