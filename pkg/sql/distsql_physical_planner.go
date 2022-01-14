@@ -1114,7 +1114,7 @@ func initTableReaderSpec(
 		LockingWaitPolicy: n.lockingWaitPolicy,
 		HasSystemColumns:  n.containsSystemColumns,
 	}
-	if vc := getInvertedColumn(n.colCfg.invertedColumn, n.cols); vc != nil {
+	if vc := getInvertedColumn(n.colCfg.invertedColumnID, n.cols); vc != nil {
 		s.InvertedColumn = vc.ColumnDesc()
 	}
 
@@ -1134,19 +1134,14 @@ func initTableReaderSpec(
 }
 
 // getInvertedColumn returns the column in cols with ID matching
-// invertedColumn.colID.
-func getInvertedColumn(
-	invertedColumn *struct {
-		colID tree.ColumnID
-		typ   *types.T
-	}, cols []catalog.Column,
-) catalog.Column {
-	if invertedColumn == nil {
+// invertedColumnID.
+func getInvertedColumn(invertedColumnID tree.ColumnID, cols []catalog.Column) catalog.Column {
+	if invertedColumnID == 0 {
 		return nil
 	}
 
 	for i := range cols {
-		if cols[i].GetID() == invertedColumn.colID {
+		if cols[i].GetID() == invertedColumnID {
 			return cols[i]
 		}
 	}

@@ -239,7 +239,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		Visibility:       execinfra.ScanVisibilityPublicAndNotPublic,
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 	}
-	if vc := getInvertedColumn(colCfg.invertedColumn, cols); vc != nil {
+	if vc := getInvertedColumn(colCfg.invertedColumnID, cols); vc != nil {
 		trSpec.InvertedColumn = vc.ColumnDesc()
 	}
 
