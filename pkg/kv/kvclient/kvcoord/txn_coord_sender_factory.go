@@ -110,3 +110,13 @@ func (tcf *TxnCoordSenderFactory) NonTransactionalSender() kv.Sender {
 func (tcf *TxnCoordSenderFactory) Metrics() TxnMetrics {
 	return tcf.metrics
 }
+
+// TestingSetLinearizable allows tests to enable linearizable behavior.
+func (tcf *TxnCoordSenderFactory) TestingSetLinearizable(linearizable bool) {
+	tcf.linearizable = linearizable
+}
+
+// TestingSetMetrics allows tests to override the factory's metrics struct.
+func (tcf *TxnCoordSenderFactory) TestingSetMetrics(metrics TxnMetrics) {
+	tcf.metrics = metrics
+}

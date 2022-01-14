@@ -172,7 +172,9 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 	1e6,
 )
 
-var senderConcurrencyLimit = settings.RegisterIntSetting(
+// SenderConcurrencyLimit controls the maximum number of asynchronous send
+// requests.
+var SenderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
@@ -420,9 +422,9 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	}
 	ds.clusterID = cfg.RPCContext.ClusterID
 	ds.asyncSenderSem = quotapool.NewIntPool("DistSender async concurrency",
-		uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
-	senderConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		ds.asyncSenderSem.UpdateCapacity(uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
+		uint64(SenderConcurrencyLimit.Get(&cfg.Settings.SV)))
+	SenderConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		ds.asyncSenderSem.UpdateCapacity(uint64(SenderConcurrencyLimit.Get(&cfg.Settings.SV)))
 	})
 	ds.rpcContext.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))
 

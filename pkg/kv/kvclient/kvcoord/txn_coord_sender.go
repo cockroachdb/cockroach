@@ -1287,6 +1287,21 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 	return tc.mu.txn.Clone()
 }
 
+// TestingGetLockFootprint returns the internal lock footprint for testing
+// purposes.
+func (tc *TxnCoordSender) TestingGetLockFootprint(mergeAndSort bool) []roachpb.Span {
+	if mergeAndSort {
+		tc.interceptorAlloc.txnPipeliner.lockFootprint.mergeAndSort()
+	}
+	return tc.interceptorAlloc.txnPipeliner.lockFootprint.asSlice()
+}
+
+// TestingGetRefreshFootprint returns the internal refresh footprint for testing
+// purposes.
+func (tc *TxnCoordSender) TestingGetRefreshFootprint() []roachpb.Span {
+	return tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.asSlice()
+}
+
 // PrepareRetryableError is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string) error {
 	tc.mu.Lock()
