@@ -145,8 +145,12 @@ export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.Rese
 export type ResetIndexUsageStatsRequestMessage = protos.cockroach.server.serverpb.ResetIndexUsageStatsRequest;
 export type ResetIndexUsageStatsResponseMessage = protos.cockroach.server.serverpb.ResetIndexUsageStatsResponse;
 
+
 export type UserSQLRolesRequestMessage = protos.cockroach.server.serverpb.UserSQLRolesRequest;
 export type UserSQLRolesResponseMessage = protos.cockroach.server.serverpb.UserSQLRolesResponse;
+
+export type HotRangesRequestMessage = protos.cockroach.server.serverpb.HotRangesRequest;
+export type HotRangesV2ResponseMessage = protos.cockroach.server.serverpb.HotRangesResponseV2;
 
 // API constants
 
@@ -810,6 +814,7 @@ export function resetIndexUsageStats(
   );
 }
 
+
 export function getUserSQLRoles(
   req: UserSQLRolesRequestMessage,
   timeout?: moment.Duration,
@@ -817,6 +822,18 @@ export function getUserSQLRoles(
   return timeoutFetch(
     serverpb.UserSQLRolesResponse,
     `${STATUS_PREFIX}/sqlroles`,
+    req as any,
+    timeout,
+  );
+
+}
+export function getHotRanges(
+  req: HotRangesRequestMessage,
+  timeout?: moment.Duration,
+): Promise<HotRangesV2ResponseMessage> {
+  return timeoutFetch(
+    serverpb.HotRangesResponseV2,
+    `${STATUS_PREFIX}/v2/hotranges`,
     req as any,
     timeout,
   );
