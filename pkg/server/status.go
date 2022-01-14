@@ -2063,10 +2063,12 @@ func (s *statusServer) HotRanges(
 }
 
 type hotRangeReportMeta struct {
-	dbName     string
-	tableName  string
-	indexNames map[uint32]string
-	parentID   uint32
+	dbName         string
+	tableName      string
+	schemaName     string
+	indexNames     map[uint32]string
+	parentID       uint32
+	schemaParentID uint32
 }
 
 // HotRangesV2 returns hot ranges from all stores on requested node or all nodes in case
@@ -2101,9 +2103,12 @@ func (s *statusServer) HotRangesV2(
 		case catalog.TableDescriptor:
 			meta.tableName = desc.GetName()
 			meta.parentID = uint32(desc.GetParentID())
+			meta.schemaParentID = uint32(desc.GetParentSchemaID())
 			for _, idx := range desc.AllIndexes() {
 				meta.indexNames[uint32(idx.GetID())] = idx.GetName()
 			}
+		case catalog.SchemaDescriptor:
+			meta.schemaName = desc.GetName()
 		case catalog.DatabaseDescriptor:
 			meta.dbName = desc.GetName()
 		}
@@ -2115,8 +2120,8 @@ func (s *statusServer) HotRangesV2(
 		for _, store := range hr.Stores {
 			for _, r := range store.HotRanges {
 				var (
-					dbName, tableName, indexName string
-					replicaNodeIDs               []roachpb.NodeID
+					dbName, tableName, indexName, schemaName string
+					replicaNodeIDs                           []roachpb.NodeID
 				)
 				_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
 				if err != nil {
@@ -2129,6 +2134,8 @@ func (s *statusServer) HotRangesV2(
 				} else {
 					dbName = rangeReportMetas[tableID].dbName
 				}
+				schemaParent := rangeReportMetas[tableID].schemaParentID
+				schemaName = rangeReportMetas[schemaParent].schemaName
 				_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
 				if err == nil {
 					indexName = rangeReportMetas[tableID].indexNames[idxID]
@@ -2141,6 +2148,7 @@ func (s *statusServer) HotRangesV2(
 					NodeID:            nodeID,
 					QPS:               r.QueriesPerSecond,
 					TableName:         tableName,
+					SchemaName:        schemaName,
 					DatabaseName:      dbName,
 					IndexName:         indexName,
 					ReplicaNodeIds:    replicaNodeIDs,
