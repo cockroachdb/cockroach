@@ -7041,15 +7041,12 @@ func TestImportRowErrorLargeRows(t *testing.T) {
 		if r.Method != "GET" {
 			return
 		}
-		_, err := w.Write([]byte("firstrowvalue\nsecondrow,is,notok,"))
-		require.NoError(t, err)
+		_, _ = w.Write([]byte("firstrowvalue\nsecondrow,is,notok,"))
 		// Write 8MB field as the last field of the second
 		// row.
 		bigData := randutil.RandBytes(rng, 8<<20)
-		_, err = w.Write(bigData)
-		require.NoError(t, err)
-		_, err = w.Write([]byte("\n"))
-		require.NoError(t, err)
+		_, _ = w.Write(bigData)
+		_, _ = w.Write([]byte("\n"))
 	}))
 	defer srv.Close()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
