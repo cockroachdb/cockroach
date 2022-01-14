@@ -3,19 +3,14 @@ load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
 
 go_library(
     name = "ui",
-    srcs = [
-        "tracing_ui.go",
-        "ui.go",
-    ],
+    srcs = ["ui.go"],
     # keep
     embedsrcs = select({
         "//pkg/ui:cockroach_with_ui": [
             "dist_vendor/list.min.js",
-            "templates/tracing/html_template.html",
             "dist_vendor/.gitkeep",
         ],
         "//conditions:default": [
-            "templates/tracing/html_template.html",
             "dist_vendor/.gitkeep",
         ],
     }),

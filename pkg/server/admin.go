@@ -52,12 +52,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingui"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -3376,4 +3379,193 @@ var errRequiresAdmin = status.Error(codes.PermissionDenied, "this operation requ
 func errRequiresRoleOption(option roleoption.Option) error {
 	return status.Errorf(
 		codes.PermissionDenied, "this operation requires %s privilege", option)
+}
+
+func (s *adminServer) ListTracingSnapshots(
+	ctx context.Context, req *serverpb.ListTracingSnapshotsRequest,
+) (*serverpb.ListTracingSnapshotsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshotInfo := s.server.cfg.Tracer.GetSnapshots()
+	snapshots := make([]*serverpb.SnapshotInfo, len(snapshotInfo))
+	for i := range snapshotInfo {
+		si := snapshotInfo[i]
+		snapshots[i] = &serverpb.SnapshotInfo{
+			SnapshotID: int64(si.ID),
+			CapturedAt: &si.CapturedAt,
+		}
+	}
+	resp := &serverpb.ListTracingSnapshotsResponse{
+		Snapshots: snapshots,
+	}
+	return resp, nil
+}
+
+// TakeTracingSnapshot captures a new snapshot of the Active Spans Registry.
+// The new snapshot is returned, and also made available through
+// ListTracingSnapshots.
+func (s *adminServer) TakeTracingSnapshot(
+	ctx context.Context, req *serverpb.TakeTracingSnapshotRequest,
+) (*serverpb.TakeTracingSnapshotResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot := s.server.cfg.Tracer.SaveSnapshot()
+	resp := &serverpb.TakeTracingSnapshotResponse{
+		Snapshot: &serverpb.SnapshotInfo{
+			SnapshotID: int64(snapshot.ID),
+			CapturedAt: &snapshot.CapturedAt,
+		},
+	}
+	return resp, nil
+}
+
+// GetTracingSnapshot returns a snapshot of the tracing spans in the active
+// spans registry previously generated through TakeTracingSnapshots.
+func (s *adminServer) GetTracingSnapshot(
+	ctx context.Context, req *serverpb.GetTracingSnapshotRequest,
+) (*serverpb.GetTracingSnapshotResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	id := tracing.SnapshotID(req.SnapshotId)
+	snapshot, err := s.server.cfg.Tracer.GetSnapshot(id)
+	if err != nil {
+		return nil, err
+	}
+
+	spansList := tracingui.ProcessSnapshot(snapshot)
+
+	spans := make([]*serverpb.TracingSpan, len(spansList.Spans))
+	stacks := make(map[string]string)
+
+	for i, s := range spansList.Spans {
+		tags := make([]*serverpb.SpanTag, len(s.Tags))
+		for j, t := range s.Tags {
+			tags[j] = &serverpb.SpanTag{
+				Key:             t.Key,
+				Val:             t.Val,
+				Caption:         t.Caption,
+				Link:            t.Link,
+				Hidden:          t.Hidden,
+				Highlight:       t.Highlight,
+				Inherit:         t.Inherit,
+				Inherited:       t.Inherited,
+				PropagateUp:     t.PropagateUp,
+				CopiedFromChild: t.CopiedFromChild,
+			}
+		}
+
+		spans[i] = &serverpb.TracingSpan{
+			Operation:     s.Operation,
+			TraceID:       s.TraceID,
+			SpanID:        s.SpanID,
+			ParentSpanID:  s.ParentSpanID,
+			Start:         &s.Start,
+			GoroutineID:   s.GoroutineID,
+			ProcessedTags: tags,
+		}
+	}
+
+	for k, v := range spansList.Stacks {
+		stacks[strconv.FormatInt(int64(k), 10)] = v
+	}
+
+	snapshotResp := &serverpb.TracingSnapshot{
+		SnapshotID: int64(id),
+		CapturedAt: &snapshot.CapturedAt,
+		Spans:      spans,
+		Stacks:     stacks,
+	}
+	resp := &serverpb.GetTracingSnapshotResponse{
+		Snapshot: snapshotResp,
+	}
+	return resp, nil
+}
+
+// GetTrace returns the trace with a specified ID. Depending on the request, the
+// trace is returned either from a snapshot that was previously taken, or
+// directly from the active spans registry.
+func (s *adminServer) GetTrace(
+	ctx context.Context, req *serverpb.GetTraceRequest,
+) (*serverpb.GetTraceResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var recording tracing.Recording
+	var snapshotID tracing.SnapshotID
+
+	traceID := req.TraceID
+	snapID := req.SnapshotID
+	if snapID != 0 {
+		snapshotID = tracing.SnapshotID(snapID)
+		snapshot, err := s.server.cfg.Tracer.GetSnapshot(snapshotID)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, r := range snapshot.Traces {
+			if r[0].TraceID == traceID {
+				recording = r
+				break
+			}
+		}
+	}
+	// Look for the trace in the registry to see if it's present and read its
+	// recording mode. If we were asked to display the current trace (as opposed
+	// to the trace saved in a snapshot), we also collect the recording.
+	traceStillExists := false
+	if err := s.server.cfg.Tracer.SpanRegistry().VisitSpans(func(sp tracing.RegistrySpan) error {
+		if sp.TraceID() != traceID {
+			return nil
+		}
+		traceStillExists = true
+		if recording == nil {
+			recording = sp.GetFullRecording(tracing.RecordingVerbose)
+		}
+		return iterutil.StopIteration()
+	}); err != nil {
+		return nil, err
+	}
+
+	if recording == nil {
+		return nil, errors.Errorf("Trace %d not found.", traceID)
+	}
+
+	return &serverpb.GetTraceResponse{
+		SnapshotID:          snapID,
+		TraceID:             traceID,
+		StillExists:         traceStillExists,
+		SerializedRecording: recording.String(),
+	}, nil
+}
+
+// SetTraceRecordingType updates the recording mode of all or some of the spans
+// in a trace.
+func (s *adminServer) SetTraceRecordingType(
+	ctx context.Context, req *serverpb.SetTraceRecordingTypeRequest,
+) (*serverpb.SetTraceRecordingTypeResponse, error) {
+	if req.TraceID == 0 {
+		return nil, errors.Errorf("missing trace id")
+	}
+	_ = s.server.cfg.Tracer.VisitSpans(func(sp tracing.RegistrySpan) error {
+		if sp.TraceID() != req.TraceID {
+			return nil
+		}
+		sp.SetRecordingType(tracing.RecordingVerbose) // NB: The recording type propagates to the children, recursively.
+		return nil
+	})
+	return &serverpb.SetTraceRecordingTypeResponse{}, nil
 }
