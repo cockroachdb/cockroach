@@ -14,6 +14,7 @@ go_library(
         "lint.go",
         "logic.go",
         "main.go",
+        "merge_test_xmls.go",
         "test.go",
         "util.go",
     ],

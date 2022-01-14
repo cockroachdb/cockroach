@@ -223,6 +223,15 @@ func main() {
 	if forceBazelStr, ok := os.LookupEnv(forceBazelEnv); ok {
 		forceBazel, _ = strconv.ParseBool(forceBazelStr)
 	}
+	var bazciPath string
+	if bazel.BuiltWithBazel() || forceBazel {
+		// NB: bazci is expected to be put in `PATH` by the caller.
+		var err error
+		bazciPath, err = exec.LookPath("bazci")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	crdb, err := os.Getwd()
 	if err != nil {
@@ -308,8 +317,8 @@ func main() {
 				args = append(args, "--test_arg=-test.timeout", fmt.Sprintf("--test_arg=%s", timeout))
 				// Give the entire test 1 more minute than the duration to wrap up.
 				args = append(args, fmt.Sprintf("--test_timeout=%d", int((duration+1*time.Minute).Seconds())))
-				args = append(args, "--run_under", fmt.Sprintf("%s -stderr -maxfails 1 -maxtime %s -p %d", bazelStressTarget, duration, parallelism))
-				// NB: bazci is expected to be put in `PATH` by the caller.
+
+				args = append(args, "--run_under", fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' -stderr -maxfails 1 -maxtime %s -p %d", bazelStressTarget, bazciPath, duration, parallelism))
 				cmd := exec.Command("bazci", args...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
