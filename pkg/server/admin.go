@@ -3087,25 +3087,78 @@ func (c *adminPrivilegeChecker) requireAdminUser(
 	return userName, nil
 }
 
-func (c *adminPrivilegeChecker) requireViewActivityPermission(
-	ctx context.Context,
-) (userName security.SQLUsername, err error) {
+func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Context) (err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
-		return userName, err
+		return err
 	}
 	if !isAdmin {
 		hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
 		if err != nil {
-			return userName, err
+			return err
 		}
+
 		if !hasViewActivity {
-			return userName, status.Errorf(
+			return status.Errorf(
 				codes.PermissionDenied, "this operation requires the %s role option",
 				roleoption.VIEWACTIVITY)
 		}
 	}
-	return userName, nil
+	return nil
+}
+
+func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermission(
+	ctx context.Context,
+) (err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return err
+	}
+	if !isAdmin {
+		hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return err
+		}
+
+		if !hasViewActivity {
+			hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return err
+			}
+
+			if !hasViewActivityRedacted {
+				return status.Errorf(
+					codes.PermissionDenied, "this operation requires the %s or %s role options",
+					roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+			}
+		}
+	}
+	return nil
+}
+
+// This function requires that the user have the VIEWACTIVITY role, but does not
+// have the VIEWACTIVITYREDACTED role.
+func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPermission(
+	ctx context.Context,
+) (err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !isAdmin {
+		hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return err
+		}
+		if hasViewActivityRedacted {
+			return status.Errorf(
+				codes.PermissionDenied, "this operation requires %s role option and is not allowed for %s role option",
+				roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+		}
+		return c.requireViewActivityPermission(ctx)
+	}
+	return nil
 }
 
 func (c *adminPrivilegeChecker) getUserAndRole(

@@ -873,12 +873,14 @@ func TestShowSessionPrivileges(t *testing.T) {
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
 	defer s.Stopper().Stop(context.Background())
 
-	// Create three users: one with no special permissions, one with the
-	// VIEWACTIVITY role option, and one admin. We'll check that the VIEWACTIVITY
+	// Create four users: one with no special permissions, one with the
+	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
+	// and one admin. We'll check that the VIEWACTIVITY, VIEWACTIVITYREDACTED
 	// users and the admin can see all sessions and the unpermissioned user can
 	// only see their own session.
 	_ = sqlDBroot.Exec(t, `CREATE USER noperms`)
 	_ = sqlDBroot.Exec(t, `CREATE USER viewactivity VIEWACTIVITY`)
+	_ = sqlDBroot.Exec(t, `CREATE USER viewactivityredacted VIEWACTIVITYREDACTED`)
 	_ = sqlDBroot.Exec(t, `CREATE USER adminuser`)
 	_ = sqlDBroot.Exec(t, `GRANT admin TO adminuser`)
 
@@ -891,6 +893,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 	users := []user{
 		{"noperms", false, nil},
 		{"viewactivity", true, nil},
+		{"viewactivityredacted", true, nil},
 		{"adminuser", true, nil},
 	}
 	for i, tc := range users {
