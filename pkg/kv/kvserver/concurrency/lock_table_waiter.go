@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // LockTableLivenessPushDelay sets the delay before pushing in order to detect
@@ -146,9 +147,11 @@ func (w *lockTableWaiterImpl) WaitOn(
 	var lockDeadline time.Time
 
 	h := contentionEventHelper{
-		sp:      tracing.SpanFromContext(ctx),
-		onEvent: w.onContentionEvent,
+		sp:              tracing.SpanFromContext(ctx),
+		onEvent:         w.onContentionEvent,
+		contentionStart: timeutil.Now(),
 	}
+	defer h.close()
 	defer h.emit()
 
 	for {
@@ -848,8 +851,17 @@ type contentionEventHelper struct {
 	sp      *tracing.Span
 	onEvent func(event *roachpb.ContentionEvent) // may be nil
 
-	// Internal.
-	ev     *roachpb.ContentionEvent
+	// contentionStart marks the start of the contention tracked by this
+	// contentionEventHelper.
+	contentionStart time.Time
+	// numLocks marks the
+	numLocks int
+	closed   bool
+
+	// ev is the event currently being constructed. It will be finalized and
+	// emitted when the respective lock is released.
+	ev *roachpb.ContentionEvent
+	// tBegin marks the start of the current contention event.
 	tBegin time.Time
 }
 
@@ -874,10 +886,7 @@ func (h *contentionEventHelper) emit() {
 // finalized and added to the Span, and a new event initialized from the inputs.
 func (h *contentionEventHelper) emitAndInit(s waitingState) {
 	if h.sp == nil {
-		// No span to attach payloads to - don't do any work.
-		//
-		// TODO(tbg): we could special case the noop span here too, but the plan is for
-		// nobody to use noop spans any more (trace.mode=background).
+		// No span to manipulate - don't do any work.
 		return
 	}
 
@@ -885,13 +894,14 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 	// Otherwise,
 	switch s.kind {
 	case waitFor, waitForDistinguished, waitSelf:
+
 		// If we're tracking an event and see a different txn/key, the event is
 		// done and we initialize the new event tracking the new txn/key.
 		//
 		// NB: we're guaranteed to have `s.{txn,key}` populated here.
-		if h.ev != nil &&
-			(!h.ev.TxnMeta.ID.Equal(s.txn.ID) || !bytes.Equal(h.ev.Key, s.key)) {
+		if h.ev == nil || (!h.ev.TxnMeta.ID.Equal(s.txn.ID) || !bytes.Equal(h.ev.Key, s.key)) {
 			h.emit() // h.ev is now nil
+			h.numLocks++
 		}
 
 		if h.ev == nil {
@@ -901,14 +911,28 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 			}
 			h.tBegin = timeutil.Now()
 		}
-	case waitElsewhere, waitQueueMaxLengthExceeded, doneWaiting:
+		h.sp.SetStatusTag("lock_wait_key", attribute.StringValue(s.key.String()))
+		h.sp.SetStatusTag("lock_wait_start", attribute.StringValue(h.tBegin.Format("15:04:05.123")))
+		h.sp.SetStatusTag("lock_holder_txn", attribute.StringValue(s.txn.ID.String()))
+		h.sp.SetStatusTag("previous_locks_waited", attribute.IntValue(h.numLocks-1))
+	case doneWaiting:
+		h.close()
+		fallthrough
+	case waitElsewhere, waitQueueMaxLengthExceeded:
 		// If we have an event, emit it now and that's it - the case we're in
 		// does not give us a new transaction/key.
-		if h.ev != nil {
-			h.emit()
-		}
+		h.emit()
 	default:
 		panic("unhandled waitingState.kind")
+	}
+}
+
+func (h *contentionEventHelper) close() {
+	if h.closed || h.sp == nil {
+		return
+	}
+	for _, tag := range []string{"lock_wait_key", "lock_wait_start", "lock_holder_txn", "previous_locks_waited"} {
+		h.sp.ClearStatusTag(tag)
 	}
 }
 
