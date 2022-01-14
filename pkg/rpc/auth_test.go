@@ -251,33 +251,33 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeAdminReq("a"),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: `requested key span a{-\\x00} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeAdminReq(prefix(10, "a")),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: noError,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeAdminReq(prefix(50, "a")),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: `requested key span /Tenant/50"a{"-\\x00"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeAdminReq(prefix(10, "a")),
 					makeReq(prefix(10, "a"), prefix(10, "b")),
 				)},
-				expErr: `request \[1 Scan, 1 AdmSplit\] not permitted`,
+				expErr: noError,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq(prefix(10, "a"), prefix(10, "b")),
 					makeAdminReq(prefix(10, "a")),
 				)},
-				expErr: `request \[1 Scan, 1 AdmSplit\] not permitted`,
+				expErr: noError,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
