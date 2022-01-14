@@ -139,6 +139,9 @@ export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.Rese
 export type UserSQLRolesRequestMessage = protos.cockroach.server.serverpb.UserSQLRolesRequest;
 export type UserSQLRolesResponseMessage = protos.cockroach.server.serverpb.UserSQLRolesResponse;
 
+export type HotRangesRequestMessage = protos.cockroach.server.serverpb.HotRangesRequest;
+export type HotRangesV2ResponseMessage = protos.cockroach.server.serverpb.HotRangesResponseV2;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -770,6 +773,18 @@ export function getUserSQLRoles(
   return timeoutFetch(
     serverpb.UserSQLRolesResponse,
     `${STATUS_PREFIX}/sqlroles`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getHotRanges(
+  req: HotRangesRequestMessage,
+  timeout?: moment.Duration,
+): Promise<HotRangesV2ResponseMessage> {
+  return timeoutFetch(
+    serverpb.HotRangesResponseV2,
+    `${STATUS_PREFIX}/v2/hotranges`,
     req as any,
     timeout,
   );
