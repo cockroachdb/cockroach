@@ -16,6 +16,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -77,6 +78,28 @@ func init() {
 		"store":       {},
 	}
 
+	// concatTags takes in a span's tags and stringiefies the ones that pass filter.
+	concatTags := func(tags map[string]string, filter func(tag string) bool) string {
+		tagsArr := make([]string, 0, len(tags))
+		for k, v := range tags {
+			if !filter(k) {
+				continue
+			}
+			if v != "" {
+				tagsArr = append(tagsArr, fmt.Sprintf("%s:%s", k, v))
+			} else {
+				tagsArr = append(tagsArr, k)
+			}
+		}
+		sort.Strings(tagsArr)
+		return strings.Join(tagsArr, ", ")
+	}
+
+	isHidden := func(tag string) bool {
+		_, hidden := hiddenTags[tag]
+		return hidden
+	}
+
 	spansTableTemplate = template.Must(template.New("spans-list").Funcs(
 		template.FuncMap{
 			"formatTime":         formatTime,
@@ -86,34 +109,12 @@ func init() {
 			},
 			"timeRaw": func(t time.Time) int64 { return t.UnixMicro() },
 			"tags": func(sp tracingpb.RecordedSpan) string {
-				var b strings.Builder
-				for k, v := range sp.Tags {
-					if _, hidden := hiddenTags[k]; hidden {
-						continue
-					}
-					if b.Len() > 0 {
-						b.WriteString(", ")
-					}
-					b.WriteString(k)
-					b.WriteString(": ")
-					b.WriteString(v)
-				}
-				return b.String()
+				return concatTags(sp.Tags, func(tag string) bool {
+					return !isHidden(tag)
+				})
 			},
 			"hiddenTags": func(sp tracingpb.RecordedSpan) string {
-				var b strings.Builder
-				for k, v := range sp.Tags {
-					if _, hidden := hiddenTags[k]; !hidden {
-						continue
-					}
-					if b.Len() > 0 {
-						b.WriteString(", ")
-					}
-					b.WriteString(k)
-					b.WriteString(": ")
-					b.WriteString(v)
-				}
-				return b.String()
+				return concatTags(sp.Tags, isHidden)
 			},
 		},
 	).Parse(ui.SpansTableTemplateSrc))

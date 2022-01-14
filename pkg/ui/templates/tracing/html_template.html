@@ -88,7 +88,7 @@ var values = [
     {
       operation: {{.Operation}},
       tags: {{tags .}},
-      hidden_tags: {{hiddenTags .}},
+      hiddenTags: {{hiddenTags .}},
       spanID: "{{.SpanID}}",
       startTime: {{formatTime .StartTime}},
       relativeTime: {{since .StartTime $capturedAt}},
@@ -119,7 +119,7 @@ function toggleVisibility(elementID) {
   }
 };
 
-function toggle(event) {
+function toggleVisibility(event) {
   console.log(event.target);
   console.log(event.target.dataset.toggleTarget);
   btn = event.target;
@@ -148,8 +148,8 @@ var options = {
           <td>
             ${values.operation} <a href="javascript:openTrace('${values.traceID}')">[+]</a><br>
             <span class="tags">${values.tags}</span>
-            <button data-toggle-target='hiddenTags-${values.spanID}' data-show="more" data-hide="less" onclick="toggle(event)">more</button>
-            <div style="display:none;" class="tags" id="hiddenTags-${values.spanID}">${values.hidden_tags}</div>
+            <button data-toggle-target='hiddenTags-${values.spanID}' data-show="more" data-hide="less" onclick="toggleVisibility(event)">more</button>
+            <div style="display:none;" class="tags" id="hiddenTags-${values.spanID}">${values.hiddenTags}</div>
           </td>
           <td>
             <div style="min-width:12em">
