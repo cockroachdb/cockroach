@@ -53,20 +53,24 @@ func (p *planner) addColumnImpl(
 		return err
 	}
 
+	var colOwnedSeqDesc *tabledesc.Mutable
 	newDef, seqPrefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, d, tn)
 	if err != nil {
 		return err
 	}
 	if seqName != nil {
-		if err := doCreateSequence(
-			params,
+		colOwnedSeqDesc, err = doCreateSequence(
+			params.ctx,
+			params.p,
+			params.SessionData(),
 			seqPrefix.Database,
 			seqPrefix.Schema,
 			seqName,
 			n.tableDesc.Persistence(),
 			seqOpts,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 	}
@@ -101,27 +105,6 @@ func (p *planner) addColumnImpl(
 		if err != nil {
 			return err
 		}
-	}
-
-	// If the new column has a DEFAULT or an ON UPDATE expression that uses a
-	// sequence, add references between its descriptor and this column descriptor.
-	if err := cdd.ForEachTypedExpr(func(expr tree.TypedExpr) error {
-		changedSeqDescs, err := maybeAddSequenceDependencies(
-			params.ctx, params.ExecCfg().Settings, params.p, n.tableDesc, col, expr, nil,
-		)
-		if err != nil {
-			return err
-		}
-		for _, changedSeqDesc := range changedSeqDescs {
-			if err := params.p.writeSchemaChange(
-				params.ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
-			); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	// We're checking to see if a user is trying add a non-nullable column without a default to a
@@ -176,16 +159,41 @@ func (p *planner) addColumnImpl(
 		n.tableDesc.SetPrimaryIndex(primaryIndex)
 	}
 
+	// We need to allocate new ID for the created column in order to correctly
+	// assign sequence ownership.
+	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+		return err
+	}
+
+	// If the new column has a DEFAULT or an ON UPDATE expression that uses a
+	// sequence, add references between its descriptor and this column descriptor.
+	if err := cdd.ForEachTypedExpr(func(expr tree.TypedExpr) error {
+		changedSeqDescs, err := maybeAddSequenceDependencies(
+			params.ctx, params.ExecCfg().Settings, params.p, n.tableDesc, col, expr, nil,
+		)
+		if err != nil {
+			return err
+		}
+		for _, changedSeqDesc := range changedSeqDescs {
+			if colOwnedSeqDesc != nil && colOwnedSeqDesc.ID == changedSeqDesc.ID {
+				if err := changedSeqDesc.SetSequenceOwner(d.Name, desc); err != nil {
+					return err
+				}
+			}
+			if err := params.p.writeSchemaChange(
+				params.ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	// Zone configuration logic is only required for REGIONAL BY ROW tables
 	// with newly created indexes.
 	if n.tableDesc.IsLocalityRegionalByRow() && idx != nil {
-		// We need to allocate new IDs for the created columns and indexes
-		// in case we need to configure their zone partitioning.
-		// This must be done after every object is created.
-		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
-			return err
-		}
-
 		// Configure zone configuration if required. This must happen after
 		// all the IDs have been allocated.
 		if err := p.configureZoneConfigForNewIndexPartitioning(

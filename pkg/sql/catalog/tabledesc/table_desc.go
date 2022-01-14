@@ -171,6 +171,33 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 	desc.Indexes[indexOrdinal-1] = index
 }
 
+// SetSequenceOwner adds sequence id to the sequence id list owned by a column
+// and set ownership values of sequence options.
+func (desc *Mutable) SetSequenceOwner(colName tree.Name, table *Mutable) error {
+	if !desc.IsSequence() {
+		return errors.Errorf("%s is not a sequence", desc.Name)
+	}
+
+	col, err := table.FindColumnWithName(colName)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, seqID := range col.ColumnDesc().OwnsSequenceIds {
+		if seqID == desc.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		col.ColumnDesc().OwnsSequenceIds = append(col.ColumnDesc().OwnsSequenceIds, desc.ID)
+	}
+	desc.SequenceOpts.SequenceOwner.OwnerTableID = table.ID
+	desc.SequenceOpts.SequenceOwner.OwnerColumnID = col.GetID()
+
+	return nil
+}
+
 // UpdateIndexPartitioning applies the new partition and adjusts the column info
 // for the specified index descriptor. Returns false iff this was a no-op.
 func UpdateIndexPartitioning(

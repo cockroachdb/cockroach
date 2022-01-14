@@ -60,6 +60,7 @@ func descForTable(
 		priv := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		desc, err := sql.NewSequenceTableDesc(
 			ctx,
+			nil,
 			name,
 			tree.SequenceOptions{},
 			parent,
@@ -68,7 +69,6 @@ func descForTable(
 			ts,
 			priv,
 			tree.PersistencePermanent,
-			nil,   /* params */
 			false, /* isMultiRegion */
 		)
 		if err != nil {
