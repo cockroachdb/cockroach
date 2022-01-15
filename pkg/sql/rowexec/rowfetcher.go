@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -72,7 +71,6 @@ func initRowFetcher(
 	valNeededForCol util.FastIntSet,
 	mon *mon.BytesMonitor,
 	alloc *tree.DatumAlloc,
-	scanVisibility execinfrapb.ScanVisibility,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	withSystemColumns bool,
@@ -91,7 +89,7 @@ func initRowFetcher(
 		IsSecondaryIndex: isSecondaryIndex,
 		ValNeededForCol:  valNeededForCol,
 	}
-	tableArgs.InitCols(desc, scanVisibility, withSystemColumns, virtualColumn)
+	tableArgs.InitCols(desc, withSystemColumns, virtualColumn)
 
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,

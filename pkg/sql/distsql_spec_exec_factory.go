@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -230,15 +229,14 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	// Phase 2: perform the table reader planning. This phase is equivalent to
 	// what DistSQLPlanner.createTableReaders does.
-	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc, colCfg.visibility)
+	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc)
 	trSpec := physicalplan.NewTableReaderSpec()
 	*trSpec = execinfrapb.TableReaderSpec{
 		Table:            *tabDesc.TableDesc(),
 		Reverse:          params.Reverse,
-		Visibility:       colCfg.visibility,
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 	}
-	if vc := getInvertedColumn(colCfg.invertedColumn, cols); vc != nil {
+	if vc := getInvertedColumn(colCfg.invertedColumnID, cols); vc != nil {
 		trSpec.InvertedColumn = vc.ColumnDesc()
 	}
 
@@ -277,7 +275,6 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			desc:                  tabDesc,
 			spans:                 spans,
 			reverse:               params.Reverse,
-			scanVisibility:        colCfg.visibility,
 			parallelize:           params.Parallelize,
 			estimatedRowCount:     uint64(params.EstimatedRowCount),
 			reqOrdering:           ReqOrdering(reqOrdering),
@@ -692,10 +689,6 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	colCfg := scanColumnsConfig{wantedColumns: make([]tree.ColumnID, 0, wantedCols.Len())}
 	for c, ok := wantedCols.Next(0); ok; c, ok = wantedCols.Next(c + 1) {
 		colCfg.wantedColumns = append(colCfg.wantedColumns, desc.PublicColumns()[c].GetID())
-	}
-	ctx := e.planner.extendedEvalCtx.Ctx()
-	if err := e.planner.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-		return zigzagPlanningSide{}, err
 	}
 	cols, err := initColsForScan(desc, colCfg)
 	if err != nil {

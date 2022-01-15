@@ -204,7 +204,7 @@ func NewColBatchScan(
 	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
 	tableArgs, _, err := populateTableArgs(
 		ctx, flowCtx, table, table.ActiveIndexes()[spec.IndexIdx],
-		invertedColumn, spec.Visibility, spec.HasSystemColumns, post, helper,
+		invertedColumn, spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
 		return nil, err
