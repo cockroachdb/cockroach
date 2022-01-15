@@ -214,10 +214,10 @@ def go_deps():
         name = "com_github_apache_thrift",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/apache/thrift",
-        sha256 = "d75265e363da943c24e7ed69104bf018429024a50968421e48a6ab3e624733c2",
-        strip_prefix = "github.com/apache/thrift@v0.13.0",
+        sha256 = "f9e5418fda5dff9f5e1a892a127472fc621d417b3ee1351e53141509233fb1d5",
+        strip_prefix = "github.com/apache/thrift@v0.15.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/apache/thrift/com_github_apache_thrift-v0.13.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/apache/thrift/com_github_apache_thrift-v0.15.0.zip",
         ],
     )
     go_repository(
@@ -2329,10 +2329,10 @@ def go_deps():
         name = "com_github_fraugster_parquet_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/fraugster/parquet-go",
-        sha256 = "cd372b4123f3ead83e1bdfd1f021d8286a8e28fb68d5884fa59657076a64f783",
-        strip_prefix = "github.com/fraugster/parquet-go@v0.4.0",
+        sha256 = "66beb8f2218c31ca4ca3d3dbcc91c256f3379750ade924016f4179982446edd7",
+        strip_prefix = "github.com/fraugster/parquet-go@v0.6.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/fraugster/parquet-go/com_github_fraugster_parquet_go-v0.4.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/fraugster/parquet-go/com_github_fraugster_parquet_go-v0.6.1.zip",
         ],
     )
     go_repository(
