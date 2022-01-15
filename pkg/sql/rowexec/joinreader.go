@@ -938,7 +938,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 
 		// Fetch the next row and tell the strategy to process it.
-		lookedUpRow, _, _, err := jr.fetcher.NextRow(jr.Ctx)
+		lookedUpRow, err := jr.fetcher.NextRow(jr.Ctx)
 		if err != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(err))
 			return jrStateUnknown, jr.DrainHelper()
