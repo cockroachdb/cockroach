@@ -57,29 +57,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -117,28 +104,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -178,28 +152,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -236,27 +197,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -299,11 +247,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -311,15 +255,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -357,26 +294,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -416,26 +342,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -472,25 +387,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -548,29 +452,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -600,28 +491,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -653,28 +531,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -703,27 +568,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -758,11 +610,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -770,15 +618,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -808,26 +649,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -859,26 +689,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -907,25 +726,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -975,29 +783,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1027,28 +822,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1080,28 +862,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1130,27 +899,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1185,11 +941,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -1197,15 +949,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1235,26 +980,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1286,26 +1020,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1334,25 +1057,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1400,29 +1112,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1463,28 +1162,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1527,28 +1213,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1588,27 +1261,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1654,11 +1314,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -1666,15 +1322,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1715,26 +1364,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1777,26 +1415,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1836,25 +1463,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1910,29 +1526,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -1973,28 +1576,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2037,28 +1627,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2098,27 +1675,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2164,11 +1728,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -2176,15 +1736,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2225,26 +1778,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2287,26 +1829,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2346,25 +1877,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2422,29 +1942,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2485,28 +1992,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2549,28 +2043,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2610,27 +2091,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2676,11 +2144,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -2688,15 +2152,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2737,26 +2194,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2799,26 +2245,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2858,25 +2293,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -2937,29 +2361,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3008,28 +2419,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3080,28 +2478,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3149,27 +2534,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3223,11 +2595,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -3235,15 +2603,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3292,26 +2653,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3362,26 +2712,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3429,25 +2768,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3516,29 +2844,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3575,28 +2890,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3635,28 +2937,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3692,27 +2981,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3754,11 +3030,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -3766,15 +3038,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3811,26 +3076,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3869,26 +3123,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3924,25 +3167,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -3999,29 +3231,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4051,28 +3270,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4104,28 +3310,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4154,27 +3347,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4209,11 +3389,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -4221,15 +3397,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4259,26 +3428,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4310,26 +3468,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4358,25 +3505,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4426,29 +3562,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4484,28 +3607,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4543,28 +3653,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4599,27 +3696,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4660,11 +3744,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -4672,15 +3752,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4716,26 +3789,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4773,26 +3835,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4827,25 +3878,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4901,29 +3941,16 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -4955,28 +3982,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5010,28 +4024,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5062,27 +4063,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5119,11 +4107,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -5131,15 +4115,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5171,26 +4148,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5224,26 +4190,15 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 								)
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5274,25 +4229,14 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIsNull, buildIsNull bool
 								)
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5350,12 +4294,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -5363,15 +4303,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5412,27 +4345,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5475,27 +4397,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5535,26 +4446,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5613,12 +4513,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -5626,15 +4522,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5667,27 +4556,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5722,27 +4600,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5774,26 +4641,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5850,12 +4706,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -5863,15 +4715,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5904,27 +4749,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -5959,27 +4793,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6011,26 +4834,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6079,12 +4891,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -6092,15 +4900,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6144,27 +4945,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6210,27 +5000,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6273,26 +5052,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6355,12 +5123,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -6368,15 +5132,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6420,27 +5177,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6486,27 +5232,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6549,26 +5284,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6633,12 +5357,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -6646,15 +5366,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6698,27 +5411,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6764,27 +5466,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6827,26 +5518,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6917,12 +5597,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -6930,15 +5606,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -6990,27 +5659,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7064,27 +5722,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7135,26 +5782,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7227,12 +5863,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -7240,15 +5872,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7288,27 +5913,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7350,27 +5964,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7409,26 +6012,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7486,12 +6078,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -7499,15 +6087,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7540,27 +6121,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7595,27 +6165,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7647,26 +6206,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7717,12 +6265,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -7730,15 +6274,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7777,27 +6314,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7838,27 +6364,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7896,26 +6411,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -7972,12 +6476,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 							probeVecNulls := probeVec.Nulls()
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
@@ -7985,15 +6485,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -8028,27 +6521,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -8085,27 +6567,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 							)
 							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -8139,26 +6610,15 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIsNull, buildIsNull bool
 							)
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
 											continue
 										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
@@ -8211,15 +6671,12 @@ func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 			continue
 		}
 		if !ht.ProbeScratch.differs[toCheck] {
-			// If the current key matches with the probe key, we want to update HeadID
-			// with the current key if it has not been set yet.
 			keyID := ht.ProbeScratch.GroupID[toCheck]
 			if ht.ProbeScratch.HeadID[toCheck] == 0 {
 				ht.ProbeScratch.HeadID[toCheck] = keyID
 			}
 		}
 		if ht.ProbeScratch.differs[toCheck] {
-			// Continue probing in this next chain for the probe key.
 			ht.ProbeScratch.differs[toCheck] = false
 			//gcassert:bce
 			toCheckSlice[nDiffers] = toCheck
@@ -8258,7 +6715,6 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 				if hasVisited := visited[HeadID-1]; !hasVisited {
 					sel[distinctCount] = sel[HeadID-1]
 					visited[HeadID-1] = true
-					// Compacting and deduplicating hash buffer.
 					//gcassert:bce
 					hashBuffer[distinctCount] = hashBuffer[i]
 					distinctCount++
@@ -8286,7 +6742,6 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 				if hasVisited := visited[HeadID-1]; !hasVisited {
 					sel[distinctCount] = int(HeadID - 1)
 					visited[HeadID-1] = true
-					// Compacting and deduplicating hash buffer.
 					//gcassert:bce
 					hashBuffer[distinctCount] = hashBuffer[i]
 					distinctCount++
