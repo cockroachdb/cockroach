@@ -24,6 +24,23 @@ import (
 	"strings"
 )
 
+var (
+	// Regexes for matching release tags
+	// Line must start with vX.Y.Z
+	versionTagRE     = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)`)
+	// Match vX.Y.0-alpha.00000000 releases
+	// ex: v21.2.0-alpha.00000000
+	alpha00TagRE     = regexp.MustCompile(`v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.0-alpha.00+$`)
+	// ex: v21.2.0-beta.1
+	alphaBetaRcTagRE = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.0-[-.0-9A-Za-z]+$`)
+	// Match releases >= vX.Y.1
+	// ex: v21.2.1
+	patchTagRE       = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.[1-9][0-9]*$`)
+	// Match only vX.Y.0 releases
+	// ex: v21.2.0
+	dotZeroTagRE     = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.0$`)
+)
+
 func main() {
 	log.SetFlags(0)
 	var tokenPath, fromRef, toRef, repository, gitCheckoutDir string
@@ -130,39 +147,49 @@ func getRefs(fromRef, toRef string) ([]string, error) {
 }
 
 func matchVersion(text string) string {
+	var dotZeroTag string
 	for _, line := range strings.Fields(text) {
 		// Only looking for version tags.
-		regVersion := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)`)
-		if !regVersion.MatchString(line) {
+		if !versionTagRE.MatchString(line) {
 			continue
 		}
-		// Should avoid *-alpha.00000000 tag, so we continue with the next line value.
-		alpha00Regex := regexp.MustCompile(`v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-alpha.00+$`)
-		if alpha00Regex.MatchString(line) {
+		// Should avoid alpha.00000000 tags. When one is seen, the earliest
+		// release should be alpha.1 or beta.1.
+		if alpha00TagRE.MatchString(line) {
 			continue
 		}
-		// Checking first for An alpha/beta/rc tag.
-		// if present, return line value
-		alphaBetaRcRegex := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[-.0-9A-Za-z]+$`)
-		if alphaBetaRcRegex.MatchString(line) {
+		// Check first for an alpha/beta/rc tag. It might be the first version
+		// tag found or it might come after a .0 and/or an alpha.00000000.
+		if alphaBetaRcTagRE.MatchString(line) {
 			return line
 		}
-		// Second check is vX.Y.Z patch release >= .1 is first (ex: v20.1.1).
-		patchRegex := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.[1-9][0-9]*$`)
-		if patchRegex.MatchString(line) {
+		// Check second for a patch release >= .1. It might be the first version
+		// tag found or it might come after a .0 tag.
+		if patchTagRE.MatchString(line) {
+			// The .0 tag wins.
+			if dotZeroTag != "" {
+				return dotZeroTag
+			}
 			return line
 		}
-		// Third check is major release A vX.Y.0 release.
-		majorReleaseRegex := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.0$`)
-		if majorReleaseRegex.MatchString(line) {
-			return line
+		// Check third for a .0 release (ex: v21.2.0).
+		// Because git orders alpha, beta and rc tags after the .0 release and
+		// before the .1 release, we need to continue checking subsequent lines
+		// to know if the .0 release is the right release.
+		if dotZeroTagRE.MatchString(line) {
+			dotZeroTag = line
+			continue
 		}
+	}
+	// The .0 version was the only version tag in the list.
+	if dotZeroTag != "" {
+		return dotZeroTag
 	}
 	return ""
 }
 
 func getFirstTagContainingRef(ref string) (string, error) {
-	cmd := exec.Command("git", "tag", "--contains", ref)
+	cmd := exec.Command("git", "tag", "--contains", ref, "--sort", "version:refname")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err

@@ -96,30 +96,52 @@ func TestMatchVersion(t *testing.T) {
 		input    string
 		expected string
 	}{
-		// No other than versions tags should be accepted.
+		// Only version tags should be accepted
 		{"Version1.0.1", ""},
 		{"Undefined", ""},
+		{"custombuild-v20.1.3-1-g56c1f2e5d3", ""},
+		{"staging-202011191818-v20.2.1.1", ""},
 		// Accepted version tags.
 		{"v1.0.1", "v1.0.1"},
 		{"v2.2.2", "v2.2.2"},
-		// Skipping *-alpha.00000000 tag.
-		{"v1.0.1-alpha.00000000", ""},
-		{"v2.2.2-alpha.00000000", ""},
-		// Checking for An alpha/beta/rc tag.
-		{"v1.0.1-alpha.1", "v1.0.1-alpha.1"},
-		{"v1.0.1-beta.1", "v1.0.1-beta.1"},
-		{"v1.0.1-rc.1", "v1.0.1-rc.1"},
+		{"v21.2.14", "v21.2.14"},
+		// Skip *-alpha.00000000 tag.
+		{"v1.0.0-alpha.00000000", ""},
+		{"v2.2.0-alpha.00000000", ""},
+		{"v21.2.0-alpha.00000000", ""},
+		// Check for An alpha/beta/rc tag.
+		{"v1.0.0-alpha.1", "v1.0.0-alpha.1"},
+		{"v21.2.0-beta.5", "v21.2.0-beta.5"},
+		{"v1.0.0-rc.2", "v1.0.0-rc.2"},
+		// Skip non .0-alpha/beta/rc tags.
+		{"v1.0.4-alpha.3", ""},
+		{"v21.0.1-beta.5", ""},
+		{"v22.0.9-rc.2", ""},
 		// Check is vX.Y.Z patch release >= .1 is first (ex: v20.1.1).
 		{"v20.0.1", "v20.0.1"},
 		{"v22.1.2", "v22.1.2"},
-		// Checking for major releases.
+		// Check for major releases.
 		{"v1.1.0", "v1.1.0"},
 		{"v2.2.0", "v2.2.0"},
+		// Check for edge cases that are special to the tag sort order produced
+		// by git.
+		// alpha.1 after alpha.00
+		{"v21.1.0-alpha.00000000\nv21.1.0-alpha.1", "v21.1.0-alpha.1"},
+		// alpha.1 after alpha.00 after .0
+		{"v21.1.0\nv21.1.0-alpha.00000000\nv21.1.0-alpha.1", "v21.1.0-alpha.1"},
+		// alpha/beta/rc after .0
+		{"v21.1.0\nv21.1.0-alpha.1", "v21.1.0-alpha.1"},
+		{"v21.1.0\nv21.1.0-beta.4", "v21.1.0-beta.4"},
+		{"v22.1.0\nv22.1.0-rc.2", "v22.1.0-rc.2"},
+		// .1 after .0
+		{"v21.1.0\nv21.1.1", "v21.1.0"},
+		// .10 after .9
+		{"v21.1.9\nv21.1.10", "v21.1.9"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			assert.Equal(t, matchVersion(tc.input), tc.expected)
+			assert.Equal(t, tc.expected, matchVersion(tc.input))
 		})
 	}
 }
