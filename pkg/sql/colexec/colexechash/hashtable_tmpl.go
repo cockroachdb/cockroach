@@ -111,7 +111,6 @@ func _CHECK_COL_BODY(
 	buildVecNulls := buildVec.Nulls()
 	// {{end}}
 	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-		// keyID of 0 is reserved to represent the end of the next chain.
 		keyID := ht.ProbeScratch.GroupID[toCheck]
 		// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
 		// {{/*
@@ -126,13 +125,12 @@ func _CHECK_COL_BODY(
 		// */}}
 		if keyID != 0 {
 			// {{end}}
-			// the build table key (calculated using keys[keyID - 1] = key) is
-			// compared to the corresponding probe table to determine if a match is
-			// found.
 			// {{if .DeletingProbeMode}}
 			if ht.Visited[keyID] {
-				// This build tuple has already been matched, so we treat
-				// it as different from the probe tuple.
+				// {{/*
+				//     This build tuple has already been matched, so we treat
+				//     it as different from the probing tuple.
+				// */}}
 				ht.ProbeScratch.differs[toCheck] = true
 				continue
 			}
@@ -156,8 +154,10 @@ func _CHECK_COL_BODY(
 			//     means .UseBuildSel if we were to introduce it.
 			// */}}
 			// {{if and (.UseProbeSel) (.ProbingAgainstItself)}}
-			// The vector is probed against itself, so buildVec has the same
-			// selection vector as probeVec.
+			// {{/*
+			//     The vector is probed against itself, so buildVec has the same
+			//     selection vector as probeVec.
+			// */}}
 			buildIdx = probeSel[keyID-1]
 			// {{else}}
 			buildIdx = int(keyID - 1)
@@ -167,15 +167,21 @@ func _CHECK_COL_BODY(
 			// {{end}}
 			if ht.allowNullEquality {
 				if probeIsNull && buildIsNull {
-					// Both values are NULLs, and since we're allowing null equality, we
-					// proceed to the next value to check.
+					// {{/*
+					//     Both values are NULLs, and since we're allowing null
+					//     equality, we proceed to the next vector to check.
+					// */}}
 					continue
 				} else if probeIsNull {
-					// Only probing value is NULL, so it is different from the build value
-					// (which is non-NULL). We mark it as "different" and proceed to the
-					// next value to check. This behavior is special in case of allowing
-					// null equality because we don't want to reset the GroupID of the
-					// current probing tuple.
+					// {{/*
+					//     Only probing value is NULL, so it is different from
+					//     the build value (which is non-NULL). We mark it as
+					//     "different" and will eventually proceed to check the
+					//     next build table for equality. This behavior is
+					//     special in case of allowing null equality because we
+					//     don't want to reset the GroupID of the current
+					//     probing tuple.
+					// */}}
 					ht.ProbeScratch.differs[toCheck] = true
 					continue
 				}
@@ -376,14 +382,16 @@ func (ht *HashTable) checkColForDistinctTuples(
 				// {{range .RightWidths}}
 				// {{$rightWidth := .Width}}
 				// {{if and (eq $leftFamily $rightFamily) (eq $leftWidth $rightWidth)}}
-				// {{/* We're being this tricky with code generation because we
+				// {{/*
+				//      We're being this tricky with code generation because we
 				//      know that both probeVec and buildVec are of the same
 				//      type, so we need to iterate over one level of type
 				//      family - width. But, the checkCol function above needs
 				//      two layers, so in order to keep these templated
 				//      functions in a single file we make sure that we
 				//      generate the code only if the "second" level is the
-				//      same as the "first" one */}}
+				//      same as the "first" one
+				// */}}
 				case _RIGHT_TYPE_WIDTH:
 					probeKeys := probeVec._ProbeType()
 					buildKeys := buildVec._ProbeType()
@@ -439,24 +447,29 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 		}
 		// {{end}}
 		if !ht.ProbeScratch.differs[toCheck] {
-			// If the current key matches with the probe key, we want to update HeadID
-			// with the current key if it has not been set yet.
 			keyID := ht.ProbeScratch.GroupID[toCheck]
 			// {{if .DeletingProbeMode}}
-			// We need to check whether this key hasn't been "deleted" (we
-			// reuse 'visited' array for tracking which tuples are deleted).
-			// TODO(yuzefovich): rather than reusing 'visited' array to have
-			// "deleted" marks we could be actually removing tuples' keyIDs
-			// from the hash chains. This will require changing our use of
-			// singly linked list 'next' to doubly linked list.
+			// {{/*
+			//     We need to check whether this matching tuple hasn't been
+			//     "deleted" (we reuse 'visited' array for tracking which tuples
+			//     are deleted).
+			//     TODO(yuzefovich): rather than reusing 'visited' array to have
+			//     "deleted" marks we could be actually removing tuples' keyIDs
+			//     from the hash chains. This will require changing our use of
+			//     singly linked list 'Next' to doubly linked list.
+			// */}}
 			if !ht.Visited[keyID] {
-				// It hasn't been deleted, so we match it with 'ToCheck'
-				// probing tuple and "delete" the key.
+				// {{/*
+				//     It hasn't been deleted, so we match it with 'toCheck'
+				//     probing tuple and "delete" the key.
+				// */}}
 				ht.ProbeScratch.HeadID[toCheck] = keyID
 				ht.Visited[keyID] = true
 			} else {
-				// It has been deleted, so we need to continue probing on the
-				// next chain if it's not the end of the chain already.
+				// {{/*
+				//     It has been deleted, so we need to continue probing on
+				//     the Next chain if it's not the end of the chain already.
+				// */}}
 				if keyID != 0 {
 					//gcassert:bce
 					toCheckSlice[nDiffers] = toCheck
@@ -465,18 +478,24 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 			}
 			continue
 			// {{else}}
+			// {{/*
+			//     If we have an equality match, we want to update HeadID with
+			//     the current keyID if it has not been set yet.
+			// */}}
 			if ht.ProbeScratch.HeadID[toCheck] == 0 {
 				ht.ProbeScratch.HeadID[toCheck] = keyID
 			}
 			// {{if .SelectSameTuples}}
 			firstID := ht.ProbeScratch.HeadID[toCheck]
 			if !ht.Visited[keyID] {
-				// We can then add this keyID into the same array at the end of the
-				// corresponding linked list and mark this ID as visited. Since there
-				// can be multiple keys that match this probe key, we want to mark
-				// differs at this position to be true. This way, the prober will
-				// continue probing for this key until it reaches the end of the next
-				// chain.
+				// {{/*
+				//     We can add this keyID into the Same array at the end
+				//     of the corresponding linked list and mark this ID as
+				//     visited. Since there can be multiple keys that match this
+				//     probe key, we want to mark 'differs' at this position to
+				//     be true. This way, the prober will continue probing for
+				//     this key until it reaches the end of the Next chain.
+				// */}}
 				ht.ProbeScratch.differs[toCheck] = true
 				ht.Visited[keyID] = true
 				if firstID != keyID {
@@ -488,7 +507,9 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 			// {{end}}
 		}
 		if ht.ProbeScratch.differs[toCheck] {
-			// Continue probing in this next chain for the probe key.
+			// {{/*
+			//     Continue probing in this Next chain for the probe key.
+			// */}}
 			ht.ProbeScratch.differs[toCheck] = false
 			//gcassert:bce
 			toCheckSlice[nDiffers] = toCheck
@@ -576,7 +597,9 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 				sel[distinctCount] = int(HeadID - 1)
 				// {{end}}
 				visited[HeadID-1] = true
-				// Compacting and deduplicating hash buffer.
+				// {{/*
+				//     Compacting and de-duplicating hash buffer.
+				// */}}
 				//gcassert:bce
 				hashBuffer[distinctCount] = hashBuffer[i]
 				distinctCount++
