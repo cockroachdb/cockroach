@@ -591,6 +591,12 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			query:  `CREATE SCHEDULE FOR BACKUP INTO 'foo' WITH encryption_passphrase=$1 RECURRING '@hourly'`,
 			errMsg: "failed to evaluate backup encryption_passphrase",
 		},
+		{
+			name:   "malformed-cron-expression",
+			query:  "CREATE SCHEDULE backup_schedule FOR BACKUP INTO 'userfile:///a' RECURRING '* 12-8 * * *';",
+			user:   freeUser,
+			errMsg: "pq: failed to parse cron expression: \"\\* 12-8 \\* \\* \\*\"",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1071,9 +1077,10 @@ INSERT INTO t values (1), (10), (100);
 		// to the next scheduled recurrence.
 		for _, id := range []int64{fullID, incID} {
 			s := th.loadSchedule(t, id)
-			require.EqualValues(t,
-				cronexpr.MustParse(s.ScheduleExpr()).Next(th.env.Now()).Round(time.Microsecond),
-				s.NextRun())
+			expr := cronexpr.MustParse(s.ScheduleExpr())
+			nextRun, err := jobs.CronParseNext(expr, th.env.Now(), s.ScheduleExpr())
+			require.NoError(t, err)
+			require.EqualValues(t, nextRun.Round(time.Microsecond), s.NextRun())
 		}
 
 		// We expect that, eventually, both backups would succeed.
