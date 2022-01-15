@@ -149,7 +149,8 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 				}
 				panic(pgerror.Newf(
 					pgcode.DependentObjectsStillExist,
-					"cannot drop table a because other objects depend on it"))
+					"cannot drop table %s because other objects depend on it",
+					tbl.GetName()))
 			})
 		}
 		scpb.ForEachSequenceOwnedBy(c, func(_, _ scpb.Status, sequenceOwnedBy *scpb.SequenceOwnedBy) {
