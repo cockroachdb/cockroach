@@ -66,6 +66,21 @@ func (mr *MockCatalogMockRecorder) GetFullyQualifiedName(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFullyQualifiedName", reflect.TypeOf((*MockCatalog)(nil).GetFullyQualifiedName), arg0, arg1)
 }
 
+// GetSchemaName mocks base method.
+func (m *MockCatalog) GetSchemaName(arg0 context.Context, arg1 catid.DescID, arg2 bool) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSchemaName", arg0, arg1, arg2)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSchemaName indicates an expected call of GetSchemaName.
+func (mr *MockCatalogMockRecorder) GetSchemaName(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSchemaName", reflect.TypeOf((*MockCatalog)(nil).GetSchemaName), arg0, arg1, arg2)
+}
+
 // MustReadImmutableDescriptor mocks base method.
 func (m *MockCatalog) MustReadImmutableDescriptor(arg0 context.Context, arg1 catid.DescID) (catalog.Descriptor, error) {
 	m.ctrl.T.Helper()

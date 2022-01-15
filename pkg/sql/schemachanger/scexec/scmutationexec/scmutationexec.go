@@ -37,6 +37,10 @@ import (
 // CatalogReader describes catalog read operations as required by the mutation
 // visitor.
 type CatalogReader interface {
+
+	// GetSchemaName fetches the name of a schema descriptor.
+	GetSchemaName(ctx context.Context, id descpb.ID, isTemporary bool) (string, error)
+
 	// MustReadImmutableDescriptor reads a descriptor from the catalog by ID.
 	MustReadImmutableDescriptor(ctx context.Context, id descpb.ID) (catalog.Descriptor, error)
 

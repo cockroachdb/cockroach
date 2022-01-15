@@ -135,6 +135,20 @@ func (d *buildDeps) MayResolveType(
 	return prefix, desc.(catalog.TypeDescriptor)
 }
 
+// ReadSchemaNamesAndIDs implements the scbuild.CatalogReader interface.
+func (d *buildDeps) ReadSchemaNamesAndIDs(
+	ctx context.Context, db catalog.DatabaseDescriptor,
+) map[descpb.ID]string {
+	descAndNames, err := d.descsCollection.GetSchemasForDatabase(
+		ctx,
+		d.txn,
+		db.GetID())
+	if err != nil {
+		panic(err)
+	}
+	return descAndNames
+}
+
 // ReadObjectNamesAndIDs implements the scbuild.CatalogReader interface.
 func (d *buildDeps) ReadObjectNamesAndIDs(
 	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,

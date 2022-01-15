@@ -11,12 +11,14 @@
 package scbuildstmt
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -34,8 +36,22 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	{
 		c := b.WithNewSourceElementID()
 		doSchema := func(schema catalog.SchemaDescriptor) {
-			// Sanity: Check if the descriptor is already dropped.
-			if checkIfDescOrElementAreDropped(b, schema.GetID()) {
+			// Sanity: Check if the descriptor is already dropped by scanning the
+			// elements. We cannot use the normal helper function, since the temporary
+			// descriptors are session bound and have specific code paths for lookups.
+			schemaDropped := false
+			b.ForEachElementStatus(func(_, targetStatus scpb.Status, elem scpb.Element) {
+				if schemaDropped {
+					return
+				}
+				if targetStatus == scpb.Status_ABSENT && screl.GetDescID(elem) == schema.GetID() {
+					switch elem.(type) {
+					case *scpb.Schema:
+						schemaDropped = true
+					}
+				}
+			})
+			if schemaDropped {
 				return
 			}
 			// For public and temporary schemas the drop logic
@@ -59,20 +75,25 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 				schemaDroppedIDs.ForEach(dropIDs.Add)
 			}
 		}
-		var schemaIDs catalog.DescriptorIDSet
-		schemaIDs.Add(db.GetSchemaID(tree.PublicSchema))
-		_ = db.ForEachSchemaInfo(func(id descpb.ID, _ string, isDropped bool) error {
-			if !isDropped {
-				schemaIDs.Add(id)
-			}
-			return nil
-		})
-		for _, schemaID := range schemaIDs.Ordered() {
-			schema := c.MustReadSchema(schemaID)
+		// Get all schemas including temporary ones for a database.
+		schemas := b.CatalogReader().ReadSchemaNamesAndIDs(b, db)
+		sortedSchemaNames := make([]string, 0, len(schemas))
+		for _, schemaName := range schemas {
+			sortedSchemaNames = append(sortedSchemaNames, schemaName)
+		}
+		sort.Strings(sortedSchemaNames)
+		for _, schemaName := range sortedSchemaNames {
+			_, schema := c.CatalogReader().MayResolveSchema(
+				b,
+				tree.ObjectNamePrefix{
+					SchemaName:      tree.Name(schemaName),
+					CatalogName:     tree.Name(db.GetName()),
+					ExplicitSchema:  true,
+					ExplicitCatalog: true})
+
 			if schema.Dropped() {
 				continue
 			}
-			dropIDs.Add(schemaID)
 			doSchema(schema)
 		}
 	}

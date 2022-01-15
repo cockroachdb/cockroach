@@ -98,6 +98,9 @@ type CatalogReader interface {
 	// ReadObjectNamesAndIDs looks up the namespace entries for a schema.
 	ReadObjectNamesAndIDs(ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor) (tree.TableNames, descpb.IDs)
 
+	// ReadSchemaNamesAndIDs looks up schema names and IDs for a given database.
+	ReadSchemaNamesAndIDs(ctx context.Context, db catalog.DatabaseDescriptor) map[descpb.ID]string
+
 	// MustReadDescriptor looks up a descriptor by ID.
 	MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor
 }
@@ -168,9 +171,6 @@ type DescriptorReader interface {
 
 	// MustReadDatabase returns the database descriptor for the given ID or panics.
 	MustReadDatabase(id descpb.ID) catalog.DatabaseDescriptor
-
-	// MustReadSchema returns the schema descriptor for the given ID or panics.
-	MustReadSchema(id descpb.ID) catalog.SchemaDescriptor
 
 	// MustReadTable returns the table descriptor for the given ID or panics.
 	MustReadTable(id descpb.ID) catalog.TableDescriptor

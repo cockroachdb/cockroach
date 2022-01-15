@@ -12,6 +12,7 @@ package sctestdeps
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -366,6 +367,39 @@ func (s *TestState) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	return tree.MakeTypeNameWithPrefix(tn.ObjectNamePrefix, tn.Object()), typ, nil
+}
+
+// ReadSchemaNamesAndIDs implements the scmutationexec.CatalogReader interface.
+func (s *TestState) ReadSchemaNamesAndIDs(
+	ctx context.Context, db catalog.DatabaseDescriptor,
+) map[descpb.ID]string {
+	namedAndIDs := make(map[descpb.ID]string)
+	err := db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
+		namedAndIDs[id] = name
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return namedAndIDs
+}
+
+// GetSchemaName implements the scmutationexec.CatalogReader interface.
+func (s *TestState) GetSchemaName(
+	ctx context.Context, id descpb.ID, isTemporary bool,
+) (string, error) {
+	if isTemporary {
+		return fmt.Sprintf("pg_temp_%d", id), nil
+	}
+	desc, err := s.MustReadImmutableDescriptor(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	schema, err := catalog.AsSchemaDescriptor(desc)
+	if err != nil {
+		return "", err
+	}
+	return schema.GetName(), nil
 }
 
 // GetQualifiedTableNameByID implements the scbuild.CatalogReader interface.

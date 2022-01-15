@@ -370,14 +370,14 @@ func (mvs *mutationVisitorState) DeleteConstraintComment(
 	constraintName string,
 	constraintType scpb.ConstraintType,
 ) error {
-	schema, err := mvs.c.MustReadImmutableDescriptor(ctx, tbl.GetParentSchemaID())
+	schemaName, err := mvs.c.GetSchemaName(ctx, tbl.GetParentSchemaID(), tbl.IsTemporary())
 	if err != nil {
 		return err
 	}
 	mvs.constraintCommentsToUpdate = append(mvs.constraintCommentsToUpdate,
 		constraintCommentToUpdate{
 			tbl:            tbl,
-			schemaName:     schema.GetName(),
+			schemaName:     schemaName,
 			constraintName: constraintName,
 			constraintType: constraintType,
 		})

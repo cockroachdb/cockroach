@@ -113,6 +113,27 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 
 var _ scexec.Catalog = (*txnDeps)(nil)
 
+// GetSchemaName implements the scmutationexec.CatalogReader interface.
+func (d *txnDeps) GetSchemaName(
+	ctx context.Context, id descpb.ID, isTemporary bool,
+) (string, error) {
+	if isTemporary {
+		return fmt.Sprintf("pg_temp_%d", id), nil
+	}
+	flags := tree.CommonLookupFlags{
+		Required:       true,
+		RequireMutable: false,
+		AvoidLeased:    true,
+		IncludeOffline: true,
+		IncludeDropped: true,
+	}
+	schema, err := d.descsCollection.GetImmutableSchemaByID(ctx, d.txn, id, flags)
+	if err != nil {
+		return "", err
+	}
+	return schema.GetName(), nil
+}
+
 // MustReadImmutableDescriptor implements the scmutationexec.CatalogReader interface.
 func (d *txnDeps) MustReadImmutableDescriptor(
 	ctx context.Context, id descpb.ID,
@@ -155,17 +176,18 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 		if err != nil {
 			return "", err
 		}
-		schemaDesc, err := d.descsCollection.GetImmutableSchemaByID(ctx, d.txn, objectDesc.GetParentSchemaID(),
-			tree.SchemaLookupFlags{
-				Required:       true,
-				IncludeDropped: true,
-				AvoidLeased:    true,
-			})
+		// Before resolving the schema name we need know if the lookup will
+		// be for a temporary schema, which will be known for table descriptors.
+		isTemp := false
+		if td, ok := objectDesc.(catalog.TableDescriptor); ok {
+			isTemp = td.IsTemporary()
+		}
+		schemaName, err := d.GetSchemaName(ctx, objectDesc.GetParentSchemaID(), isTemp)
 		if err != nil {
 			return "", err
 		}
 		name := tree.MakeTableNameWithSchema(tree.Name(databaseDesc.GetName()),
-			tree.Name(schemaDesc.GetName()),
+			tree.Name(schemaName),
 			tree.Name(objectDesc.GetName()))
 		return name.FQString(), nil
 	} else if objectDesc.DescriptorType() == catalog.Database {

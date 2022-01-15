@@ -28,16 +28,6 @@ func (b buildCtx) MustReadDatabase(id descpb.ID) catalog.DatabaseDescriptor {
 	return db
 }
 
-// MustReadSchema implements the scbuildstmt.DescriptorReader interface.
-func (b buildCtx) MustReadSchema(id descpb.ID) catalog.SchemaDescriptor {
-	desc := b.CatalogReader().MustReadDescriptor(b, id)
-	schema, err := catalog.AsSchemaDescriptor(desc)
-	if err != nil {
-		panic(err)
-	}
-	return schema
-}
-
 // MustReadTable implements the scbuildstmt.DescriptorReader interface.
 func (b buildCtx) MustReadTable(id descpb.ID) catalog.TableDescriptor {
 	desc := b.CatalogReader().MustReadDescriptor(b, id)

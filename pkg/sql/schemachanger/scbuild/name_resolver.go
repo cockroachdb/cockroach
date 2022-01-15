@@ -56,10 +56,10 @@ func (b buildCtx) ResolveSchema(
 		panic(sqlerrors.NewUndefinedSchemaError(name.Schema()))
 	}
 	switch sc.SchemaKind() {
-	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
+	case catalog.SchemaPublic, catalog.SchemaVirtual:
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
 			"%s permission denied for schema %q", p.RequiredPrivilege.String(), name))
-	case catalog.SchemaUserDefined:
+	case catalog.SchemaUserDefined, catalog.SchemaTemporary:
 		b.MustOwn(sc)
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind()))
