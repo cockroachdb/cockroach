@@ -53,10 +53,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -66,51 +63,47 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												if !probeVal && buildVal {
-													cmpResult = -1
-												} else if probeVal && !buildVal {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
 												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-												unique = cmpResult != 0
+										{
+											var cmpResult int
+
+											if !probeVal && buildVal {
+												cmpResult = -1
+											} else if probeVal && !buildVal {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -119,52 +112,42 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												if !probeVal && buildVal {
-													cmpResult = -1
-												} else if probeVal && !buildVal {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-
-												unique = cmpResult != 0
+											if !probeVal && buildVal {
+												cmpResult = -1
+											} else if probeVal && !buildVal {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -173,50 +156,36 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												if !probeVal && buildVal {
-													cmpResult = -1
-												} else if probeVal && !buildVal {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-
-												unique = cmpResult != 0
+											if !probeVal && buildVal {
+												cmpResult = -1
+											} else if probeVal && !buildVal {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -224,42 +193,27 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												if !probeVal && buildVal {
-													cmpResult = -1
-												} else if probeVal && !buildVal {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-
-												unique = cmpResult != 0
+											if !probeVal && buildVal {
+												cmpResult = -1
+											} else if probeVal && !buildVal {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -267,10 +221,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -280,51 +231,47 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												if !probeVal && buildVal {
-													cmpResult = -1
-												} else if probeVal && !buildVal {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
 												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-												unique = cmpResult != 0
+										{
+											var cmpResult int
+
+											if !probeVal && buildVal {
+												cmpResult = -1
+											} else if probeVal && !buildVal {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -333,52 +280,42 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												if !probeVal && buildVal {
-													cmpResult = -1
-												} else if probeVal && !buildVal {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-
-												unique = cmpResult != 0
+											if !probeVal && buildVal {
+												cmpResult = -1
+											} else if probeVal && !buildVal {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -387,50 +324,36 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												if !probeVal && buildVal {
-													cmpResult = -1
-												} else if probeVal && !buildVal {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-
-												unique = cmpResult != 0
+											if !probeVal && buildVal {
+												cmpResult = -1
+											} else if probeVal && !buildVal {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -438,42 +361,27 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												if !probeVal && buildVal {
-													cmpResult = -1
-												} else if probeVal && !buildVal {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-
-												unique = cmpResult != 0
+											if !probeVal && buildVal {
+												cmpResult = -1
+											} else if probeVal && !buildVal {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -496,10 +404,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -509,43 +414,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = bytes.Compare(probeVal, buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = bytes.Compare(probeVal, buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -554,44 +455,34 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = bytes.Compare(probeVal, buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = bytes.Compare(probeVal, buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -600,42 +491,28 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = bytes.Compare(probeVal, buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = bytes.Compare(probeVal, buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -643,34 +520,19 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
-												cmpResult = bytes.Compare(probeVal, buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										{
+											var cmpResult int
+											cmpResult = bytes.Compare(probeVal, buildVal)
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -678,10 +540,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -691,43 +550,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = bytes.Compare(probeVal, buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = bytes.Compare(probeVal, buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -736,44 +591,34 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = bytes.Compare(probeVal, buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = bytes.Compare(probeVal, buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -782,42 +627,28 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = bytes.Compare(probeVal, buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = bytes.Compare(probeVal, buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -825,34 +656,19 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
-												cmpResult = bytes.Compare(probeVal, buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										{
+											var cmpResult int
+											cmpResult = bytes.Compare(probeVal, buildVal)
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -875,10 +691,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -888,43 +701,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -933,44 +742,34 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -979,42 +778,28 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -1022,34 +807,19 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										{
+											var cmpResult int
+											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -1057,10 +827,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -1070,43 +837,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1115,44 +878,34 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1161,42 +914,28 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -1204,34 +943,19 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
-												cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										{
+											var cmpResult int
+											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -1252,10 +976,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -1265,54 +986,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1321,55 +1038,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1378,53 +1085,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -1432,45 +1125,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -1478,10 +1156,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -1491,54 +1166,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1547,55 +1218,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1604,53 +1265,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -1658,45 +1305,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -1708,10 +1340,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -1721,54 +1350,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1777,55 +1402,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1834,53 +1449,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -1888,45 +1489,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -1934,10 +1520,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -1947,54 +1530,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2003,55 +1582,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2060,53 +1629,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -2114,45 +1669,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -2165,10 +1705,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -2178,54 +1715,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2234,55 +1767,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2291,53 +1814,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -2345,45 +1854,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -2391,10 +1885,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -2404,54 +1895,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2460,55 +1947,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2517,53 +1994,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -2571,45 +2034,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -2627,10 +2075,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -2640,54 +2085,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2696,55 +2137,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2753,53 +2184,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -2807,45 +2224,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -2853,10 +2255,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -2866,54 +2265,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2922,55 +2317,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2979,53 +2364,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -3033,45 +2404,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -3083,10 +2439,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -3096,54 +2449,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3152,55 +2501,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3209,53 +2548,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -3263,45 +2588,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -3309,10 +2619,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -3322,54 +2629,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3378,55 +2681,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3435,53 +2728,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -3489,45 +2768,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -3540,10 +2804,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -3553,54 +2814,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3609,55 +2866,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3666,53 +2913,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -3720,45 +2953,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -3766,10 +2984,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -3779,54 +2994,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3835,55 +3046,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3892,53 +3093,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -3946,45 +3133,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -4003,10 +3175,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -4016,54 +3185,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4072,55 +3237,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4129,53 +3284,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -4183,45 +3324,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -4229,10 +3355,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -4242,54 +3365,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4298,55 +3417,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4355,53 +3464,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -4409,45 +3504,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -4459,10 +3539,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -4472,54 +3549,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4528,55 +3601,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4585,53 +3648,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -4639,45 +3688,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -4685,10 +3719,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -4698,54 +3729,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4754,55 +3781,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4811,53 +3828,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -4865,45 +3868,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -4916,10 +3904,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -4929,54 +3914,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4985,55 +3966,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5042,53 +4013,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -5096,45 +4053,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -5142,10 +4084,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -5155,54 +4094,50 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5211,55 +4146,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5268,53 +4193,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -5322,45 +4233,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := int64(probeVal), int64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else {
-														cmpResult = 0
-													}
+												a, b := int64(probeVal), int64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else {
+													cmpResult = 0
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -5383,10 +4279,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -5396,62 +4289,58 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := float64(probeVal), float64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else if a == b {
+												a, b := float64(probeVal), float64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else if a == b {
+													cmpResult = 0
+												} else if math.IsNaN(a) {
+													if math.IsNaN(b) {
 														cmpResult = 0
-													} else if math.IsNaN(a) {
-														if math.IsNaN(b) {
-															cmpResult = 0
-														} else {
-															cmpResult = -1
-														}
 													} else {
-														cmpResult = 1
+														cmpResult = -1
 													}
+												} else {
+													cmpResult = 1
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5460,63 +4349,53 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := float64(probeVal), float64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else if a == b {
+												a, b := float64(probeVal), float64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else if a == b {
+													cmpResult = 0
+												} else if math.IsNaN(a) {
+													if math.IsNaN(b) {
 														cmpResult = 0
-													} else if math.IsNaN(a) {
-														if math.IsNaN(b) {
-															cmpResult = 0
-														} else {
-															cmpResult = -1
-														}
 													} else {
-														cmpResult = 1
+														cmpResult = -1
 													}
+												} else {
+													cmpResult = 1
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5525,61 +4404,47 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := float64(probeVal), float64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else if a == b {
+												a, b := float64(probeVal), float64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else if a == b {
+													cmpResult = 0
+												} else if math.IsNaN(a) {
+													if math.IsNaN(b) {
 														cmpResult = 0
-													} else if math.IsNaN(a) {
-														if math.IsNaN(b) {
-															cmpResult = 0
-														} else {
-															cmpResult = -1
-														}
 													} else {
-														cmpResult = 1
+														cmpResult = -1
 													}
+												} else {
+													cmpResult = 1
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -5587,53 +4452,38 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := float64(probeVal), float64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else if a == b {
+												a, b := float64(probeVal), float64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else if a == b {
+													cmpResult = 0
+												} else if math.IsNaN(a) {
+													if math.IsNaN(b) {
 														cmpResult = 0
-													} else if math.IsNaN(a) {
-														if math.IsNaN(b) {
-															cmpResult = 0
-														} else {
-															cmpResult = -1
-														}
 													} else {
-														cmpResult = 1
+														cmpResult = -1
 													}
+												} else {
+													cmpResult = 1
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -5641,10 +4491,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -5654,62 +4501,58 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := float64(probeVal), float64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else if a == b {
+												a, b := float64(probeVal), float64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else if a == b {
+													cmpResult = 0
+												} else if math.IsNaN(a) {
+													if math.IsNaN(b) {
 														cmpResult = 0
-													} else if math.IsNaN(a) {
-														if math.IsNaN(b) {
-															cmpResult = 0
-														} else {
-															cmpResult = -1
-														}
 													} else {
-														cmpResult = 1
+														cmpResult = -1
 													}
+												} else {
+													cmpResult = 1
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5718,63 +4561,53 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := float64(probeVal), float64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else if a == b {
+												a, b := float64(probeVal), float64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else if a == b {
+													cmpResult = 0
+												} else if math.IsNaN(a) {
+													if math.IsNaN(b) {
 														cmpResult = 0
-													} else if math.IsNaN(a) {
-														if math.IsNaN(b) {
-															cmpResult = 0
-														} else {
-															cmpResult = -1
-														}
 													} else {
-														cmpResult = 1
+														cmpResult = -1
 													}
+												} else {
+													cmpResult = 1
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5783,61 +4616,47 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := float64(probeVal), float64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else if a == b {
+												a, b := float64(probeVal), float64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else if a == b {
+													cmpResult = 0
+												} else if math.IsNaN(a) {
+													if math.IsNaN(b) {
 														cmpResult = 0
-													} else if math.IsNaN(a) {
-														if math.IsNaN(b) {
-															cmpResult = 0
-														} else {
-															cmpResult = -1
-														}
 													} else {
-														cmpResult = 1
+														cmpResult = -1
 													}
+												} else {
+													cmpResult = 1
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -5845,53 +4664,38 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
 
 											{
-												var cmpResult int
-
-												{
-													a, b := float64(probeVal), float64(buildVal)
-													if a < b {
-														cmpResult = -1
-													} else if a > b {
-														cmpResult = 1
-													} else if a == b {
+												a, b := float64(probeVal), float64(buildVal)
+												if a < b {
+													cmpResult = -1
+												} else if a > b {
+													cmpResult = 1
+												} else if a == b {
+													cmpResult = 0
+												} else if math.IsNaN(a) {
+													if math.IsNaN(b) {
 														cmpResult = 0
-													} else if math.IsNaN(a) {
-														if math.IsNaN(b) {
-															cmpResult = 0
-														} else {
-															cmpResult = -1
-														}
 													} else {
-														cmpResult = 1
+														cmpResult = -1
 													}
+												} else {
+													cmpResult = 1
 												}
-
-												unique = cmpResult != 0
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -5914,10 +4718,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -5927,50 +4728,46 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												if probeVal.Before(buildVal) {
-													cmpResult = -1
-												} else if buildVal.Before(probeVal) {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
 												}
-												unique = cmpResult != 0
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											if probeVal.Before(buildVal) {
+												cmpResult = -1
+											} else if buildVal.Before(probeVal) {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
+											}
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5979,51 +4776,41 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												if probeVal.Before(buildVal) {
-													cmpResult = -1
-												} else if buildVal.Before(probeVal) {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											if probeVal.Before(buildVal) {
+												cmpResult = -1
+											} else if buildVal.Before(probeVal) {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
+											}
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6032,49 +4819,35 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												if probeVal.Before(buildVal) {
-													cmpResult = -1
-												} else if buildVal.Before(probeVal) {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											if probeVal.Before(buildVal) {
+												cmpResult = -1
+											} else if buildVal.Before(probeVal) {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
+											}
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -6082,41 +4855,26 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											if probeVal.Before(buildVal) {
+												cmpResult = -1
+											} else if buildVal.Before(probeVal) {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
+											unique = cmpResult != 0
 										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
 
-											{
-												var cmpResult int
-
-												if probeVal.Before(buildVal) {
-													cmpResult = -1
-												} else if buildVal.Before(probeVal) {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-										}
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -6124,10 +4882,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -6137,50 +4892,46 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												if probeVal.Before(buildVal) {
-													cmpResult = -1
-												} else if buildVal.Before(probeVal) {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
 												}
-												unique = cmpResult != 0
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											if probeVal.Before(buildVal) {
+												cmpResult = -1
+											} else if buildVal.Before(probeVal) {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
+											}
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6189,51 +4940,41 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												if probeVal.Before(buildVal) {
-													cmpResult = -1
-												} else if buildVal.Before(probeVal) {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											if probeVal.Before(buildVal) {
+												cmpResult = -1
+											} else if buildVal.Before(probeVal) {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
+											}
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6242,49 +4983,35 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												if probeVal.Before(buildVal) {
-													cmpResult = -1
-												} else if buildVal.Before(probeVal) {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											if probeVal.Before(buildVal) {
+												cmpResult = -1
+											} else if buildVal.Before(probeVal) {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
+											}
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -6292,41 +5019,26 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											if probeVal.Before(buildVal) {
+												cmpResult = -1
+											} else if buildVal.Before(probeVal) {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
+											unique = cmpResult != 0
 										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
 
-											{
-												var cmpResult int
-
-												if probeVal.Before(buildVal) {
-													cmpResult = -1
-												} else if buildVal.Before(probeVal) {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-										}
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -6349,10 +5061,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -6362,43 +5071,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = probeVal.Compare(buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = probeVal.Compare(buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6407,44 +5112,34 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = probeVal.Compare(buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = probeVal.Compare(buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6453,42 +5148,28 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = probeVal.Compare(buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = probeVal.Compare(buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -6496,34 +5177,19 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
-												cmpResult = probeVal.Compare(buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										{
+											var cmpResult int
+											cmpResult = probeVal.Compare(buildVal)
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -6531,10 +5197,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -6544,43 +5207,39 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = probeVal.Compare(buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = probeVal.Compare(buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6589,44 +5248,34 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = probeVal.Compare(buildVal)
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = probeVal.Compare(buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6635,42 +5284,28 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-												cmpResult = probeVal.Compare(buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+											cmpResult = probeVal.Compare(buildVal)
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -6678,34 +5313,19 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
-												cmpResult = probeVal.Compare(buildVal)
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										{
+											var cmpResult int
+											cmpResult = probeVal.Compare(buildVal)
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -6728,10 +5348,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -6741,49 +5358,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												var err error
-												cmpResult, err = probeVal.Compare(buildVal)
-												if err != nil {
-													colexecerror.ExpectedError(err)
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
 												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-												unique = cmpResult != 0
+										{
+											var cmpResult int
+
+											var err error
+											cmpResult, err = probeVal.Compare(buildVal)
+											if err != nil {
+												colexecerror.ExpectedError(err)
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6792,50 +5405,40 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												var err error
-												cmpResult, err = probeVal.Compare(buildVal)
-												if err != nil {
-													colexecerror.ExpectedError(err)
-												}
-
-												unique = cmpResult != 0
+											var err error
+											cmpResult, err = probeVal.Compare(buildVal)
+											if err != nil {
+												colexecerror.ExpectedError(err)
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6844,48 +5447,34 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												var err error
-												cmpResult, err = probeVal.Compare(buildVal)
-												if err != nil {
-													colexecerror.ExpectedError(err)
-												}
-
-												unique = cmpResult != 0
+											var err error
+											cmpResult, err = probeVal.Compare(buildVal)
+											if err != nil {
+												colexecerror.ExpectedError(err)
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -6893,40 +5482,25 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												var err error
-												cmpResult, err = probeVal.Compare(buildVal)
-												if err != nil {
-													colexecerror.ExpectedError(err)
-												}
-
-												unique = cmpResult != 0
+											var err error
+											cmpResult, err = probeVal.Compare(buildVal)
+											if err != nil {
+												colexecerror.ExpectedError(err)
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -6934,10 +5508,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -6947,49 +5518,45 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												var err error
-												cmpResult, err = probeVal.Compare(buildVal)
-												if err != nil {
-													colexecerror.ExpectedError(err)
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
 												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-												unique = cmpResult != 0
+										{
+											var cmpResult int
+
+											var err error
+											cmpResult, err = probeVal.Compare(buildVal)
+											if err != nil {
+												colexecerror.ExpectedError(err)
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6998,50 +5565,40 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
+											}
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												var err error
-												cmpResult, err = probeVal.Compare(buildVal)
-												if err != nil {
-													colexecerror.ExpectedError(err)
-												}
-
-												unique = cmpResult != 0
+											var err error
+											cmpResult, err = probeVal.Compare(buildVal)
+											if err != nil {
+												colexecerror.ExpectedError(err)
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7050,48 +5607,34 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												var err error
-												cmpResult, err = probeVal.Compare(buildVal)
-												if err != nil {
-													colexecerror.ExpectedError(err)
-												}
-
-												unique = cmpResult != 0
+											var err error
+											cmpResult, err = probeVal.Compare(buildVal)
+											if err != nil {
+												colexecerror.ExpectedError(err)
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -7099,40 +5642,25 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
 
-											{
-												var cmpResult int
+										{
+											var cmpResult int
 
-												var err error
-												cmpResult, err = probeVal.Compare(buildVal)
-												if err != nil {
-													colexecerror.ExpectedError(err)
-												}
-
-												unique = cmpResult != 0
+											var err error
+											cmpResult, err = probeVal.Compare(buildVal)
+											if err != nil {
+												colexecerror.ExpectedError(err)
 											}
 
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											unique = cmpResult != 0
 										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -7155,10 +5683,7 @@ func (ht *HashTable) checkColDeleting(
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -7168,45 +5693,41 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7215,46 +5736,36 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7263,44 +5774,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -7308,36 +5805,21 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+											unique = cmpResult != 0
 										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
 
-											{
-												var cmpResult int
-
-												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-										}
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
@@ -7345,10 +5827,7 @@ func (ht *HashTable) checkColDeleting(
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
@@ -7358,45 +5837,41 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												if !buildIsNull {
+													ht.ProbeScratch.differs[toCheck] = true
+												}
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										if buildIsNull {
+											ht.ProbeScratch.differs[toCheck] = true
+											continue
+										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7405,46 +5880,36 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
-										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
+										probeIsNull := probeVecNulls.NullAt(probeIdx)
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-												unique = cmpResult != 0
+											if ht.allowNullEquality {
+												ht.ProbeScratch.differs[toCheck] = true
+											} else {
+												ht.ProbeScratch.GroupID[toCheck] = 0
 											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7453,44 +5918,30 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVecNulls.NullAt(buildIdx)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
-										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
+										buildIsNull := buildVecNulls.NullAt(buildIdx)
+										if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
-
-											{
-												var cmpResult int
-
-												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+											continue
 										}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+											unique = cmpResult != 0
+										}
+
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									keyID := ht.ProbeScratch.GroupID[toCheck]
 									if keyID != 0 {
@@ -7498,36 +5949,21 @@ func (ht *HashTable) checkColDeleting(
 											ht.ProbeScratch.differs[toCheck] = true
 											continue
 										}
-
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										if ht.allowNullEquality {
-											if probeIsNull && buildIsNull {
-												continue
-											} else if probeIsNull {
-												ht.ProbeScratch.differs[toCheck] = true
-												continue
-											}
+										probeVal := probeKeys.Get(probeIdx)
+										buildVal := buildKeys.Get(buildIdx)
+										var unique bool
+
+										{
+											var cmpResult int
+
+											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+											unique = cmpResult != 0
 										}
-										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
-										} else if buildIsNull {
-											ht.ProbeScratch.differs[toCheck] = true
-										} else {
-											probeVal := probeKeys.Get(probeIdx)
-											buildVal := buildKeys.Get(buildIdx)
-											var unique bool
 
-											{
-												var cmpResult int
-
-												cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-												unique = cmpResult != 0
-											}
-
-											ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-										}
+										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 									}
 								}
 							}

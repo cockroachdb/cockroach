@@ -100,10 +100,7 @@ func _CHECK_COL_BODY(
 	_DELETING_PROBE_MODE bool,
 ) { // */}}
 	// {{define "checkColBody" -}}
-	var (
-		probeIdx, buildIdx       int
-		probeIsNull, buildIsNull bool
-	)
+	var probeIdx, buildIdx int
 	// {{if .ProbeHasNulls}}
 	probeVecNulls := probeVec.Nulls()
 	// {{end}}
@@ -142,14 +139,13 @@ func _CHECK_COL_BODY(
 				continue
 			}
 			// {{end}}
-
+			// {{/*
+			//     Figure out the indexes of the tuples we're looking at.
+			// */}}
 			// {{if .UseProbeSel}}
 			probeIdx = probeSel[toCheck]
 			// {{else}}
 			probeIdx = int(toCheck)
-			// {{end}}
-			// {{if .ProbeHasNulls}}
-			probeIsNull = probeVecNulls.NullAt(probeIdx)
 			// {{end}}
 			// {{/*
 			//     Usually, the build vector is already stored in the hash table,
@@ -169,51 +165,82 @@ func _CHECK_COL_BODY(
 			// {{else}}
 			buildIdx = int(keyID - 1)
 			// {{end}}
-			// {{if .BuildHasNulls}}
-			buildIsNull = buildVecNulls.NullAt(buildIdx)
+			// {{/*
+			//     If either of the tuples might have NULLs, check that.
+			// */}}
+			// {{if .ProbeHasNulls}}
+			probeIsNull := probeVecNulls.NullAt(probeIdx)
 			// {{end}}
-			if ht.allowNullEquality {
-				if probeIsNull && buildIsNull {
-					// {{/*
-					//     Both values are NULLs, and since we're allowing null
-					//     equality, we proceed to the next vector to check.
-					// */}}
-					continue
-				} else if probeIsNull {
-					// {{/*
-					//     Only probing value is NULL, so it is different from
-					//     the build value (which is non-NULL). We mark it as
-					//     "different" and will eventually proceed to check the
-					//     next build table for equality. This behavior is
-					//     special in case of allowing null equality because we
-					//     don't want to reset the GroupID of the current
-					//     probing tuple.
-					// */}}
-					ht.ProbeScratch.differs[toCheck] = true
-					continue
-				}
-			}
+			// {{if .BuildHasNulls}}
+			buildIsNull := buildVecNulls.NullAt(buildIdx)
+			// {{end}}
+			// {{/*
+			//     If the probing tuple might have NULLs, handle that case
+			//     first.
+			// */}}
+			// {{if .ProbeHasNulls}}
 			if probeIsNull {
-				// {{if .SelectDistinct}}
-				// {{/*
-				//     We know that nulls are distinct (because
-				//     allowNullEquality case is handled above) and our probing
-				//     tuple has a NULL value in the current column, so the
-				//     probing tuple is distinct from the build table.
-				// */}}
-				ht.ProbeScratch.distinct[toCheck] = true
-				// {{else}}
-				ht.ProbeScratch.GroupID[toCheck] = 0
-				// {{end}}
-			} else if buildIsNull {
-				ht.ProbeScratch.differs[toCheck] = true
-			} else {
-				probeVal := probeKeys.Get(probeIdx)
-				buildVal := buildKeys.Get(buildIdx)
-				var unique bool
-				_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
-				ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+				if ht.allowNullEquality {
+					// {{/*
+					//     The probing tuple has a NULL value and NULLs are
+					//     treated as equal, so our behavior will depend on
+					//     whether the build tuple also has a NULL value:
+					//     - buildIsNull is false, then we have a mismatch and
+					//     we want to mark 'differs' accordingly;
+					//     - buildIsNull is true, then we have a match for the
+					//     current value and want to proceed checking on the
+					//     following column.
+					//     The template is set up such that in both cases we
+					//     fall down to 'continue', and when !buildIsNull, we
+					//     also generate code for updating 'differs'.
+					// */}}
+					// {{if .BuildHasNulls}}
+					if !buildIsNull {
+						// {{end}}
+						ht.ProbeScratch.differs[toCheck] = true
+						// {{if .BuildHasNulls}}
+					}
+					// {{end}}
+				} else {
+					// {{if .SelectDistinct}}
+					// {{/*
+					//     We know that nulls are distinct (because
+					//     allowNullEquality is false) and our probing tuple has
+					//     a NULL value in the current column, so the probing
+					//     tuple is distinct from the build table.
+					// */}}
+					ht.ProbeScratch.distinct[toCheck] = true
+					// {{else}}
+					ht.ProbeScratch.GroupID[toCheck] = 0
+					// {{end}}
+				}
+				continue
 			}
+			// {{end}}
+			// {{/*
+			//     At this point only the build tuple might have a NULL value,
+			//     and if it is NULL, regardless of allowNullEquality, we have a
+			//     mismatch.
+			// */}}
+			// {{if .BuildHasNulls}}
+			if buildIsNull {
+				ht.ProbeScratch.differs[toCheck] = true
+				continue
+			}
+			// {{end}}
+			// {{/*
+			//     Now both values are not NULL, so we have to perform actual
+			//     comparison.
+			//     TODO(yuzefovich): depending on the type, it might be faster
+			//     to check whether differs[toCheck] is already true. My guess
+			//     is that for simple types like int64 introducing a conditional
+			//     will be slower.
+			// */}}
+			probeVal := probeKeys.Get(probeIdx)
+			buildVal := buildKeys.Get(buildIdx)
+			var unique bool
+			_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
+			ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 			// {{if and .SelectDistinct (not .ProbingAgainstItself)}}
 		} else {
 			ht.ProbeScratch.distinct[toCheck] = true
