@@ -57,6 +57,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -72,9 +74,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -122,6 +124,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -137,7 +140,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -188,6 +191,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -204,7 +208,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -319,6 +323,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -334,9 +340,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -384,6 +390,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -399,7 +406,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -450,6 +457,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -466,7 +474,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -596,6 +604,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -611,9 +621,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -653,6 +663,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -668,7 +679,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -711,6 +722,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -727,7 +739,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -826,6 +838,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -841,9 +855,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -883,6 +897,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -898,7 +913,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -941,6 +956,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -957,7 +973,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -1071,6 +1087,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1086,9 +1104,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -1128,6 +1146,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1143,7 +1162,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -1186,6 +1205,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1202,7 +1222,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -1301,6 +1321,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1316,9 +1338,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -1358,6 +1380,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1373,7 +1396,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -1416,6 +1439,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1432,7 +1456,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -1544,6 +1568,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1559,9 +1585,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -1612,6 +1638,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1627,7 +1654,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -1681,6 +1708,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1697,7 +1725,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -1818,6 +1846,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1833,9 +1863,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -1886,6 +1916,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1901,7 +1932,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -1955,6 +1986,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1971,7 +2003,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -2096,6 +2128,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2111,9 +2145,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -2164,6 +2198,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2179,7 +2214,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -2233,6 +2268,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2249,7 +2285,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -2370,6 +2406,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2385,9 +2423,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -2438,6 +2476,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2453,7 +2492,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -2507,6 +2546,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2523,7 +2563,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -2649,6 +2689,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2664,9 +2706,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -2717,6 +2759,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2732,7 +2775,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -2786,6 +2829,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2802,7 +2846,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -2923,6 +2967,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2938,9 +2984,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -2991,6 +3037,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3006,7 +3053,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -3060,6 +3107,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3076,7 +3124,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -3207,6 +3255,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3222,9 +3272,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -3275,6 +3325,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3290,7 +3341,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -3344,6 +3395,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3360,7 +3412,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -3481,6 +3533,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3496,9 +3550,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -3549,6 +3603,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3564,7 +3619,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -3618,6 +3673,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3634,7 +3690,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -3759,6 +3815,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3774,9 +3832,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -3827,6 +3885,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3842,7 +3901,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -3896,6 +3955,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3912,7 +3972,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -4033,6 +4093,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4048,9 +4110,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -4101,6 +4163,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4116,7 +4179,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -4170,6 +4233,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4186,7 +4250,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -4312,6 +4376,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4327,9 +4393,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -4380,6 +4446,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4395,7 +4462,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -4449,6 +4516,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4465,7 +4533,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -4586,6 +4654,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4601,9 +4671,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -4654,6 +4724,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4669,7 +4740,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -4723,6 +4794,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4739,7 +4811,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -4871,6 +4943,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4886,9 +4960,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -4939,6 +5013,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4954,7 +5029,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -5008,6 +5083,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5024,7 +5100,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -5145,6 +5221,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5160,9 +5238,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -5213,6 +5291,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5228,7 +5307,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -5282,6 +5361,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5298,7 +5378,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -5423,6 +5503,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5438,9 +5520,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -5491,6 +5573,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5506,7 +5589,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -5560,6 +5643,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5576,7 +5660,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -5697,6 +5781,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5712,9 +5798,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -5765,6 +5851,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5780,7 +5867,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -5834,6 +5921,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5850,7 +5938,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -5976,6 +6064,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5991,9 +6081,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -6044,6 +6134,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6059,7 +6150,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -6113,6 +6204,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6129,7 +6221,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -6250,6 +6342,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6265,9 +6359,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -6318,6 +6412,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6333,7 +6428,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -6387,6 +6482,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6403,7 +6499,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -6539,6 +6635,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6554,9 +6652,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -6615,6 +6713,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6630,7 +6729,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -6692,6 +6791,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6708,7 +6808,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -6845,6 +6945,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6860,9 +6962,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -6921,6 +7023,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6936,7 +7039,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -6998,6 +7101,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7014,7 +7118,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -7166,6 +7270,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7181,9 +7287,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -7230,6 +7336,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7245,7 +7352,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -7295,6 +7402,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7311,7 +7419,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -7424,6 +7532,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7439,9 +7549,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -7488,6 +7598,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7503,7 +7614,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -7553,6 +7664,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7569,7 +7681,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -7697,6 +7809,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7712,9 +7826,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -7754,6 +7868,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7769,7 +7884,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -7812,6 +7927,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7828,7 +7944,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -7927,6 +8043,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7942,9 +8060,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -7984,6 +8102,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7999,7 +8118,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -8042,6 +8161,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8058,7 +8178,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -8172,6 +8292,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8187,9 +8309,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -8235,6 +8357,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8250,7 +8373,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -8299,6 +8422,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8315,7 +8439,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -8426,6 +8550,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8441,9 +8567,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -8489,6 +8615,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8504,7 +8631,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -8553,6 +8680,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8569,7 +8697,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -8695,6 +8823,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8710,9 +8840,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -8754,6 +8884,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8769,7 +8900,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = probeSel[toCheck]
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -8814,6 +8945,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8830,7 +8962,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -8933,6 +9065,8 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -8948,9 +9082,9 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we
@@ -8992,6 +9126,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -9007,7 +9142,7 @@ func (ht *HashTable) checkColDeleting(
 										}
 
 										probeIdx = int(toCheck)
-										probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+										probeIsNull = probeVecNulls.NullAt(probeIdx)
 										buildIdx = int(keyID - 1)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
@@ -9052,6 +9187,7 @@ func (ht *HashTable) checkColDeleting(
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -9068,7 +9204,7 @@ func (ht *HashTable) checkColDeleting(
 
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
-										buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+										buildIsNull = buildVecNulls.NullAt(buildIdx)
 										if ht.allowNullEquality {
 											if probeIsNull && buildIsNull {
 												// Both values are NULLs, and since we're allowing null equality, we

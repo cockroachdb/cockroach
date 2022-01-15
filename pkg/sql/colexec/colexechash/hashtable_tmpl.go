@@ -104,6 +104,12 @@ func _CHECK_COL_BODY(
 		probeIdx, buildIdx       int
 		probeIsNull, buildIsNull bool
 	)
+	// {{if .ProbeHasNulls}}
+	probeVecNulls := probeVec.Nulls()
+	// {{end}}
+	// {{if .BuildHasNulls}}
+	buildVecNulls := buildVec.Nulls()
+	// {{end}}
 	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 		// keyID of 0 is reserved to represent the end of the next chain.
 		keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -138,7 +144,7 @@ func _CHECK_COL_BODY(
 			probeIdx = int(toCheck)
 			// {{end}}
 			// {{if .ProbeHasNulls}}
-			probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+			probeIsNull = probeVecNulls.NullAt(probeIdx)
 			// {{end}}
 			// {{/*
 			//     Usually, the build vector is already stored in the hash table,
@@ -157,7 +163,7 @@ func _CHECK_COL_BODY(
 			buildIdx = int(keyID - 1)
 			// {{end}}
 			// {{if .BuildHasNulls}}
-			buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+			buildIsNull = buildVecNulls.NullAt(buildIdx)
 			// {{end}}
 			if ht.allowNullEquality {
 				if probeIsNull && buildIsNull {

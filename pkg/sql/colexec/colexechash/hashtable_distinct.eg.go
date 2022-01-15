@@ -54,6 +54,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -62,11 +64,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -113,6 +115,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -121,7 +124,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -173,6 +176,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -184,7 +188,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -292,6 +296,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -300,9 +306,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -349,6 +355,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -357,7 +364,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -407,6 +414,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -416,7 +424,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -537,6 +545,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -545,11 +555,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -588,6 +598,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -596,7 +607,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -640,6 +651,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -651,7 +663,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -743,6 +755,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -751,9 +765,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -792,6 +806,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -800,7 +815,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -842,6 +857,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -851,7 +867,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -956,6 +972,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -964,11 +982,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1007,6 +1025,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1015,7 +1034,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -1059,6 +1078,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1070,7 +1090,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1162,6 +1182,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1170,9 +1192,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1211,6 +1233,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1219,7 +1242,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -1261,6 +1284,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1270,7 +1294,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1373,6 +1397,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1381,11 +1407,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1435,6 +1461,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1443,7 +1470,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -1498,6 +1525,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1509,7 +1537,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1623,6 +1651,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1631,9 +1661,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1683,6 +1713,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1691,7 +1722,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -1744,6 +1775,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1753,7 +1785,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1875,6 +1907,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1883,11 +1917,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -1937,6 +1971,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -1945,7 +1980,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -2000,6 +2035,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2011,7 +2047,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -2125,6 +2161,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2133,9 +2171,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -2185,6 +2223,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2193,7 +2232,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -2246,6 +2285,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2255,7 +2295,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -2379,6 +2419,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2387,11 +2429,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -2441,6 +2483,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2449,7 +2492,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -2504,6 +2547,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2515,7 +2559,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -2629,6 +2673,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2637,9 +2683,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -2689,6 +2735,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2697,7 +2744,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -2750,6 +2797,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2759,7 +2807,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -2886,6 +2934,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2894,11 +2944,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -2956,6 +3006,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -2964,7 +3015,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -3027,6 +3078,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3038,7 +3090,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -3168,6 +3220,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3176,9 +3230,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -3236,6 +3290,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3244,7 +3299,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -3305,6 +3360,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3314,7 +3370,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -3457,6 +3513,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3465,11 +3523,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -3515,6 +3573,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3523,7 +3582,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -3574,6 +3633,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3585,7 +3645,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -3691,6 +3751,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3699,9 +3761,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -3747,6 +3809,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3755,7 +3818,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -3804,6 +3867,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3813,7 +3877,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -3932,6 +3996,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3940,11 +4006,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -3983,6 +4049,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -3991,7 +4058,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -4035,6 +4102,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4046,7 +4114,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -4138,6 +4206,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4146,9 +4216,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -4187,6 +4257,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4195,7 +4266,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -4237,6 +4308,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4246,7 +4318,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -4351,6 +4423,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4359,11 +4433,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -4408,6 +4482,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4416,7 +4491,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -4466,6 +4541,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4477,7 +4553,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -4581,6 +4657,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4589,9 +4667,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -4636,6 +4714,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4644,7 +4723,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -4692,6 +4771,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4701,7 +4781,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -4818,6 +4898,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4826,11 +4908,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -4871,6 +4953,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4879,7 +4962,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
@@ -4925,6 +5008,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -4936,7 +5020,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// The vector is probed against itself, so buildVec has the same
 									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5032,6 +5116,8 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5040,9 +5126,9 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5083,6 +5169,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5091,7 +5178,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									// found.
 
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -5135,6 +5222,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 									probeIdx, buildIdx       int
 									probeIsNull, buildIsNull bool
 								)
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5144,7 +5232,7 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5259,6 +5347,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5268,9 +5358,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5320,6 +5410,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5329,7 +5420,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -5382,6 +5473,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5392,7 +5484,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5518,6 +5610,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5527,9 +5621,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5571,6 +5665,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5580,7 +5675,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -5625,6 +5720,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5635,7 +5731,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5751,6 +5847,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5760,9 +5858,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5804,6 +5902,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5813,7 +5912,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -5858,6 +5957,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5868,7 +5968,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -5976,6 +6076,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -5985,9 +6087,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -6040,6 +6142,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6049,7 +6152,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -6105,6 +6208,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6115,7 +6219,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -6248,6 +6352,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6257,9 +6363,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -6312,6 +6418,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6321,7 +6428,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -6377,6 +6484,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6387,7 +6495,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -6522,6 +6630,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6531,9 +6641,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -6586,6 +6696,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6595,7 +6706,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -6651,6 +6762,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6661,7 +6773,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -6802,6 +6914,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6811,9 +6925,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -6874,6 +6988,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6883,7 +6998,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -6947,6 +7062,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -6957,7 +7073,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -7108,6 +7224,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7117,9 +7235,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -7168,6 +7286,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7177,7 +7296,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -7229,6 +7348,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7239,7 +7359,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -7363,6 +7483,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7372,9 +7494,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -7416,6 +7538,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7425,7 +7548,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -7470,6 +7593,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7480,7 +7604,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -7590,6 +7714,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7599,9 +7725,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -7649,6 +7775,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7658,7 +7785,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -7709,6 +7836,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7719,7 +7847,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -7841,6 +7969,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7850,9 +7980,9 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
@@ -7896,6 +8026,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7905,7 +8036,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 									// found.
 
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
+									probeIsNull = probeVecNulls.NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
@@ -7952,6 +8083,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 								probeIdx, buildIdx       int
 								probeIsNull, buildIsNull bool
 							)
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
@@ -7962,7 +8094,7 @@ func (ht *HashTable) checkColForDistinctTuples(
 
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
+									buildIsNull = buildVecNulls.NullAt(buildIdx)
 									if ht.allowNullEquality {
 										if probeIsNull && buildIsNull {
 											// Both values are NULLs, and since we're allowing null equality, we
