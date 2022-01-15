@@ -408,7 +408,9 @@ func (r *incrementalReconciler) reconcile(
 func (r *incrementalReconciler) filterForMissingTableIDs(
 	ctx context.Context, updates []spanconfig.DescriptorUpdate,
 ) (descpb.IDs, error) {
+	seen := make(map[descpb.ID]struct{})
 	var missingIDs descpb.IDs
+
 	if err := sql.DescsTxn(ctx, r.execCfg,
 		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, update := range updates {
@@ -433,7 +435,10 @@ func (r *incrementalReconciler) filterForMissingTableIDs(
 				}
 
 				if considerAsMissing {
-					missingIDs = append(missingIDs, update.ID) // accumulate the set of missing table IDs
+					if _, found := seen[update.ID]; !found {
+						seen[update.ID] = struct{}{}
+						missingIDs = append(missingIDs, update.ID) // accumulate the set of missing table IDs
+					}
 				}
 			}
 
