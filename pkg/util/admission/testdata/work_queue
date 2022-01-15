@@ -58,7 +58,7 @@ granted chain-id=5
 ----
 continueGrantChain 5
 id 5: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Both tenants are using 1 slot. The tie is broken arbitrarily in favor of
 # tenant 71.
@@ -82,7 +82,7 @@ closed epoch: 0 tenantHeap len: 2 top tenant: 71
 # The work admitted for tenant 53 is done.
 work-done id=1
 ----
-returnGrant
+returnGrant 1
 
 # Tenant 53 now using fewer slots so it becomes the top of the heap.
 print
@@ -95,7 +95,7 @@ closed epoch: 0 tenantHeap len: 2 top tenant: 53
 # reflected in the WorkQueue state.
 admit id=6 tenant=1 priority=0 create-time-millis=6 bypass=true
 ----
-tookWithoutPermission
+tookWithoutPermission 1
 id 6: admit succeeded
 
 print
@@ -109,13 +109,13 @@ granted chain-id=7
 ----
 continueGrantChain 7
 id 2: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=9
 ----
 continueGrantChain 9
 id 4: admit succeeded
-granted: returned true
+granted: returned 1
 
 # No more waiting requests.
 print
@@ -128,7 +128,7 @@ closed epoch: 0 tenantHeap len: 0
 # Granted returns false.
 granted chain-id=10
 ----
-granted: returned false
+granted: returned 0
 
 print
 ----
@@ -162,7 +162,7 @@ granted chain-id=5
 ----
 continueGrantChain 5
 id 1: admit succeeded
-granted: returned true
+granted: returned 1
 
 print
 ----
@@ -196,14 +196,14 @@ granted chain-id=6
 ----
 continueGrantChain 6
 id 3: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Older request in closed epoch is granted.
 granted chain-id=7
 ----
 continueGrantChain 7
 id 2: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Only request is in open epoch.
 print
@@ -247,13 +247,13 @@ granted chain-id=8
 ----
 continueGrantChain 8
 id 7: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=9
 ----
 continueGrantChain 9
 id 5: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Add another request to closed epoch that is subject to LIFO ordering.
 admit id=8 tenant=53 priority=0 create-time-millis=350 bypass=false
@@ -274,7 +274,7 @@ granted chain-id=10
 ----
 continueGrantChain 10
 id 4: admit succeeded
-granted: returned true
+granted: returned 1
 
 print
 ----
@@ -285,7 +285,7 @@ granted chain-id=11
 ----
 continueGrantChain 11
 id 8: admit succeeded
-granted: returned true
+granted: returned 1
 
 print
 ----
@@ -297,7 +297,7 @@ granted chain-id=12
 ----
 continueGrantChain 12
 id 6: admit succeeded
-granted: returned true
+granted: returned 1
 
 print
 ----
@@ -334,7 +334,7 @@ granted chain-id=12
 ----
 continueGrantChain 12
 id 10: admit succeeded
-granted: returned true
+granted: returned 1
 
 print
 ----
@@ -365,7 +365,7 @@ granted chain-id=13
 ----
 continueGrantChain 13
 id 11: admit succeeded
-granted: returned true
+granted: returned 1
 
 # With the remaining two items, the priority is different, so higher priority
 # is preferred.
@@ -378,13 +378,13 @@ granted chain-id=14
 ----
 continueGrantChain 14
 id 9: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=15
 ----
 continueGrantChain 15
 id 12: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Advance time again. Since one of the priority=0 requests experienced high
 # latency, switch that back to LIFO.
@@ -473,13 +473,13 @@ granted chain-id=1
 ----
 continueGrantChain 1
 id 1: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=2
 ----
 continueGrantChain 2
 id 2: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Both tenants are using 1 slot.
 print
@@ -508,7 +508,7 @@ granted chain-id=3
 ----
 continueGrantChain 3
 id 4: admit succeeded
-granted: returned true
+granted: returned 1
 
 print
 ----
@@ -558,7 +558,7 @@ granted chain-id=4
 ----
 continueGrantChain 4
 id 5: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Tenant 10 is using 3 slots and tenant 5 is using 1 slot. Tenant 5 is the top
 # of the heap.
@@ -580,13 +580,13 @@ granted chain-id=5
 ----
 continueGrantChain 5
 id 6: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=6
 ----
 continueGrantChain 6
 id 3: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Test that batch update of tenant weights is working correctly.
 init
@@ -649,49 +649,49 @@ granted chain-id=1
 ----
 continueGrantChain 1
 id 1: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=2
 ----
 continueGrantChain 2
 id 8: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=3
 ----
 continueGrantChain 3
 id 7: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=4
 ----
 continueGrantChain 4
 id 6: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=5
 ----
 continueGrantChain 5
 id 5: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=6
 ----
 continueGrantChain 6
 id 4: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=7
 ----
 continueGrantChain 7
 id 3: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=8
 ----
 continueGrantChain 8
 id 2: admit succeeded
-granted: returned true
+granted: returned 1
 
 print
 ----

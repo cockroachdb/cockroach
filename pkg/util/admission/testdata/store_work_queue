@@ -1,0 +1,103 @@
+init
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+stats:{admittedCount:0 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+estimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1}
+
+set-try-get-return-value v=true
+----
+
+admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false
+----
+tryGet: returning true
+id 1: admit succeeded with handle {tenantID:{InternalValue:53} writeBytes:0 writeTokens:1 workByteAdditionTokens:1 ingestRequest:false admissionEnabled:true}
+
+work-done id=1
+----
+
+set-store-request-estimates percent-ingested-into-l0=20 work-bytes-addition=100
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 1, w: 1, fifo: -128
+stats:{admittedCount:1 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+estimates:{fractionOfIngestIntoL0:0.2 workByteAddition:100}
+
+admit id=2 tenant=55 priority=0 create-time-millis=1 bypass=false
+----
+tryGet: returning true
+id 2: admit succeeded with handle {tenantID:{InternalValue:55} writeBytes:0 writeTokens:100 workByteAdditionTokens:100 ingestRequest:false admissionEnabled:true}
+
+admit id=3 tenant=53 priority=0 create-time-millis=1 bypass=false write-bytes=1000000 ingest-request=true
+----
+tryGet: returning true
+id 3: admit succeeded with handle {tenantID:{InternalValue:53} writeBytes:1000000 writeTokens:200100 workByteAdditionTokens:100 ingestRequest:true admissionEnabled:true}
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 200101, w: 1, fifo: -128
+ tenant-id: 55 used: 100, w: 1, fifo: -128
+stats:{admittedCount:1 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+estimates:{fractionOfIngestIntoL0:0.2 workByteAddition:100}
+
+set-try-get-return-value v=false
+----
+
+admit id=4 tenant=57 priority=0 create-time-millis=1 bypass=false write-bytes=2000 ingest-request=false
+----
+tryGet: returning false
+
+work-done id=2
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 57
+ tenant-id: 53 used: 200101, w: 1, fifo: -128
+ tenant-id: 55 used: 100, w: 1, fifo: -128
+ tenant-id: 57 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 0]
+stats:{admittedCount:2 admittedWithBytesCount:0 admittedBytes:0 ingestedBytes:0 ingestedIntoL0Bytes:0}
+estimates:{fractionOfIngestIntoL0:0.2 workByteAddition:100}
+
+granted
+----
+continueGrantChain 0
+id 4: admit succeeded with handle {tenantID:{InternalValue:57} writeBytes:2000 writeTokens:2100 workByteAdditionTokens:100 ingestRequest:false admissionEnabled:true}
+granted: returned 2100
+
+work-done id=3 ingested-into-l0=20000
+----
+returnGrant 180000
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 20101, w: 1, fifo: -128
+ tenant-id: 55 used: 100, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+stats:{admittedCount:3 admittedWithBytesCount:1 admittedBytes:1000000 ingestedBytes:1000000 ingestedIntoL0Bytes:20000}
+estimates:{fractionOfIngestIntoL0:0.2 workByteAddition:100}
+
+set-store-request-estimates percent-ingested-into-l0=10 work-bytes-addition=10000
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 20101, w: 1, fifo: -128
+ tenant-id: 55 used: 100, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+stats:{admittedCount:3 admittedWithBytesCount:1 admittedBytes:1000000 ingestedBytes:1000000 ingestedIntoL0Bytes:20000}
+estimates:{fractionOfIngestIntoL0:0.1 workByteAddition:10000}
+
+work-done id=4
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 20101, w: 1, fifo: -128
+ tenant-id: 55 used: 100, w: 1, fifo: -128
+ tenant-id: 57 used: 2100, w: 1, fifo: -128
+stats:{admittedCount:4 admittedWithBytesCount:2 admittedBytes:1002000 ingestedBytes:1000000 ingestedIntoL0Bytes:20000}
+estimates:{fractionOfIngestIntoL0:0.1 workByteAddition:10000}
