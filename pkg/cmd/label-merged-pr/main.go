@@ -74,7 +74,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot read token from %s: %+v\n", tokenPath, err)
 	}
-	refList, err := getRefs(fromRef, toRef)
+	commonBaseRef, err := getCommonBaseRef(fromRef, toRef)
+	if err != nil {
+		log.Fatalf("Cannot get common base ref: %+v\n", err)
+	}
+
+	refList, err := getRefs(commonBaseRef, toRef)
 	if err != nil {
 		log.Fatalf("Cannot get refs: %+v\n", err)
 	}
@@ -105,6 +110,15 @@ func readToken(path string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(token)), nil
+}
+
+func getCommonBaseRef(fromRef, toRef string) (string, error) {
+	cmd := exec.Command("git", "merge-base", fromRef, toRef)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func filterPullRequests(text string) []string {
