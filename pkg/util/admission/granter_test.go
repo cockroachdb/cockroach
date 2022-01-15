@@ -29,6 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO(sumeer): fix all tests.
+
 type testRequester struct {
 	workKind   WorkKind
 	granter    granter
@@ -40,40 +42,41 @@ type testRequester struct {
 	grantChainID           grantChainID
 }
 
+var _ requester = &testRequester{}
+
 func (tr *testRequester) hasWaitingRequests() bool {
 	return tr.waitingRequests
 }
 
-func (tr *testRequester) granted(grantChainID grantChainID) bool {
+func (tr *testRequester) granted(grantChainID grantChainID) int64 {
 	fmt.Fprintf(tr.buf, "%s: granted in chain %d, and returning %t\n", workKindString(tr.workKind),
 		grantChainID, !tr.returnFalseFromGranted)
 	tr.grantChainID = grantChainID
-	return !tr.returnFalseFromGranted
+	rv := int64(1)
+	if tr.returnFalseFromGranted {
+		rv = 0
+	}
+	return rv
 }
 
 func (tr *testRequester) tryGet() {
-	rv := tr.granter.tryGet()
+	rv := tr.granter.tryGet(1)
 	fmt.Fprintf(tr.buf, "%s: tryGet returned %t\n", workKindString(tr.workKind), rv)
 }
 
 func (tr *testRequester) returnGrant() {
 	fmt.Fprintf(tr.buf, "%s: returnGrant\n", workKindString(tr.workKind))
-	tr.granter.returnGrant()
+	tr.granter.returnGrant(1)
 }
 
 func (tr *testRequester) tookWithoutPermission() {
 	fmt.Fprintf(tr.buf, "%s: tookWithoutPermission\n", workKindString(tr.workKind))
-	tr.granter.tookWithoutPermission()
+	tr.granter.tookWithoutPermission(1)
 }
 
 func (tr *testRequester) continueGrantChain() {
 	fmt.Fprintf(tr.buf, "%s: continueGrantChain\n", workKindString(tr.workKind))
 	tr.granter.continueGrantChain(tr.grantChainID)
-}
-
-func (tr *testRequester) getAdmittedCount() uint64 {
-	// Only used by ioLoadListener, so don't bother.
-	return 0
 }
 
 // TestGranterBasic is a datadriven test with the following commands:
@@ -180,7 +183,7 @@ func TestGranterBasic(t *testing.T) {
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
 			coord.mu.Lock()
-			coord.granters[KVWork].(*kvGranter).setAvailableIOTokensLocked(int64(tokens))
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableIOTokensLocked(int64(tokens))
 			coord.mu.Unlock()
 			coord.testingTryGrant()
 			return flushAndReset()
@@ -227,6 +230,16 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 	}
 }
 
+type testStoreRequester struct {
+	requester
+}
+
+func (r *testStoreRequester) getStoreAdmissionStats() storeAdmissionStats {
+	return storeAdmissionStats{}
+}
+func (r *testStoreRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
+}
+
 // TestStoreCoordinators tests only the setup of GrantCoordinators per store.
 // Testing of IO load functionality happens in TestIOLoadListener.
 func TestStoreCoordinators(t *testing.T) {
@@ -239,6 +252,7 @@ func TestStoreCoordinators(t *testing.T) {
 	// All the KVWork requesters. The first one is for all KVWork and the
 	// remaining are the per-store ones.
 	var requesters []*testRequester
+	usesTokensCount := 0
 	opts := Options{
 		Settings: settings,
 		makeRequesterFunc: func(
@@ -251,14 +265,26 @@ func TestStoreCoordinators(t *testing.T) {
 			}
 			if workKind == KVWork {
 				requesters = append(requesters, req)
+				if opts.usesTokens {
+					usesTokensCount++
+				}
 			}
 			return req
 		},
+	}
+	f := opts.makeRequesterFunc
+	opts.makeStoreRequesterFunc = func(
+		granter granter, settings *cluster.Settings, opts workQueueOptions) storeRequester {
+		requester := f(KVWork, granter, settings, opts)
+		return &testStoreRequester{
+			requester: requester,
+		}
 	}
 	coords, _ := NewGrantCoordinators(ambientCtx, opts)
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))
+	require.Equal(t, 0, usesTokensCount)
 	storeCoords := coords.Stores
 	metrics := pebble.Metrics{}
 	mp := testMetricsProvider{}
@@ -268,6 +294,7 @@ func TestStoreCoordinators(t *testing.T) {
 	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp)
 	// Now we have 1+2 = 3 KVWork requesters.
 	require.Equal(t, 3, len(requesters))
+	require.Equal(t, 2, usesTokensCount)
 	// Confirm that the store IDs are as expected.
 	var actualStores []int32
 	for s := range storeCoords.gcMap {
@@ -289,19 +316,26 @@ func TestStoreCoordinators(t *testing.T) {
 }
 
 type testRequesterForIOLL struct {
-	admittedCount uint64
+	stats     storeAdmissionStats
+	estimates storeRequestEstimates
 }
+
+var _ storeRequester = &testRequesterForIOLL{}
 
 func (r *testRequesterForIOLL) hasWaitingRequests() bool {
 	panic("unimplemented")
 }
 
-func (r *testRequesterForIOLL) granted(grantChainID grantChainID) bool {
+func (r *testRequesterForIOLL) granted(grantChainID grantChainID) int64 {
 	panic("unimplemented")
 }
 
-func (r *testRequesterForIOLL) getAdmittedCount() uint64 {
-	return r.admittedCount
+func (r *testRequesterForIOLL) getStoreAdmissionStats() storeAdmissionStats {
+	return r.stats
+}
+
+func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEstimates) {
+	r.estimates = estimates
 }
 
 type testGranterWithIOTokens struct {
@@ -343,7 +377,7 @@ func TestIOLoadListener(t *testing.T) {
 				// Setup state used as input for token adjustment.
 				var admitted uint64
 				d.ScanArgs(t, "admitted", &admitted)
-				req.admittedCount = admitted
+				req.stats.admittedCount = admitted
 				var metrics pebble.Metrics
 				var l0Bytes uint64
 				d.ScanArgs(t, "l0-bytes", &l0Bytes)
@@ -374,9 +408,10 @@ func TestIOLoadListener(t *testing.T) {
 				// Do the ticks until just before next adjustment.
 				var buf strings.Builder
 				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
-					"smoothed-admit: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
+					"smoothed-admit: %d,\ntokens: %s, tokens-allocated: %s\n",
+					ioll.admissionStats.admittedCount,
 					ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
-					int64(ioll.smoothedNumAdmit), tokensForIntervalToString(ioll.totalTokens),
+					int64(ioll.smoothedNumTokens), tokensForIntervalToString(ioll.totalTokens),
 					tokensFor1sToString(ioll.tokensAllocated))
 				for i := 0; i < adjustmentInterval; i++ {
 					ioll.allocateTokensTick()
@@ -443,7 +478,12 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		m.Levels[0].Size = int64(rand.Uint64())
 		m.Levels[0].BytesFlushed = rand.Uint64()
 		m.Levels[0].BytesIngested = rand.Uint64()
-		req.admittedCount = rand.Uint64()
+		req.stats.admittedCount = rand.Uint64()
+		req.stats.admittedWithBytesCount = req.stats.admittedCount / 2
+		req.stats.admittedBytes = rand.Uint64()
+		req.stats.ingestedBytes = req.stats.admittedBytes
+		req.stats.ingestedIntoL0Bytes = req.stats.ingestedBytes / 2
+
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()

@@ -69,14 +69,15 @@ type requester interface {
 	// hasWaitingRequests returns whether there are any waiting/queued requests
 	// of this WorkKind.
 	hasWaitingRequests() bool
-	// granted is called by a granter to grant admission to queued requests. It
-	// returns true if the grant was accepted, else returns false. A grant may
-	// not be accepted if the grant raced with request cancellation and there
-	// are now no waiting requests. The grantChainID is used when calling
-	// continueGrantChain -- see the comment with that method below.
-	granted(grantChainID grantChainID) bool
-	// getAdmittedCount returns the cumulative count of admitted work.
-	getAdmittedCount() uint64
+	// granted is called by a granter to grant admission to a single queued
+	// request. It returns > 0 if the grant was accepted, else returns 0. A
+	// grant may not be accepted if the grant raced with request cancellation
+	// and there are now no waiting requests. The grantChainID is used when
+	// calling continueGrantChain -- see the comment with that method below.
+	// When accepted, the return value indicates the number of slots/tokens that
+	// were used.
+	// REQUIRES: count <= 1 for slots.
+	granted(grantChainID grantChainID) int64
 }
 
 // grantKind represents the two kind of ways we grant admission: using a slot
@@ -96,6 +97,12 @@ type requester interface {
 // we can know when the work is complete. Having this extra completion
 // information can be advantageous in admission control decisions, so
 // WorkKinds where this information is easily available use slots.
+//
+// StoreGrantCoordinators and its corresponding StoreWorkQueues are a hybrid
+// -- they use tokens (as explained later). However, there is useful
+// completion information such as how many tokens were actually used, which
+// can differ from the up front information, and is utilized to adjust the
+// available tokens.
 type grantKind int8
 
 const (
@@ -108,32 +115,43 @@ const (
 // this fits into the overall structure.
 type granter interface {
 	grantKind() grantKind
-	// tryGet is used by a requester to get a slot/token for a piece of work
+	// tryGet is used by a requester to get slots/tokens for a piece of work
 	// that has encountered no waiting/queued work. This is the fast path that
 	// avoids queueing in the requester.
-	tryGet() bool
-	// returnGrant is called for returning slots after use, and used for
-	// returning either slots or tokens when the grant raced with the work being
-	// canceled, and the grantee did not end up doing any work. The latter case
-	// occurs despite the bool return value on the requester.granted method --
-	// it is possible that the work was not canceled at the time when
-	// requester.grant was called, and hence returned true, but later when the
-	// goroutine doing the work noticed that it had been granted, there is a
-	// possibility that that raced with cancellation.
-	returnGrant()
-	// tookWithoutPermission informs the granter that a slot/token was taken
-	// unilaterally, without permission. Currently we only implement this for
-	// slots, since only KVWork is allowed to bypass admission control for high
-	// priority internal activities (e.g. node liveness) and for KVWork that
-	// generates other KVWork (like intent resolution of discovered intents).
-	// Not bypassing for the latter could result in single node or distributed
-	// deadlock, and since such work is typically not a major (on average)
-	// consumer of resources, we consider bypassing to be acceptable.
-	tookWithoutPermission()
+	//
+	// REQUIRES: count > 0. count == 1 for slots.
+	tryGet(count int64) bool
+	// returnGrant is called for:
+	// - returning slots after use.
+	// - returning tokens when the work did not end up using all the tokens.
+	// - returning either slots or tokens when the grant raced with the work
+	//   being canceled, and the grantee did not end up doing any work.
+	//
+	// The last case occurs despite the return value on the requester.granted
+	// method -- it is possible that the work was not canceled at the time when
+	// requester.grant was called, and hence returned a count > 0, but later
+	// when the goroutine doing the work noticed that it had been granted, there
+	// is a possibility that that raced with cancellation.
+	//
+	// REQUIRES: count > 0. count == 1 for slots.
+	returnGrant(count int64)
+	// tookWithoutPermission informs the granter that a slot or tokens were
+	// taken unilaterally, without permission. This is useful for slots, since
+	// KVWork is allowed to bypass admission control for high priority internal
+	// activities (e.g. node liveness) and for KVWork that generates other
+	// KVWork (like intent resolution of discovered intents). Not bypassing for
+	// the latter could result in single node or distributed deadlock, and since
+	// such work is typically not a major (on average) consumer of resources, we
+	// consider bypassing to be acceptable. For tokens, this is useful when the
+	// initial estimated tokens for a unit of work turned out to be an
+	// underestimate.
+	//
+	// REQUIRES: count > 0. count == 1 for slots.
+	tookWithoutPermission(count int64)
 	// continueGrantChain is called by the requester at some point after grant
 	// was called on the requester. The expectation is that this is called by
 	// the grantee after its goroutine runs and notices that it has been granted
-	// a slot/token. This provides a natural throttling that reduces grant
+	// a slot/tokens. This provides a natural throttling that reduces grant
 	// bursts by taking into immediate account the capability of the goroutine
 	// scheduler to schedule such work.
 	//
@@ -294,12 +312,12 @@ type granterWithLockedCalls interface {
 	granter
 	// tryGetLocked is the real implementation of tryGet in the granter interface.
 	// Additionally, it is also used when continuing a grant chain.
-	tryGetLocked() grantResult
+	tryGetLocked(count int64) grantResult
 	// returnGrantLocked is the real implementation of returnGrant.
-	returnGrantLocked()
+	returnGrantLocked(count int64)
 	// tookWithoutPermissionLocked is the real implementation of
 	// tookWithoutPermission.
-	tookWithoutPermissionLocked()
+	tookWithoutPermissionLocked(count int64)
 
 	// getPairedRequester returns the requester implementation that this granter
 	// interacts with.
@@ -308,18 +326,17 @@ type granterWithLockedCalls interface {
 
 // slotGranter implements granterWithLockedCalls.
 type slotGranter struct {
-	coord      *GrantCoordinator
-	workKind   WorkKind
-	requester  requester
-	usedSlots  int
-	totalSlots int
+	coord               *GrantCoordinator
+	workKind            WorkKind
+	requester           requester
+	usedSlots           int
+	totalSlots          int
+	skipSlotEnforcement bool
 
 	// Optional. Nil for a slotGranter used for KVWork since the slots for that
 	// slotGranter are directly adjusted by the kvSlotAdjuster (using the
 	// kvSlotAdjuster here would provide a redundant identical signal).
 	cpuOverload cpuOverloadIndicator
-	// TODO(sumeer): Add an optional overload indicator for memory, that will be
-	// relevant for SQLStatementLeafStartWork and SQLStatementRootStartWork.
 
 	usedSlotsMetric *metric.Gauge
 }
@@ -334,15 +351,18 @@ func (sg *slotGranter) grantKind() grantKind {
 	return slot
 }
 
-func (sg *slotGranter) tryGet() bool {
-	return sg.coord.tryGet(sg.workKind)
+func (sg *slotGranter) tryGet(count int64) bool {
+	return sg.coord.tryGet(sg.workKind, count)
 }
 
-func (sg *slotGranter) tryGetLocked() grantResult {
+func (sg *slotGranter) tryGetLocked(count int64) grantResult {
+	if count != 1 {
+		panic(errors.AssertionFailedf("unexpected count: %d", count))
+	}
 	if sg.cpuOverload != nil && sg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
-	if sg.usedSlots < sg.totalSlots {
+	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
 		sg.usedSlots++
 		sg.usedSlotsMetric.Update(int64(sg.usedSlots))
 		return grantSuccess
@@ -353,11 +373,14 @@ func (sg *slotGranter) tryGetLocked() grantResult {
 	return grantFailLocal
 }
 
-func (sg *slotGranter) returnGrant() {
-	sg.coord.returnGrant(sg.workKind)
+func (sg *slotGranter) returnGrant(count int64) {
+	sg.coord.returnGrant(sg.workKind, count)
 }
 
-func (sg *slotGranter) returnGrantLocked() {
+func (sg *slotGranter) returnGrantLocked(count int64) {
+	if count != 1 {
+		panic(errors.AssertionFailedf("unexpected count: %d", count))
+	}
 	sg.usedSlots--
 	if sg.usedSlots < 0 {
 		panic(errors.AssertionFailedf("used slots is negative %d", sg.usedSlots))
@@ -365,11 +388,14 @@ func (sg *slotGranter) returnGrantLocked() {
 	sg.usedSlotsMetric.Update(int64(sg.usedSlots))
 }
 
-func (sg *slotGranter) tookWithoutPermission() {
-	sg.coord.tookWithoutPermission(sg.workKind)
+func (sg *slotGranter) tookWithoutPermission(count int64) {
+	sg.coord.tookWithoutPermission(sg.workKind, count)
 }
 
-func (sg *slotGranter) tookWithoutPermissionLocked() {
+func (sg *slotGranter) tookWithoutPermissionLocked(count int64) {
+	if count != 1 {
+		panic(errors.AssertionFailedf("unexpected count: %d", count))
+	}
 	sg.usedSlots++
 	sg.usedSlotsMetric.Update(int64(sg.usedSlots))
 }
@@ -383,8 +409,8 @@ type tokenGranter struct {
 	coord                *GrantCoordinator
 	workKind             WorkKind
 	requester            requester
-	availableBurstTokens int
-	maxBurstTokens       int
+	availableBurstTokens int64
+	maxBurstTokens       int64
 	skipTokenEnforcement bool
 	// Optional. Practically, both uses of tokenGranter, for SQLKVResponseWork
 	// and SQLSQLResponseWork have a non-nil value. We don't expect to use
@@ -409,148 +435,119 @@ func (tg *tokenGranter) grantKind() grantKind {
 	return token
 }
 
-func (tg *tokenGranter) tryGet() bool {
-	return tg.coord.tryGet(tg.workKind)
+func (tg *tokenGranter) tryGet(count int64) bool {
+	return tg.coord.tryGet(tg.workKind, count)
 }
 
-func (tg *tokenGranter) tryGetLocked() grantResult {
+func (tg *tokenGranter) tryGetLocked(count int64) grantResult {
 	if tg.cpuOverload != nil && tg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
 	if tg.availableBurstTokens > 0 || tg.skipTokenEnforcement {
-		tg.availableBurstTokens--
+		tg.availableBurstTokens -= count
 		return grantSuccess
 	}
 	return grantFailLocal
 }
 
-func (tg *tokenGranter) returnGrant() {
-	tg.coord.returnGrant(tg.workKind)
+func (tg *tokenGranter) returnGrant(count int64) {
+	tg.coord.returnGrant(tg.workKind, count)
 }
 
-func (tg *tokenGranter) returnGrantLocked() {
-	tg.availableBurstTokens++
+func (tg *tokenGranter) returnGrantLocked(count int64) {
+	tg.availableBurstTokens += count
 	if tg.availableBurstTokens > tg.maxBurstTokens {
 		tg.availableBurstTokens = tg.maxBurstTokens
 	}
 }
 
-func (tg *tokenGranter) tookWithoutPermission() {
-	panic(errors.AssertionFailedf("unimplemented"))
+func (tg *tokenGranter) tookWithoutPermission(count int64) {
+	tg.coord.tookWithoutPermission(tg.workKind, count)
 }
 
-func (tg *tokenGranter) tookWithoutPermissionLocked() {
-	panic(errors.AssertionFailedf("unimplemented"))
+func (tg *tokenGranter) tookWithoutPermissionLocked(count int64) {
+	tg.availableBurstTokens -= count
 }
 
 func (tg *tokenGranter) continueGrantChain(grantChainID grantChainID) {
 	tg.coord.continueGrantChain(tg.workKind, grantChainID)
 }
 
-// kvGranter implements granterWithLockedCalls. It is used for grants to
-// KVWork, that are limited by slots (CPU bound work) and/or tokens (IO
-// bound work).
-type kvGranter struct {
-	coord               *GrantCoordinator
-	requester           requester
-	usedSlots           int
-	totalSlots          int
-	skipSlotEnforcement bool
-
-	ioTokensEnabled bool
+// kvStoreTokenGranter implements granterWithLockedCalls. It is used for grants to
+// KVWork, that are limited by slots (CPU bound work) or tokens (IO bound
+// work).
+type kvStoreTokenGranter struct {
+	coord     *GrantCoordinator
+	requester requester
 	// There is no rate limiting in granting these tokens. That is, they are all
 	// burst tokens.
-	availableIOTokens int64
-
-	// Metric pointers can be nil.
-	usedSlotsMetric                 *metric.Gauge
+	availableIOTokens               int64
 	ioTokensExhaustedDurationMetric *metric.Counter
 	exhaustedStart                  time.Time
 }
 
-var _ granterWithLockedCalls = &kvGranter{}
+var _ granterWithLockedCalls = &kvStoreTokenGranter{}
 
-func (sg *kvGranter) getPairedRequester() requester {
+func (sg *kvStoreTokenGranter) getPairedRequester() requester {
 	return sg.requester
 }
 
-func (sg *kvGranter) grantKind() grantKind {
-	// Slot represents that there is a completion indicator, and it does not
-	// matter that kvGranter internally uses both slots and tokens.
-	return slot
+func (sg *kvStoreTokenGranter) grantKind() grantKind {
+	return token
 }
 
-func (sg *kvGranter) tryGet() bool {
-	return sg.coord.tryGet(KVWork)
+func (sg *kvStoreTokenGranter) tryGet(count int64) bool {
+	return sg.coord.tryGet(KVWork, count)
 }
 
-func (sg *kvGranter) tryGetLocked() grantResult {
-	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
-		if !sg.ioTokensEnabled || sg.availableIOTokens > 0 {
-			sg.usedSlots++
-			if sg.usedSlotsMetric != nil {
-				sg.usedSlotsMetric.Update(int64(sg.usedSlots))
-			}
-			if sg.ioTokensEnabled {
-				sg.availableIOTokens--
-				if sg.availableIOTokens == 0 {
-					sg.exhaustedStart = timeutil.Now()
-				}
-			}
-			return grantSuccess
-		}
-		return grantFailLocal
+func (sg *kvStoreTokenGranter) tryGetLocked(count int64) grantResult {
+	if sg.availableIOTokens > 0 {
+		sg.subtractTokens(count)
+		return grantSuccess
 	}
-	return grantFailDueToSharedResource
+	return grantFailLocal
 }
 
-func (sg *kvGranter) returnGrant() {
-	sg.coord.returnGrant(KVWork)
+func (sg *kvStoreTokenGranter) returnGrant(count int64) {
+	sg.coord.returnGrant(KVWork, count)
 }
 
-func (sg *kvGranter) returnGrantLocked() {
-	sg.usedSlots--
-	if sg.usedSlots < 0 {
-		panic(errors.AssertionFailedf("used slots is negative %d", sg.usedSlots))
-	}
-	if sg.usedSlotsMetric != nil {
-		sg.usedSlotsMetric.Update(int64(sg.usedSlots))
-	}
+func (sg *kvStoreTokenGranter) returnGrantLocked(count int64) {
+	sg.subtractTokens(-count)
 }
 
-func (sg *kvGranter) tookWithoutPermission() {
-	sg.coord.tookWithoutPermission(KVWork)
+func (sg *kvStoreTokenGranter) tookWithoutPermission(count int64) {
+	sg.coord.tookWithoutPermission(KVWork, count)
 }
 
-func (sg *kvGranter) tookWithoutPermissionLocked() {
-	sg.usedSlots++
-	if sg.usedSlotsMetric != nil {
-		sg.usedSlotsMetric.Update(int64(sg.usedSlots))
-	}
-	if sg.ioTokensEnabled {
-		sg.availableIOTokens--
-		if sg.availableIOTokens == 0 {
-			sg.exhaustedStart = timeutil.Now()
-		}
+func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64) {
+	sg.subtractTokens(count)
+}
+
+func (sg *kvStoreTokenGranter) subtractTokens(count int64) {
+	avail := sg.availableIOTokens
+	sg.availableIOTokens -= count
+	if count > 0 && avail > 0 && sg.availableIOTokens <= 0 {
+		sg.exhaustedStart = timeutil.Now()
+	} else if count < 0 && avail < 0 && sg.availableIOTokens > 0 {
+		exhaustedMicros := timeutil.Since(sg.exhaustedStart).Microseconds()
+		sg.ioTokensExhaustedDurationMetric.Inc(exhaustedMicros)
 	}
 }
 
-func (sg *kvGranter) continueGrantChain(grantChainID grantChainID) {
+func (sg *kvStoreTokenGranter) continueGrantChain(grantChainID grantChainID) {
 	sg.coord.continueGrantChain(KVWork, grantChainID)
 }
 
-func (sg *kvGranter) setAvailableIOTokensLocked(tokens int64) {
-	wasExhausted := sg.ioTokensEnabled && sg.availableIOTokens <= 0
-	sg.ioTokensEnabled = true
-	if sg.availableIOTokens < 0 {
-		// Negative because of tookWithoutPermission.
-		sg.availableIOTokens += tokens
-	} else {
+func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) {
+	// It is possible for availableIOTokens to be negative because of
+	// tookWithoutPermission or because tryGet will satisfy requests until
+	// availableIOTokens become <= 0. We want to remember this previous
+	// over-allocation.
+	sg.subtractTokens(-tokens)
+	if sg.availableIOTokens > tokens {
+		// Clamp to tokens.
 		sg.availableIOTokens = tokens
-	}
-	if wasExhausted && sg.availableIOTokens > 0 && sg.ioTokensExhaustedDurationMetric != nil {
-		exhaustedMicros := timeutil.Since(sg.exhaustedStart).Microseconds()
-		sg.ioTokensExhaustedDurationMetric.Inc(exhaustedMicros)
 	}
 }
 
@@ -616,11 +613,15 @@ type Options struct {
 	SQLStatementRootStartWorkSlots int
 	Settings                       *cluster.Settings
 	// Only non-nil for tests.
-	makeRequesterFunc makeRequesterFunc
+	makeRequesterFunc      makeRequesterFunc
+	makeStoreRequesterFunc makeStoreRequesterFunc
 }
 
 type makeRequesterFunc func(
 	workKind WorkKind, granter granter, settings *cluster.Settings, opts workQueueOptions) requester
+
+type makeStoreRequesterFunc func(granter granter, settings *cluster.Settings,
+	opts workQueueOptions) storeRequester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
 // regular cluster node. Caller is responsible for hooking up
@@ -662,8 +663,9 @@ func NewGrantCoordinators(
 		grantChainID:         1,
 	}
 
-	kvg := &kvGranter{
+	kvg := &slotGranter{
 		coord:           coord,
+		workKind:        KVWork,
 		totalSlots:      opts.MinCPUSlots,
 		usedSlotsMetric: metrics.KVUsedSlots,
 	}
@@ -675,8 +677,8 @@ func NewGrantCoordinators(
 	tg := &tokenGranter{
 		coord:                coord,
 		workKind:             SQLKVResponseWork,
-		availableBurstTokens: opts.SQLKVResponseBurstTokens,
-		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
+		availableBurstTokens: int64(opts.SQLKVResponseBurstTokens),
+		maxBurstTokens:       int64(opts.SQLKVResponseBurstTokens),
 		cpuOverload:          kvSlotAdjuster,
 	}
 	coord.queues[SQLKVResponseWork] = makeRequester(
@@ -687,8 +689,8 @@ func NewGrantCoordinators(
 	tg = &tokenGranter{
 		coord:                coord,
 		workKind:             SQLSQLResponseWork,
-		availableBurstTokens: opts.SQLSQLResponseBurstTokens,
-		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
+		availableBurstTokens: int64(opts.SQLSQLResponseBurstTokens),
+		maxBurstTokens:       int64(opts.SQLSQLResponseBurstTokens),
 		cpuOverload:          kvSlotAdjuster,
 	}
 	coord.queues[SQLSQLResponseWork] = makeRequester(
@@ -724,9 +726,13 @@ func NewGrantCoordinators(
 
 	storeWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-stores")
 	metricStructs = append(metricStructs, storeWorkQueueMetrics)
+	makeStoreRequester := makeStoreWorkQueue
+	if opts.makeStoreRequesterFunc != nil {
+		makeStoreRequester = opts.makeStoreRequesterFunc
+	}
 	storeCoordinators := &StoreGrantCoordinators{
 		settings:                    st,
-		makeRequesterFunc:           makeRequester,
+		makeStoreRequesterFunc:      makeStoreRequester,
 		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 		workQueueMetrics:            storeWorkQueueMetrics,
 	}
@@ -762,8 +768,8 @@ func NewGrantCoordinatorSQL(
 	tg := &tokenGranter{
 		coord:                coord,
 		workKind:             SQLKVResponseWork,
-		availableBurstTokens: opts.SQLKVResponseBurstTokens,
-		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
+		availableBurstTokens: int64(opts.SQLKVResponseBurstTokens),
+		maxBurstTokens:       int64(opts.SQLKVResponseBurstTokens),
 		cpuOverload:          sqlNodeCPU,
 	}
 	coord.queues[SQLKVResponseWork] = makeRequester(
@@ -774,8 +780,8 @@ func NewGrantCoordinatorSQL(
 	tg = &tokenGranter{
 		coord:                coord,
 		workKind:             SQLSQLResponseWork,
-		availableBurstTokens: opts.SQLSQLResponseBurstTokens,
-		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
+		availableBurstTokens: int64(opts.SQLSQLResponseBurstTokens),
+		maxBurstTokens:       int64(opts.SQLSQLResponseBurstTokens),
 		cpuOverload:          sqlNodeCPU,
 	}
 	coord.queues[SQLSQLResponseWork] = makeRequester(
@@ -892,7 +898,7 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
 	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
 	if coord.granters[KVWork] != nil {
-		coord.granters[KVWork].(*kvGranter).skipSlotEnforcement = skipEnforcement
+		coord.granters[KVWork].(*slotGranter).skipSlotEnforcement = skipEnforcement
 	}
 	if coord.grantChainActive && !coord.tryTerminateGrantChain() {
 		return
@@ -901,14 +907,14 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 }
 
 // tryGet is called by granter.tryGet with the WorkKind.
-func (coord *GrantCoordinator) tryGet(workKind WorkKind) bool {
+func (coord *GrantCoordinator) tryGet(workKind WorkKind, count int64) bool {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	// It is possible that a grant chain is active, and has not yet made its way
 	// to this workKind. So it may be more reasonable to queue. But we have some
 	// concerns about incurring the delay of multiple goroutine context switches
 	// so we ignore this case.
-	res := coord.granters[workKind].tryGetLocked()
+	res := coord.granters[workKind].tryGetLocked(count)
 	switch res {
 	case grantSuccess:
 		// Grant chain may be active, but it did not get in the way of this grant,
@@ -931,10 +937,10 @@ func (coord *GrantCoordinator) tryGet(workKind WorkKind) bool {
 }
 
 // returnGrant is called by granter.returnGrant with the WorkKind.
-func (coord *GrantCoordinator) returnGrant(workKind WorkKind) {
+func (coord *GrantCoordinator) returnGrant(workKind WorkKind, count int64) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	coord.granters[workKind].returnGrantLocked()
+	coord.granters[workKind].returnGrantLocked(count)
 	if coord.grantChainActive {
 		if coord.grantChainIndex > workKind &&
 			coord.granters[workKind].getPairedRequester().hasWaitingRequests() {
@@ -953,10 +959,10 @@ func (coord *GrantCoordinator) returnGrant(workKind WorkKind) {
 
 // tookWithoutPermission is called by granter.tookWithoutPermission with the
 // WorkKind.
-func (coord *GrantCoordinator) tookWithoutPermission(workKind WorkKind) {
+func (coord *GrantCoordinator) tookWithoutPermission(workKind WorkKind, count int64) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	coord.granters[workKind].tookWithoutPermissionLocked()
+	coord.granters[workKind].tookWithoutPermissionLocked(count)
 }
 
 // continueGrantChain is called by granter.continueGrantChain with the
@@ -1052,16 +1058,23 @@ OuterLoop:
 		}
 		req := granter.getPairedRequester()
 		for req.hasWaitingRequests() && !localDone {
-			res := granter.tryGetLocked()
+			// Get 1 token or slot.
+			res := granter.tryGetLocked(1)
 			switch res {
 			case grantSuccess:
 				chainID := noGrantChain
 				if grantBurstCount+1 == grantBurstLimit && coord.useGrantChains {
 					chainID = coord.grantChainID
 				}
-				if !req.granted(chainID) {
-					granter.returnGrantLocked()
+				tookCount := req.granted(chainID)
+				if tookCount == 0 {
+					// Did not accept grant.
+					granter.returnGrantLocked(1)
 				} else {
+					// May have taken more.
+					if tookCount > 1 {
+						granter.tookWithoutPermissionLocked(tookCount - 1)
+					}
 					grantBurstCount++
 					if grantBurstCount == grantBurstLimit && coord.useGrantChains {
 						coord.grantChainActive = true
@@ -1119,9 +1132,11 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 		kind := WorkKind(i)
 		switch kind {
 		case KVWork:
-			g := coord.granters[i].(*kvGranter)
-			s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalSlots)
-			if g.ioTokensEnabled {
+			switch g := coord.granters[i].(type) {
+			case *slotGranter:
+				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots,
+					g.totalSlots)
+			case *kvStoreTokenGranter:
 				s.Printf(" io-avail: %d", g.availableIOTokens)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
@@ -1146,7 +1161,7 @@ type StoreGrantCoordinators struct {
 	ambientCtx log.AmbientContext
 
 	settings                    *cluster.Settings
-	makeRequesterFunc           makeRequesterFunc
+	makeStoreRequesterFunc      makeStoreRequesterFunc
 	kvIOTokensExhaustedDuration *metric.Counter
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics WorkQueueMetrics
@@ -1237,34 +1252,36 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 		useGrantChains: false,
 		numProcs:       1,
 	}
-	kvg := &kvGranter{
-		coord: coord,
-		// Unlimited slots since not constrained by CPU.
-		totalSlots:                      math.MaxInt32,
+	kvg := &kvStoreTokenGranter{
+		coord:                           coord,
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
 	}
 	opts := makeWorkQueueOptions(KVWork)
+	// This is IO work, so override the usesTokens value.
+	opts.usesTokens = true
 	// Share the WorkQueue metrics across all stores.
 	// TODO(sumeer): add per-store WorkQueue state for debug.zip and db console.
 	opts.metrics = &sgc.workQueueMetrics
-	coord.queues[KVWork] = sgc.makeRequesterFunc(KVWork, kvg, sgc.settings, opts)
-	kvg.requester = coord.queues[KVWork]
+	storeReq := sgc.makeStoreRequesterFunc(kvg, sgc.settings, opts)
+	coord.queues[KVWork] = storeReq
+	kvg.requester = storeReq
 	coord.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
 		storeID:     storeID,
 		settings:    sgc.settings,
-		kvRequester: coord.queues[KVWork],
+		kvRequester: storeReq,
 	}
 	coord.ioLoadListener.mu.Mutex = &coord.mu
-	coord.ioLoadListener.mu.kvGranter = coord.granters[KVWork].(*kvGranter)
+	coord.ioLoadListener.mu.kvGranter = kvg
 	return coord
 }
 
 // TryGetQueueForStore returns a WorkQueue for the given storeID, or nil if
 // the storeID is not known.
+// TODO(sumeer): change this method to return *StoreWorkQueue.
 func (sgc *StoreGrantCoordinators) TryGetQueueForStore(storeID int32) *WorkQueue {
 	if granter, ok := sgc.gcMap[storeID]; ok {
-		return granter.GetWorkQueue(KVWork)
+		return &granter.queues[KVWork].(*StoreWorkQueue).q
 	}
 	return nil
 }
@@ -1328,7 +1345,7 @@ type kvSlotAdjuster struct {
 	// - these are potentially long-lived work items and not CPU bound
 	// - we don't know how to coordinate adjustment of those slots and the KV
 	//   slots.
-	granter     *kvGranter
+	granter     *slotGranter
 	minCPUSlots int
 	maxCPUSlots int
 
@@ -1405,7 +1422,7 @@ type StoreMetrics struct {
 	*pebble.Metrics
 }
 
-// granterWithIOTokens is used to abstract kvGranter for testing.
+// granterWithIOTokens is used to abstract kvStoreTokenGranter for testing.
 type granterWithIOTokens interface {
 	// setAvailableIOTokensLocked bounds the available tokens that can be
 	// granted to the value provided in the tokens parameter. This is not a
@@ -1416,7 +1433,46 @@ type granterWithIOTokens interface {
 	setAvailableIOTokensLocked(tokens int64)
 }
 
-// ioLoadListener adjusts tokens in kvGranter for IO, specifically due to
+// storeAdmissionStats are stats maintained by a storeRequester.
+// TODO: update all of these at admissionworkdone time, so they are
+// mutually consistent even when computing deltas.
+type storeAdmissionStats struct {
+	// Total admission requests.
+	admittedCount uint64
+	// Total admission requests that provided their byte size.
+	// INVARIANT: admittedWithBytesCount <= admittedCount
+	admittedWithBytesCount uint64
+	// Bytes mentioned at admission request time for the requests in
+	// admittedWithBytesCount.
+	admittedBytes uint64
+	// Bytes mentioned at admission request time for the ingestion requests.
+	// INVARIANT: ingestedBytes <= admittedBytes
+	ingestedBytes uint64
+	// After execution of the ingestion requests, how many bytes were ingested
+	// into L0.
+	// INVARIANT: ingestedIntoL0Bytes <= ingestedBytes
+	ingestedIntoL0Bytes uint64
+}
+
+// storeRequestEstimates are estimates that the storeRequester should use for
+// its future requests.
+type storeRequestEstimates struct {
+	// Fraction of ingested bytes (via admission control) that went into L0.
+	// Calculated using storeAdmissionStats.
+	fractionOfIngestIntoL0 float64
+	// When StoreWriteWorkInfo.WriteBytes is 0, this estimate should be used.
+	// Must be > 0.
+	workByteEstimate int64
+}
+
+// storeRequester is used to abstract *StoreWorkQueue for testing.
+type storeRequester interface {
+	requester
+	getStoreAdmissionStats() storeAdmissionStats
+	setStoreRequestEstimates(estimates storeRequestEstimates)
+}
+
+// ioLoadListener adjusts tokens in kvStoreTokenGranter for IO, specifically due to
 // overload caused by writes. IO uses tokens and not slots since work
 // completion is not an indicator that the "resource usage" has ceased -- it
 // just means that the write has been applied to the WAL. Most of the work is
@@ -1424,7 +1480,7 @@ type granterWithIOTokens interface {
 type ioLoadListener struct {
 	storeID     int32
 	settings    *cluster.Settings
-	kvRequester requester
+	kvRequester storeRequester
 	mu          struct {
 		// Used when changing state in kvGranter. This is a pointer since it is
 		// the same as GrantCoordinator.mu.
@@ -1432,14 +1488,20 @@ type ioLoadListener struct {
 		kvGranter granterWithIOTokens
 	}
 
-	// Cumulative stats used to compute interval stats.
+	// Stats used to compute interval stats.
 	statsInitialized bool
-	admittedCount    uint64
-	l0Bytes          int64
-	l0AddedBytes     uint64
+	// Cumulative.
+	admissionStats storeAdmissionStats
+	// Gauge.
+	l0Bytes int64
+	// Cumulative.
+	l0AddedBytes uint64
 	// Exponentially smoothed per interval values.
 	smoothedBytesRemoved int64
-	smoothedNumAdmit     float64
+	// Tokens are in units of bytes.
+	smoothedNumTokens float64
+	// Estimates from last interval.
+	estimates storeRequestEstimates
 
 	// totalTokens represents the tokens to give out until the next call to
 	// adjustTokens. They are given out with smoothing -- tokensAllocated
@@ -1495,7 +1557,7 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m pebble.Metric
 	if !io.statsInitialized {
 		io.statsInitialized = true
 		// Initialize cumulative stats.
-		io.admittedCount = io.kvRequester.getAdmittedCount()
+		io.admissionStats = io.kvRequester.getStoreAdmissionStats()
 		io.l0Bytes = m.Levels[0].Size
 		io.l0AddedBytes = m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested
 		// No initial limit, i.e, the first interval is unlimited.
@@ -1543,7 +1605,8 @@ func (io *ioLoadListener) allocateTokensTick() {
 func (io *ioLoadListener) adjustTokens(ctx context.Context, m pebble.Metrics) {
 	io.tokensAllocated = 0
 	// Grab the cumulative stats.
-	admittedCount := io.kvRequester.getAdmittedCount()
+	admissionStats := io.kvRequester.getStoreAdmissionStats()
+
 	l0Bytes := m.Levels[0].Size
 	l0AddedBytes := m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested
 	// Compute the stats for the interval.
@@ -1566,66 +1629,107 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, m pebble.Metrics) {
 	// so smooth out what is being removed by compactions.
 	io.smoothedBytesRemoved =
 		int64(alpha*float64(bytesRemoved) + (1-alpha)*float64(io.smoothedBytesRemoved))
-	// admitted represents what we actually admitted.
-	var admitted uint64
 	doLog := true
-	if admittedCount < io.admittedCount {
-		log.Warningf(ctx, "admitted count decreased from %d to %d",
-			io.admittedCount, admittedCount)
-	} else {
-		admitted = admittedCount - io.admittedCount
+	// Compute the deltas of the storeAdmissionStats
+	admittedDelta := admissionStats.admittedCount - io.admissionStats.admittedCount
+	admittedWithBytesDelta :=
+		admissionStats.admittedWithBytesCount - io.admissionStats.admittedWithBytesCount
+	admittedBytesDelta := admissionStats.admittedBytes - io.admissionStats.admittedBytes
+	ingestedBytesDelta := admissionStats.ingestedBytes - io.admissionStats.ingestedBytes
+	ingestedIntoL0BytesDelta :=
+		admissionStats.ingestedIntoL0Bytes - io.admissionStats.ingestedIntoL0Bytes
+
+	admittedWithoutBytesDelta := admittedDelta - admittedWithBytesDelta
+	accountedBytesIntoL0 := admittedBytesDelta - (ingestedBytesDelta - ingestedIntoL0BytesDelta)
+	unaccountedBytesIntoL0 := bytesAdded - int64(accountedBytesIntoL0)
+	if unaccountedBytesIntoL0 < 0 {
+		// This could happen because of the different points in time the two stats
+		// a, b are collected, for which we are computing a-b. The compensation we
+		// do below is limited to exponential smoothing, which hopefully is good
+		// enough.
+		unaccountedBytesIntoL0 = 0
 	}
-	if admitted == 0 {
-		admitted = 1
+	if admittedDelta == 0 {
+		admittedDelta = 1
 		// Admission control is likely disabled, given there was no KVWork
-		// admitted for 60s. And even if it is enabled, this is not an interesting
+		// admitted for 15s. And even if it is enabled, this is not an interesting
 		// situation.
 		doLog = false
 	}
+	if admittedWithoutBytesDelta > 0 {
+		// Some work that contributed to unaccountedBytesIntoL0 could have
+		// completely bypassed admission control, so it isn't necessarily fair to
+		// count into against work that falls into the admittedWithoutBytesDelta.
+		// But we can't do any better, and we don't want admission control to
+		// become completely ineffective. The deficiency in that case is in the
+		// lack of integration with admission control.
+		bytesAddedPerWorkWithoutBytes :=
+			float64(unaccountedBytesIntoL0) / float64(admittedWithoutBytesDelta)
+		if bytesAddedPerWorkWithoutBytes > 0 {
+			io.estimates.workByteEstimate = int64(alpha*float64(bytesAddedPerWorkWithoutBytes) +
+				(1-alpha)*float64(io.estimates.workByteEstimate))
+			if io.estimates.workByteEstimate == 0 {
+				// Need this estimate to be > 0.
+				io.estimates.workByteEstimate = 1
+			}
+		}
+		// Else unaccountedBytesIntoL0 was 0. This will be very rare, and don't
+		// update the workByteEstimate.
+	}
+	// Else admittedWithoutBytesDelta = 0. This will be very rare, and don't
+	// update the workByteEstimate.
+
+	if ingestedBytesDelta > 0 {
+		fractionOfIngestIntoL0 := float64(ingestedIntoL0BytesDelta) / float64(ingestedBytesDelta)
+		io.estimates.fractionOfIngestIntoL0 = alpha*fractionOfIngestIntoL0 +
+			(1-alpha)*io.estimates.fractionOfIngestIntoL0
+	}
+	// Else, no ingestion happened in this time interval, so don't update
+	// the estimate.
+
 	// We constrain admission if the store if over the threshold.
 	if m.Levels[0].NumFiles > L0FileCountOverloadThreshold.Get(&io.settings.SV) ||
 		m.Levels[0].Sublevels > int32(L0SubLevelCountOverloadThreshold.Get(&io.settings.SV)) {
-		// Attribute the bytesAdded equally to all the admitted work.
-		// INVARIANT: bytesAddedPerWork >= 0
-		bytesAddedPerWork := float64(bytesAdded) / float64(admitted)
-		if bytesAddedPerWork == 0 {
-			// We are here because bytesAdded was 0. This will be very rare.
-			bytesAddedPerWork = 1
-		}
-		// Don't admit more work than we can remove via compactions. numAdmit
+		// Don't admit more byte work than we can remove via compactions. numTokens
 		// tracks our goal for admission.
-		numAdmit := float64(io.smoothedBytesRemoved) / bytesAddedPerWork
+		numTokens := float64(io.smoothedBytesRemoved)
 		// Scale down since we want to get under the thresholds over time. This
 		// scaling could be adjusted based on how much above the threshold we are,
 		// but for now we just use a constant.
-		numAdmit /= 2.0
-		// Smooth it out in case our estimation of numAdmit goes awry in some
-		// intervals.
-		io.smoothedNumAdmit = alpha*numAdmit + (1-alpha)*io.smoothedNumAdmit
-		if float64(math.MaxInt64) < io.smoothedNumAdmit {
-			// Avoid overflow. This will be very rare.
+		numTokens /= 2.0
+		// Smooth it. This may seem peculiar since we are already using
+		// smoothedBytesRemoved, but the else clause below uses a different
+		// computation so we also want the history of smoothedNumTokens.
+		io.smoothedNumTokens = alpha*numTokens + (1-alpha)*io.smoothedNumTokens
+		if float64(math.MaxInt64) < io.smoothedNumTokens {
+			// Avoid overflow. This should not really happen.
 			io.totalTokens = math.MaxInt64
 		} else {
-			io.totalTokens = int64(io.smoothedNumAdmit)
+			io.totalTokens = int64(io.smoothedNumTokens)
 		}
 		if doLog {
 			log.Infof(ctx,
 				"IO overload on store %d (files %d, sub-levels %d): admitted: %d, added: %d, "+
-					"removed (%d, %d), admit: (%f, %d)",
-				io.storeID, m.Levels[0].NumFiles, m.Levels[0].Sublevels, admitted, bytesAdded,
-				bytesRemoved, io.smoothedBytesRemoved, numAdmit, io.totalTokens)
+					"removed (%d, %d), tokens: (%f, %d)",
+				io.storeID, m.Levels[0].NumFiles, m.Levels[0].Sublevels, admittedDelta, bytesAdded,
+				bytesRemoved, io.smoothedBytesRemoved, numTokens, io.totalTokens)
 		}
 	} else {
-		// Under the threshold. Maintain a smoothedNumAdmit so that it is not 0
-		// when we first go over the threshold. Instead use what we actually
-		// admitted.
-		io.smoothedNumAdmit = alpha*float64(admitted) + (1-alpha)*io.smoothedNumAdmit
+		// Under the threshold. Maintain a smoothedNumTokens based on what was
+		// added or removed, so that when we go over the threshold we have some
+		// history.
+		numTokens := bytesAdded
+		if bytesRemoved > numTokens {
+			numTokens = bytesRemoved
+		}
+		io.smoothedNumTokens = alpha*float64(numTokens) + (1-alpha)*io.smoothedNumTokens
 		io.totalTokens = unlimitedTokens
 	}
 	// Install the latest cumulative stats.
-	io.admittedCount = admittedCount
+	io.admissionStats = admissionStats
 	io.l0Bytes = l0Bytes
 	io.l0AddedBytes = l0AddedBytes
+	io.kvRequester.setStoreRequestEstimates(io.estimates)
 }
 
 var _ cpuOverloadIndicator = &sqlNodeCPUOverloadIndicator{}

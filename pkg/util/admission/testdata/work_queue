@@ -58,7 +58,7 @@ granted chain-id=5
 ----
 continueGrantChain 5
 id 5: admit succeeded
-granted: returned true
+granted: returned 1
 
 # Both tenants are using 1 slot. The tie is broken arbitrarily in favor of
 # tenant 71.
@@ -82,7 +82,7 @@ tenantHeap len: 2 top tenant: 71
 # The work admitted for tenant 53 is done.
 work-done id=1
 ----
-returnGrant
+returnGrant 1
 
 # Tenant 53 now using fewer slots so it becomes the top of the heap.
 print
@@ -95,7 +95,7 @@ tenantHeap len: 2 top tenant: 53
 # reflected in the WorkQueue state.
 admit id=6 tenant=1 priority=0 create-time=6 bypass=true
 ----
-tookWithoutPermission
+tookWithoutPermission 1
 id 6: admit succeeded
 
 print
@@ -109,13 +109,13 @@ granted chain-id=7
 ----
 continueGrantChain 7
 id 2: admit succeeded
-granted: returned true
+granted: returned 1
 
 granted chain-id=9
 ----
 continueGrantChain 9
 id 4: admit succeeded
-granted: returned true
+granted: returned 1
 
 # No more waiting requests.
 print
@@ -128,7 +128,7 @@ tenantHeap len: 0
 # Granted returns false.
 granted chain-id=10
 ----
-granted: returned false
+granted: returned 0
 
 print
 ----

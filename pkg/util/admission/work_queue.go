@@ -116,6 +116,9 @@ type WorkInfo struct {
 	// RequiresLeaseholder is true iff the work requires the leaseholder.
 	// Optional (see comment above).
 	RequiresLeaseholder bool
+
+	// For internal use by wrapper classes. The requested tokens or slots.
+	requestedCount int64
 }
 
 // WorkQueue maintains a queue of work waiting to be admitted. Ordering of
@@ -183,6 +186,7 @@ type workQueueOptions struct {
 func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
 	switch workKind {
 	case KVWork:
+		// CPU bound KV work uses tokens.
 		return workQueueOptions{usesTokens: false, tiedToRange: true}
 	case SQLKVResponseWork, SQLSQLResponseWork:
 		return workQueueOptions{usesTokens: true, tiedToRange: false}
@@ -239,6 +243,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	if q.settings != nil && enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {
 		return false, nil
 	}
+	if info.requestedCount == 0 {
+		info.requestedCount = 1
+	}
 	q.metrics.Requested.Inc(1)
 	tenantID := info.TenantID.ToUint64()
 
@@ -254,13 +261,13 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.mu.tenants[tenantID] = tenant
 	}
 	if info.BypassAdmission && roachpb.IsSystemTenantID(tenantID) && q.workKind == KVWork {
-		tenant.used++
+		tenant.used += uint64(info.requestedCount)
 		if len(tenant.waitingWorkHeap) > 0 {
 			q.mu.tenantHeap.fix(tenant)
 		}
 		q.mu.Unlock()
 		q.admitMu.Unlock()
-		q.granter.tookWithoutPermission()
+		q.granter.tookWithoutPermission(info.requestedCount)
 		q.metrics.Admitted.Inc(1)
 		atomic.AddUint64(&q.admittedCount, 1)
 		return true, nil
@@ -269,9 +276,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	if len(q.mu.tenantHeap) == 0 {
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
-		tenant.used++
+		tenant.used += uint64(info.requestedCount)
 		q.mu.Unlock()
-		if q.granter.tryGet() {
+		if q.granter.tryGet(info.requestedCount) {
 			q.admitMu.Unlock()
 			q.metrics.Admitted.Inc(1)
 			atomic.AddUint64(&q.admittedCount, 1)
@@ -302,10 +309,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			if !ok || prevTenant != tenant {
 				panic("prev tenantInfo no longer in map")
 			}
-			if tenant.used == 0 {
-				panic("tenant.used is already zero")
+			if tenant.used < uint64(info.requestedCount) {
+				panic(errors.AssertionFailedf("tenant.used %d < info.requestedCount %d",
+					tenant.used, info.requestedCount))
 			}
-			tenant.used--
+			tenant.used -= uint64(info.requestedCount)
 		} else {
 			if !ok {
 				tenant = newTenantInfo(tenantID)
@@ -313,8 +321,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			}
 			// Don't want to overflow tenant.used if it is already 0 because of
 			// being reset to 0 by the GC goroutine.
-			if tenant.used > 0 {
-				tenant.used--
+			if tenant.used >= uint64(info.requestedCount) {
+				tenant.used -= uint64(info.requestedCount)
 			}
 		}
 	}
@@ -339,7 +347,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		}
 	}
 	// Push onto heap(s).
-	work := newWaitingWork(info.Priority, info.CreateTime)
+	work := newWaitingWork(info.Priority, info.CreateTime, info.requestedCount)
 	heap.Push(&tenant.waitingWorkHeap, work)
 	if len(tenant.waitingWorkHeap) == 1 {
 		heap.Push(&q.mu.tenantHeap, tenant)
@@ -358,15 +366,16 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if work.heapIndex == -1 {
 			// No longer in heap. Raced with token/slot grant.
 			if !q.usesTokens {
-				if tenant.used == 0 {
-					panic("tenant.used is already zero")
+				if tenant.used < uint64(info.requestedCount) {
+					panic(errors.AssertionFailedf("tenant.used %d < info.requestedCount %d",
+						tenant.used, info.requestedCount))
 				}
-				tenant.used--
+				tenant.used -= uint64(info.requestedCount)
 			}
 			// Else, we don't decrement tenant.used since we don't want to race with
 			// the gc goroutine that will set used=0.
 			q.mu.Unlock()
-			q.granter.returnGrant()
+			q.granter.returnGrant(info.requestedCount)
 			// The channel is sent to after releasing mu, so we don't need to hold
 			// mu when receiving from it. Additionally, we've already called
 			// returnGrant so we're not holding back future grant chains if this one
@@ -416,8 +425,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 // SQLStatementRootStartWork.
 func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID) {
 	if q.usesTokens {
-		panic(errors.AssertionFailedf("tokens should not be returned"))
+		// Ignore.
+		return
 	}
+	// Single slot is allocated for the work.
 	q.mu.Lock()
 	tenant, ok := q.mu.tenants[tenantID.ToUint64()]
 	if !ok {
@@ -428,7 +439,7 @@ func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID) {
 		q.mu.tenantHeap.fix(tenant)
 	}
 	q.mu.Unlock()
-	q.granter.returnGrant()
+	q.granter.returnGrant(1)
 }
 
 func (q *WorkQueue) getAdmittedCount() uint64 {
@@ -441,27 +452,31 @@ func (q *WorkQueue) hasWaitingRequests() bool {
 	return len(q.mu.tenantHeap) > 0
 }
 
-func (q *WorkQueue) granted(grantChainID grantChainID) bool {
+func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	// Reduce critical section by getting time before mutex acquisition.
 	now := timeutil.Now()
 	q.mu.Lock()
 	if len(q.mu.tenantHeap) == 0 {
 		q.mu.Unlock()
-		return false
+		return 0
 	}
 	tenant := q.mu.tenantHeap[0]
 	item := heap.Pop(&tenant.waitingWorkHeap).(*waitingWork)
 	item.grantTime = now
-	tenant.used++
+	tenant.used += uint64(item.requestedCount)
 	if len(tenant.waitingWorkHeap) > 0 {
 		q.mu.tenantHeap.fix(tenant)
 	} else {
 		q.mu.tenantHeap.remove(tenant)
 	}
+	// Get the value of requestecCount before releasing the mutex, since after
+	// releasing Admit can notice that item is no longer in the heap and call
+	// releaseWaitingWork to return item to the waitingWorkPool.
+	requestedCount := item.requestedCount
 	q.mu.Unlock()
 	// Reduce critical section by sending on channel after releasing mutex.
 	item.ch <- grantChainID
-	return true
+	return requestedCount
 }
 
 func (q *WorkQueue) gcTenantsAndResetTokens() {
@@ -479,6 +494,31 @@ func (q *WorkQueue) gcTenantsAndResetTokens() {
 			// All the heap members will reset used=0, so no need to change heap
 			// ordering.
 		}
+	}
+}
+
+// forceAllocateTokens is used internally by StoreWorkQueue. tokens can be
+// negative.
+func (q *WorkQueue) forceAllocateTokens(tenantID roachpb.TenantID, count int64) {
+	tid := tenantID.ToUint64()
+	q.mu.Lock()
+	tenant, ok := q.mu.tenants[tid]
+	if ok {
+		if count < 0 {
+			toReturn := uint64(-count)
+			if tenant.used < toReturn {
+				tenant.used = 0
+			} else {
+				tenant.used -= toReturn
+			}
+		} else {
+			tenant.used += uint64(count)
+		}
+	}
+	if count < 0 {
+		q.granter.returnGrant(-count)
+	} else {
+		q.granter.tookWithoutPermission(count)
 	}
 }
 
@@ -632,8 +672,9 @@ func (th *tenantHeap) Pop() interface{} {
 
 // waitingWork is the per-work information in the waitingWorkHeap.
 type waitingWork struct {
-	priority   WorkPriority
-	createTime int64
+	priority       WorkPriority
+	createTime     int64
+	requestedCount int64
 	// ch is used to communicate a grant to the waiting goroutine. The
 	// grantChainID is used by the waiting goroutine to call continueGrantChain.
 	ch chan grantChainID
@@ -656,17 +697,18 @@ var waitingWorkPool = sync.Pool{
 	},
 }
 
-func newWaitingWork(priority WorkPriority, createTime int64) *waitingWork {
+func newWaitingWork(priority WorkPriority, createTime int64, requestedCount int64) *waitingWork {
 	ww := waitingWorkPool.Get().(*waitingWork)
 	ch := ww.ch
 	if ch == nil {
 		ch = make(chan grantChainID, 1)
 	}
 	*ww = waitingWork{
-		priority:   priority,
-		createTime: createTime,
-		ch:         ch,
-		heapIndex:  -1,
+		priority:       priority,
+		createTime:     createTime,
+		requestedCount: requestedCount,
+		ch:             ch,
+		heapIndex:      -1,
 	}
 	return ww
 }
@@ -791,4 +833,151 @@ func makeWorkQueueMetrics(name string) WorkQueueMetrics {
 			addName(name, waitDurationsMeta), base.DefaultHistogramWindowInterval()),
 		WaitQueueLength: metric.NewGauge(addName(name, waitQueueLengthMeta)),
 	}
+}
+
+type StoreWriteWorkInfo struct {
+	WorkInfo
+	// WriteBytes should be populated if the caller knows the bytes that will be written,
+	// else this should be set to 0, and the callee will use an estimate.
+	// For large writes, typically generated for index backfills, restores etc.
+	// it is important to populate this.
+	WriteBytes int64
+	// IngestRequest is true iff this will be executed by ingesting sstables
+	// into the store. In this case WriteBytes must be populated.
+	IngestRequest bool
+}
+
+type StoreWorkQueue struct {
+	q  WorkQueue
+	mu struct {
+		syncutil.RWMutex
+		estimates storeRequestEstimates
+		stats     storeAdmissionStats
+	}
+}
+
+type storeWorkHandle struct {
+	tenantID         roachpb.TenantID
+	writeBytes       int64
+	writeTokens      int64
+	estimatedBytes   bool
+	ingestRequest    bool
+	admissionEnabled bool
+}
+
+// Admit is called when requesting admission for store work. If err!=nil, the
+// request was not admitted, potentially due to a deadline being exceeded. If
+// err=nil, AdmittedWorkDone must be called when the admitted work is done.
+func (q *StoreWorkQueue) Admit(
+	ctx context.Context, info StoreWriteWorkInfo,
+) (handle interface{}, err error) {
+	if info.IngestRequest && info.WriteBytes == 0 {
+		return nil, errors.Errorf("IngestRequest must specify WriteBytes")
+	}
+	h := storeWorkHandle{
+		tenantID:      info.TenantID,
+		writeBytes:    info.WriteBytes,
+		ingestRequest: info.IngestRequest,
+	}
+	var estimates storeRequestEstimates
+	if h.writeBytes == 0 || h.ingestRequest {
+		q.mu.RLock()
+		estimates = q.mu.estimates
+		q.mu.RUnlock()
+	}
+	if h.writeBytes == 0 {
+		h.writeBytes = estimates.workByteEstimate
+		h.estimatedBytes = true
+	}
+	h.writeTokens = h.writeBytes
+	if h.ingestRequest {
+		h.writeTokens = int64(float64(h.writeBytes) * estimates.fractionOfIngestIntoL0)
+		if h.writeTokens == 0 {
+			// Even though ingestions seemingly are not adding to L0, ask for 1
+			// token, so that if we are experiencing overload, ingestion is also
+			// throttled.
+			h.writeTokens = 1
+		}
+	}
+	info.WorkInfo.requestedCount = h.writeBytes
+	enabled, err := q.q.Admit(ctx, info.WorkInfo)
+	if err != nil {
+		return nil, err
+	}
+	h.admissionEnabled = enabled
+	return h, nil
+}
+
+func (q *StoreWorkQueue) AdmittedWorkDone(handle interface{}, ingestedIntoL0Bytes int64) error {
+	h := handle.(storeWorkHandle)
+	if !h.admissionEnabled {
+		return nil
+	}
+	if !h.ingestRequest && ingestedIntoL0Bytes > 0 {
+		panic(errors.AssertionFailedf("ingested bytes for non-ingest request"))
+	}
+	{
+		q.mu.Lock()
+		q.mu.stats.admittedCount++
+		if !h.estimatedBytes {
+			q.mu.stats.admittedWithBytesCount++
+			q.mu.stats.admittedBytes += uint64(h.writeBytes)
+			if h.ingestRequest {
+				q.mu.stats.ingestedBytes += uint64(h.writeBytes)
+				q.mu.stats.ingestedIntoL0Bytes += uint64(ingestedIntoL0Bytes)
+			}
+		}
+		q.mu.Unlock()
+	}
+	if !h.ingestRequest {
+		return nil
+	}
+	var err error
+	if ingestedIntoL0Bytes > h.writeBytes {
+		err = errors.Errorf("ingested L0 bytes %d > write bytes %d", ingestedIntoL0Bytes,
+			h.writeBytes)
+		// Don't return here since want to make the shared accounting correct.
+		ingestedIntoL0Bytes = h.writeBytes
+	}
+	// tokensToAllocate can be negative.
+	tokensToAllocate := ingestedIntoL0Bytes - h.writeTokens
+	if tokensToAllocate != 0 {
+		q.q.forceAllocateTokens(h.tenantID, tokensToAllocate)
+	}
+	return err
+}
+
+func (q *StoreWorkQueue) hasWaitingRequests() bool {
+	return q.q.hasWaitingRequests()
+}
+
+func (q *StoreWorkQueue) granted(grantChainID grantChainID) int64 {
+	return q.q.granted(grantChainID)
+}
+
+func (q *StoreWorkQueue) getStoreAdmissionStats() storeAdmissionStats {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return q.mu.stats
+}
+
+func (q *StoreWorkQueue) setStoreRequestEstimates(estimates storeRequestEstimates) {
+	q.mu.Lock()
+	q.mu.estimates = estimates
+	q.mu.Unlock()
+}
+
+func makeStoreWorkQueue(
+	granter granter, settings *cluster.Settings, opts workQueueOptions,
+) storeRequester {
+	q := &StoreWorkQueue{
+		q: *(makeWorkQueue(KVWork, granter, settings, opts).(*WorkQueue)),
+	}
+	// Arbitrary initial values. These will be replaced before any meaningful
+	// token constraints are enforced.
+	q.mu.estimates = storeRequestEstimates{
+		fractionOfIngestIntoL0: 0.5,
+		workByteEstimate:       50,
+	}
+	return q
 }

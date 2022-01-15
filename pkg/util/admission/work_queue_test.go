@@ -53,32 +53,34 @@ type testGranter struct {
 	returnValueFromTryGet bool
 }
 
+var _ granter = &testGranter{}
+
 func (tg *testGranter) grantKind() grantKind {
 	return slot
 }
-func (tg *testGranter) tryGet() bool {
+func (tg *testGranter) tryGet(count int64) bool {
 	tg.buf.printf("tryGet: returning %t", tg.returnValueFromTryGet)
 	return tg.returnValueFromTryGet
 }
-func (tg *testGranter) returnGrant() {
-	tg.buf.printf("returnGrant")
+func (tg *testGranter) returnGrant(count int64) {
+	tg.buf.printf("returnGrant %d", count)
 }
-func (tg *testGranter) tookWithoutPermission() {
-	tg.buf.printf("tookWithoutPermission")
+func (tg *testGranter) tookWithoutPermission(count int64) {
+	tg.buf.printf("tookWithoutPermission %d", count)
 }
 func (tg *testGranter) continueGrantChain(grantChainID grantChainID) {
 	tg.buf.printf("continueGrantChain %d", grantChainID)
 }
 func (tg *testGranter) grant(grantChainID grantChainID) {
 	rv := tg.r.granted(grantChainID)
-	if rv {
+	if rv > 0 {
 		// Need deterministic output, and this is racing with the goroutine that
 		// was admitted. Sleep to let it get scheduled. We could do something more
 		// sophisticated like monitoring goroutine states like in
 		// concurrency_manager_test.go.
 		time.Sleep(50 * time.Millisecond)
 	}
-	tg.buf.printf("granted: returned %t", rv)
+	tg.buf.printf("granted: returned %d", rv)
 }
 
 type testWork struct {
@@ -324,8 +326,9 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 }
 
 // TODO(sumeer):
+// - Test WorkQueue for tokens, with multiple tokens being requested
+// - Test StoreWorkQueue
 // - Test metrics
 // - Test race between grant and cancellation
-// - Test WorkQueue for tokens
 // - Add microbenchmark with high concurrency and procs for full admission
 //   system
