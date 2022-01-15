@@ -1368,3 +1368,36 @@ func (e *RefreshFailedError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &RefreshFailedError{}
+
+// New error handling from here:
+
+// NewRefreshFailedErrorV2 initializes a new RefreshFailedErrorV2. reason can be 'committed value'
+// or 'intent' which caused the failed refresh, key is the key that we failed
+// refreshing, and ts is the timestamp of the committed value or intent that was written.
+func NewRefreshFailedErrorV2(
+	reason RefreshFailedErrorV2_Reason, key Key, ts hlc.Timestamp,
+) *RefreshFailedErrorV2 {
+	return &RefreshFailedErrorV2{
+		Reason:    reason,
+		Key:       key,
+		Timestamp: ts,
+	}
+}
+
+func (e RefreshFailedErrorV2) Error() string {
+	return e.FailureReason()
+}
+
+// FailureReason returns the failure reason as a string.
+func (e RefreshFailedErrorV2) FailureReason() string {
+	var r string
+	switch e.Reason {
+	case RefreshFailedErrorV2_REASON_COMMITTED_VALUE:
+		r = "committed value"
+	case RefreshFailedErrorV2_REASON_INTENT:
+		r = "intent"
+	default:
+		r = "UNKNOWN"
+	}
+	return fmt.Sprintf("encountered recently written %s %s @%s", r, e.Key, e.Timestamp)
+}

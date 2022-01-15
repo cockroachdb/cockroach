@@ -491,7 +491,6 @@ func (z *zigzagJoiner) setupInfo(
 		neededCols,
 		flowCtx.EvalCtx.Mon,
 		info.alloc,
-		execinfra.ScanVisibilityPublic,
 		// NB: zigzag joins are disabled when a row-level locking clause is
 		// supplied, so there is no locking strength on *ZigzagJoinerSpec.
 		descpb.ScanLockingStrength_FOR_NONE,
