@@ -6,7 +6,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 
 try-get work=kv
 ----
-kv: tryGet returned true
+kv: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
@@ -14,7 +14,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # No more slots.
 try-get work=kv
 ----
-kv: tryGet returned false
+kv: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
@@ -28,7 +28,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # Since no more KV slots, couldn't get.
 try-get work=sql-kv-response
 ----
-sql-kv-response: tryGet returned false
+sql-kv-response: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
@@ -42,7 +42,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # Since no more KV slots, couldn't get.
 try-get work=sql-leaf-start
 ----
-sql-leaf-start: tryGet returned false
+sql-leaf-start: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
@@ -56,7 +56,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # Since no more KV slots, couldn't get.
 try-get work=sql-root-start
 ----
-sql-root-start: tryGet returned false
+sql-root-start: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
@@ -69,8 +69,8 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 
 return-grant work=kv
 ----
-kv: returnGrant
-kv: granted in chain 1, and returning true
+kv: returnGrant(1)
+kv: granted in chain 1, and returning 1
 GrantCoordinator:
 (chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
@@ -81,7 +81,7 @@ GrantCoordinator:
 (chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
-set-return-value-from-granted work=kv v=false
+set-return-value-from-granted work=kv v=0
 ----
 GrantCoordinator:
 (chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
@@ -98,8 +98,8 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # Grant to sql-kv-response consumes a token.
 return-grant work=kv
 ----
-kv: returnGrant
-sql-kv-response: granted in chain 2, and returning true
+kv: returnGrant(1)
+sql-kv-response: granted in chain 2, and returning 1
 GrantCoordinator:
 (chain: id: 2 active: true index: 1) kv: used: 0, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
@@ -108,7 +108,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 continue-grant-chain work=sql-kv-response
 ----
 sql-kv-response: continueGrantChain
-sql-kv-response: granted in chain 2, and returning true
+sql-kv-response: granted in chain 2, and returning 1
 GrantCoordinator:
 (chain: id: 2 active: true index: 1) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
@@ -118,7 +118,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 continue-grant-chain work=sql-kv-response
 ----
 sql-kv-response: continueGrantChain
-sql-leaf-start: granted in chain 2, and returning true
+sql-leaf-start: granted in chain 2, and returning 1
 GrantCoordinator:
 (chain: id: 2 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 0, total: 1
@@ -126,7 +126,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: use
 continue-grant-chain work=sql-leaf-start
 ----
 sql-leaf-start: continueGrantChain
-sql-leaf-start: granted in chain 2, and returning true
+sql-leaf-start: granted in chain 2, and returning 1
 GrantCoordinator:
 (chain: id: 2 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 0, total: 1
@@ -136,7 +136,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: use
 continue-grant-chain work=sql-leaf-start
 ----
 sql-leaf-start: continueGrantChain
-sql-root-start: granted in chain 2, and returning true
+sql-root-start: granted in chain 2, and returning 1
 GrantCoordinator:
 (chain: id: 2 active: true index: 4) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
@@ -153,8 +153,8 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: use
 # which will eventually find a free slot to give to sql-leaf-start.
 return-grant work=sql-leaf-start
 ----
-sql-leaf-start: returnGrant
-sql-leaf-start: granted in chain 3, and returning true
+sql-leaf-start: returnGrant(1)
+sql-leaf-start: granted in chain 3, and returning 1
 GrantCoordinator:
 (chain: id: 3 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
@@ -163,7 +163,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: use
 # not past this WorkKind, so no grant is done.
 return-grant work=sql-leaf-start
 ----
-sql-leaf-start: returnGrant
+sql-leaf-start: returnGrant(1)
 GrantCoordinator:
 (chain: id: 3 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
@@ -171,7 +171,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: use
 # The kv slots are fully used after this tryGet, which succeeds.
 try-get work=kv
 ----
-kv: tryGet returned true
+kv: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 3 active: true index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
@@ -179,7 +179,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: use
 # This tryGet for kv fails and forces termination of the grant chain.
 try-get work=kv
 ----
-kv: tryGet returned false
+kv: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
@@ -209,7 +209,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: use
 # Some other kv work takes without permission.
 took-without-permission work=kv
 ----
-kv: tookWithoutPermission
+kv: tookWithoutPermission(1)
 GrantCoordinator:
 (chain: id: 4 active: false index: 3) kv: used: 2, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
@@ -225,7 +225,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: use
 # to sql-kv-response and the grant chain is again active.
 cpu-load runnable=0 procs=1
 ----
-sql-kv-response: granted in chain 4, and returning true
+sql-kv-response: granted in chain 4, and returning 1
 GrantCoordinator:
 (chain: id: 4 active: true index: 1) kv: used: 2, total: 3 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
@@ -249,7 +249,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: use
 # are full.
 return-grant work=sql-leaf-start
 ----
-sql-leaf-start: returnGrant
+sql-leaf-start: returnGrant(1)
 GrantCoordinator:
 (chain: id: 5 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 1, total: 1
@@ -259,10 +259,10 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # relevant to continuing the grant chain.
 cpu-load runnable=2 procs=4
 ----
-sql-kv-response: granted in chain 0, and returning true
-sql-kv-response: granted in chain 0, and returning true
-sql-leaf-start: granted in chain 0, and returning true
-sql-leaf-start: granted in chain 5, and returning true
+sql-kv-response: granted in chain 0, and returning 1
+sql-kv-response: granted in chain 0, and returning 1
+sql-leaf-start: granted in chain 0, and returning 1
+sql-leaf-start: granted in chain 5, and returning 1
 GrantCoordinator:
 (chain: id: 5 active: true index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
@@ -270,7 +270,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: use
 # There is now a free sql-root-start slot, which the grant chain will get to.
 return-grant work=sql-root-start
 ----
-sql-root-start: returnGrant
+sql-root-start: returnGrant(1)
 GrantCoordinator:
 (chain: id: 5 active: true index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 0, total: 1
@@ -288,83 +288,9 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: use
 continue-grant-chain work=sql-leaf-start
 ----
 sql-leaf-start: continueGrantChain
-sql-root-start: granted in chain 0, and returning true
+sql-root-start: granted in chain 0, and returning 1
 GrantCoordinator:
 (chain: id: 6 active: false index: 5) kv: used: 2, total: 3 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# Start restricting IO tokens for KV.
-set-io-tokens tokens=1
-----
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 2, total: 3 io-avail: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# Return both slots currently used by KV, so that 3 slots are free, but there
-# is only 1 token.
-return-grant work=kv
-----
-kv: returnGrant
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 1, total: 3 io-avail: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-return-grant work=kv
-----
-kv: returnGrant
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 0, total: 3 io-avail: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# Takes 1 slot and 1 token.
-try-get work=kv
-----
-kv: tryGet returned true
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 1, total: 3 io-avail: 0 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# There are 2 slots available, but no tokens, so fails.
-try-get work=kv
-----
-kv: tryGet returned false
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 1, total: 3 io-avail: 0 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-set-has-waiting-requests work=kv v=true
-----
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 1, total: 3 io-avail: 0 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-set-return-value-from-granted work=kv v=true
-----
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 1, total: 3 io-avail: 0 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# Tokens become negative.
-took-without-permission work=kv
-----
-kv: tookWithoutPermission
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 2, total: 3 io-avail: -1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# Tokens are refilled, but since was at -1, the result is 0 tokens.
-set-io-tokens tokens=1
-----
-GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 2, total: 3 io-avail: 0 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# Refill again. The waiting KV work is granted.
-set-io-tokens tokens=1
-----
-kv: granted in chain 0, and returning true
-GrantCoordinator:
-(chain: id: 6 active: false index: 0) kv: used: 3, total: 3 io-avail: 0 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
 
 #####################################################################
@@ -378,7 +304,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # No more slots after this slot is granted.
 try-get work=kv
 ----
-kv: tryGet returned true
+kv: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
@@ -386,7 +312,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # Since no more KV slots, cannot grant token to sql-kv-response.
 try-get work=sql-kv-response
 ----
-sql-kv-response: tryGet returned false
+sql-kv-response: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
@@ -394,7 +320,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # Since no more KV slots, cannot grant token to sql-sql-response.
 try-get work=sql-sql-response
 ----
-sql-sql-response: tryGet returned false
+sql-sql-response: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
@@ -410,7 +336,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # sql-kv-response can get a token.
 try-get work=sql-kv-response
 ----
-sql-kv-response: tryGet returned true
+sql-kv-response: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
@@ -418,7 +344,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # sql-kv-response can get another token, even though tokens are exhausted.
 try-get work=sql-kv-response
 ----
-sql-kv-response: tryGet returned true
+sql-kv-response: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
@@ -426,7 +352,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # sql-sql-response can get a token.
 try-get work=sql-sql-response
 ----
-sql-sql-response: tryGet returned true
+sql-sql-response: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
 sql-sql-response: avail: 0 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
@@ -434,7 +360,7 @@ sql-sql-response: avail: 0 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 # sql-sql-response can get another token, even though tokens are exhausted.
 try-get work=sql-sql-response
 ----
-sql-sql-response: tryGet returned true
+sql-sql-response: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
 sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
@@ -442,7 +368,96 @@ sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: us
 # KV can get another slot even though slots are exhausted.
 try-get work=kv
 ----
-kv: tryGet returned true
+kv: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 5) kv: used: 2, total: 1 sql-kv-response: avail: -1
 sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+
+#####################################################################
+# Test store grant coordinator.
+init-store-grant-coordinator
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 614891469123651720
+
+# Initial tokens are effectively unlimited.
+try-get work=kv v=10000
+----
+kv: tryGet(10000) returned true
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 614891469123641720
+
+# Set the io tokens to a smaller value.
+set-io-tokens tokens=500
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 500
+
+# Subtract 100 tokens.
+took-without-permission work=kv v=100
+----
+kv: tookWithoutPermission(100)
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 400
+
+# Add 200 tokens.
+return-grant work=kv v=200
+----
+kv: returnGrant(200)
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 600
+
+# Setup waiting requests that want 400 tokens each.
+set-has-waiting-requests work=kv v=true
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 600
+
+set-return-value-from-granted work=kv v=400
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 600
+
+# Returning tokens triggers granting and 2 requests will be granted until the
+# tokens become <= 0.
+return-grant work=kv v=100
+----
+kv: returnGrant(100)
+kv: granted in chain 0, and returning 400
+kv: granted in chain 0, and returning 400
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -100
+
+set-return-value-from-granted work=kv v=100
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -100
+
+# No tokens to give.
+try-get work=kv
+----
+kv: tryGet(1) returned false
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -100
+
+# Increment by 50 tokens.
+set-io-tokens tokens=50
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -50
+
+# Return another 50 tokens. Since the number of tokens is 0, there is no
+# grant.
+return-grant work=kv v=50
+----
+kv: returnGrant(50)
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 0
+
+# As soon as the tokens > 0, it will grant.
+return-grant work=kv v=1
+----
+kv: returnGrant(1)
+kv: granted in chain 0, and returning 100
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: -99
