@@ -742,6 +742,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 		return r, err
 	}
 
+	r.tableDesc = desc
 	rf, err := c.rfCache.RowFetcherForTableDesc(desc)
 	if err != nil {
 		return r, err
@@ -756,7 +757,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 		return r, err
 	}
 
-	r.datums, r.tableDesc, _, err = rf.NextRow(ctx)
+	r.datums, err = rf.NextRow(ctx)
 	if err != nil {
 		return r, err
 	}
@@ -770,8 +771,10 @@ func (c *kvEventToRowConsumer) eventToRow(
 
 	// Assert that we don't get a second row from the row.Fetcher. We
 	// fed it a single KV, so that would be surprising.
-	var nextRow encodeRow
-	nextRow.datums, nextRow.tableDesc, _, err = rf.NextRow(ctx)
+	nextRow := encodeRow{
+		tableDesc: desc,
+	}
+	nextRow.datums, err = rf.NextRow(ctx)
 	if err != nil {
 		return r, err
 	}
@@ -783,6 +786,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 	_, withDiff := c.details.Opts[changefeedbase.OptDiff]
 	if withDiff {
 		prevRF := rf
+		r.prevTableDesc = r.tableDesc
 		if prevSchemaTimestamp != schemaTimestamp {
 			// If the previous value is being interpreted under a different
 			// version of the schema, fetch the correct table descriptor and
@@ -792,6 +796,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 				return r, err
 			}
 
+			r.prevTableDesc = prevDesc
 			prevRF, err = c.rfCache.RowFetcherForTableDesc(prevDesc)
 			if err != nil {
 				return r, err
@@ -806,7 +811,7 @@ func (c *kvEventToRowConsumer) eventToRow(
 		if err := prevRF.StartScanFrom(ctx, &c.kvFetcher, false /* traceKV */); err != nil {
 			return r, err
 		}
-		r.prevDatums, r.prevTableDesc, _, err = prevRF.NextRow(ctx)
+		r.prevDatums, err = prevRF.NextRow(ctx)
 		if err != nil {
 			return r, err
 		}
@@ -818,8 +823,10 @@ func (c *kvEventToRowConsumer) eventToRow(
 
 		// Assert that we don't get a second row from the row.Fetcher. We
 		// fed it a single KV, so that would be surprising.
-		var nextRow encodeRow
-		nextRow.prevDatums, nextRow.prevTableDesc, _, err = prevRF.NextRow(ctx)
+		nextRow := encodeRow{
+			prevTableDesc: r.prevTableDesc,
+		}
+		nextRow.prevDatums, err = prevRF.NextRow(ctx)
 		if err != nil {
 			return r, err
 		}

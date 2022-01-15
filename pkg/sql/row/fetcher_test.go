@@ -166,7 +166,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, desc, index, err := rf.NextRowDecoded(context.Background())
+				datums, err := rf.NextRowDecoded(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -175,14 +175,6 @@ func TestNextRowSingle(t *testing.T) {
 				}
 
 				count++
-
-				if desc.GetID() != tableDesc.GetID() || index.GetID() != tableDesc.GetPrimaryIndexID() {
-					t.Fatalf(
-						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.GetName(), tableDesc.GetPrimaryIndex().GetName(),
-						desc.GetName(), index.GetName(),
-					)
-				}
 
 				if table.nCols != len(datums) {
 					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))
@@ -285,7 +277,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, desc, index, err := rf.NextRowDecoded(context.Background())
+				datums, err := rf.NextRowDecoded(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -294,14 +286,6 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				}
 
 				count++
-
-				if desc.GetID() != tableDesc.GetID() || index.GetID() != tableDesc.GetPrimaryIndexID() {
-					t.Fatalf(
-						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.GetName(), tableDesc.GetPrimaryIndex().GetName(),
-						desc.GetName(), index.GetName(),
-					)
-				}
 
 				if table.nCols != len(datums) {
 					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))
@@ -480,7 +464,7 @@ INDEX(c)
 	for {
 		// Just try to grab the row - we don't need to validate the contents
 		// in this test.
-		datums, _, _, err := rf.NextRowDecoded(context.Background())
+		datums, err := rf.NextRowDecoded(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -639,7 +623,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			nullCount := 0
 			var prevIdxVal int64
 			for {
-				datums, desc, index, err := rf.NextRowDecoded(context.Background())
+				datums, err := rf.NextRowDecoded(context.Background())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -648,14 +632,6 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				}
 
 				count++
-
-				if desc.GetID() != tableDesc.GetID() || index.GetID() != tableDesc.PublicNonPrimaryIndexes()[0].GetID() {
-					t.Fatalf(
-						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.GetName(), tableDesc.PublicNonPrimaryIndexes()[0].GetName(),
-						desc.GetName(), index.GetName(),
-					)
-				}
 
 				if table.nCols != len(datums) {
 					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))

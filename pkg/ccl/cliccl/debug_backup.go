@@ -648,7 +648,7 @@ func processEntryFiles(
 	}
 
 	for {
-		datums, _, _, err := rf.NextRowDecoded(ctx)
+		datums, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			return errors.Wrapf(err, "decode row")
 		}
