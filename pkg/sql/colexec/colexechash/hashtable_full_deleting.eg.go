@@ -7562,17 +7562,18 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 					if ht.ProbeScratch.HeadID[toCheck] == 0 {
 						ht.ProbeScratch.HeadID[toCheck] = keyID
 					}
-					firstID := ht.ProbeScratch.HeadID[toCheck]
 					if !ht.Visited[keyID] {
-						ht.ProbeScratch.differs[toCheck] = true
-						ht.Visited[keyID] = true
+						firstID := ht.ProbeScratch.HeadID[toCheck]
 						if firstID != keyID {
 							ht.Same[keyID] = ht.Same[firstID]
 							ht.Same[firstID] = keyID
 						}
+						ht.Visited[keyID] = true
+						//gcassert:bce
+						toCheckSlice[nDiffers] = toCheck
+						nDiffers++
 					}
-				}
-				if ht.ProbeScratch.differs[toCheck] {
+				} else {
 					ht.ProbeScratch.differs[toCheck] = false
 					//gcassert:bce
 					toCheckSlice[nDiffers] = toCheck
@@ -7590,8 +7591,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 					if ht.ProbeScratch.HeadID[toCheck] == 0 {
 						ht.ProbeScratch.HeadID[toCheck] = keyID
 					}
-				}
-				if ht.ProbeScratch.differs[toCheck] {
+				} else {
 					ht.ProbeScratch.differs[toCheck] = false
 					//gcassert:bce
 					toCheckSlice[nDiffers] = toCheck
@@ -7618,9 +7618,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 							nDiffers++
 						}
 					}
-					continue
-				}
-				if ht.ProbeScratch.differs[toCheck] {
+				} else {
 					ht.ProbeScratch.differs[toCheck] = false
 					//gcassert:bce
 					toCheckSlice[nDiffers] = toCheck
@@ -7645,9 +7643,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 							nDiffers++
 						}
 					}
-					continue
-				}
-				if ht.ProbeScratch.differs[toCheck] {
+				} else {
 					ht.ProbeScratch.differs[toCheck] = false
 					//gcassert:bce
 					toCheckSlice[nDiffers] = toCheck

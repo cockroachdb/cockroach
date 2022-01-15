@@ -476,7 +476,6 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 					nDiffers++
 				}
 			}
-			continue
 			// {{else}}
 			// {{/*
 			//     If we have an equality match, we want to update HeadID with
@@ -486,27 +485,43 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 				ht.ProbeScratch.HeadID[toCheck] = keyID
 			}
 			// {{if .SelectSameTuples}}
-			firstID := ht.ProbeScratch.HeadID[toCheck]
 			if !ht.Visited[keyID] {
 				// {{/*
-				//     We can add this keyID into the Same array at the end
-				//     of the corresponding linked list and mark this ID as
-				//     visited. Since there can be multiple keys that match this
-				//     probe key, we want to mark 'differs' at this position to
-				//     be true. This way, the prober will continue probing for
-				//     this key until it reaches the end of the Next chain.
+				//     This is the first time we found a match for this tuple
+				//     from the hash table.
+				//
+				//     First, we check if there is already another tuple in the
+				//     equality chain for this tuple from the hash table (the
+				//     value of HeadID is different from the keyID - if it is
+				//     the same, then we've just inserted it right above).
 				// */}}
-				ht.ProbeScratch.differs[toCheck] = true
-				ht.Visited[keyID] = true
+				firstID := ht.ProbeScratch.HeadID[toCheck]
 				if firstID != keyID {
+					// {{/*
+					//     There is already at least on other tuple, so we
+					//     insert this tuple right after the head of the
+					//     equality chain.
+					// */}}
 					ht.Same[keyID] = ht.Same[firstID]
 					ht.Same[firstID] = keyID
 				}
+				// {{/*
+				//     Now mark this tuple as visited so that it doesn't get
+				//     inserted into the equality chain again.
+				// */}}
+				ht.Visited[keyID] = true
+				// {{/*
+				//     Since there can be more tuples in the hash table that
+				//     match this probing tuple, we include the probing tuple in
+				//     the ToCheck for the next probing iteration.
+				// */}}
+				//gcassert:bce
+				toCheckSlice[nDiffers] = toCheck
+				nDiffers++
 			}
 			// {{end}}
 			// {{end}}
-		}
-		if ht.ProbeScratch.differs[toCheck] {
+		} else {
 			// {{/*
 			//     Continue probing in this Next chain for the probe key.
 			// */}}
