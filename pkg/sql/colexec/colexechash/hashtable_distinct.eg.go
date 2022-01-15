@@ -6675,8 +6675,7 @@ func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 			if ht.ProbeScratch.HeadID[toCheck] == 0 {
 				ht.ProbeScratch.HeadID[toCheck] = keyID
 			}
-		}
-		if ht.ProbeScratch.differs[toCheck] {
+		} else {
 			ht.ProbeScratch.differs[toCheck] = false
 			//gcassert:bce
 			toCheckSlice[nDiffers] = toCheck
