@@ -69,8 +69,9 @@
 //   the admission order within a WorkKind based on tenant fairness,
 //   importance of work etc.
 // - granter: the counterpart to requester which grants admission tokens or
-//   slots. The implementations are slotGranter, tokenGranter, kvGranter. The
-//   implementation of requester interacts with the granter interface.
+//   slots. The implementations are slotGranter, tokenGranter,
+//   kvStoreTokenGranter. The implementation of requester interacts with the
+//   granter interface.
 // - granterWithLockedCalls: this is an extension of granter that is used
 //   as part of the implementation of GrantCoordinator. This arrangement
 //   is partly to centralize locking in the GrantCoordinator (except for
@@ -78,24 +79,25 @@
 // - cpuOverloadIndicator: this serves as an optional additional gate on
 //   granting, by providing an (ideally) instantaneous signal of cpu overload.
 //   The kvSlotAdjuster is the concrete implementation, except for SQL
-//   nodes, where this is implemented by sqlNodeCPUOverloadIndicator.
+//   nodes, where this will be implemented by sqlNodeCPUOverloadIndicator.
 //   CPULoadListener is also implemented by these structs, to listen to
 //   the latest CPU load information from the scheduler.
 //
-// Load observation and slot count or token burst adjustment: Currently the
-// only dynamic adjustment is performed by kvSlotAdjuster for KVWork slots.
-// This is because KVWork is expected to usually be CPU bound (due to good
-// caching), and unlike SQLKVResponseWork and SQLSQLResponseWork (which are
-// even more CPU bound), we have a completion indicator -- so we can expect to
-// have a somewhat stable KVWork slot count even if the work sizes are
-// extremely heterogeneous.
+// Load observation and slot count or token burst adjustment: Dynamic
+// adjustment is performed by kvSlotAdjuster for KVWork slots. This is because
+// KVWork is expected to usually be CPU bound (due to good caching), and
+// unlike SQLKVResponseWork and SQLSQLResponseWork (which are even more CPU
+// bound), we have a completion indicator -- so we can expect to have a
+// somewhat stable KVWork slot count even if the work sizes are extremely
+// heterogeneous.
 //
-// Since there isn't token burst adjustment, the burst limits should be chosen
-// to err on the side of fully saturating CPU, since we have the fallback of
-// the cpuOverloadIndicator to stop granting even if tokens are available.
-// If we figure out a way to dynamically tune the token burst count, or
-// (even more ambitious) figure out a way to come up with a token rate, it
-// should fit in the general framework that is setup here.
+// There isn't token burst adjustment (except for each store -- see below),
+// and the burst limits should be chosen to err on the side of fully
+// saturating CPU, since we have the fallback of the cpuOverloadIndicator to
+// stop granting even if tokens are available. If we figure out a way to
+// dynamically tune the token burst count, or (even more ambitious) figure out
+// a way to come up with a token rate, it should fit in the general framework
+// that is setup here.
 //
 
 // Partial usage example (regular cluster):
@@ -117,5 +119,9 @@
 // }
 // doWork()
 // if enabled { kvQueue.AdmittedWorkDone(tid) }
+
+// Additionally, each store has a single StoreWorkQueue and GrantCoordinator
+// for writes. See kvStoreTokenGranter and how its tokens are dynamically
+// adjusted based on Pebble metrics.
 
 package admission
