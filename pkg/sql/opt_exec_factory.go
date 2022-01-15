@@ -88,15 +88,8 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	// initTable checks that the current user has the correct privilege to access
-	// the table. However, the privilege has already been checked in optbuilder,
-	// and does not need to be rechecked. In fact, it's an error to check the
-	// privilege if the table was originally part of a view, since lower privilege
-	// users might be able to access a view that uses a higher privilege table.
-	ef.planner.skipSelectPrivilegeChecks = true
-	defer func() { ef.planner.skipSelectPrivilegeChecks = false }()
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := scan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
+	if err := scan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -610,7 +603,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan := ef.planner.Scan()
 
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -658,7 +651,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	tableScan := ef.planner.Scan()
 
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -741,7 +734,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	// column analysis.
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tableDesc, nil, colCfg); err != nil {
+	if err := tableScan.initTable(ctx, ef.planner, tableDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -793,7 +786,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tableScan := ef.planner.Scan()
 
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, nil, colCfg); err != nil {
+	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -858,7 +851,7 @@ func (ef *execFactory) constructScanForZigzag(
 
 	scan := ef.planner.Scan()
 	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := scan.initTable(ctx, ef.planner, tableDesc, nil, colCfg); err != nil {
+	if err := scan.initTable(ctx, ef.planner, tableDesc, colCfg); err != nil {
 		return nil, err
 	}
 

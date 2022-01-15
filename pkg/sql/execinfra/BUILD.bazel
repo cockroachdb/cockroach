@@ -13,7 +13,6 @@ go_library(
         "outboxbase.go",
         "processorsbase.go",
         "readerbase.go",
-        "scanbase.go",
         "server_config.go",
         "stats.go",
         "testutils.go",
