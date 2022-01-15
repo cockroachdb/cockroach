@@ -90,9 +90,9 @@ var values = [
       tags: {{tags .}},
       hiddenTags: {{hiddenTags .}},
       spanID: "{{.SpanID}}",
-      startTime: {{formatTime .StartTime}},
-      relativeTime: {{since .StartTime $capturedAt}},
-      startTimeMicros: {{timeRaw .StartTime}},
+      startTime: {{formatTime .Start}},
+      relativeTime: {{since .Start $capturedAt}},
+      startTimeMicros: {{timeRaw .Start}},
       goroutineID: {{.GoroutineID}},
       traceID: "{{.TraceID}}",
       stack: {{index $stacks .GoroutineID}}
@@ -110,7 +110,6 @@ function toggleStackVisibility(spanID) {
 };
 
 function toggleVisibility(elementID) {
-  console.log(window.event.target);
   var elem = document.getElementById(elementID);
   if (elem.style.display === "none") {
     elem.style.display = "block";

@@ -60,7 +60,7 @@ type pageData struct {
 }
 
 type spansList struct {
-	Spans []tracingpb.RecordedSpan
+	Spans []processedSpan
 	// Stacks contains stack traces for the goroutines referenced by the Spans
 	// through their GoroutineID field.
 	Stacks map[int]string // GoroutineID to stack trace
@@ -68,36 +68,42 @@ type spansList struct {
 
 var spansTableTemplate *template.Template
 
+var hiddenTags = map[string]struct{}{
+	"_unfinished": {},
+	"_verbose":    {},
+	"_dropped":    {},
+	"node":        {},
+	"store":       {},
+}
+
+func generateTagValue(t processedTag) string {
+	val := t.val
+	if t.link != "" {
+		val = fmt.Sprintf("<a href='%s'>%s</a>", t.link, t.val)
+	}
+	if t.caption == "" {
+		return val
+	}
+	return fmt.Sprintf("<span title='%s'>%s</span>", t.caption, val)
+}
+
 func init() {
 
-	hiddenTags := map[string]struct{}{
-		"_unfinished": {},
-		"_verbose":    {},
-		"_dropped":    {},
-		"node":        {},
-		"store":       {},
-	}
-
 	// concatTags takes in a span's tags and stringiefies the ones that pass filter.
-	concatTags := func(tags map[string]string, filter func(tag string) bool) string {
+	concatTags := func(tags []processedTag, filter func(tag processedTag) bool) string {
 		tagsArr := make([]string, 0, len(tags))
-		for k, v := range tags {
-			if !filter(k) {
+		for _, t := range tags {
+			k, v := t.key, t.val
+			if !filter(t) {
 				continue
 			}
 			if v != "" {
-				tagsArr = append(tagsArr, fmt.Sprintf("%s:%s", k, v))
+				tagsArr = append(tagsArr, fmt.Sprintf("%s:%s", k, generateTagValue(t)))
 			} else {
 				tagsArr = append(tagsArr, k)
 			}
 		}
-		sort.Strings(tagsArr)
 		return strings.Join(tagsArr, ", ")
-	}
-
-	isHidden := func(tag string) bool {
-		_, hidden := hiddenTags[tag]
-		return hidden
 	}
 
 	spansTableTemplate = template.Must(template.New("spans-list").Funcs(
@@ -108,13 +114,15 @@ func init() {
 				return fmt.Sprintf("(%s ago)", formatDuration(capturedAt.Sub(t)))
 			},
 			"timeRaw": func(t time.Time) int64 { return t.UnixMicro() },
-			"tags": func(sp tracingpb.RecordedSpan) string {
-				return concatTags(sp.Tags, func(tag string) bool {
-					return !isHidden(tag)
+			"tags": func(sp processedSpan) string {
+				return concatTags(sp.Tags, func(t processedTag) bool {
+					return !t.hidden
 				})
 			},
-			"hiddenTags": func(sp tracingpb.RecordedSpan) string {
-				return concatTags(sp.Tags, isHidden)
+			"hiddenTags": func(sp processedSpan) string {
+				return concatTags(sp.Tags, func(t processedTag) bool {
+					return t.hidden
+				})
 			},
 		},
 	).Parse(ui.SpansTableTemplateSrc))
@@ -210,6 +218,10 @@ func serveHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, tr *
 	for _, r := range snapshot.Traces {
 		spans = append(spans, r...)
 	}
+	processedSpans := make([]processedSpan, len(spans))
+	for i, s := range spans {
+		processedSpans[i] = processSpan(s, snapshot)
+	}
 
 	// Copy the stack traces and augment the map.
 	stacks := make(map[int]string, len(snapshot.Stacks))
@@ -234,7 +246,7 @@ func serveHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, tr *
 		AllSnapshots: tr.GetSnapshots(),
 		Err:          snapshot.Err,
 		SpansList: spansList{
-			Spans:  spans,
+			Spans:  processedSpans,
 			Stacks: stacks,
 		},
 	})
@@ -245,6 +257,101 @@ func serveHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, tr *
 			log.Warningf(ctx, "error executing tracez template: %s", err)
 			_, _ = w.Write([]byte(err.Error()))
 		}
+	}
+}
+
+type processedSpan struct {
+	Operation       string
+	TraceID, SpanID uint64
+	Start           time.Time
+	GoroutineID     uint64
+	Tags            []processedTag
+}
+
+type processedTag struct {
+	key, val string
+	caption  string
+	link     string
+	hidden   bool
+}
+
+func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processedSpan {
+	p := processedSpan{
+		Operation:   s.Operation,
+		TraceID:     uint64(s.TraceID),
+		SpanID:      uint64(s.SpanID),
+		Start:       s.StartTime,
+		GoroutineID: s.GoroutineID,
+	}
+
+	// Sort the tags.
+	tagKeys := make([]string, 0, len(s.Tags))
+	for k := range s.Tags {
+		tagKeys = append(tagKeys, k)
+	}
+	sort.Strings(tagKeys)
+
+	p.Tags = make([]processedTag, len(s.Tags))
+	for i, k := range tagKeys {
+		p.Tags[i] = processTag(k, s.Tags[k], snap)
+	}
+	return p
+}
+
+func processTag(k, v string, snap tracing.SpansSnapshot) processedTag {
+	p := processedTag{
+		key: k,
+		val: v,
+	}
+	_, hidden := hiddenTags[k]
+	p.hidden = hidden
+
+	switch k {
+	case "lock_holder_txn":
+		p.link = v
+		txnState := findTxnState(v, snap)
+		if !txnState.found {
+			p.caption = "blocked on unknown transaction"
+		} else if txnState.curQuery != "" {
+			p.caption = "blocked on txn currently running query: " + txnState.curQuery
+		} else {
+			p.caption = "blocked on idle txn"
+		}
+	}
+
+	return p
+}
+
+type txnState struct {
+	found    bool
+	curQuery string
+}
+
+func findTxnState(txnID string, snap tracing.SpansSnapshot) txnState {
+	// Iterate through all the traces and look for a "sql txn" span for the
+	// respective transaction.
+	for _, t := range snap.Traces {
+		for _, s := range t {
+			if s.Operation != "sql txn" || s.Tags["txn"] != txnID {
+				continue
+			}
+			// I've found the transaction. Look through its children and find a SQL query.
+			// !!! The search here is a bit brutal.
+			for _, s2 := range t {
+				if s2.Operation == "sql query" {
+					return txnState{
+						found:    true,
+						curQuery: s2.Tags["statement"],
+					}
+				}
+			}
+			return txnState{
+				found: true,
+			}
+		}
+	}
+	return txnState{
+		found: false,
 	}
 }
 
