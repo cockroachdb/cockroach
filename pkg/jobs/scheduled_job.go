@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gorhill/cronexpr"
+	"github.com/robfig/cron/v3"
 )
 
 // scheduledJobRecord is a reflective representation of a row in
@@ -194,12 +194,13 @@ func (j *ScheduledJob) Frequency() (time.Duration, error) {
 		return 0, errors.Newf(
 			"schedule %d is not periodic", j.rec.ScheduleID)
 	}
-	expr, err := cronexpr.Parse(j.rec.ScheduleExpr)
+	expr, err := cron.ParseStandard(j.rec.ScheduleExpr)
 	if err != nil {
 		return 0, errors.Wrapf(err,
 			"parsing schedule expression: %q; it must be a valid cron expression",
 			j.rec.ScheduleExpr)
 	}
+
 	next := expr.Next(j.env.Now())
 	nextNext := expr.Next(next)
 	return nextNext.Sub(next), nil
@@ -211,7 +212,7 @@ func (j *ScheduledJob) ScheduleNextRun() error {
 		return errors.Newf(
 			"cannot set next run for schedule %d (empty schedule)", j.rec.ScheduleID)
 	}
-	expr, err := cronexpr.Parse(j.rec.ScheduleExpr)
+	expr, err := cron.ParseStandard(j.rec.ScheduleExpr)
 	if err != nil {
 		return errors.Wrapf(err, "parsing schedule expression: %q", j.rec.ScheduleExpr)
 	}
