@@ -156,7 +156,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.sstCh)
 		for entry := range entries {
-			if err := rd.openSSTs(entry, rd.sstCh); err != nil {
+			if err := rd.openSSTs(ctx, entry, rd.sstCh); err != nil {
 				return err
 			}
 		}
@@ -166,7 +166,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.progCh)
-		return rd.runRestoreWorkers(rd.sstCh)
+		return rd.runRestoreWorkers(ctx, rd.sstCh)
 	})
 }
 
@@ -240,9 +240,8 @@ type mergedSST struct {
 }
 
 func (rd *restoreDataProcessor) openSSTs(
-	entry execinfrapb.RestoreSpanEntry, sstCh chan mergedSST,
+	ctx context.Context, entry execinfrapb.RestoreSpanEntry, sstCh chan mergedSST,
 ) error {
-	ctx := rd.Ctx
 	ctxDone := ctx.Done()
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
@@ -299,7 +298,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		return nil
 	}
 
-	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
+	log.VEventf(ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
 
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
@@ -322,8 +321,8 @@ func (rd *restoreDataProcessor) openSSTs(
 	return sendIters(iters, dirs)
 }
 
-func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
-	return ctxgroup.GroupWorkers(rd.Ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
+func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan mergedSST) error {
+	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
 		for {
 			done, err := func() (done bool, _ error) {
 				sstIter, ok := <-ssts
@@ -332,7 +331,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
 					return done, nil
 				}
 
-				summary, err := rd.processRestoreSpanEntry(sstIter)
+				summary, err := rd.processRestoreSpanEntry(ctx, sstIter)
 				if err != nil {
 					return done, err
 				}
@@ -358,10 +357,9 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ssts chan mergedSST) error {
 }
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
-	sst mergedSST,
+	ctx context.Context, sst mergedSST,
 ) (roachpb.BulkOpSummary, error) {
 	db := rd.flowCtx.Cfg.DB
-	ctx := rd.Ctx
 	evalCtx := rd.EvalCtx
 	var summary roachpb.BulkOpSummary
 
