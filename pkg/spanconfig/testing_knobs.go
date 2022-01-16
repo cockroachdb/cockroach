@@ -75,6 +75,10 @@ type TestingKnobs struct {
 	// waiting for the descriptor to actually get GC-ed in tests.
 	ExcludeDroppedDescriptorsFromLookup bool
 
+	// ConfigureScratchRange controls whether the scratch range (used in tests)
+	// applies the RANGE DEFAULT configuration.
+	ConfigureScratchRange bool
+
 	// ReconcilerInitialInterceptor, if set, is invoked at the very outset of
 	// the reconciliation process.
 	ReconcilerInitialInterceptor func()
