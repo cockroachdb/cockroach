@@ -78,7 +78,7 @@ Please perform the following steps:
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(fileContents, "STABLE_BUILD_GIT_COMMIT") {
+		if !strings.Contains(fileContents, "STABLE_BUILD_GIT_BUILD_TYPE") {
 			passedStampTest = false
 		}
 	}
