@@ -132,6 +132,13 @@ type crdbSpanMu struct {
 	// TODO(radu): perhaps we want a recording to capture all the tags (even
 	// those that were set before recording started)?
 	tags []attribute.KeyValue
+	// !!! comment and allocate through scratch
+	lazyTags []lazyTag
+}
+
+type lazyTag struct {
+	Key   string
+	Value fmt.Stringer
 }
 
 // makeSizeLimitedBuffer creates a sizeLimitedBuffer.
@@ -397,6 +404,16 @@ func (s *crdbSpan) setTagLocked(key string, value attribute.Value) {
 	s.mu.tags = append(s.mu.tags, attribute.KeyValue{Key: k, Value: value})
 }
 
+func (s *crdbSpan) setLazyTagLocked(key string, value fmt.Stringer) {
+	for i := range s.mu.lazyTags {
+		if s.mu.lazyTags[i].Key == key {
+			s.mu.lazyTags[i].Value = value
+			return
+		}
+	}
+	s.mu.lazyTags = append(s.mu.lazyTags, lazyTag{Key: key, Value: value})
+}
+
 // clearTag removes a tag, if it exists.
 func (s *crdbSpan) clearTag(key string) {
 	s.mu.Lock()
@@ -606,6 +623,9 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for _, kv := range s.mu.tags {
 			// We encode the tag values as strings.
 			addTag(string(kv.Key), kv.Value.Emit())
+		}
+		for _, kv := range s.mu.lazyTags {
+			addTag(kv.Key, kv.Value.String())
 		}
 	}
 

@@ -79,7 +79,7 @@ var hiddenTags = map[string]struct{}{
 func generateTagValue(t processedTag) string {
 	val := t.val
 	if t.link != "" {
-		val = fmt.Sprintf("<a href='%s'>%s</a>", t.link, t.val)
+		val = fmt.Sprintf("<button onclick=\"search('%s')\" class='tag-link'>%s</button>", t.link, t.val)
 	}
 	if t.caption == "" {
 		return val
@@ -88,17 +88,25 @@ func generateTagValue(t processedTag) string {
 }
 
 func init() {
-
 	// concatTags takes in a span's tags and stringiefies the ones that pass filter.
 	concatTags := func(tags []processedTag, filter func(tag processedTag) bool) string {
 		tagsArr := make([]string, 0, len(tags))
 		for _, t := range tags {
+			icon := ""
+			if t.highlight {
+				icon = "<img style='width:16px;height:16px;' src='https://icons.iconarchive.com/icons/google/noto-emoji-symbols/256/73028-warning-icon.png'/>"
+			}
+			keyAnnotation := ""
+			if t.inherited {
+				keyAnnotation = "<span title='inherited'>(↓)</span>"
+			}
+
 			k, v := t.key, t.val
 			if !filter(t) {
 				continue
 			}
 			if v != "" {
-				tagsArr = append(tagsArr, fmt.Sprintf("%s:%s", k, generateTagValue(t)))
+				tagsArr = append(tagsArr, fmt.Sprintf("%s%s%s:%s", icon, k, keyAnnotation, generateTagValue(t)))
 			} else {
 				tagsArr = append(tagsArr, k)
 			}
@@ -218,9 +226,38 @@ func serveHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, tr *
 	for _, r := range snapshot.Traces {
 		spans = append(spans, r...)
 	}
+
+	spansMap := make(map[uint64]*processedSpan)
+	childrenMap := make(map[uint64][]*processedSpan)
 	processedSpans := make([]processedSpan, len(spans))
 	for i, s := range spans {
-		processedSpans[i] = processSpan(s, snapshot)
+		p := processSpan(s, snapshot)
+		ptr := &processedSpans[i]
+		*ptr = p
+		spansMap[p.SpanID] = &processedSpans[i]
+		if _, ok := childrenMap[p.ParentSpanID]; !ok {
+			childrenMap[p.ParentSpanID] = []*processedSpan{&processedSpans[i]}
+		} else {
+			childrenMap[p.ParentSpanID] = append(childrenMap[p.ParentSpanID], &processedSpans[i])
+		}
+	}
+	// Propagate the highlight tags up.
+	for _, s := range processedSpans {
+		for _, t := range s.Tags {
+			if !t.highlight {
+				continue
+			}
+			propagateInterestingTagUpwards(t, &s, spansMap)
+		}
+	}
+	// Propagate the inherit tags down.
+	for _, s := range processedSpans {
+		for _, t := range s.Tags {
+			if !t.inherit || t.inherited {
+				continue
+			}
+			propagateInheritTagDownwards(t, &s, childrenMap)
+		}
 	}
 
 	// Copy the stack traces and augment the map.
@@ -261,11 +298,11 @@ func serveHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, tr *
 }
 
 type processedSpan struct {
-	Operation       string
-	TraceID, SpanID uint64
-	Start           time.Time
-	GoroutineID     uint64
-	Tags            []processedTag
+	Operation                     string
+	TraceID, SpanID, ParentSpanID uint64
+	Start                         time.Time
+	GoroutineID                   uint64
+	Tags                          []processedTag
 }
 
 type processedTag struct {
@@ -273,15 +310,54 @@ type processedTag struct {
 	caption  string
 	link     string
 	hidden   bool
+	// copiedFromChild is set if this tag did not originate on the owner span, but
+	// instead was propagated upwards from a child span.
+	copiedFromChild bool
+	// highlight is set if the tag should be rendered with a little exclamation
+	// mark.
+	highlight bool
+	// inherit is set if this tag should be passed down to children, and
+	// recursively.
+	inherit bool
+	// inherited is set if this tag was passed over from an ancestor.
+	inherited bool
+}
+
+// propagateInterestingTagUpwards copies tag from sp to all of sp's ancestors.
+func propagateInterestingTagUpwards(
+	tag processedTag, sp *processedSpan, spans map[uint64]*processedSpan,
+) {
+	tag.copiedFromChild = true
+	parentID := sp.ParentSpanID
+	for {
+		p, ok := spans[parentID]
+		if !ok {
+			return
+		}
+		p.Tags = append(p.Tags, tag)
+		parentID = p.ParentSpanID
+	}
+}
+
+func propagateInheritTagDownwards(
+	tag processedTag, sp *processedSpan, children map[uint64][]*processedSpan,
+) {
+	tag.inherited = true
+	tag.hidden = true
+	for _, child := range children[sp.SpanID] {
+		child.Tags = append(child.Tags, tag)
+		propagateInheritTagDownwards(tag, child, children)
+	}
 }
 
 func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processedSpan {
 	p := processedSpan{
-		Operation:   s.Operation,
-		TraceID:     uint64(s.TraceID),
-		SpanID:      uint64(s.SpanID),
-		Start:       s.StartTime,
-		GoroutineID: s.GoroutineID,
+		Operation:    s.Operation,
+		TraceID:      uint64(s.TraceID),
+		SpanID:       uint64(s.SpanID),
+		ParentSpanID: uint64(s.ParentSpanID),
+		Start:        s.StartTime,
+		GoroutineID:  s.GoroutineID,
 	}
 
 	// Sort the tags.
@@ -308,8 +384,13 @@ func processTag(k, v string, snap tracing.SpansSnapshot) processedTag {
 
 	switch k {
 	case "lock_holder_txn":
-		p.link = v
-		txnState := findTxnState(v, snap)
+		txnID := v
+		// Take only the first 8 bytes, to keep the text shorter.
+		txnIDShort := v[:8]
+		p.val = txnIDShort
+		p.highlight = true
+		p.link = txnIDShort
+		txnState := findTxnState(txnID, snap)
 		if !txnState.found {
 			p.caption = "blocked on unknown transaction"
 		} else if txnState.curQuery != "" {
@@ -317,6 +398,8 @@ func processTag(k, v string, snap tracing.SpansSnapshot) processedTag {
 		} else {
 			p.caption = "blocked on idle txn"
 		}
+	case "statement":
+		p.inherit = true
 	}
 
 	return p

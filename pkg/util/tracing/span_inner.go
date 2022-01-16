@@ -166,6 +166,16 @@ func (s *spanInner) SetTag(key string, value attribute.Value, statusTag bool) *s
 	return s
 }
 
+func (s *spanInner) SetLazyTag(key string, value fmt.Stringer) *spanInner {
+	if s.isNoop() {
+		return s
+	}
+	s.crdb.mu.Lock()
+	defer s.crdb.mu.Unlock()
+	s.crdb.setLazyTagLocked(key, value)
+	return s
+}
+
 func (s *spanInner) ClearStatusTag(key string) *spanInner {
 	if s.isNoop() {
 		return s

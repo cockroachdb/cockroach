@@ -262,7 +262,15 @@ func (sp *Span) SetTag(key string, value attribute.Value) {
 	if sp.detectUseAfterFinish() {
 		return
 	}
-	sp.i.SetTag(key, value, true /* statusTag */)
+	sp.i.SetTag(key, value, false /* statusTag */)
+}
+
+// !!! comment
+func (sp *Span) SetLazyTag(key string, value fmt.Stringer) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.SetLazyTag(key, value)
 }
 
 // SetStatusTag is like SetTag, except the new tag can be removed from the Span

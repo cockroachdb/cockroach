@@ -15,6 +15,7 @@
       padding-left: 3px
     }
 
+    /* Buttons that look like links */
     .link-button {
       background: none!important;
       border: none;
@@ -25,6 +26,13 @@
       cursor: pointer;
     }
 
+    button {
+      cursor: pointer;
+    }
+
+    .tag-link {
+      border: none;
+    }
   </style>
 </head>
 
@@ -59,7 +67,7 @@ Stored snapshots (ID: capture time):
 <div id="spans-list">
   <table>
     <thead>
-    <input class="search" placeholder="Search" />
+    <input type="search" id="searchBox" class="search" placeholder="Search" />
     <tr>
       <th>
         <button class="sort link-button" data-sort="operation"> Operation </button>
@@ -109,16 +117,18 @@ function toggleStackVisibility(spanID) {
   }
 };
 
-function toggleVisibility(elementID) {
-  var elem = document.getElementById(elementID);
-  if (elem.style.display === "none") {
-    elem.style.display = "block";
-  } else {
-    elem.style.display = "none";
-  }
-};
+// !!!
+// function toggleVisibility(elementID) {
+//   var elem = document.getElementById(elementID);
+//   if (elem.style.display === "none") {
+//     elem.style.display = "block";
+//   } else {
+//     elem.style.display = "none";
+//   }
+// };
 
 function toggleVisibility(event) {
+  // !!!
   console.log(event.target);
   console.log(event.target.dataset.toggleTarget);
   btn = event.target;
@@ -130,6 +140,13 @@ function toggleVisibility(event) {
     target.style.display = "none";
     btn.innerText = btn.dataset.show;
   }
+};
+
+function search(s) {
+    var searchBox = document.getElementById("searchBox");
+    searchBox.value = s;
+    // !!! searchBox.dispatchEvent(new Event('change', {'bubbles': true}));
+    spansList.search(s);
 };
 
 // openTrace opens the requested trace in a new window.
@@ -176,8 +193,8 @@ String.prototype.replace = function(...args) {
   let expRegEx = /[-[\]{}()*+?.,\\^$|#]/g;
   let expReplacement = '\\$&';
   if (args[0].toString() == expRegEx.toString() && args[1] == expReplacement) {
-    console.log('found');
-    return this;
+    // Return a copy of the input.
+    return this.slice();
   }
   return oldReplace.call(this,...args) ;
 };
