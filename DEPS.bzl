@@ -3404,16 +3404,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_gorhill_cronexpr",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/gorhill/cronexpr",
-        sha256 = "742d8957d3f9fe773150fb3164868a755b2af5b705b38c72c45ca5386715c617",
-        strip_prefix = "github.com/gorhill/cronexpr@v0.0.0-20180427100037-88b0669f7d75",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorhill/cronexpr/com_github_gorhill_cronexpr-v0.0.0-20180427100037-88b0669f7d75.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_gorilla_context",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gorilla/context",
@@ -6442,6 +6432,16 @@ def go_deps():
         strip_prefix = "github.com/retailnext/hllpp@v1.0.1-0.20180308014038-101a6d2f8b52",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/retailnext/hllpp/com_github_retailnext_hllpp-v1.0.1-0.20180308014038-101a6d2f8b52.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_robfig_cron_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/robfig/cron/v3",
+        sha256 = "ebe6454642220832a451b8cc50eae5f9150fd8d36b90b242a5de27676be86c70",
+        strip_prefix = "github.com/robfig/cron/v3@v3.0.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/robfig/cron/v3/com_github_robfig_cron_v3-v3.0.1.zip",
         ],
     )
     go_repository(

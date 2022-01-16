@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/gorhill/cronexpr"
+	"github.com/robfig/cron/v3"
 )
 
 const (
@@ -195,19 +195,19 @@ func computeScheduleRecurrence(
 	if evalFn == nil {
 		return neverRecurs, nil
 	}
-	cron, err := evalFn()
+	cronStr, err := evalFn()
 	if err != nil {
 		return nil, err
 	}
-	expr, err := cronexpr.Parse(cron)
+	expr, err := cron.ParseStandard(cronStr)
 	if err != nil {
 		return nil, errors.Newf(
 			`error parsing schedule expression: %q; it must be a valid cron expression`,
-			cron)
+			cronStr)
 	}
 	nextRun := expr.Next(now)
 	frequency := expr.Next(nextRun).Sub(nextRun)
-	return &scheduleRecurrence{cron, frequency}, nil
+	return &scheduleRecurrence{cronStr, frequency}, nil
 }
 
 var forceFullBackup *scheduleRecurrence
