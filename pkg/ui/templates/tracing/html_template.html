@@ -166,8 +166,21 @@ var options = {
 
 // Create the list of spans.
 var spansList = new List('spans-list', options, values);
-// Start with spans sorted newest first.
-spansList.sort('startTimeMicros', {order: "desc"});
+// Horrible hack for working around a bug in list.js and allowing searches that
+// contain characters like '-'. See https://github.com/javve/list.js/issues/699.
+// We monkey-patch Strings.replace(), recognize a broken escape that list.js
+// does in [1], and turn it into a no-op.
+// [1] https://github.com/javve/list.js/blob/d32c85d396c961e079ecf5c21ebffe53a9a73d80/src/search.js#L31
+oldReplace = String.prototype.replace
+String.prototype.replace = function(...args) {
+  let expRegEx = /[-[\]{}()*+?.,\\^$|#]/g;
+  let expReplacement = '\\$&';
+  if (args[0].toString() == expRegEx.toString() && args[1] == expReplacement) {
+    console.log('found');
+    return this;
+  }
+  return oldReplace.call(this,...args) ;
+};
 
 </script>
 </html>
