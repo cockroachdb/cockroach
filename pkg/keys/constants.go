@@ -287,6 +287,7 @@ var (
 	// ScratchRangeMin is a key used in tests to write arbitrary data without
 	// overlapping with meta, system or tenant ranges.
 	ScratchRangeMin = TableDataMax
+	ScratchRangeMax = TenantPrefix
 	//
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.

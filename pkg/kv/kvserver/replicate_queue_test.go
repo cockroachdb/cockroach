@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -414,7 +415,16 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	// Setup a scratch range on a test cluster with 2 non-voters and 1 voter.
 	setupFn := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeDescriptor) {
 		tc := testcluster.StartTestCluster(t, 5,
-			base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationAuto,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						SpanConfig: &spanconfig.TestingKnobs{
+							ConfigureScratchRange: true,
+						},
+					},
+				},
+			},
 		)
 
 		scratchKey := tc.ScratchRange(t)
@@ -529,6 +539,9 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 				ReplicationMode: base.ReplicationAuto,
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
+						SpanConfig: &spanconfig.TestingKnobs{
+							ConfigureScratchRange: true,
+						},
 						NodeLiveness: kvserver.NodeLivenessTestingKnobs{
 							StorePoolNodeLivenessFn: func(
 								id roachpb.NodeID, now time.Time, duration time.Duration,
@@ -676,6 +689,11 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 					{
 						Key: "rack", Value: strconv.Itoa(i),
 					},
+				},
+			},
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
 				},
 			},
 		}

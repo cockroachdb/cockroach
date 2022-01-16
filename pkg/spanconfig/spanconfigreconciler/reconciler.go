@@ -145,6 +145,7 @@ func (r *Reconciler) Reconcile(
 		kvAccessor:    r.kvAccessor,
 		codec:         r.codec,
 		tenID:         r.tenID,
+		knobs:         r.knobs,
 	}
 	latestStore, reconciledUpUntil, err := full.reconcile(ctx)
 	if err != nil {
@@ -194,6 +195,7 @@ type fullReconciler struct {
 
 	codec keys.SQLCodec
 	tenID roachpb.TenantID
+	knobs *spanconfig.TestingKnobs
 }
 
 // reconcile runs the full reconciliation process, returning:
@@ -279,6 +281,9 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		tenantSpan = roachpb.Span{
 			Key:    keys.EverythingSpan.Key,
 			EndKey: keys.TableDataMax,
+		}
+		if f.knobs.ConfigureScratchRange {
+			tenantSpan.EndKey = keys.ScratchRangeMax
 		}
 	} else {
 		// Secondary tenants govern everything prefixed by their tenant ID.
