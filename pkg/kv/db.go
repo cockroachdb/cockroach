@@ -679,12 +679,12 @@ func (db *DB) AddSSTable(
 ) error {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
-		stats, ingestAsWrites, false /* writeAtBatchTS */)
+		stats, ingestAsWrites, false /* writeAtBatchTS */, hlc.Timestamp{} /* sstTimestamp */)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
 // AddSSTableAtBatchTimestamp links a file into the Pebble log-structured
-// merge-tree.
+// merge-tree. All keys in the SST must have a have batchTs as their timestamp.
 //
 // Should only be called after checking the MVCCAddSSTable version gate.
 func (db *DB) AddSSTableAtBatchTimestamp(
@@ -700,7 +700,7 @@ func (db *DB) AddSSTableAtBatchTimestamp(
 ) (hlc.Timestamp, error) {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
-		stats, ingestAsWrites, true /* writeAtBatchTS */)
+		stats, ingestAsWrites, true /* writeAtBatchTS */, batchTs)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
 		return hlc.Timestamp{}, err

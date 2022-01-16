@@ -200,6 +200,13 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 		return err
 	}
 
+	if b.writeAtBatchTS {
+		if b.batchTS.IsEmpty() {
+			b.batchTS = b.db.Clock().Now()
+		}
+		key.Timestamp = b.batchTS
+	}
+
 	// Update the range currently represented in this batch, as necessary.
 	if len(b.batchStartKey) == 0 {
 		b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
@@ -237,6 +244,10 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.flushKey = nil
 	b.flushKeyChecked = false
 	b.ms.Reset()
+
+	if b.writeAtBatchTS {
+		b.batchTS = hlc.Timestamp{}
+	}
 
 	b.rowCounter.BulkOpSummary.Reset()
 	return nil
