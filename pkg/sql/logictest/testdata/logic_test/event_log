@@ -373,12 +373,15 @@ DROP DATABASE IF EXISTS othereventlogtest CASCADE
 # verify event is there, and cascading table drops are logged.
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'  - 'DroppedSchemaObjects'
 FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE eventlogtest%'
+  AND
+  (json_extract_path(info::JSONB, 'DroppedSchemaObjects') @> '["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"]' OR
+   json_extract_path(info::JSONB, 'DroppedSchemaObjects')  @> '["eventlogtest.public.testtable", "eventlogtest.public.anothertesttable"]')
 ----
-1  {"DatabaseName": "eventlogtest", "DroppedSchemaObjects": ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"], "EventType": "drop_database", "Statement": "DROP DATABASE eventlogtest CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"DatabaseName": "eventlogtest", "EventType": "drop_database", "Statement": "DROP DATABASE eventlogtest CASCADE", "Tag": "DROP DATABASE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'

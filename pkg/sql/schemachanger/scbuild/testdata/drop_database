@@ -205,9 +205,6 @@ DROP DATABASE db1 CASCADE
 - [[Database:{DescID: 54}, ABSENT], PUBLIC]
   details:
     databaseId: 54
-    dependentObjects:
-    - 55
-    - 56
 - [[DatabaseComment:{DescID: 54}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
