@@ -115,6 +115,10 @@ func (b buildCtx) ResolveRelation(
 		}
 		panic(sqlerrors.NewUndefinedRelationError(name))
 	}
+	if rel.IsVirtualTable() {
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%s is a virtual object and cannot be modified", tree.ErrNameString(rel.GetName())))
+	}
 	// If we own the schema then we can manipulate the underlying relation.
 	_, schema := b.CatalogReader().MayResolveSchema(b, prefix.NamePrefix())
 	isOwner := false
