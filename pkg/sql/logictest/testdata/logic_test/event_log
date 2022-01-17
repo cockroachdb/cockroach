@@ -373,15 +373,22 @@ DROP DATABASE IF EXISTS othereventlogtest CASCADE
 # verify event is there, and cascading table drops are logged.
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'  - 'DroppedSchemaObjects'
-FROM system.eventlog
-WHERE "eventType" = 'drop_database'
-  AND info::JSONB->>'Statement' LIKE 'DROP DATABASE eventlogtest%'
-  AND
-  (json_extract_path(info::JSONB, 'DroppedSchemaObjects') @> '["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"]' OR
-   json_extract_path(info::JSONB, 'DroppedSchemaObjects')  @> '["eventlogtest.public.testtable", "eventlogtest.public.anothertesttable"]')
+SELECT "reportingID",
+       (info::JSONB - 'Timestamp' - 'DescriptorID')
+       || (
+			SELECT json_build_object(
+					'DroppedSchemaObjects',
+					json_agg(value ORDER BY value)
+			       )
+			  FROM ROWS FROM (
+					json_array_elements((info::JSONB)->'DroppedSchemaObjects')
+			       )
+		)
+  FROM system.eventlog
+ WHERE "eventType" = 'drop_database'
+       AND info::JSONB->>'Statement' LIKE 'DROP DATABASE eventlogtest%';
 ----
-1  {"DatabaseName": "eventlogtest", "EventType": "drop_database", "Statement": "DROP DATABASE eventlogtest CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"DatabaseName": "eventlogtest", "DroppedSchemaObjects": ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"], "EventType": "drop_database", "Statement": "DROP DATABASE eventlogtest CASCADE", "Tag": "DROP DATABASE", "User": "root"}
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
@@ -475,6 +482,7 @@ AND info NOT LIKE '%sql.stats.automatic_collection.enabled%'
 AND info NOT LIKE '%sql.defaults.vectorize%'
 AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.defaults.experimental_distsql_planning%'
+AND info NOT LIKE '%sql.defaults.experimental_new_schema_changer.enabled%'
 ORDER BY "timestamp", info
 ----
 0  1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "root", "Value": "true"}
