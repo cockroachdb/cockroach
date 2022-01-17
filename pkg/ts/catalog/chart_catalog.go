@@ -881,26 +881,33 @@ var charts = []sectionDescription{
 			{
 				Title:       "Latch",
 				Downsampler: DescribeAggregator_MAX,
-				Percentiles: false,
 				Metrics:     []string{"requests.slow.latch"},
 			},
 			{
 				Title:       "Stuck Acquiring Lease",
 				Downsampler: DescribeAggregator_MAX,
-				Percentiles: false,
 				Metrics:     []string{"requests.slow.lease"},
 			},
 			{
 				Title:       "Stuck in Raft",
 				Downsampler: DescribeAggregator_MAX,
-				Percentiles: false,
 				Metrics:     []string{"requests.slow.raft"},
 			},
 			{
 				Title:       "Stuck sending RPCs to range",
 				Downsampler: DescribeAggregator_MAX,
-				Percentiles: false,
 				Metrics:     []string{"requests.slow.distsender"},
+			},
+			{
+				Title:       "Replicas with tripped circuit breakers",
+				Downsampler: DescribeAggregator_MAX,
+				Metrics:     []string{"kv.replica_circuit_breaker.num_tripped_replicas"},
+			},
+			{
+				Title:       "Replica circuit breaker trip events",
+				Downsampler: DescribeAggregator_MAX,
+				Rate:        DescribeDerivative_NON_NEGATIVE_DERIVATIVE,
+				Metrics:     []string{"kv.replica_circuit_breaker.num_tripped_events"},
 			},
 		},
 	},

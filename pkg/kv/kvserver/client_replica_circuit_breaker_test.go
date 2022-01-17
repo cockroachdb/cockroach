@@ -68,6 +68,10 @@ func TestReplicaCircuitBreaker_NotTripped(t *testing.T) {
 // In this test, n1 holds the lease and we disable the probe and trip the
 // breaker. While the breaker is tripped, requests fail-fast with either a
 // breaker or lease error. When the probe is re-enabled, everything heals.
+//
+// This test also verifies the circuit breaker metrics. This is only done
+// in this one test since little would be gained by adding it across the
+// board.
 func TestReplicaCircuitBreaker_LeaseholderTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -79,6 +83,14 @@ func TestReplicaCircuitBreaker_LeaseholderTripped(t *testing.T) {
 	// Disable the probe so that when the breaker trips, it stays tripped.
 	tc.SetProbeEnabled(n1, false)
 	tc.Report(n1, errors.New("boom"))
+
+	s1 := tc.GetFirstStoreFromServer(t, n1)
+	s2 := tc.GetFirstStoreFromServer(t, n2)
+	// Both current and all-time trip events increment on n1, not on n2.
+	require.EqualValues(t, 1, s1.Metrics().ReplicaCircuitBreakerCurTripped.Value())
+	require.EqualValues(t, 1, s1.Metrics().ReplicaCircuitBreakerCumTripped.Count())
+	require.Zero(t, s2.Metrics().ReplicaCircuitBreakerCurTripped.Value())
+	require.Zero(t, s2.Metrics().ReplicaCircuitBreakerCumTripped.Count())
 
 	// n1 could theoretically still serve reads (there is a valid lease
 	// and none of the latches are taken), but since it is hard to determine
@@ -103,6 +115,14 @@ func TestReplicaCircuitBreaker_LeaseholderTripped(t *testing.T) {
 	// Same behavior on writes.
 	tc.Report(n1, errors.New("boom again"))
 	tc.UntripsSoon(t, tc.Write, n1)
+
+	// Currently tripped drops back to zero, all-time is two (since we tripped
+	// it twice)
+	require.EqualValues(t, 0, s1.Metrics().ReplicaCircuitBreakerCurTripped.Value())
+	require.EqualValues(t, 2, s1.Metrics().ReplicaCircuitBreakerCumTripped.Count())
+	// s2 wasn't affected by any breaker events.
+	require.Zero(t, s2.Metrics().ReplicaCircuitBreakerCurTripped.Value())
+	require.Zero(t, s2.Metrics().ReplicaCircuitBreakerCumTripped.Count())
 }
 
 // In this scenario we have n1 holding the lease and we permanently trip the

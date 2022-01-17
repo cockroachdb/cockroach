@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
@@ -49,6 +50,9 @@ var replicaCircuitBreakerSlowReplicationThreshold = settings.RegisterPublicDurat
 	defaultReplicaCircuitBreakerSlowReplicationThreshold,
 	settings.NonNegativeDuration,
 )
+
+// Telemetry counter to count number of trip events.
+var telemetryTripAsync = telemetry.GetCounterOnce("kv.replica_circuit_breaker.num_tripped_events")
 
 // replicaCircuitBreaker is a wrapper around *circuit.Breaker that makes it
 // convenient for use as a per-Replica circuit breaker.
@@ -104,6 +108,8 @@ func newReplicaCircuitBreaker(
 	stopper *stop.Stopper,
 	ambientCtx log.AmbientContext,
 	r replicaInCircuitBreaker,
+	onTrip func(),
+	onReset func(),
 ) *replicaCircuitBreaker {
 	br := &replicaCircuitBreaker{
 		stopper: stopper,
@@ -115,14 +121,36 @@ func newReplicaCircuitBreaker(
 	br.wrapped = circuit.NewBreaker(circuit.Options{
 		Name:       "breaker", // log bridge has ctx tags
 		AsyncProbe: br.asyncProbe,
-		EventHandler: &circuit.EventLogger{
-			Log: func(buf redact.StringBuilder) {
-				log.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+		EventHandler: &replicaCircuitBreakerLogger{
+			EventHandler: &circuit.EventLogger{
+				Log: func(buf redact.StringBuilder) {
+					log.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+				},
 			},
+			onTrip:  onTrip,
+			onReset: onReset,
 		},
 	})
 
 	return br
+}
+
+type replicaCircuitBreakerLogger struct {
+	circuit.EventHandler
+	onTrip  func()
+	onReset func()
+}
+
+func (r replicaCircuitBreakerLogger) OnTrip(br *circuit.Breaker, prev, cur error) {
+	if prev == nil {
+		r.onTrip()
+	}
+	r.EventHandler.OnTrip(br, prev, cur)
+}
+
+func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker) {
+	r.onReset()
+	r.EventHandler.OnReset(br)
 }
 
 type probeKey struct{}
