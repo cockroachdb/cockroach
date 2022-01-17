@@ -12,7 +12,7 @@ package colexec
 import (
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -42,7 +42,7 @@ func EncDatumRowsToColVec(
 	vec coldata.Vec,
 	columnIdx int,
 	t *types.T,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 ) error {
 	var err error
 	allocator.PerformOperation(

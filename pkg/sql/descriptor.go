@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -323,9 +324,7 @@ func TranslateDataPlacement(g tree.DataPlacement) (descpb.DataPlacement, error) 
 	}
 }
 
-func (p *planner) checkRegionIsCurrentlyActive(
-	ctx context.Context, region descpb.RegionName,
-) error {
+func (p *planner) checkRegionIsCurrentlyActive(ctx context.Context, region catpb.RegionName) error {
 	liveRegions, err := p.getLiveClusterRegions(ctx)
 	if err != nil {
 		return err
@@ -342,7 +341,7 @@ var InitializeMultiRegionMetadataCCL = func(
 	execCfg *ExecutorConfig,
 	liveClusterRegions LiveClusterRegions,
 	survivalGoal tree.SurvivalGoal,
-	primaryRegion descpb.RegionName,
+	primaryRegion catpb.RegionName,
 	regions []tree.Name,
 	dataPlacement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
@@ -396,7 +395,7 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 		p.ExecCfg(),
 		liveRegions,
 		survivalGoal,
-		descpb.RegionName(primaryRegion),
+		catpb.RegionName(primaryRegion),
 		regions,
 		placement,
 	)

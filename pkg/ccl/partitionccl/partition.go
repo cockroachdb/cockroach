@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -114,9 +115,7 @@ func valueEncodePartitionTuple(
 		if err := colinfo.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
 		}
-		value, err = rowenc.EncodeTableValue(
-			value, descpb.ColumnID(encoding.NoColumnID), datum, scratch,
-		)
+		value, err = valueside.Encode(value, valueside.NoColumnID, datum, scratch)
 		if err != nil {
 			return nil, err
 		}
@@ -411,7 +410,7 @@ func selectPartitionExprs(
 		exprsByPartName[string(partName)] = nil
 	}
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	var prefixDatums []tree.Datum
 	if err := catalog.ForEachIndex(tableDesc, catalog.IndexOpts{
 		AddMutations: true,
@@ -467,7 +466,7 @@ func selectPartitionExprs(
 // register itself in the map with a placeholder entry (so we can still verify
 // that the requested partitions are all valid).
 func selectPartitionExprsByName(
-	a *rowenc.DatumAlloc,
+	a *tree.DatumAlloc,
 	evalCtx *tree.EvalContext,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,

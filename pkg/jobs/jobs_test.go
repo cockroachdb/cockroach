@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1423,6 +1423,20 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatalf("unexpected: %v", err)
 			}
 		})
+		t.Run("huge errors are truncated if marking job as failed", func(t *testing.T) {
+			hugeErr := strings.Repeat("a", 2048)
+			truncatedHugeErr := "boom: " + strings.Repeat("a", 1018) + " -- TRUNCATED"
+			err := errors.Errorf("boom: %s", hugeErr)
+			job, exp := createDefaultJob()
+			exp.Error = truncatedHugeErr
+			if err := job.Failed(ctx, err); err != nil {
+				t.Fatal(err)
+			}
+			if err := exp.verify(job.ID(), jobs.StatusFailed); err != nil {
+				t.Fatal(err)
+			}
+		})
+
 	})
 
 	t.Run("cancelable jobs can be paused until finished", func(t *testing.T) {

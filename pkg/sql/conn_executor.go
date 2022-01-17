@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -804,7 +803,7 @@ func (s *Server) newConnExecutor(
 			execTestingKnobs: s.GetExecutorConfig().TestingKnobs,
 		},
 		memMetrics: memMetrics,
-		planner:    planner{execCfg: s.cfg, alloc: &rowenc.DatumAlloc{}},
+		planner:    planner{execCfg: s.cfg, alloc: &tree.DatumAlloc{}},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
@@ -2483,6 +2482,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			Planner:                   p,
 			PrivilegedAccessor:        p,
 			SessionAccessor:           p,
+			JobExecContext:            p,
 			ClientNoticeSender:        p,
 			Sequence:                  p,
 			Tenant:                    p,
@@ -2948,6 +2948,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs := &ex.extraTxnState.schemaChangerState
 	deps := newSchemaChangerTxnRunDependencies(
+		ex.planner.SessionData(),
 		ex.planner.User(),
 		ex.server.cfg,
 		ex.planner.txn,

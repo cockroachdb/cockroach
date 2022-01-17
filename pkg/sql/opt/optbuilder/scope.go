@@ -360,12 +360,15 @@ func (s *scope) makeOrderingChoice() props.OrderingChoice {
 }
 
 // makePhysicalProps constructs physical properties using the columns in the
-// scope for presentation and s.ordering for required ordering.
+// scope for presentation and s.ordering for required ordering. The distribution
+// is determined based on the locality of the gateway node, since data must
+// always be returned to the gateway.
 func (s *scope) makePhysicalProps() *physical.Required {
 	p := &physical.Required{
 		Presentation: s.makePresentation(),
 	}
 	p.Ordering.FromOrdering(s.ordering)
+	p.Distribution.FromLocality(s.builder.evalCtx.Locality)
 	return p
 }
 

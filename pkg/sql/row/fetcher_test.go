@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -57,7 +56,7 @@ func makeFetcherArgs(entry initFetcherArgs) FetcherTableArgs {
 }
 
 func initFetcher(
-	entry initFetcherArgs, reverseScan bool, alloc *rowenc.DatumAlloc, memMon *mon.BytesMonitor,
+	entry initFetcherArgs, reverseScan bool, alloc *tree.DatumAlloc, memMon *mon.BytesMonitor,
 ) (fetcher *Fetcher, err error) {
 	fetcher = &Fetcher{}
 
@@ -70,8 +69,7 @@ func initFetcher(
 		reverseScan,
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		alloc,
 		memMon,
 		fetcherArgs,
@@ -131,7 +129,7 @@ func TestNextRowSingle(t *testing.T) {
 		)
 	}
 
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
@@ -250,7 +248,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 		)
 	}
 
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
@@ -364,7 +362,7 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 		valNeededForCol: valNeededForCol,
 	}
 
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	settings := cluster.MakeTestingClusterSettings()
 
@@ -428,7 +426,7 @@ INDEX(c)
 		),
 	)
 
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
@@ -604,7 +602,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		table.nRows += nNulls
 	}
 
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
@@ -744,7 +742,7 @@ func TestRowFetcherReset(t *testing.T) {
 		indexIdx:        0,
 		valNeededForCol: valNeededForCol,
 	}
-	da := rowenc.DatumAlloc{}
+	da := tree.DatumAlloc{}
 	fetcher, err := initFetcher(args, false, &da, nil /*memMon*/)
 	if err != nil {
 		t.Fatal(err)
@@ -767,8 +765,7 @@ func TestRowFetcherReset(t *testing.T) {
 		false, /*reverse*/
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&da,
 		nil, /* memMonitor */
 		fetcherArgs,

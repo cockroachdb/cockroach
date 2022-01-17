@@ -63,13 +63,22 @@ func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 // This is a code snippet that is the main body of checkCol* functions. It
 // takes in the following template "meta" variables that enable/disable certain
 // code paths:
+// _GLOBAL - a string replaced by "$global" (the local template variable
+// referring to the NotEqual overload) before performing the template function
+// call. It is needed because _CHECK_COL_BODY template function is called from
+// two places where the overload is in different template context (in one case
+// it is `.`, and in another it is `.Global`). We work around it by replacing
+// _GLOBAL with the local variable during the initial preprocessing of the
+// template.
 // _PROBE_HAS_NULLS - a boolean as .ProbeHasNulls that determines whether the
 // probe vector might have NULL values.
 // _BUILD_HAS_NULLS - a boolean as .BuildHasNulls that determines whether the
 // build vector might have NULL values.
 // _SELECT_DISTINCT - a boolean as .SelectDistinct that determines whether a
-// probe tuple should be marked as "distinct" if its GroupID is zero (meaning
-// that there is no tuple in the hash table with the same hash code).
+// probe tuple should be marked as "distinct" if there is no tuple in the hash
+// table that might be a duplicate of the probe tuple (either because the
+// GroupID of the probe tuple is 0 - meaning no hash matches - or because the
+// probe tuple has a NULL value when NULLs are treated as not equal).
 // _USE_PROBE_SEL - a boolean as .UseProbeSel that determines whether there is
 // a selection vector on the probe vector.
 // _PROBING_AGAINST_ITSELF - a boolean as .ProbingAgainstItself that tells us
@@ -82,6 +91,7 @@ func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 // When it is true, the HashTable uses 'visited' slice to mark previously
 // matched tuples as "deleted" so they won't get matched again.
 func _CHECK_COL_BODY(
+	_GLOBAL interface{},
 	_PROBE_HAS_NULLS bool,
 	_BUILD_HAS_NULLS bool,
 	_SELECT_DISTINCT bool,
@@ -97,7 +107,19 @@ func _CHECK_COL_BODY(
 	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 		// keyID of 0 is reserved to represent the end of the next chain.
 		keyID := ht.ProbeScratch.GroupID[toCheck]
+		// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
+		// {{/*
+		//      When we're selecting distinct tuples and probing against itself,
+		//      we're in the code path of the unordered distinct where we're
+		//      trying to find duplicates within a single input batch. In such a
+		//      case we will never hit keyID of 0 because each tuple in the
+		//      batch is equal to itself (and possibly others). Once we find a
+		//      match, the tuple is no longer checked, so we never reach the end
+		//      of the corresponding hash chain which could result in keyID
+		//      being 0.
+		// */}}
 		if keyID != 0 {
+			// {{end}}
 			// the build table key (calculated using keys[keyID - 1] = key) is
 			// compared to the corresponding probe table to determine if a match is
 			// found.
@@ -153,20 +175,14 @@ func _CHECK_COL_BODY(
 				}
 			}
 			if probeIsNull {
-				// {{if or (.SelectDistinct) (.ProbingAgainstItself)}}
+				// {{if .SelectDistinct}}
 				// {{/*
 				//     We know that nulls are distinct (because
 				//     allowNullEquality case is handled above) and our probing
 				//     tuple has a NULL value in the current column, so the
-				//     probing tuple is distinct from the build table. Both
-				//     parts of the template condition above are only 'true' if
-				//     the hash table is used for the unordered distinct
-				//     operator, and in that scenario we want to mark the
-				//     current probing tuple as distinct but also set its
-				//     GroupID such that it (the probing tuple) matches itself.
+				//     probing tuple is distinct from the build table.
 				// */}}
 				ht.ProbeScratch.distinct[toCheck] = true
-				ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 				// {{else}}
 				ht.ProbeScratch.GroupID[toCheck] = 0
 				// {{end}}
@@ -179,10 +195,11 @@ func _CHECK_COL_BODY(
 				_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
 				ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 			}
-		}
-		// {{if .SelectDistinct}}
-		if keyID == 0 {
+			// {{if and .SelectDistinct (not .ProbingAgainstItself)}}
+		} else {
 			ht.ProbeScratch.distinct[toCheck] = true
+			// {{end}}
+			// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
 		}
 		// {{end}}
 	}
@@ -191,30 +208,38 @@ func _CHECK_COL_BODY(
 }
 
 func _CHECK_COL_WITH_NULLS(
-	_USE_PROBE_SEL bool, _PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_MODE bool,
+	_SELECT_DISTINCT bool,
+	_USE_PROBE_SEL bool,
+	_PROBING_AGAINST_ITSELF bool,
+	_DELETING_PROBE_MODE bool,
 ) { // */}}
 	// {{define "checkColWithNulls" -}}
+	// {{$global := .Global}}
+	// {{$selectDistinct := .SelectDistinct}}
 	// {{$probingAgainstItself := .ProbingAgainstItself}}
 	// {{$deletingProbeMode := .DeletingProbeMode}}
 	if probeVec.MaybeHasNulls() {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(true, true, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+			_CHECK_COL_BODY(_GLOBAL, true, true, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 		} else {
-			_CHECK_COL_BODY(true, false, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+			_CHECK_COL_BODY(_GLOBAL, true, false, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 		}
 	} else {
 		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(false, true, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+			_CHECK_COL_BODY(_GLOBAL, false, true, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 		} else {
-			_CHECK_COL_BODY(false, false, false, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+			_CHECK_COL_BODY(_GLOBAL, false, false, _SELECT_DISTINCT, _USE_PROBE_SEL, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 		}
 	}
 	// {{end}}
 	// {{/*
 }
 
-func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_MODE bool) { // */}}
+func _CHECK_COL_FUNCTION_TEMPLATE(
+	_SELECT_DISTINCT bool, _PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_MODE bool,
+) { // */}}
 	// {{define "checkColFunctionTemplate" -}}
+	// {{$selectDistinct := .SelectDistinct}}
 	// {{$probingAgainstItself := .ProbingAgainstItself}}
 	// {{$deletingProbeMode := .DeletingProbeMode}}
 	// {{with .Global}}
@@ -252,9 +277,9 @@ func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_
 					probeKeys := probeVec._ProbeType()
 					buildKeys := buildVec._BuildType()
 					if probeSel != nil {
-						_CHECK_COL_WITH_NULLS(true, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+						_CHECK_COL_WITH_NULLS(_SELECT_DISTINCT, true, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 					} else {
-						_CHECK_COL_WITH_NULLS(false, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
+						_CHECK_COL_WITH_NULLS(_SELECT_DISTINCT, false, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 					}
 					// {{end}}
 					// {{end}}
@@ -282,7 +307,7 @@ func (ht *HashTable) checkCol(
 	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
 ) {
 	// {{with .Overloads}}
-	_CHECK_COL_FUNCTION_TEMPLATE(false, false)
+	_CHECK_COL_FUNCTION_TEMPLATE(false, false, false)
 	// {{end}}
 }
 
@@ -290,16 +315,17 @@ func (ht *HashTable) checkCol(
 
 // {{if .HashTableMode.IsDistinctBuild}}
 
-// checkColAgainstItself is similar to checkCol, but it probes the vector
-// against itself.
-func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel []int) {
+// checkColAgainstItselfForDistinct is similar to checkCol, but it probes the
+// vector against itself for the purposes of finding matches to unordered
+// distinct columns.
+func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck uint64, sel []int) {
 	// {{/*
 	// In order to reuse the same template function as checkCol uses, we use
 	// the same variable names.
 	// */}}
 	probeVec, buildVec, probeSel := vec, vec, sel
 	// {{with .Overloads}}
-	_CHECK_COL_FUNCTION_TEMPLATE(true, false)
+	_CHECK_COL_FUNCTION_TEMPLATE(true, true, false)
 	// {{end}}
 }
 
@@ -316,32 +342,11 @@ func (ht *HashTable) checkColDeleting(
 	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
 ) {
 	// {{with .Overloads}}
-	_CHECK_COL_FUNCTION_TEMPLATE(false, true)
+	_CHECK_COL_FUNCTION_TEMPLATE(false, false, true)
 	// {{end}}
 }
 
 // {{end}}
-
-// {{/*
-func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(_USE_PROBE_SEL bool) { // */}}
-	// {{define "checkColForDistinctWithNulls" -}}
-	if probeVec.MaybeHasNulls() {
-		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(true, true, true, _USE_PROBE_SEL, false, false)
-		} else {
-			_CHECK_COL_BODY(true, false, true, _USE_PROBE_SEL, false, false)
-		}
-	} else {
-		if buildVec.MaybeHasNulls() {
-			_CHECK_COL_BODY(false, true, true, _USE_PROBE_SEL, false, false)
-		} else {
-			_CHECK_COL_BODY(false, false, true, _USE_PROBE_SEL, false, false)
-		}
-	}
-
-	// {{end}}
-	// {{/*
-} // */}}
 
 // {{if .HashTableMode.IsDistinctBuild}}
 // {{with .Overloads}}
@@ -376,10 +381,19 @@ func (ht *HashTable) checkColForDistinctTuples(
 				case _RIGHT_TYPE_WIDTH:
 					probeKeys := probeVec._ProbeType()
 					buildKeys := buildVec._ProbeType()
-					if probeSel != nil {
-						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(true)
+					// {{$global := .}}
+					if probeVec.MaybeHasNulls() {
+						if buildVec.MaybeHasNulls() {
+							_CHECK_COL_BODY(_GLOBAL, true, true, true, true, false, false)
+						} else {
+							_CHECK_COL_BODY(_GLOBAL, true, false, true, true, false, false)
+						}
 					} else {
-						_CHECK_COL_FOR_DISTINCT_WITH_NULLS(false)
+						if buildVec.MaybeHasNulls() {
+							_CHECK_COL_BODY(_GLOBAL, false, true, true, true, false, false)
+						} else {
+							_CHECK_COL_BODY(_GLOBAL, false, false, true, true, false, false)
+						}
 					}
 					// {{end}}
 					// {{end}}
@@ -405,7 +419,16 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 		toCheck := toCheckSlice[toCheckPos]
 		// {{if .SelectDistinct}}
 		if ht.ProbeScratch.distinct[toCheck] {
-			ht.ProbeScratch.HeadID[toCheck] = ht.ProbeScratch.GroupID[toCheck]
+			// {{/*
+			//     The hash table is used for the unordered distinct operator.
+			//     This code block is only relevant when we're probing the batch
+			//     against itself in order to separate all tuples in the batch
+			//     into equality buckets (where equality buckets are specified
+			//     by the same HeadID values). In this case we see that the
+			//     probing tuple is distinct (i.e. it is unique in the batch),
+			//     so we want to mark it as equal to itself only.
+			// */}}
+			ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
 			continue
 		}
 		// {{end}}
@@ -514,7 +537,7 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 // in the probe table.
 func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
 	for i := range ht.keyCols {
-		ht.checkColAgainstItself(vecs[i], nToCheck, sel)
+		ht.checkColAgainstItselfForDistinct(vecs[i], nToCheck, sel)
 	}
 	nDiffers := uint64(0)
 	_CHECK_BODY(false, false, true)

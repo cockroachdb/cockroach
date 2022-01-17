@@ -5,8 +5,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 go_library(
     name = "scpb",
     srcs = [
-        "metadata.go",
-        "node.go",
+        "constants.go",
+        "state.go",
         ":gen-elements-interface",  # keep
     ],
     embed = [":scpb_go_proto"],
@@ -25,7 +25,9 @@ go_proto_library(
     proto = ":scpb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
     ],
@@ -33,10 +35,14 @@ go_proto_library(
 
 proto_library(
     name = "scpb_proto",
-    srcs = ["scpb.proto"],
+    srcs = [
+        "elements.proto",
+        "scpb.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -53,7 +59,7 @@ go_binary(
 genrule(
     name = "gen-elements-interface",
     srcs = [
-        "scpb.proto",
+        "elements.proto",
     ],
     outs = ["elements_generated.go"],
     cmd = """

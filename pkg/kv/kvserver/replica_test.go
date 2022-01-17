@@ -66,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -10213,7 +10212,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				ba.Add(&get, &put)
 				return
 			},
-			expErr: "write at timestamp .* too old",
+			expErr: "write for key .* at timestamp .* too old",
 		},
 		{
 			name: "serializable push without retry",
@@ -10242,7 +10241,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &cput)
 				return
 			},
-			expErr: "write at timestamp .* too old",
+			expErr: "write for key .* at timestamp .* too old",
 		},
 		// Non-1PC serializable txn initput will fail with write too old error.
 		{
@@ -10257,7 +10256,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				assignSeqNumsForReqs(ba.Txn, &iput)
 				return
 			},
-			expErr: "write at timestamp .* too old",
+			expErr: "write for key .* at timestamp .* too old",
 		},
 		// Non-1PC serializable txn locking scan will fail with write too old error.
 		{
@@ -10272,7 +10271,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				ba.Add(scan)
 				return
 			},
-			expErr: "write at timestamp .* too old",
+			expErr: "write for key .* at timestamp .* too old",
 		},
 		// Non-1PC serializable txn cput with CanForwardReadTimestamp set to
 		// true will succeed with write too old error.
@@ -12988,44 +12987,6 @@ func enableTraceDebugUseAfterFree() (restore func()) {
 	prev := trace.DebugUseAfterFinish
 	trace.DebugUseAfterFinish = true
 	return func() { trace.DebugUseAfterFinish = prev }
-}
-
-func TestRangeUnavailableMessage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var repls roachpb.ReplicaSet
-	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 10, ReplicaID: 100})
-	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 20, ReplicaID: 200})
-	desc := roachpb.NewRangeDescriptor(10, roachpb.RKey("a"), roachpb.RKey("z"), repls)
-	dur := time.Minute
-	var ba roachpb.BatchRequest
-	ba.Add(&roachpb.RequestLeaseRequest{})
-	lm := liveness.IsLiveMap{
-		1: liveness.IsLiveMapEntry{IsLive: true},
-	}
-	rs := raft.Status{}
-	var s redact.StringBuilder
-	rangeUnavailableMessage(&s, desc, lm, &rs, &ba, dur)
-	const exp = `have been waiting 60.00s for proposing command RequestLease [‹/Min›,‹/Min›).
-This range is likely unavailable.
-Please submit this message to Cockroach Labs support along with the following information:
-
-Descriptor:  r10:‹{a-z}› [(n1,s10):1, (n2,s20):2, next=3, gen=0]
-Live:        (n1,s10):1
-Non-live:    (n2,s20):2
-Raft Status: {"id":"0","term":0,"vote":"0","commit":0,"lead":"0","raftState":"StateFollower","applied":0,"progress":{},"leadtransferee":"0"}
-
-and a copy of https://yourhost:8080/#/reports/range/10
-
-If you are using CockroachDB Enterprise, reach out through your
-support contract. Otherwise, please open an issue at:
-
-  https://github.com/cockroachdb/cockroach/issues/new/choose
-`
-	act := s.RedactableString()
-	t.Log(act)
-	require.EqualValues(t, exp, act)
 }
 
 // Test that, depending on the request's ClientRangeInfo, descriptor and lease

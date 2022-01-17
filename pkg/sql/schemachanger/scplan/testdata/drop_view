@@ -9,12 +9,15 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 ops
 DROP VIEW defaultdb.v1
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveTableComment
+      TableID: 55
 PreCommitPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
@@ -41,26 +44,28 @@ PreCommitPhase stage 1 of 1 with 6 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP VIEW defaultdb.v1
+          redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1›
+          statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 55
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 55
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW ‹defaultdb›.public.‹v1›
+      StatementTag: DROP VIEW
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 55
@@ -133,24 +138,39 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 5 MutationType ops
+StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 56}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 57}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 58}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 61}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 61}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 55
+    *scop.RemoveTableComment
+      TableID: 55
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 56
+    *scop.RemoveTableComment
+      TableID: 56
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
+    *scop.RemoveTableComment
+      TableID: 57
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 58
+    *scop.RemoveTableComment
+      TableID: 58
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 61
+    *scop.RemoveTableComment
+      TableID: 61
 PreCommitPhase stage 1 of 1 with 25 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
@@ -261,11 +281,13 @@ PreCommitPhase stage 1 of 1 with 25 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP VIEW defaultdb.v1 CASCADE
+          redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+          statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
   transitions:
     [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
@@ -275,72 +297,72 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
     [[View:{DescID: 61}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 55
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 55
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+      StatementTag: DROP VIEW
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 55
     *scop.LogEvent
-      DescID: 56
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 56
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+      StatementTag: DROP VIEW
+      TargetMetadata:
+        SourceElementID: 2
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 56
     *scop.LogEvent
-      DescID: 57
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 57
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+      StatementTag: DROP VIEW
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 57
     *scop.LogEvent
-      DescID: 58
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 58
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+      StatementTag: DROP VIEW
+      TargetMetadata:
+        SourceElementID: 3
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 58
     *scop.LogEvent
-      DescID: 61
+      Authorization:
+        UserName: root
       Element:
-        view:
+        View:
           tableId: 61
-      Metadata:
-        Statement: DROP VIEW defaultdb.v1 CASCADE
-        TargetMetadata:
-          SourceElementID: 5
-          SubWorkID: 1
-        Username: root
+      Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+      StatementTag: DROP VIEW
+      TargetMetadata:
+        SourceElementID: 5
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 61

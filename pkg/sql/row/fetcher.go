@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -123,18 +125,6 @@ type tableInfo struct {
 	// changefeeds use this by providing raw kvs with tombstones unfiltered via
 	// `StartScanFrom`.
 	rowIsDeleted bool
-
-	// hasLast indicates whether there was a previously scanned k/v.
-	hasLast bool
-	// lastDatums is a buffer for the current key. It is only present when
-	// doing a physical check in order to verify round-trip encoding.
-	// It is required because Fetcher.kv is overwritten before NextRow
-	// returns.
-	lastKV roachpb.KeyValue
-	// lastDatums is a buffer for the previously scanned k/v datums. It is
-	// only present when doing a physical check in order to verify
-	// ordering.
-	lastDatums tree.Datums
 }
 
 // FetcherTableArgs are the arguments passed to Fetcher.Init
@@ -151,17 +141,10 @@ type FetcherTableArgs struct {
 
 // InitCols initializes the columns in FetcherTableArgs.
 func (fta *FetcherTableArgs) InitCols(
-	desc catalog.TableDescriptor,
-	scanVisibility execinfrapb.ScanVisibility,
-	withSystemColumns bool,
-	invertedColumn catalog.Column,
+	desc catalog.TableDescriptor, withSystemColumns bool, invertedColumn catalog.Column,
 ) {
 	cols := make([]catalog.Column, 0, len(desc.AllColumns()))
-	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
-		cols = append(cols, desc.ReadableColumns()...)
-	} else {
-		cols = append(cols, desc.PublicColumns()...)
-	}
+	cols = append(cols, desc.ReadableColumns()...)
 	if invertedColumn != nil {
 		for i, col := range cols {
 			if col.GetID() == invertedColumn.GetID() {
@@ -247,16 +230,12 @@ type Fetcher struct {
 	keyRemainingBytes []byte
 	kvEnd             bool
 
-	// isCheck indicates whether or not we are running checks for k/v
-	// correctness. It is set only during SCRUB commands.
-	isCheck bool
-
 	// IgnoreUnexpectedNulls allows Fetcher to return null values for non-nullable
 	// columns and is only used for decoding for error messages or debugging.
 	IgnoreUnexpectedNulls bool
 
 	// Buffered allocation of decoded datums.
-	alloc *rowenc.DatumAlloc
+	alloc *tree.DatumAlloc
 
 	// Memory monitor and memory account for the bytes fetched by this fetcher.
 	mon             *mon.BytesMonitor
@@ -294,8 +273,7 @@ func (rf *Fetcher) Init(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
-	isCheck bool,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	memMonitor *mon.BytesMonitor,
 	tableArgs FetcherTableArgs,
 ) error {
@@ -305,7 +283,6 @@ func (rf *Fetcher) Init(
 	rf.lockWaitPolicy = lockWaitPolicy
 	rf.lockTimeout = lockTimeout
 	rf.alloc = alloc
-	rf.isCheck = isCheck
 
 	if memMonitor != nil {
 		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, memMonitor)
@@ -345,10 +322,10 @@ func (rf *Fetcher) Init(
 
 			// Set up any system column metadata, if this column is a system column.
 			switch colinfo.GetSystemColumnKindFromColumnID(col.GetID()) {
-			case descpb.SystemColumnKind_MVCCTIMESTAMP:
+			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
 				rf.mvccDecodeStrategy = MVCCDecodingRequired
-			case descpb.SystemColumnKind_TABLEOID:
+			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
 				table.tableOid = tree.NewDOid(tree.DInt(tableArgs.Desc.GetID()))
 			}
@@ -356,31 +333,36 @@ func (rf *Fetcher) Init(
 	}
 
 	table.knownPrefixLength = len(
-		rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()),
+		rowenc.MakeIndexKeyPrefix(codec, table.desc.GetID(), table.index.GetID()),
 	)
 
-	var indexColumnIDs []descpb.ColumnID
-	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)
+	table.indexColumnDirs = table.desc.IndexFullColumnDirections(table.index)
+	fullColumns := table.desc.IndexFullColumns(table.index)
 
 	table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
 	neededIndexCols := 0
-	nIndexCols := len(indexColumnIDs)
+	nIndexCols := len(fullColumns)
 	if cap(table.indexColIdx) >= nIndexCols {
 		table.indexColIdx = table.indexColIdx[:nIndexCols]
 	} else {
 		table.indexColIdx = make([]int, nIndexCols)
 	}
-	for i, id := range indexColumnIDs {
+	for i, col := range fullColumns {
+		if col == nil {
+			table.indexColIdx[i] = -1
+			continue
+		}
+		id := col.GetID()
 		colIdx, ok := table.colIdxMap.Get(id)
 		if ok {
 			table.indexColIdx[i] = colIdx
-			if table.neededCols.Contains(int(id)) {
+			if table.neededCols.Contains(int(col.GetID())) {
 				neededIndexCols++
 				table.neededValueColsByIdx.Remove(colIdx)
 			}
 		} else {
 			table.indexColIdx[i] = -1
-			if table.neededCols.Contains(int(id)) {
+			if table.neededCols.Contains(int(col.GetID())) {
 				return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
 			}
 		}
@@ -419,7 +401,7 @@ func (rf *Fetcher) Init(
 	}
 
 	// Prepare our index key vals slice.
-	table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs, table.keyValTypes)
+	table.keyValTypes, err = getColumnTypes(fullColumns, table.keyValTypes)
 	if err != nil {
 		return err
 	}
@@ -435,8 +417,9 @@ func (rf *Fetcher) Init(
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.IndexDesc().KeySuffixColumnIDs, table.extraTypes)
-		nExtraColumns := table.index.NumKeySuffixColumns()
+		keySuffixCols := table.desc.IndexKeySuffixColumns(table.index)
+		table.extraTypes, err = getColumnTypes(keySuffixCols, table.extraTypes)
+		nExtraColumns := len(keySuffixCols)
 		if cap(table.extraVals) >= nExtraColumns {
 			table.extraVals = table.extraVals[:nExtraColumns]
 		} else {
@@ -449,6 +432,24 @@ func (rf *Fetcher) Init(
 
 	rf.numKeysPerRow, err = table.desc.KeysPerRow(table.index.GetID())
 	return err
+}
+
+func getColumnTypes(columns []catalog.Column, outTypes []*types.T) ([]*types.T, error) {
+	if cap(outTypes) < len(columns) {
+		outTypes = make([]*types.T, len(columns))
+	} else {
+		outTypes = outTypes[:len(columns)]
+	}
+	for i, col := range columns {
+		if col == nil {
+			return nil, fmt.Errorf("column does not exist")
+		}
+		if !col.Public() {
+			return nil, fmt.Errorf("column %q (%d) is not public", col.GetName(), col.GetID())
+		}
+		outTypes[i] = col.GetType()
+	}
+	return outTypes, nil
 }
 
 // GetTable returns the table that this Fetcher was initialized with.
@@ -735,7 +736,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 		for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
 			var err error
 			// Slice off an extra encoded column from rf.keyRemainingBytes.
-			rf.keyRemainingBytes, err = rowenc.SkipTableKey(rf.keyRemainingBytes)
+			rf.keyRemainingBytes, err = keyside.Skip(rf.keyRemainingBytes)
 			if err != nil {
 				return false, err
 			}
@@ -1020,7 +1021,7 @@ func (rf *Fetcher) processValueSingle(
 			// although that would require changing UnmarshalColumnValue to operate
 			// on bytes, and for Encode/DecodeTableValue to operate on marshaled
 			// single values.
-			value, err := rowenc.UnmarshalColumnValue(rf.alloc, typ, kv.Value)
+			value, err := valueside.UnmarshalLegacy(rf.alloc, typ, kv.Value)
 			if err != nil {
 				return "", "", err
 			}
@@ -1142,9 +1143,6 @@ func (rf *Fetcher) NextRow(
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 
-		if rf.isCheck {
-			rf.table.lastKV = rf.kv
-		}
 		rowDone, err := rf.NextKey(ctx)
 		if err != nil {
 			return nil, nil, nil, err
@@ -1201,194 +1199,6 @@ func (rf *Fetcher) RowIsDeleted() bool {
 	return rf.table.rowIsDeleted
 }
 
-// NextRowWithErrors calls NextRow to fetch the next row and also run
-// additional additional logic for physical checks. The Datums should
-// not be modified and are only valid until the next call. When there
-// are no more rows, the Datums is nil. The checks executed include:
-//  - k/v data round-trips, i.e. it decodes and re-encodes to the same
-//    value.
-//  - There is no extra unexpected or incorrect data encoded in the k/v
-//    pair.
-//  - Decoded keys follow the same ordering as their encoding.
-func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (rowenc.EncDatumRow, error) {
-	row, table, index, err := rf.NextRow(ctx)
-	if row == nil {
-		return nil, nil
-	} else if err != nil {
-		// If this is not already a wrapped error, we will consider it to be
-		// a generic physical error.
-		// FIXME(joey): This may not be needed if we capture all the errors
-		// encountered. This is a TBD when this change is polished.
-		if !scrub.IsScrubError(err) {
-			err = scrub.WrapError(scrub.PhysicalError, err)
-		}
-		return row, err
-	}
-
-	// Decode the row in-place. The following check datum encoding
-	// functions require that the table.row datums are decoded.
-	for i := range row {
-		if row[i].IsUnset() {
-			rf.table.decodedRow[i] = tree.DNull
-			continue
-		}
-		if err := row[i].EnsureDecoded(rf.table.cols[i].GetType(), rf.alloc); err != nil {
-			return nil, err
-		}
-		rf.table.decodedRow[i] = row[i].Datum
-	}
-
-	if index.GetID() == table.GetPrimaryIndexID() {
-		err = rf.checkPrimaryIndexDatumEncodings(ctx)
-	} else {
-		err = rf.checkSecondaryIndexDatumEncodings(ctx)
-	}
-	if err != nil {
-		return row, err
-	}
-
-	err = rf.checkKeyOrdering(ctx)
-
-	return row, err
-}
-
-// checkPrimaryIndexDatumEncodings will run a round-trip encoding check
-// on all values in the buffered row. This check is specific to primary
-// index datums.
-func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
-	table := &rf.table
-	scratch := make([]byte, 1024)
-	colIDToColumn := make(map[descpb.ColumnID]catalog.Column)
-	for _, col := range table.desc.PublicColumns() {
-		colIDToColumn[col.GetID()] = col
-	}
-
-	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.PublicNonPrimaryIndexes()}
-
-	return table.desc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
-		var lastColID descpb.ColumnID
-		familyID := family.ID
-		familySortedColumnIDs, ok := rh.sortedColumnFamily(familyID)
-		if !ok {
-			return errors.AssertionFailedf("invalid family sorted column id map for family %d", familyID)
-		}
-
-		for _, colID := range familySortedColumnIDs {
-			rowVal := table.row[table.colIdxMap.GetDefault(colID)]
-			if rowVal.IsNull() {
-				// Column is not present.
-				continue
-			}
-
-			if skip, err := rh.skipColumnNotInPrimaryIndexValue(colID, rowVal.Datum); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err, "unable to determine skip")
-			} else if skip {
-				continue
-			}
-
-			col := colIDToColumn[colID]
-			if col == nil {
-				return errors.AssertionFailedf("column mapping not found for column %d", colID)
-			}
-
-			if lastColID > col.GetID() {
-				return errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
-			}
-			colIDDiff := col.GetID() - lastColID
-			lastColID = col.GetID()
-
-			if result, err := rowenc.EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
-				scratch); err != nil {
-				return errors.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
-					col.GetName(), rowVal.Datum)
-			} else if !rowVal.BytesEqual(result) {
-				return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
-					"value failed to round-trip encode. Column=%s colIDDiff=%d Key=%s expected %#v, got: %#v",
-					col.GetName(), colIDDiff, rf.kv.Key, rowVal.EncodedString(), result))
-			}
-		}
-		return nil
-	})
-}
-
-// checkSecondaryIndexDatumEncodings will run a round-trip encoding
-// check on all values in the buffered row. This check is specific to
-// secondary index datums.
-func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
-	table := &rf.table
-	colToEncDatum := make(map[descpb.ColumnID]rowenc.EncDatum, len(table.row))
-	values := make(tree.Datums, len(table.row))
-	for i, col := range table.cols {
-		colToEncDatum[col.GetID()] = table.row[i]
-		values[i] = table.row[i].Datum
-	}
-
-	// The below code makes incorrect checks (#45256).
-	indexEntries, err := rowenc.EncodeSecondaryIndex(
-		rf.codec, table.desc, table.index, table.colIdxMap, values, false /* includeEmpty */)
-	if err != nil {
-		return err
-	}
-
-	for _, indexEntry := range indexEntries {
-		// We ignore the first 4 bytes of the values. These bytes are a
-		// checksum which are not set by EncodeSecondaryIndex.
-		if !indexEntry.Key.Equal(rf.table.lastKV.Key) {
-			return scrub.WrapError(scrub.IndexKeyDecodingError, errors.Errorf(
-				"secondary index key failed to round-trip encode. expected %#v, got: %#v",
-				rf.table.lastKV.Key, indexEntry.Key))
-		} else if !indexEntry.Value.EqualTagAndData(table.lastKV.Value) {
-			return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
-				"secondary index value failed to round-trip encode. expected %#v, got: %#v",
-				rf.table.lastKV.Value, indexEntry.Value))
-		}
-	}
-	return nil
-}
-
-// checkKeyOrdering verifies that the datums decoded for the current key
-// have the same ordering as the encoded key.
-func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
-	defer func() {
-		rf.table.lastDatums = append(tree.Datums(nil), rf.table.decodedRow...)
-	}()
-
-	if !rf.table.hasLast {
-		rf.table.hasLast = true
-		return nil
-	}
-
-	evalCtx := tree.EvalContext{}
-	// Iterate through columns in order, comparing each value to the value in the
-	// previous row in that column. When the first column with a differing value
-	// is found, compare the values to ensure the ordering matches the column
-	// ordering.
-	for i := 0; i < rf.table.index.NumKeyColumns(); i++ {
-		id := rf.table.index.GetKeyColumnID(i)
-		idx := rf.table.colIdxMap.GetDefault(id)
-		result := rf.table.decodedRow[idx].Compare(&evalCtx, rf.table.lastDatums[idx])
-		expectedDirection := rf.table.index.GetKeyColumnDirection(i)
-		if rf.reverse && expectedDirection == descpb.IndexDescriptor_ASC {
-			expectedDirection = descpb.IndexDescriptor_DESC
-		} else if rf.reverse && expectedDirection == descpb.IndexDescriptor_DESC {
-			expectedDirection = descpb.IndexDescriptor_ASC
-		}
-
-		if result != 0 {
-			if expectedDirection == descpb.IndexDescriptor_ASC && result < 0 ||
-				expectedDirection == descpb.IndexDescriptor_DESC && result > 0 {
-				return scrub.WrapError(scrub.IndexKeyDecodingError,
-					errors.Errorf("key ordering did not match datum ordering. IndexDescriptor=%s",
-						expectedDirection))
-			}
-			// After the first column with a differing value is found, the remaining
-			// columns are skipped (see #32874).
-			break
-		}
-	}
-	return nil
-}
-
 func (rf *Fetcher) finalizeRow() error {
 	table := &rf.table
 
@@ -1422,15 +1232,10 @@ func (rf *Fetcher) finalizeRow() error {
 						indexColValues = append(indexColValues, "?")
 					}
 				}
-				err := errors.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 					table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
 					strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ","))
-
-				if rf.isCheck {
-					return scrub.WrapError(scrub.UnexpectedNullValueError, err)
-				}
-				return err
 			}
 			table.row[i] = rowenc.EncDatum{
 				Datum: tree.DNull,

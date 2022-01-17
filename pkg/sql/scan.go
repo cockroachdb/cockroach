@@ -12,17 +12,13 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -47,11 +43,6 @@ type scanNode struct {
 
 	desc  catalog.TableDescriptor
 	index catalog.Index
-
-	// Set if an index was explicitly specified.
-	specifiedIndex catalog.Index
-	// Set if the NO_INDEX_JOIN hint was given.
-	noIndexJoin bool
 
 	colCfg scanColumnsConfig
 	// The table columns, possibly including ones currently in schema changes.
@@ -114,32 +105,16 @@ type scanNode struct {
 // scanColumnsConfig controls the "schema" of a scan node.
 type scanColumnsConfig struct {
 	// wantedColumns contains all the columns are part of the scan node schema,
-	// in this order (with the caveat that the addUnwantedAsHidden flag below
-	// can add more columns). Non public columns can only be added if allowed
-	// by the visibility flag below.
+	// in this order. Must not be nil (even if empty).
 	wantedColumns []tree.ColumnID
-	// wantedColumnsOrdinals contains the ordinals of all columns in
-	// wantedColumns. Note that if addUnwantedAsHidden flag is set, the hidden
-	// columns are not included here.
-	wantedColumnsOrdinals []uint32
 
-	// invertedColumn maps the column ID of the inverted column (if it exists)
-	// to the column type actually stored in the index. For example, the
-	// inverted column of an inverted index has type bytes, even though the
-	// column descriptor matches the source column (Geometry, Geography, JSON or
-	// Array).
-	invertedColumn *struct {
-		colID tree.ColumnID
-		typ   *types.T
-	}
-
-	// When set, the columns that are not in the wantedColumns list are added to
-	// the list of columns as hidden columns.
-	addUnwantedAsHidden bool
-
-	// If visibility is set to execinfra.ScanVisibilityPublicAndNotPublic, then
-	// mutation columns can be added to the list of columns.
-	visibility execinfrapb.ScanVisibility
+	// invertedColumnID/invertedColumnType are used to map the column ID of the
+	// inverted column (if it exists) to the column type actually stored in the
+	// index. For example, the inverted column of an inverted index has type
+	// bytes, even though the column descriptor matches the source column
+	// (Geometry, Geography, JSON or Array).
+	invertedColumnID   tree.ColumnID
+	invertedColumnType *types.T
 }
 
 func (cfg scanColumnsConfig) assertValidReqOrdering(reqOrdering exec.OutputOrdering) error {
@@ -198,50 +173,14 @@ func (n *scanNode) disableBatchLimit() {
 
 // Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
-	ctx context.Context,
-	p *planner,
-	desc catalog.TableDescriptor,
-	indexFlags *tree.IndexFlags,
-	colCfg scanColumnsConfig,
+	ctx context.Context, p *planner, desc catalog.TableDescriptor, colCfg scanColumnsConfig,
 ) error {
 	n.desc = desc
-
-	if !p.skipSelectPrivilegeChecks {
-		if err := p.CheckPrivilege(ctx, n.desc, privilege.SELECT); err != nil {
-			return err
-		}
-	}
-
-	if indexFlags != nil {
-		if err := n.lookupSpecifiedIndex(indexFlags); err != nil {
-			return err
-		}
-	}
 
 	// Check if any system columns are requested, as they need special handling.
 	n.containsSystemColumns = scanContainsSystemColumns(&colCfg)
 
-	n.noIndexJoin = (indexFlags != nil && indexFlags.NoIndexJoin)
 	return n.initDescDefaults(colCfg)
-}
-
-func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
-	if indexFlags.Index != "" {
-		// Search index by name.
-		foundIndex, _ := n.desc.FindIndexWithName(string(indexFlags.Index))
-		if foundIndex == nil || !foundIndex.Public() {
-			return errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
-		}
-		n.specifiedIndex = foundIndex
-	} else if indexFlags.IndexID != 0 {
-		// Search index by ID.
-		foundIndex, _ := n.desc.FindIndexWithID(descpb.IndexID(indexFlags.IndexID))
-		if foundIndex == nil || !foundIndex.Public() {
-			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
-		}
-		n.specifiedIndex = foundIndex
-	}
-	return nil
 }
 
 // initColsForScan initializes cols according to desc and colCfg.
@@ -249,51 +188,23 @@ func initColsForScan(
 	desc catalog.TableDescriptor, colCfg scanColumnsConfig,
 ) (cols []catalog.Column, err error) {
 	if colCfg.wantedColumns == nil {
-		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
+		return nil, errors.AssertionFailedf("wantedColumns is nil")
 	}
 
-	cols = make([]catalog.Column, 0, len(desc.DeletableColumns()))
-	for _, wc := range colCfg.wantedColumns {
-		id := descpb.ColumnID(wc)
-		col, err := desc.FindColumnWithID(id)
+	cols = make([]catalog.Column, len(colCfg.wantedColumns))
+	for i, colID := range colCfg.wantedColumns {
+		col, err := desc.FindColumnWithID(colID)
 		if err != nil {
 			return cols, err
-		}
-		if !col.IsSystemColumn() {
-			if colCfg.visibility != execinfra.ScanVisibilityPublic {
-				col = desc.ReadableColumns()[col.Ordinal()]
-			} else if !col.Public() {
-				return cols, fmt.Errorf("column-id \"%d\" does not exist", id)
-			}
 		}
 
 		// If this is an inverted column, create a new descriptor with the
 		// correct type.
-		if vc := colCfg.invertedColumn; vc != nil && vc.colID == wc && !vc.typ.Identical(col.GetType()) {
+		if colCfg.invertedColumnID == colID && !colCfg.invertedColumnType.Identical(col.GetType()) {
 			col = col.DeepCopy()
-			col.ColumnDesc().Type = vc.typ
+			col.ColumnDesc().Type = colCfg.invertedColumnType
 		}
-		cols = append(cols, col)
-	}
-
-	if colCfg.addUnwantedAsHidden {
-		for _, c := range desc.PublicColumns() {
-			found := false
-			for _, wc := range colCfg.wantedColumns {
-				if descpb.ColumnID(wc) == c.GetID() {
-					found = true
-					break
-				}
-			}
-			if !found {
-				// NB: we could amortize this allocation using a second slice,
-				// but addUnwantedAsHidden is only used by scrub, so doing so
-				// doesn't seem worth it.
-				col := c.DeepCopy()
-				col.ColumnDesc().Hidden = true
-				cols = append(cols, col)
-			}
-		}
+		cols[i] = col
 	}
 
 	return cols, nil

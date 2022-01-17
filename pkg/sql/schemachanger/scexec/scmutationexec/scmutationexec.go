@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // CatalogReader describes catalog read operations as required by the mutation
@@ -77,6 +79,17 @@ type MutationVisitorStateUpdater interface {
 	// DeleteDescriptor adds a descriptor for deletion.
 	DeleteDescriptor(id descpb.ID)
 
+	// DeleteComment removes comments for a descriptor
+	DeleteComment(id descpb.ID, subID int, commentType keys.CommentType)
+
+	// DeleteConstraintComment removes comments for a descriptor
+	DeleteConstraintComment(
+		ctx context.Context,
+		tbl catalog.TableDescriptor,
+		constraintName string,
+		constraintType scpb.ConstraintType,
+	) error
+
 	// AddNewGCJobForTable enqueues a GC job for the given table.
 	AddNewGCJobForTable(descriptor catalog.TableDescriptor)
 
@@ -87,14 +100,14 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(jobID jobspb.JobID, state scpb.State) error
+	AddNewSchemaChangerJob(jobID jobspb.JobID, targetState scpb.TargetState, current []scpb.Status) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.
-	UpdateSchemaChangerJob(jobID jobspb.JobID, statuses []scpb.Status, isNonCancelable bool) error
+	UpdateSchemaChangerJob(jobID jobspb.JobID, current []scpb.Status, isNonCancelable bool) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
-	EnqueueEvent(id descpb.ID, metadata *scpb.ElementMetadata, event eventpb.EventPayload) error
+	EnqueueEvent(id descpb.ID, metadata scpb.TargetMetadata, details eventpb.CommonSQLEventDetails, event eventpb.EventPayload) error
 }
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
@@ -169,13 +182,13 @@ func (m *visitor) swapSchemaChangeJobID(
 func (m *visitor) CreateDeclarativeSchemaChangerJob(
 	ctx context.Context, job scop.CreateDeclarativeSchemaChangerJob,
 ) error {
-	return m.s.AddNewSchemaChangerJob(job.JobID, job.State)
+	return m.s.AddNewSchemaChangerJob(job.JobID, job.TargetState, job.Current)
 }
 
 func (m *visitor) UpdateSchemaChangerJob(
 	ctx context.Context, progress scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJob(progress.JobID, progress.Statuses, progress.IsNonCancelable)
+	return m.s.UpdateSchemaChangerJob(progress.JobID, progress.Current, progress.IsNonCancelable)
 }
 
 func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {
@@ -889,23 +902,29 @@ func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyR
 }
 
 func (m *visitor) LogEvent(ctx context.Context, op scop.LogEvent) error {
-	event, err := asEventPayload(ctx, op, m)
-	if err != nil {
-		return err
-	}
-	return m.s.EnqueueEvent(op.DescID, &op.Metadata, event)
-}
-
-func asEventPayload(
-	ctx context.Context, op scop.LogEvent, m *visitor,
-) (eventpb.EventPayload, error) {
 	descID := screl.GetDescID(op.Element.Element())
 	fullName, err := m.cr.GetFullyQualifiedName(ctx, descID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if op.TargetStatus == scpb.Status_ABSENT {
-		switch op.Element.GetValue().(type) {
+	event, err := asEventPayload(ctx, fullName, op.Element.Element(), op.TargetStatus, m)
+	if err != nil {
+		return err
+	}
+	details := eventpb.CommonSQLEventDetails{
+		ApplicationName: op.Authorization.AppName,
+		User:            op.Authorization.UserName,
+		Statement:       redact.RedactableString(op.Statement),
+		Tag:             op.StatementTag,
+	}
+	return m.s.EnqueueEvent(descID, op.TargetMetadata, details, event)
+}
+
+func asEventPayload(
+	ctx context.Context, fullName string, e scpb.Element, targetStatus scpb.Status, m *visitor,
+) (eventpb.EventPayload, error) {
+	if targetStatus == scpb.Status_ABSENT {
+		switch e.(type) {
 		case *scpb.Table:
 			return &eventpb.DropTable{TableName: fullName}, nil
 		case *scpb.View:
@@ -920,9 +939,9 @@ func asEventPayload(
 			return &eventpb.DropType{TypeName: fullName}, nil
 		}
 	}
-	switch e := op.Element.GetValue().(type) {
+	switch e := e.(type) {
 	case *scpb.Column:
-		tbl, err := m.checkOutTable(ctx, op.DescID)
+		tbl, err := m.checkOutTable(ctx, e.TableID)
 		if err != nil {
 			return nil, err
 		}
@@ -935,7 +954,7 @@ func asEventPayload(
 			MutationID: uint32(mutation.MutationID()),
 		}, nil
 	case *scpb.SecondaryIndex:
-		tbl, err := m.checkOutTable(ctx, op.DescID)
+		tbl, err := m.checkOutTable(ctx, e.TableID)
 		if err != nil {
 			return nil, err
 		}
@@ -943,7 +962,7 @@ func asEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		switch op.TargetStatus {
+		switch targetStatus {
 		case scpb.Status_PUBLIC:
 			return &eventpb.AlterTable{
 				TableName:  fullName,
@@ -956,10 +975,10 @@ func asEventPayload(
 				MutationID: uint32(mutation.MutationID()),
 			}, nil
 		default:
-			return nil, errors.AssertionFailedf("unknown target status %s", op.TargetStatus)
+			return nil, errors.AssertionFailedf("unknown target status %s", targetStatus)
 		}
 	}
-	return nil, errors.AssertionFailedf("unknown %s element type %T", op.TargetStatus.String(), op.Element.GetValue())
+	return nil, errors.AssertionFailedf("unknown %s element type %T", targetStatus.String(), e)
 }
 
 func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPartitionInfo) error {
@@ -1014,6 +1033,41 @@ func (m *visitor) DeleteDatabaseSchemaEntry(
 	}
 	delete(db.Schemas, sc.GetName())
 	return nil
+}
+
+func (m *visitor) RemoveTableComment(_ context.Context, op scop.RemoveTableComment) error {
+	m.s.DeleteComment(op.TableID, 0, keys.TableCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveDatabaseComment(_ context.Context, op scop.RemoveDatabaseComment) error {
+	m.s.DeleteComment(op.DatabaseID, 0, keys.DatabaseCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveSchemaComment(_ context.Context, op scop.RemoveSchemaComment) error {
+	m.s.DeleteComment(op.SchemaID, 0, keys.SchemaCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveIndexComment(_ context.Context, op scop.RemoveIndexComment) error {
+	m.s.DeleteComment(op.TableID, int(op.IndexID), keys.IndexCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveColumnComment(_ context.Context, op scop.RemoveColumnComment) error {
+	m.s.DeleteComment(op.TableID, int(op.ColumnID), keys.ColumnCommentType)
+	return nil
+}
+
+func (m *visitor) RemoveConstraintComment(
+	ctx context.Context, op scop.RemoveConstraintComment,
+) error {
+	tbl, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	return m.s.DeleteConstraintComment(ctx, tbl.(catalog.TableDescriptor), op.ConstraintName, op.ConstraintType)
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)

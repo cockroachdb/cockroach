@@ -48,7 +48,7 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 			// Block drops if cascade is not set.
 			if n.DropBehavior == tree.DropRestrict && (nodeAdded || !schemaDroppedIDs.Empty()) {
 				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-					"database %q has a non-empty schema %q and CASCADE was not specified", db.GetName(), schema.GetName()))
+					"database %q is not empty and RESTRICT was specified", db.GetName()))
 			}
 			// If no schema exists to depend on, then depend on dropped IDs
 			if !nodeAdded {
@@ -75,5 +75,9 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	b.EnqueueDrop(&scpb.Database{
 		DatabaseID:       db.GetID(),
 		DependentObjects: dropIDs.Ordered(),
+	})
+	b.EnqueueDrop(&scpb.DatabaseComment{
+		DatabaseID: db.GetID(),
+		Comment:    scpb.PlaceHolderComment,
 	})
 }

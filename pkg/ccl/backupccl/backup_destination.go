@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,29 +32,30 @@ import (
 // chain.
 func fetchPreviousBackups(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	user security.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	prevBackupURIs []string,
 	encryptionParams jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) ([]BackupManifest, *jobspb.BackupEncryptionOptions, error) {
+) ([]BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
 	if len(prevBackupURIs) == 0 {
-		return nil, nil, nil
+		return nil, nil, 0, nil
 	}
 
 	baseBackup := prevBackupURIs[0]
 	encryptionOptions, err := getEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
 		encryptionParams, kmsEnv)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	prevBackups, err := getBackupManifests(ctx, user, makeCloudStorage, prevBackupURIs,
+	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage, prevBackupURIs,
 		encryptionOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
-	return prevBackups, encryptionOptions, nil
+	return prevBackups, encryptionOptions, size, nil
 }
 
 // resolveDest resolves the true destination of a backup. The backup command
@@ -188,20 +191,33 @@ func resolveDest(
 // getBackupManifests fetches the backup manifest from a list of backup URIs.
 func getBackupManifests(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	user security.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	backupURIs []string,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, error) {
+) ([]BackupManifest, int64, error) {
 	manifests := make([]BackupManifest, len(backupURIs))
 	if len(backupURIs) == 0 {
-		return manifests, nil
+		return manifests, 0, nil
 	}
+
+	memMu := struct {
+		syncutil.Mutex
+		total int64
+		mem   *mon.BoundAccount
+	}{}
+	memMu.mem = mem
 
 	g := ctxgroup.WithContext(ctx)
 	for i := range backupURIs {
 		i := i
+		// boundAccount isn't threadsafe so we'll make a new one this goroutine to
+		// pass while reading. When it is done, we'll lock an mu, reserve its size
+		// from the main one tracking the total amount reserved.
+		subMem := mem.Monitor().MakeBoundAccount()
 		g.GoCtx(func(ctx context.Context) error {
+			defer subMem.Close(ctx)
 			// TODO(lucy): We may want to upgrade the table descs to the newer
 			// foreign key representation here, in case there are backups from an
 			// older cluster. Keeping the descriptors as they are works for now
@@ -209,22 +225,34 @@ func getBackupManifests(
 			// but it will be safer for future code to avoid having older-style
 			// descriptors around.
 			uri := backupURIs[i]
-			desc, err := ReadBackupManifestFromURI(
-				ctx, uri, user, makeCloudStorage, encryption,
+			desc, size, err := ReadBackupManifestFromURI(
+				ctx, &subMem, uri, user, makeCloudStorage, encryption,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "failed to read backup from %q",
 					RedactURIForErrorMessage(uri))
 			}
-			manifests[i] = desc
-			return nil
+
+			memMu.Lock()
+			err = memMu.mem.Grow(ctx, size)
+
+			if err == nil {
+				memMu.total += size
+				manifests[i] = desc
+			}
+			subMem.Shrink(ctx, size)
+			memMu.Unlock()
+
+			return err
 		})
 	}
+
 	if err := g.Wait(); err != nil {
-		return nil, err
+		mem.Shrink(ctx, memMu.total)
+		return nil, 0, err
 	}
 
-	return manifests, nil
+	return manifests, memMu.total, nil
 }
 
 // getEncryptionFromBase retrieves the encryption options of a base backup. It

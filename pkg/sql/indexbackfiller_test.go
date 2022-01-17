@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -353,7 +352,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 	) []tree.Datums {
 		t.Helper()
 		var fetcher row.Fetcher
-		var alloc rowenc.DatumAlloc
+		var alloc tree.DatumAlloc
 
 		mm := mon.MakeStandaloneBudget(1 << 30)
 		idx, err := table.FindIndexWithID(indexID)
@@ -386,7 +385,6 @@ INSERT INTO foo VALUES (1), (10), (100);
 			descpb.ScanLockingStrength_FOR_NONE,
 			descpb.ScanLockingWaitPolicy_BLOCK,
 			0,
-			false,
 			&alloc,
 			mm.Monitor(),
 			row.FetcherTableArgs{

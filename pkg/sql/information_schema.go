@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -861,17 +862,17 @@ var (
 	refConstraintRuleCascade    = tree.NewDString("CASCADE")
 )
 
-func dStringForFKAction(action descpb.ForeignKeyReference_Action) tree.Datum {
+func dStringForFKAction(action catpb.ForeignKeyAction) tree.Datum {
 	switch action {
-	case descpb.ForeignKeyReference_NO_ACTION:
+	case catpb.ForeignKeyAction_NO_ACTION:
 		return refConstraintRuleNoAction
-	case descpb.ForeignKeyReference_RESTRICT:
+	case catpb.ForeignKeyAction_RESTRICT:
 		return refConstraintRuleRestrict
-	case descpb.ForeignKeyReference_SET_NULL:
+	case catpb.ForeignKeyAction_SET_NULL:
 		return refConstraintRuleSetNull
-	case descpb.ForeignKeyReference_SET_DEFAULT:
+	case catpb.ForeignKeyAction_SET_DEFAULT:
 		return refConstraintRuleSetDefault
-	case descpb.ForeignKeyReference_CASCADE:
+	case catpb.ForeignKeyAction_CASCADE:
 		return refConstraintRuleCascade
 	}
 	panic(errors.Errorf("unexpected ForeignKeyReference_Action: %v", action))

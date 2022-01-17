@@ -42,11 +42,6 @@ func dropSchema(
 	behavior tree.DropBehavior,
 ) (nodeAdded bool, dropIDs catalog.DescriptorIDSet) {
 	descsThatNeedElements := catalog.DescriptorIDSet{}
-	// For non-user defined schemas, another check will be
-	// done each object as we go to drop them.
-	if sc.SchemaKind() == catalog.SchemaUserDefined {
-		b.MustOwn(sc)
-	}
 	_, objectIDs := b.CatalogReader().ReadObjectNamesAndIDs(b, db, sc)
 	for _, id := range objectIDs {
 		// For dependency tracking we will still track that these elements were
@@ -97,6 +92,10 @@ func dropSchema(
 		b.EnqueueDrop(&scpb.DatabaseSchemaEntry{
 			DatabaseID: sc.GetParentID(),
 			SchemaID:   sc.GetID(),
+		})
+		b.EnqueueDrop(&scpb.SchemaComment{
+			SchemaID: sc.GetID(),
+			Comment:  scpb.PlaceHolderComment,
 		})
 		return true, dropIDs
 	}

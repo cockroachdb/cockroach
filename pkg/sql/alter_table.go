@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1126,8 +1127,8 @@ func applyColumnMutation(
 		for _, fk := range tableDesc.OutboundFKs {
 			for _, colID := range fk.OriginColumnIDs {
 				if colID == col.GetID() &&
-					fk.OnUpdate != descpb.ForeignKeyReference_NO_ACTION &&
-					fk.OnUpdate != descpb.ForeignKeyReference_RESTRICT {
+					fk.OnUpdate != catpb.ForeignKeyAction_NO_ACTION &&
+					fk.OnUpdate != catpb.ForeignKeyAction_RESTRICT {
 					return pgerror.Newf(
 						pgcode.InvalidColumnDefinition,
 						"column %s(%d) cannot have both an ON UPDATE expression and a foreign"+

@@ -270,8 +270,7 @@ func TestShowCreateTable(t *testing.T) {
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX t12_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 8,
-	FAMILY "primary" (a, rowid),
-	CONSTRAINT check_crdb_internal_a_shard_8 CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
+	FAMILY "primary" (a, rowid)
 )`,
 		},
 	}
@@ -874,12 +873,14 @@ func TestShowSessionPrivileges(t *testing.T) {
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
 	defer s.Stopper().Stop(context.Background())
 
-	// Create three users: one with no special permissions, one with the
-	// VIEWACTIVITY role option, and one admin. We'll check that the VIEWACTIVITY
+	// Create four users: one with no special permissions, one with the
+	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
+	// and one admin. We'll check that the VIEWACTIVITY, VIEWACTIVITYREDACTED
 	// users and the admin can see all sessions and the unpermissioned user can
 	// only see their own session.
 	_ = sqlDBroot.Exec(t, `CREATE USER noperms`)
 	_ = sqlDBroot.Exec(t, `CREATE USER viewactivity VIEWACTIVITY`)
+	_ = sqlDBroot.Exec(t, `CREATE USER viewactivityredacted VIEWACTIVITYREDACTED`)
 	_ = sqlDBroot.Exec(t, `CREATE USER adminuser`)
 	_ = sqlDBroot.Exec(t, `GRANT admin TO adminuser`)
 
@@ -892,6 +893,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 	users := []user{
 		{"noperms", false, nil},
 		{"viewactivity", true, nil},
+		{"viewactivityredacted", true, nil},
 		{"adminuser", true, nil},
 	}
 	for i, tc := range users {

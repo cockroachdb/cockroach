@@ -43,7 +43,7 @@ func (s *statusServer) CombinedStatementStats(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -116,12 +116,18 @@ func collectCombinedStatements(
 				transaction_fingerprint_id,
 				app_name,
 				aggregated_ts,
-				metadata,
+				jsonb_set(
+					metadata,
+					array['query'],
+					to_jsonb(
+						prettify_statement(metadata ->> 'query', %d, %d, %d)
+					)
+				),
 				statistics,
 				sampled_plan,
 				aggregation_interval
 			FROM crdb_internal.statement_statistics
-			%s`, whereClause)
+			%s`, tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase, whereClause)
 
 	const expectedNumDatums = 8
 

@@ -28,13 +28,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/redact"
 )
+
+// FormatAstAsRedactableString implements scbuild.AstFormatter
+func (p *planner) FormatAstAsRedactableString(
+	statement tree.Statement, annotations *tree.Annotations,
+) redact.RedactableString {
+	return formatStmtKeyAsRedactableString(p.getVirtualTabler(),
+		statement,
+		annotations)
+}
 
 // SchemaChange provides the planNode for the new schema changer.
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, bool, error) {
+
 	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
 	// When new schema changer is on we will not support it for explicit
@@ -53,11 +65,12 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p.Descriptors(),
 		p,
 		p,
+		p,
 		p.SessionData(),
 		p.ExecCfg().Settings,
 		scs.stmts,
 	)
-	outputNodes, err := scbuild.Build(ctx, deps, scs.state, stmt)
+	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scerrors.HasNotImplemented(err) &&
 		mode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
 		return nil, false, nil
@@ -70,9 +83,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		}
 		return nil, false, err
 	}
-	return &schemaChangePlanNode{
-		plannedState: outputNodes,
-	}, true, nil
+	return &schemaChangePlanNode{plannedState: state}, true, nil
 }
 
 // WaitForDescriptorSchemaChanges polls the specified descriptor (in separate
@@ -125,17 +136,17 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 // schemaChangePlanNode is the planNode utilized by the new schema changer to
 // perform all schema changes, unified in the new schema changer.
 type schemaChangePlanNode struct {
-	// plannedState contains the set of states produced by the builder combining
+	// plannedState contains the state produced by the builder combining
 	// the nodes that existed preceding the current statement with the output of
 	// the built current statement.
-	plannedState scpb.State
+	plannedState scpb.CurrentState
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
 	runDeps := newSchemaChangerTxnRunDependencies(
-		p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
+		p.SessionData(), p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
 	)
 	after, jobID, err := scrun.RunStatementPhase(
 		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
@@ -149,6 +160,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 }
 
 func newSchemaChangerTxnRunDependencies(
+	sessionData *sessiondata.SessionData,
 	user security.SQLUsername,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
@@ -159,6 +171,7 @@ func newSchemaChangerTxnRunDependencies(
 ) scexec.Dependencies {
 	return scdeps.NewExecutorDependencies(
 		execCfg.Codec,
+		sessionData,
 		txn,
 		user,
 		descriptors,
@@ -171,6 +184,7 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
 		scdeps.NewPartitioner(execCfg.Settings, evalContext),
+		execCfg.CommentUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		schemaChangerJobID,
 		stmts,

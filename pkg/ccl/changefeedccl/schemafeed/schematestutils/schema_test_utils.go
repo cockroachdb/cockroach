@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -59,9 +60,9 @@ func MakeColumnDesc(id descpb.ColumnID) *descpb.ColumnDescriptor {
 // SetLocalityRegionalByRow sets the LocalityConfig of the table
 // descriptor such that desc.IsLocalityRegionalByRow will return true.
 func SetLocalityRegionalByRow(desc catalog.TableDescriptor) catalog.TableDescriptor {
-	desc.TableDesc().LocalityConfig = &descpb.TableDescriptor_LocalityConfig{
-		Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
-			RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+	desc.TableDesc().LocalityConfig = &catpb.LocalityConfig{
+		Locality: &catpb.LocalityConfig_RegionalByRow_{
+			RegionalByRow: &catpb.LocalityConfig_RegionalByRow{},
 		},
 	}
 	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()

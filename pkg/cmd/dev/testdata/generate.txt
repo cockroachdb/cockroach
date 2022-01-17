@@ -26,7 +26,7 @@ bazel info workspace --color=no
 bazel info bazel-bin --color=no
 git status --ignored --short go/src/github.com/cockroachdb/cockroach/pkg
 rm pkg/file_to_delete.go
-find /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach -name *.go
+bazel aquery --output=jsonproto //:go_path
 cat go/src/github.com/cockroachdb/cockroach/build/bazelutil/checked_in_genfiles.txt
 cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go go/src/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go
 cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated-gen.go go/src/github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated.go

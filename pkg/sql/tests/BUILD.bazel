@@ -32,6 +32,7 @@ go_test(
         "enum_test.go",
         "hash_sharded_test.go",
         "impure_builtin_test.go",
+        "insert_fast_path_test.go",
         "inverted_index_test.go",
         "kv_test.go",
         "main_test.go",

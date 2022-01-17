@@ -12,11 +12,13 @@ package colfetcher
 
 import (
 	"context"
+	"math"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -102,6 +105,15 @@ type ColIndexJoin struct {
 	// maintainOrdering is true when the index join is required to maintain its
 	// input ordering, in which case the ordering of the spans cannot be changed.
 	maintainOrdering bool
+
+	// usesStreamer indicates whether the ColIndexJoin is using the Streamer
+	// API.
+	usesStreamer bool
+	streamerInfo struct {
+		*kvstreamer.Streamer
+		budgetAcc   *mon.BoundAccount
+		budgetLimit int64
+	}
 }
 
 var _ colexecop.KVReader = &ColIndexJoin{}
@@ -119,6 +131,21 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 	// tracing is enabled.
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colindexjoin")
 	s.Input.Init(s.Ctx)
+	if s.usesStreamer {
+		s.streamerInfo.Streamer = kvstreamer.NewStreamer(
+			s.flowCtx.Cfg.DistSender,
+			s.flowCtx.Stopper(),
+			s.flowCtx.Txn,
+			s.flowCtx.EvalCtx.Settings,
+			row.GetWaitPolicy(s.rf.lockWaitPolicy),
+			s.streamerInfo.budgetLimit,
+			s.streamerInfo.budgetAcc,
+		)
+		s.streamerInfo.Streamer.Init(
+			kvstreamer.OutOfOrder,
+			kvstreamer.Hints{UniqueRequests: true},
+		)
+	}
 }
 
 type indexJoinState uint8
@@ -174,16 +201,27 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			// the memory accounting - we don't double count for any memory of
 			// spans because the spanAssembler released all of the relevant
 			// memory from its account in GetSpans().
-			if err := s.rf.StartScan(
-				s.Ctx,
-				s.flowCtx.Txn,
-				spans,
-				nil,   /* bsHeader */
-				false, /* limitBatches */
-				rowinfra.NoBytesLimit,
-				rowinfra.NoRowLimit,
-				s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
-			); err != nil {
+			var err error
+			if s.usesStreamer {
+				err = s.rf.StartScanStreaming(
+					s.Ctx,
+					s.streamerInfo.Streamer,
+					spans,
+					rowinfra.NoRowLimit,
+				)
+			} else {
+				err = s.rf.StartScan(
+					s.Ctx,
+					s.flowCtx.Txn,
+					spans,
+					nil,   /* bsHeader */
+					false, /* limitBatches */
+					rowinfra.NoBytesLimit,
+					rowinfra.NoRowLimit,
+					s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+				)
+			}
+			if err != nil {
 				colexecerror.InternalError(err)
 			}
 			s.state = indexJoinScanning
@@ -280,7 +318,7 @@ func (s *ColIndexJoin) getRowSize(idx int) int64 {
 			rowSize += adjustMemEstimate(s.mem.byteLikeCols[i].ElemSize(idx))
 		}
 		for i := range s.mem.decimalCols {
-			rowSize += adjustMemEstimate(int64(tree.SizeOfDecimal(&s.mem.decimalCols[i][idx])))
+			rowSize += adjustMemEstimate(int64(s.mem.decimalCols[i][idx].Size()))
 		}
 		for i := range s.mem.datumCols {
 			memEstimate := int64(s.mem.datumCols[i].Get(idx).(tree.Datum).Size()) + memsize.DatumOverhead
@@ -385,6 +423,7 @@ func NewColIndexJoin(
 	allocator *colmem.Allocator,
 	fetcherAllocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
+	streamerBudgetAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	helper *colexecargs.ExprHelper,
 	input colexecop.Operator,
@@ -406,18 +445,37 @@ func NewColIndexJoin(
 		return nil, errors.AssertionFailedf("non-empty ON expressions are not supported for index joins")
 	}
 
-	// TODO(ajwerner): The need to construct an immutable here
-	// indicates that we're probably doing this wrong. Instead we should be
-	// just setting the ID and Version in the spec or something like that and
-	// retrieving the hydrated immutable from cache.
-	table := spec.BuildTableDescriptor()
+	table := flowCtx.TableDescriptor(&spec.Table)
 	index := table.ActiveIndexes()[spec.IndexIdx]
 	tableArgs, neededColumns, err := populateTableArgs(
 		ctx, flowCtx, table, index, nil, /* invertedCol */
-		spec.Visibility, spec.HasSystemColumns, post, helper,
+		spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
+
+	useStreamer := row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings) && !spec.MaintainOrdering
+	if useStreamer {
+		// TODO(yuzefovich): remove this conditional once multiple column
+		// families are supported.
+		if maxKeysPerRow, err := tableArgs.desc.KeysPerRow(tableArgs.index.GetID()); err != nil {
+			return nil, err
+		} else if maxKeysPerRow > 1 {
+			// Currently, the streamer only supports cases with a single column
+			// family.
+			useStreamer = false
+		} else {
+			if streamerBudgetAcc == nil {
+				return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
+			}
+			// Keep the quarter of the memory limit for the output batch of the
+			// cFetcher, and we'll give the remaining three quarters to the
+			// streamer budget below.
+			memoryLimit = int64(math.Ceil(float64(memoryLimit) / 4.0))
+		}
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -425,14 +483,16 @@ func NewColIndexJoin(
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		flowCtx.EvalCtx.SessionData().LockTimeout,
-		execinfra.GetWorkMemLimit(flowCtx),
+		memoryLimit,
 		// Note that the correct estimated row count will be set by the index
 		// joiner for each set of spans to read.
 		0,     /* estimatedRowCount */
 		false, /* reverse */
 		flowCtx.TraceKV,
 	}
-	if err = fetcher.Init(flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns); err != nil {
+	if err = fetcher.Init(
+		flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns,
+	); err != nil {
 		fetcher.Release()
 		return nil, err
 	}
@@ -448,8 +508,13 @@ func NewColIndexJoin(
 		spanAssembler:    spanAssembler,
 		ResultTypes:      tableArgs.typs,
 		maintainOrdering: spec.MaintainOrdering,
+		usesStreamer:     useStreamer,
 	}
 	op.prepareMemLimit(inputTypes)
+	if useStreamer {
+		op.streamerInfo.budgetLimit = 3 * memoryLimit
+		op.streamerInfo.budgetAcc = streamerBudgetAcc
+	}
 
 	return op, nil
 }
@@ -531,6 +596,9 @@ func (s *ColIndexJoin) closeInternal() {
 	if s.spanAssembler != nil {
 		// spanAssembler can be nil if Release() has already been called.
 		s.spanAssembler.Close()
+	}
+	if s.streamerInfo.Streamer != nil {
+		s.streamerInfo.Streamer.Close()
 	}
 	s.batch = nil
 }

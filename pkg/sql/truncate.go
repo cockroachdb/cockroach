@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -382,7 +381,7 @@ func ClearTableDataInChunks(
 ) error {
 	const chunkSize = row.TableTruncateChunkSize
 	var resume roachpb.Span
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	for rowIdx, done := 0, false; !done; rowIdx += chunkSize {
 		resumeAt := resume
 		if traceKV {

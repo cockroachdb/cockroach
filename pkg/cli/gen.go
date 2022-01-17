@@ -211,8 +211,8 @@ Output the list of cluster settings known to this binary.
 		settings.NewUpdater(&s.SV).ResetRemaining(context.Background())
 
 		var rows [][]string
-		for _, name := range settings.Keys() {
-			setting, ok := settings.Lookup(name, settings.LookupForLocalAccess)
+		for _, name := range settings.Keys(settings.ForSystemTenant) {
+			setting, ok := settings.Lookup(name, settings.LookupForLocalAccess, settings.ForSystemTenant)
 			if !ok {
 				panic(fmt.Sprintf("could not find setting %q", name))
 			}

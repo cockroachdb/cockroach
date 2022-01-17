@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
@@ -386,7 +387,7 @@ func (s *sortTopKProcessor) ConsumerClosed() {
 type sortChunksProcessor struct {
 	sorterBase
 
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 
 	// sortChunksProcessor accumulates rows that are equal on a prefix, until it
 	// encounters a row that is greater. It stores that greater row in nextChunkRow

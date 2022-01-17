@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -202,7 +203,7 @@ func (w index) GetGeoConfig() geoindex.Config {
 }
 
 // GetSharded returns the ShardedDescriptor in the index descriptor
-func (w index) GetSharded() descpb.ShardedDescriptor {
+func (w index) GetSharded() catpb.ShardedDescriptor {
 	return w.desc.Sharded
 }
 

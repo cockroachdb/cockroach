@@ -817,6 +817,15 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if required.LimitHint != 0 {
 			tp.Childf("limit hint: %.2f", required.LimitHint)
 		}
+
+		// Show the required distribution, if any, and also show the provided input
+		// distribution if this is a Distribute expression.
+		if !required.Distribution.Any() {
+			tp.Childf("distribution: %s", required.Distribution.String())
+		}
+		if distribute, ok := e.(*DistributeExpr); ok {
+			tp.Childf("input distribution: %s", distribute.Input.ProvidedPhysical().Distribution.String())
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideRuleProps) {

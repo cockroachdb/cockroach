@@ -16,16 +16,15 @@ go_library(
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
         "//pkg/sql/colexec/colexecutils",
-        "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/memsize",
-        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
         "//pkg/util/json",  # keep
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -39,15 +38,14 @@ go_test(
         "main_test.go",
     ],
     embed = [":colexechash"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
         "//pkg/sql/colexec/colexecutils",
-        "//pkg/sql/colexec/execgen",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
-        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",

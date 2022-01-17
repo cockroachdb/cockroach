@@ -1074,10 +1074,10 @@ func TestAdminAPISettings(t *testing.T) {
 	// Any bool that defaults to true will work here.
 	const settingKey = "sql.metrics.statement_details.enabled"
 	st := s.ClusterSettings()
-	allKeys := settings.Keys()
+	allKeys := settings.Keys(settings.ForSystemTenant)
 
 	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.Lookup(k, settings.LookupForReporting)
+		ref, ok := settings.Lookup(k, settings.LookupForReporting, settings.ForSystemTenant)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}

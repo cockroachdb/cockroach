@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,7 +58,7 @@ func (w *workloadReader) start(ctx ctxgroup.Group) {
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromColOffset(
-	alloc *rowenc.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
+	alloc *tree.DatumAlloc, hint *types.T, evalCtx *tree.EvalContext, col coldata.Vec, rowIdx int,
 ) (tree.Datum, error) {
 	if col.Nulls().NullAt(rowIdx) {
 		return tree.DNull, nil
@@ -232,7 +232,7 @@ func (w *WorkloadKVConverter) Worker(
 	conv.FractionFn = func() float32 {
 		return float32(atomic.LoadInt64(&w.finishedBatchesAtomic)) / w.totalBatches
 	}
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 	var a bufalloc.ByteAllocator
 	cb := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
 

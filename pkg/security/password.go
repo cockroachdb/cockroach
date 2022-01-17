@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"regexp"
 	"runtime"
 	"sync"
@@ -28,13 +29,34 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// BcryptCost is the cost to use when hashing passwords. It is exposed for
-// testing.
+// BcryptCost is the cost to use when hashing passwords.
+// It is exposed for testing.
 //
-// BcryptCost should increase along with computation power.
-// For estimates, see: http://security.stackexchange.com/questions/17207/recommended-of-rounds-for-bcrypt
-// For now, we use the library's default cost.
-var BcryptCost = bcrypt.DefaultCost
+// The default value of BcryptCost should increase along with
+// computation power.
+//
+// For estimates, see:
+// http://security.stackexchange.com/questions/17207/recommended-of-rounds-for-bcrypt
+var BcryptCost = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	BcryptCostSettingName,
+	fmt.Sprintf(
+		"the hashing cost to use when storing passwords supplied as cleartext by SQL clients "+
+			"with the hashing method crdb-bcrypt (allowed range: %d-%d)",
+		bcrypt.MinCost, bcrypt.MaxCost),
+	// The default value 10 is equal to bcrypt.DefaultCost.
+	// It incurs a password check latency of ~60ms on AMD 3950X 3.7GHz.
+	// For reference, value 11 incurs ~110ms latency on the same hw, value 12 incurs ~390ms.
+	10,
+	func(i int64) error {
+		if i < int64(bcrypt.MinCost) || i > int64(bcrypt.MaxCost) {
+			return bcrypt.InvalidCostError(int(i))
+		}
+		return nil
+	}).WithPublic()
+
+// BcryptCostSettingName is the name of the cluster setting BcryptCost.
+const BcryptCostSettingName = "server.user_login.password_hashes.default_cost.crdb_bcrypt"
 
 // ErrEmptyPassword indicates that an empty password was attempted to be set.
 var ErrEmptyPassword = errors.New("empty passwords are not permitted")
@@ -74,14 +96,14 @@ func CompareHashAndPassword(ctx context.Context, hashedPassword []byte, password
 }
 
 // HashPassword takes a raw password and returns a bcrypt hashed password.
-func HashPassword(ctx context.Context, password string) ([]byte, error) {
+func HashPassword(ctx context.Context, sv *settings.Values, password string) ([]byte, error) {
 	sem := getBcryptSem(ctx)
 	alloc, err := sem.Acquire(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
 	defer alloc.Release()
-	return bcrypt.GenerateFromPassword(appendEmptySha256(password), BcryptCost)
+	return bcrypt.GenerateFromPassword(appendEmptySha256(password), int(BcryptCost.Get(sv)))
 }
 
 // AutoDetectPasswordHashes is the cluster setting that configures whether
@@ -168,7 +190,7 @@ var MinPasswordLength = settings.RegisterIntSetting(
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
 	1,
 	settings.NonNegativeInt,
-)
+).WithPublic()
 
 // bcryptSemOnce wraps a semaphore that limits the number of concurrent calls
 // to the bcrypt hash functions. This is needed to avoid the risk of a

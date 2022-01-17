@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -171,7 +172,7 @@ func (p *planner) AlterPrimaryKey(
 	// If the new index is requested to be sharded, set up the index descriptor
 	// to be sharded, and add the new shard column if it is missing.
 	if alterPKNode.Sharded != nil {
-		shardCol, newColumns, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, err := setupShardedIndex(
 			ctx,
 			p.EvalContext(),
 			&p.semaCtx,
@@ -186,15 +187,13 @@ func (p *planner) AlterPrimaryKey(
 			return err
 		}
 		alterPKNode.Columns = newColumns
-		if newColumn {
-			if err := p.setupConstraintForShard(
-				ctx,
-				tableDesc,
-				shardCol,
-				newPrimaryIndexDesc.Sharded.ShardBuckets,
-			); err != nil {
-				return err
-			}
+		if err := p.maybeSetupConstraintForShard(
+			ctx,
+			tableDesc,
+			shardCol,
+			newPrimaryIndexDesc.Sharded.ShardBuckets,
+		); err != nil {
+			return err
 		}
 		telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 	}
@@ -242,15 +241,15 @@ func (p *planner) AlterPrimaryKey(
 	if alterPrimaryKeyLocalitySwap != nil {
 		localityConfigSwap := alterPrimaryKeyLocalitySwap.localityConfigSwap
 		switch to := localityConfigSwap.NewLocalityConfig.Locality.(type) {
-		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+		case *catpb.LocalityConfig_RegionalByRow_:
 			// Check we are migrating from a known locality.
 			switch localityConfigSwap.OldLocalityConfig.Locality.(type) {
-			case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+			case *catpb.LocalityConfig_RegionalByRow_:
 				// We want to drop the old PARTITION ALL BY clause in this case for all
 				// the indexes if we were from a REGIONAL BY ROW.
 				dropPartitionAllBy = true
-			case *descpb.TableDescriptor_LocalityConfig_Global_,
-				*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+			case *catpb.LocalityConfig_Global_,
+				*catpb.LocalityConfig_RegionalByTable_:
 			default:
 				return errors.AssertionFailedf(
 					"unknown locality config swap: %T to %T",
@@ -281,8 +280,8 @@ func (p *planner) AlterPrimaryKey(
 					*alterPrimaryKeyLocalitySwap.newColumnName,
 				)
 			}
-		case *descpb.TableDescriptor_LocalityConfig_Global_,
-			*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+		case *catpb.LocalityConfig_Global_,
+			*catpb.LocalityConfig_RegionalByTable_:
 			// We should only migrating from a REGIONAL BY ROW.
 			if localityConfigSwap.OldLocalityConfig.GetRegionalByRow() == nil {
 				return errors.AssertionFailedf(

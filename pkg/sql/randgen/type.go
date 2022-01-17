@@ -15,7 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -69,7 +69,7 @@ func init() {
 // IsAllowedForArray returns true iff the passed in type can be a valid ArrayContents()
 func IsAllowedForArray(typ *types.T) bool {
 	// Don't include un-encodable types.
-	encTyp, err := rowenc.DatumTypeToArrayElementEncodingType(typ)
+	encTyp, err := valueside.DatumTypeToArrayElementEncodingType(typ)
 	if err != nil || encTyp == 0 {
 		return false
 	}

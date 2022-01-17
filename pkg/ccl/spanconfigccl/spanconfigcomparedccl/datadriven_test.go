@@ -110,7 +110,7 @@ func TestDataDriven(t *testing.T) {
 			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		}
 
-		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc)
+		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs)
 		defer spanConfigTestCluster.Cleanup()
 
 		kvSubscriber := tc.Server(0).SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
@@ -182,7 +182,7 @@ func TestDataDriven(t *testing.T) {
 			switch d.Cmd {
 			case "initialize":
 				secondaryTenant := spanConfigTestCluster.InitializeTenant(ctx, tenantID)
-				secondaryTenant.Exec(`SET CLUSTER SETTING sql.zone_configs.experimental_allow_for_secondary_tenant.enabled = true`)
+				secondaryTenant.Exec(`SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`)
 
 			case "exec-sql":
 				// Run under an explicit transaction -- we rely on having a
@@ -199,8 +199,8 @@ func TestDataDriven(t *testing.T) {
 			case "reconcile":
 				tsBeforeReconcilerStart := tenant.Clock().Now()
 				go func() {
-					err := tenant.Reconciler().Reconcile(ctx, hlc.Timestamp{}, func(checkpoint hlc.Timestamp) error {
-						tenant.Checkpoint(checkpoint)
+					err := tenant.Reconciler().Reconcile(ctx, hlc.Timestamp{} /* startTS */, func() error {
+						tenant.RecordCheckpoint()
 						return nil
 					})
 					require.NoError(t, err)

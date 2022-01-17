@@ -193,7 +193,7 @@ func (r *Replica) evalAndPropose(
 	} else if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Perform a sanity check that the lease is owned by this replica. This must
 		// have been ascertained by the callers in checkExecutionCanProceed.
-		log.Fatalf(ctx, "cannot propose %s on follower with remotely owned lease %s", ba, &st.Lease)
+		log.Fatalf(ctx, "cannot propose %s on follower with remotely owned lease %s", ba, st.Lease)
 	} else {
 		proposal.command.ProposerLeaseSequence = st.Lease.Sequence
 	}
@@ -752,7 +752,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
 	r.traceMessageSends(msgApps, "sending msgApp")
-	r.sendRaftMessages(ctx, msgApps)
+	r.sendRaftMessagesRaftMuLocked(ctx, msgApps)
 
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed on the underlying DB.
@@ -862,7 +862,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
 	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
-	r.sendRaftMessages(ctx, otherMsgs)
+	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
 	applicationStart := timeutil.Now()
@@ -1010,7 +1010,7 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	}
 
 	now := r.store.Clock().NowAsClockTimestamp()
-	if r.maybeQuiesceLocked(ctx, now, livenessMap) {
+	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, now, livenessMap) {
 		return false, nil
 	}
 
@@ -1057,6 +1057,21 @@ func (r *Replica) hasRaftReadyRLocked() bool {
 	return r.mu.internalRaftGroup.HasReady()
 }
 
+// slowReplicationThreshold returns the threshold after which in-flight
+// replicated commands should be considered "stuck" and should trip the
+// per-Replica circuit breaker. The boolean indicates whether this
+// mechanism is enabled; if it isn't no action should be taken.
+func (r *Replica) slowReplicationThreshold(ba *roachpb.BatchRequest) (time.Duration, bool) {
+	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SlowReplicationThresholdOverride != nil {
+		if dur := knobs.SlowReplicationThresholdOverride(ba); dur > 0 {
+			return dur, true
+		}
+		// Fall through.
+	}
+	dur := replicaCircuitBreakerSlowReplicationThreshold.Get(&r.store.cfg.Settings.SV)
+	return dur, dur > 0
+}
+
 //go:generate stringer -type refreshRaftReason
 type refreshRaftReason int
 
@@ -1092,9 +1107,29 @@ func (r *Replica) refreshProposalsLocked(
 		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
+	var maxSlowProposalDurationRequest *roachpb.BatchRequest
+	var maxSlowProposalDuration time.Duration
+	var slowProposalCount int64
 	var reproposals pendingCmdSlice
 	for _, p := range r.mu.proposals {
-		if p.command.MaxLeaseIndex == 0 {
+		slowReplicationThreshold, ok := r.slowReplicationThreshold(p.Request)
+		// NB: ticks can be delayed, in which this detection would kick in too late
+		// as well. This is unlikely to become a concern since the configured
+		// durations here should be very large compared to the refresh interval, and
+		// so delays shouldn't dramatically change the detection latency.
+		inflightDuration := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks)
+		if ok && inflightDuration > slowReplicationThreshold {
+			if maxSlowProposalDuration < inflightDuration {
+				maxSlowProposalDuration = inflightDuration
+				maxSlowProposalDurationRequest = p.Request
+				slowProposalCount++
+			}
+		}
+		// TODO(tbg): the enabled() call is a hack until we've figured out what to
+		// do about #74711. If leases are finished instead of reproposed, they can't
+		// ever trigger the breaker, which is bad as there usually isn't anything
+		// else around that will.
+		if p.command.MaxLeaseIndex == 0 && !r.breaker.enabled() {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
@@ -1139,6 +1174,30 @@ func (r *Replica) refreshProposalsLocked(
 			// repropose everything.
 			reproposals = append(reproposals, p)
 		}
+	}
+
+	r.store.metrics.SlowRaftRequests.Update(slowProposalCount)
+
+	// If the breaker isn't tripped yet but we've detected commands that have
+	// taken too long to replicate, trip the breaker now.
+	//
+	// NB: we still keep reproposing commands on this and subsequent ticks
+	// even though this seems strictly counter-productive, except perhaps
+	// for the probe's proposals. We could consider being more strict here
+	// which could avoid build-up of raft log entries during outages, see
+	// for example:
+	// https://github.com/cockroachdb/cockroach/issues/60612
+	if r.breaker.Signal().Err() == nil && maxSlowProposalDuration > 0 {
+		log.Warningf(ctx,
+			"have been waiting %.2fs for slow proposal %s",
+			maxSlowProposalDuration.Seconds(), maxSlowProposalDurationRequest,
+		)
+		// NB: this is async because we're holding lots of locks here, and we want
+		// to avoid having to pass all the information about the replica into the
+		// breaker (since the breaker needs access to this information at will to
+		// power the probe anyway). Over time, we anticipate there being multiple
+		// mechanisms which trip the breaker.
+		r.breaker.TripAsync()
 	}
 
 	if log.V(1) && len(reproposals) > 0 {
@@ -1207,7 +1266,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	return true
 }
 
-func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Message) {
+func (r *Replica) sendRaftMessagesRaftMuLocked(ctx context.Context, messages []raftpb.Message) {
 	var lastAppResp raftpb.Message
 	for _, message := range messages {
 		drop := false
@@ -1275,19 +1334,19 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 		}
 
 		if !drop {
-			r.sendRaftMessage(ctx, message)
+			r.sendRaftMessageRaftMuLocked(ctx, message)
 		}
 	}
 	if lastAppResp.Index > 0 {
-		r.sendRaftMessage(ctx, lastAppResp)
+		r.sendRaftMessageRaftMuLocked(ctx, lastAppResp)
 	}
 }
 
-// sendRaftMessage sends a Raft message.
-func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
+// sendRaftMessageRaftMuLocked sends a Raft message.
+func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Message) {
 	r.mu.RLock()
-	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
-	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.raftMu.lastToReplica)
+	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.raftMu.lastFromReplica)
 	var startKey roachpb.RKey
 	if msg.Type == raftpb.MsgApp && r.mu.internalRaftGroup != nil {
 		// When the follower is potentially an uninitialized replica waiting for

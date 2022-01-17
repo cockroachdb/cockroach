@@ -22,11 +22,10 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -34,11 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -684,8 +682,8 @@ func RunTestsWithFn(
 					if typs != nil {
 						inputTypes = typs[i]
 					}
-					rng, _ := randutil.NewTestRand()
-					inputSources[i] = newOpTestSelInput(allocator, rng, batchSize, tup, inputTypes)
+					inputSources[i] = newOpTestSelInput(allocator, batchSize, tup, inputTypes)
+					inputSources[i].(*opTestInput).batchLengthRandomizationEnabled = true
 				}
 			} else {
 				for i, tup := range tups {
@@ -693,6 +691,7 @@ func RunTestsWithFn(
 						inputTypes = typs[i]
 					}
 					inputSources[i] = NewOpTestInput(allocator, batchSize, tup, inputTypes)
+					inputSources[i].(*opTestInput).batchLengthRandomizationEnabled = true
 				}
 			}
 			test(t, inputSources)
@@ -837,8 +836,9 @@ type opTestInput struct {
 
 	typs []*types.T
 
-	batchSize int
-	tuples    Tuples
+	batchSize                       int
+	batchLengthRandomizationEnabled bool
+	tuples                          Tuples
 	// initialTuples are tuples passed in into the constructor, and we keep the
 	// reference to them in order to be able to reset the operator.
 	initialTuples Tuples
@@ -877,12 +877,11 @@ func NewOpTestInput(
 }
 
 func newOpTestSelInput(
-	allocator *colmem.Allocator, rng *rand.Rand, batchSize int, tuples Tuples, typs []*types.T,
+	allocator *colmem.Allocator, batchSize int, tuples Tuples, typs []*types.T,
 ) *opTestInput {
 	ret := &opTestInput{
 		allocator:     allocator,
 		useSel:        true,
-		rng:           rng,
 		batchSize:     batchSize,
 		tuples:        tuples,
 		initialTuples: tuples,
@@ -900,7 +899,7 @@ func (s *opTestInput) Init(context.Context) {
 		s.typs = extrapolateTypesFromTuples(s.tuples)
 	}
 	s.batch = s.allocator.NewMemBatchWithMaxCapacity(s.typs)
-
+	s.rng, _ = randutil.NewTestRand()
 	s.selection = make([]int, coldata.BatchSize())
 	for i := range s.selection {
 		s.selection[i] = i
@@ -915,6 +914,13 @@ func (s *opTestInput) Next() coldata.Batch {
 	batchSize := s.batchSize
 	if len(s.tuples) < batchSize {
 		batchSize = len(s.tuples)
+	}
+	if s.batchLengthRandomizationEnabled {
+		// With 50% probability for this particular batch use a random length in
+		// range [1, batchSize].
+		if s.rng.Float64() < 0.5 {
+			batchSize = s.rng.Intn(batchSize) + 1
+		}
 	}
 	tups := s.tuples[:batchSize]
 	s.tuples = s.tuples[batchSize:]
@@ -1655,7 +1661,7 @@ func (c *chunkingBatchSource) Init(context.Context) {
 	c.batch = c.allocator.NewMemBatchWithMaxCapacity(c.typs)
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
-		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls())
+		c.batch.ColVec(i).SetNulls(*c.cols[i].Nulls())
 	}
 }
 
@@ -1677,8 +1683,7 @@ func (c *chunkingBatchSource) Next() coldata.Batch {
 		// responsible for updating those, so we iterate only up to len(c.typs)
 		// as per out initialization.
 		c.batch.ColVec(i).SetCol(c.cols[i].Window(c.curIdx, lastIdx).Col())
-		nullsSlice := c.cols[i].Nulls().Slice(c.curIdx, lastIdx)
-		c.batch.ColVec(i).SetNulls(&nullsSlice)
+		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls().Slice(c.curIdx, lastIdx))
 	}
 	c.batch.SetLength(lastIdx - c.curIdx)
 	c.curIdx = lastIdx
@@ -1762,8 +1767,8 @@ func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) 
 // use in testing window functions in RANGE mode with offsets.
 func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
 	var encoded, scratch []byte
-	encoded, err := rowenc.EncodeTableValue(
-		encoded, descpb.ColumnID(encoding.NoColumnID), offset, scratch)
+	encoded, err := valueside.Encode(
+		encoded, valueside.NoColumnID, offset, scratch)
 	require.NoError(t, err)
 	return encoded
 }

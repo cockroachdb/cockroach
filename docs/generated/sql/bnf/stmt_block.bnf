@@ -559,6 +559,8 @@ on_conflict ::=
 	'ON' 'CONFLICT' 'DO' 'NOTHING'
 	| 'ON' 'CONFLICT' '(' name_list ')' opt_where_clause 'DO' 'NOTHING'
 	| 'ON' 'CONFLICT' '(' name_list ')' opt_where_clause 'DO' 'UPDATE' 'SET' set_clause_list opt_where_clause
+	| 'ON' 'CONFLICT' 'ON' 'CONSTRAINT' constraint_name 'DO' 'NOTHING'
+	| 'ON' 'CONFLICT' 'ON' 'CONSTRAINT' constraint_name 'DO' 'UPDATE' 'SET' set_clause_list opt_where_clause
 
 pause_jobs_stmt ::=
 	'PAUSE' 'JOB' a_expr
@@ -1040,6 +1042,7 @@ unreserved_keyword ::=
 	| 'NOMODIFYCLUSTERSETTING'
 	| 'NONVOTERS'
 	| 'NOVIEWACTIVITY'
+	| 'NOVIEWACTIVITYREDACTED'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -1198,6 +1201,7 @@ unreserved_keyword ::=
 	| 'VARYING'
 	| 'VIEW'
 	| 'VIEWACTIVITY'
+	| 'VIEWACTIVITYREDACTED'
 	| 'VISIBLE'
 	| 'VOTERS'
 	| 'WITHIN'
@@ -1440,8 +1444,8 @@ create_view_stmt ::=
 	'CREATE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
 	| 'CREATE' 'OR' 'REPLACE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
 	| 'CREATE' opt_temp 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list 'AS' select_stmt
-	| 'CREATE' 'MATERIALIZED' 'VIEW' view_name opt_column_list 'AS' select_stmt
-	| 'CREATE' 'MATERIALIZED' 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list 'AS' select_stmt
+	| 'CREATE' 'MATERIALIZED' 'VIEW' view_name opt_column_list 'AS' select_stmt opt_with_data
+	| 'CREATE' 'MATERIALIZED' 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list 'AS' select_stmt opt_with_data
 
 create_sequence_stmt ::=
 	'CREATE' opt_temp 'SEQUENCE' sequence_name opt_sequence_option_list
@@ -2025,6 +2029,10 @@ opt_temp ::=
 	| 'TEMP'
 	| 
 
+opt_with_data ::=
+	'WITH' 'DATA'
+	| 
+
 sequence_name ::=
 	db_object_name
 
@@ -2358,6 +2366,8 @@ role_option ::=
 	| 'NOCREATELOGIN'
 	| 'VIEWACTIVITY'
 	| 'NOVIEWACTIVITY'
+	| 'VIEWACTIVITYREDACTED'
+	| 'NOVIEWACTIVITYREDACTED'
 	| 'CANCELQUERY'
 	| 'NOCANCELQUERY'
 	| 'MODIFYCLUSTERSETTING'

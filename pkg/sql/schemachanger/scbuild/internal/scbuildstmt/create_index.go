@@ -12,6 +12,7 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -28,7 +29,7 @@ import (
 
 // CreateIndex implements CREATE INDEX.
 func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
-	_, rel, idx := b.ResolveIndex(n.Table.ToUnresolvedObjectName(), n.Name, ResolveParams{
+	prefix, rel, idx := b.ResolveIndex(n.Table.ToUnresolvedObjectName(), n.Name, ResolveParams{
 		IsExistenceOptional: true,
 		RequiredPrivilege:   privilege.CREATE,
 	})
@@ -36,6 +37,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		// Table must exist.
 		panic(sqlerrors.NewUndefinedRelationError(n.Table.ToUnresolvedObjectName()))
 	}
+	// Mutate the AST to have the fully resolved name from above, which will be
+	// used for both event logging and errors.
+	n.Table.ObjectNamePrefix = prefix.NamePrefix()
 	if idx != nil {
 		if n.IfNotExists {
 			return
@@ -99,7 +103,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Setup the column ID.
 	for _, columnNode := range n.Columns {
 		// If the column was just added the new schema changer is not supported.
-		if b.HasNode(func(status, _ scpb.Status, elem scpb.Element) bool {
+		if b.HasElementStatus(func(status, _ scpb.Status, elem scpb.Element) bool {
 			if status != scpb.Status_ABSENT {
 				return false
 			}
@@ -201,7 +205,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if err != nil {
 			panic(err)
 		}
-		secondaryIndex.ShardedDescriptor = &descpb.ShardedDescriptor{
+		secondaryIndex.ShardedDescriptor = &catpb.ShardedDescriptor{
 			IsSharded:    true,
 			Name:         shardColName,
 			ShardBuckets: buckets,

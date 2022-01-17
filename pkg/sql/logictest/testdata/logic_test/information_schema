@@ -4636,6 +4636,7 @@ default_transaction_isolation                         serializable
 default_transaction_priority                          normal
 default_transaction_read_only                         off
 default_transaction_use_follower_reads                off
+default_with_oids                                     off
 disable_partially_distributed_plans                   off
 disable_plan_gists                                    off
 disallow_full_table_scans                             off
@@ -4721,6 +4722,7 @@ transaction_rows_read_log                             0
 transaction_rows_written_err                          0
 transaction_rows_written_log                          0
 transaction_status                                    NoTxn
+xmloption                                             content
 
 # information_schema can be used with the anonymous database.
 # It should show information across all databases.

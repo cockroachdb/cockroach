@@ -285,7 +285,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 			// than processors that scan over tables get their inputs from here, so
 			// this is a convenient place to do the hydration. Processors that scan
 			// over tables will have their hydration performed in ProcessorBase.Init.
-			resolver := f.TypeResolverFactory.NewTypeResolver(f.EvalCtx.Txn)
+			resolver := f.NewTypeResolver(f.EvalCtx.Txn)
 			if err := resolver.HydrateTypeSlice(ctx, is.ColumnTypes); err != nil {
 				return nil, err
 			}

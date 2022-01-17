@@ -12,6 +12,7 @@ package scop
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -49,7 +50,7 @@ type MakeAddedIndexDeleteOnly struct {
 	KeySuffixColumnIDs  []descpb.ColumnID
 	StoreColumnIDs      []descpb.ColumnID
 	CompositeColumnIDs  []descpb.ColumnID
-	ShardedDescriptor   *descpb.ShardedDescriptor
+	ShardedDescriptor   *catpb.ShardedDescriptor
 	Inverted            bool
 	Concurrently        bool
 	SecondaryIndex      bool
@@ -204,12 +205,12 @@ type MakeAddedColumnDeleteOnly struct {
 	OnUpdateExpr                      string
 	Hidden                            bool
 	Inaccessible                      bool
-	GeneratedAsIdentityType           descpb.GeneratedAsIdentityType
+	GeneratedAsIdentityType           catpb.GeneratedAsIdentityType
 	GeneratedAsIdentitySequenceOption string
 	UsesSequenceIds                   []descpb.ID
 	ComputerExpr                      string
 	PgAttributeNum                    uint32
-	SystemColumnKind                  descpb.SystemColumnKind
+	SystemColumnKind                  catpb.SystemColumnKind
 	Virtual                           bool
 }
 
@@ -295,10 +296,12 @@ type AddIndexPartitionInfo struct {
 // LogEvent logs an event for a given descriptor.
 type LogEvent struct {
 	mutationOp
-	DescID       descpb.ID
-	Metadata     scpb.ElementMetadata
-	Element      *scpb.ElementProto
-	TargetStatus scpb.Status
+	TargetMetadata scpb.TargetMetadata
+	Authorization  scpb.Authorization
+	Statement      string
+	StatementTag   string
+	Element        scpb.ElementProto
+	TargetStatus   scpb.Status
 }
 
 // SetColumnName makes a column only to allocate
@@ -350,8 +353,9 @@ type AddJobReference struct {
 // declarative schema changer post-commit phases.
 type CreateDeclarativeSchemaChangerJob struct {
 	mutationOp
-	JobID jobspb.JobID
-	State scpb.State
+	JobID       jobspb.JobID
+	TargetState scpb.TargetState
+	Current     []scpb.Status
 }
 
 // UpdateSchemaChangerJob is used to update the progress and payload of the
@@ -359,6 +363,47 @@ type CreateDeclarativeSchemaChangerJob struct {
 type UpdateSchemaChangerJob struct {
 	mutationOp
 	JobID           jobspb.JobID
-	Statuses        []scpb.Status
+	Current         []scpb.Status
 	IsNonCancelable bool
+}
+
+// RemoveTableComment is used to delete a comment associated with a table.
+type RemoveTableComment struct {
+	mutationOp
+	TableID descpb.ID
+}
+
+// RemoveDatabaseComment is used to delete a comment associated with a database.
+type RemoveDatabaseComment struct {
+	mutationOp
+	DatabaseID descpb.ID
+}
+
+// RemoveSchemaComment is used to delete a comment associated with a schema.
+type RemoveSchemaComment struct {
+	mutationOp
+	SchemaID descpb.ID
+}
+
+// RemoveIndexComment is used to delete a comment associated with an index.
+type RemoveIndexComment struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
+// RemoveColumnComment is used to delete a comment associated with a column.
+type RemoveColumnComment struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// RemoveConstraintComment is used to delete a comment associated with a
+// constraint.
+type RemoveConstraintComment struct {
+	mutationOp
+	TableID        descpb.ID
+	ConstraintType scpb.ConstraintType
+	ConstraintName string
 }

@@ -21,10 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -358,6 +361,8 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 
 func TestTruncatePreservesSplitPoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	skip.UnderRace(t)
 
 	ctx := context.Background()
@@ -386,6 +391,16 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 			})
 			defer tc.Stopper().Stop(ctx)
 
+			{
+				// This test asserts on KV-internal effects (i.e. range splits
+				// and their boundaries) as a result of configs and manually
+				// installed splits. To ensure it works with the span configs
+				// infrastructure quickly enough, we set a low closed timestamp
+				// target duration.
+				tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+				tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+			}
+
 			var err error
 			_, err = tc.Conns[0].ExecContext(ctx, `
 CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b));
@@ -395,29 +410,44 @@ ALTER INDEX a_b_idx SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000
 `)
 			assert.NoError(t, err)
 
-			row := tc.Conns[0].QueryRowContext(ctx, `
-SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = 'a'::regclass`)
-			assert.NoError(t, row.Err())
-			var nRanges int
-			assert.NoError(t, row.Scan(&nRanges))
-
 			const origNRanges = 19
-			assert.Equal(t, origNRanges, nRanges)
+
+			// Range split decisions happen asynchronously, hence the
+			// succeeds-soon block here and below.
+			testutils.SucceedsSoon(t, func() error {
+				row := tc.Conns[0].QueryRowContext(ctx, `
+SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = 'a'::regclass`)
+				assert.NoError(t, row.Err())
+
+				var nRanges int
+				assert.NoError(t, row.Scan(&nRanges))
+				if nRanges != origNRanges {
+					return errors.Newf("expected %d ranges, found %d", origNRanges, nRanges)
+				}
+				return nil
+			})
 
 			_, err = tc.Conns[0].ExecContext(ctx, `TRUNCATE a`)
 			assert.NoError(t, err)
 
-			row = tc.Conns[0].QueryRowContext(ctx, `
-SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = 'a'::regclass`)
-			assert.NoError(t, row.Err())
-			assert.NoError(t, row.Scan(&nRanges))
+			// We subtract 1 from the original n ranges because the first range
+			// can't be migrated to the new keyspace, as its prefix doesn't
+			// include an index ID.
+			expRanges := origNRanges + testCase.nodes*int(sql.PreservedSplitCountMultiple.Get(
+				&tc.Servers[0].Cfg.Settings.SV))
 
-			// We subtract 1 from the original n ranges because the first range can't
-			// be migrated to the new keyspace, as its prefix doesn't include an
-			// index ID.
-			assert.Equal(t, origNRanges+testCase.nodes*int(sql.PreservedSplitCountMultiple.Get(&tc.Servers[0].Cfg.
-				Settings.SV)),
-				nRanges)
+			testutils.SucceedsSoon(t, func() error {
+				row := tc.Conns[0].QueryRowContext(ctx, `
+SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = 'a'::regclass`)
+				assert.NoError(t, row.Err())
+
+				var nRanges int
+				assert.NoError(t, row.Scan(&nRanges))
+				if nRanges != expRanges {
+					return errors.Newf("expected %d ranges, found %d", expRanges, nRanges)
+				}
+				return nil
+			})
 		})
 	}
 }

@@ -65,7 +65,7 @@ type PrettyCfg struct {
 // configuration.
 func DefaultPrettyCfg() PrettyCfg {
 	return PrettyCfg{
-		LineWidth: 60,
+		LineWidth: DefaultLineWidth,
 		Simplify:  true,
 		TabWidth:  4,
 		UseTabs:   true,
@@ -93,6 +93,26 @@ const (
 	// also extra indents the operands of AND and OR operators so
 	// that they appear aligned but also indented.
 	PrettyAlignAndExtraIndent = 3
+)
+
+// CaseMode directs which casing mode to use.
+type CaseMode int
+
+const (
+	// LowerCase transforms case-insensitive strings (like SQL keywords) to lowercase.
+	LowerCase CaseMode = 0
+	// UpperCase transforms case-insensitive strings (like SQL keywords) to uppercase.
+	UpperCase CaseMode = 1
+)
+
+// LineWidthMode directs which mode of line width to use.
+type LineWidthMode int
+
+const (
+	// DefaultLineWidth is the line width used with the default pretty-printing configuration.
+	DefaultLineWidth = 60
+	// ConsoleLineWidth is the line width used on the frontend console.
+	ConsoleLineWidth = 108
 )
 
 // keywordWithText returns a pretty.Keyword with left and/or right
@@ -955,6 +975,9 @@ func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
 
 	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
 		cond := pretty.Nil
+		if len(node.OnConflict.Constraint) > 0 {
+			cond = p.nestUnder(pretty.Text("ON CONSTRAINT"), p.Doc(&node.OnConflict.Constraint))
+		}
 		if len(node.OnConflict.Columns) > 0 {
 			cond = p.bracket("(", p.Doc(&node.OnConflict.Columns), ")")
 		}

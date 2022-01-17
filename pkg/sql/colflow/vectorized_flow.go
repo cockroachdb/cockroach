@@ -209,7 +209,7 @@ func (f *vectorizedFlow) Setup(
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
-		flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
+		flowCtx.NewTypeResolver(flowCtx.EvalCtx.Txn),
 		f.FlowBase.GetAdmissionInfo(),
 	)
 	if f.testingKnobs.onSetupFlow != nil {
@@ -993,6 +993,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, s.batchFlowCoordinator)
+			s.releasables = append(s.releasables, s.batchFlowCoordinator)
 		} else {
 			// We need to use the row receiving output.
 			if input != nil {
@@ -1021,6 +1022,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 			)
 			// The flow coordinator is a root of its operator chain.
 			s.opChains = append(s.opChains, f)
+			// NOTE: we don't append f to s.releasables because addFlowCoordinator
+			// adds the FlowCoordinator to FlowBase.processors, which ensures that
+			// it is later released in FlowBase.Cleanup.
 			s.addFlowCoordinator(f)
 		}
 
@@ -1108,7 +1112,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 			numOldMonitors := len(s.monitorRegistry.GetMonitors())
 			if args.ExprHelper.SemaCtx == nil {
-				args.ExprHelper.SemaCtx = flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+				args.ExprHelper.SemaCtx = flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
 			}
 			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)

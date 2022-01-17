@@ -87,7 +87,7 @@ type invertedJoiner struct {
 	fetcher rowFetcher
 	// rowsRead is the total number of rows that the fetcher read from disk.
 	rowsRead int64
-	alloc    rowenc.DatumAlloc
+	alloc    tree.DatumAlloc
 	rowAlloc rowenc.EncDatumRowAlloc
 
 	// tableRow represents a row with all the columns of the table, where only
@@ -195,7 +195,7 @@ func newInvertedJoiner(
 		return nil, errors.AssertionFailedf("unexpected inverted join type %s", spec.Type)
 	}
 	ij := &invertedJoiner{
-		desc:                 spec.BuildTableDescriptor(),
+		desc:                 flowCtx.TableDescriptor(&spec.Table),
 		input:                input,
 		inputTypes:           input.OutputTypes(),
 		prefixEqualityCols:   spec.PrefixEqualityColumns,
@@ -215,14 +215,18 @@ func newInvertedJoiner(
 
 	// Initialize tableRow, indexRow, indexRowTypes, and indexRowToTableRowMap,
 	// a mapping from indexRow column ordinal to tableRow column ordinals.
-	indexColumnIDs, _ := catalog.FullIndexColumnIDs(ij.index)
+	indexColumns := ij.desc.IndexFullColumns(ij.index)
 	// Inverted joins are not used for mutations.
 	ij.tableRow = make(rowenc.EncDatumRow, len(ij.desc.PublicColumns()))
-	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
+	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumns)-1)
 	ij.indexRowTypes = make([]*types.T, len(ij.indexRow))
 	ij.indexRowToTableRowMap = make([]int, len(ij.indexRow))
 	indexRowIdx := 0
-	for _, colID := range indexColumnIDs {
+	for _, col := range indexColumns {
+		if col == nil {
+			continue
+		}
+		colID := col.GetID()
 		// Do not include the inverted column in the map.
 		if colID == ij.invertedColID {
 			continue
@@ -269,7 +273,7 @@ func newInvertedJoiner(
 		return nil, err
 	}
 
-	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+	semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
 	onExprColTypes := make([]*types.T, 0, len(ij.inputTypes)+len(rightColTypes))
 	onExprColTypes = append(onExprColTypes, ij.inputTypes...)
 	onExprColTypes = append(onExprColTypes, rightColTypes...)
@@ -308,14 +312,17 @@ func newInvertedJoiner(
 	// here. For now, we do the simple thing, since we have no idea whether
 	// such workloads actually occur in practice.
 	allIndexCols := util.MakeFastIntSet()
-	for _, colID := range indexColumnIDs {
-		allIndexCols.Add(ij.colIdxMap.GetDefault(colID))
+	for _, col := range indexColumns {
+		if col == nil {
+			continue
+		}
+		allIndexCols.Add(ij.colIdxMap.GetDefault(col.GetID()))
 	}
 	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
 	// and so do not need to see in-progress schema changes.
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
-		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic,
+		allIndexCols, flowCtx.EvalCtx.Mon, &ij.alloc,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
 		false /* withSystemColumns */, nil, /* virtualColumn */
 	)
