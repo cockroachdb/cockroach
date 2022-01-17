@@ -56,6 +56,12 @@ message NotLeaseHolderError {
   optional roachpb.Lease lease = 4;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  // The range descriptor generation of the replica the error originated from.
+  // Used by the DistSender's RangeCache to determine whether the error was
+  // returned because the replica had a stale understanding of who the
+  // leaseholder is.
+  optional int64 descriptor_generation = 6 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "DescriptorGeneration", (gogoproto.casttype) = "RangeGeneration"];
   // If set, the Error() method will return this instead of composing its
   // regular spiel. Useful because we reuse this error when rejecting a command
   // because the lease under which its application was attempted is different
