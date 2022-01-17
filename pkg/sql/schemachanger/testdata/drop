@@ -163,6 +163,7 @@ commit transaction #1
 begin transaction #2
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 12 MutationType ops
 write *eventpb.DropSchema to event log for descriptor #57: DROP SCHEMA ‹db›.‹sc› CASCADE
+write *eventpb.DropType to event log for descriptor #60: DROP SCHEMA ‹db›.‹sc› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
 delete schema namespace entry {54 0 sc} -> 57
@@ -598,6 +599,7 @@ begin transaction #2
 create job #2: "GC for dropping descriptors 64 67 65 66 68 69 70 71 74 and parent database 61"
   descriptor IDs: [64 67 65 66 68 69 70 71 74]
 write *eventpb.DropDatabase to event log for descriptor #61: DROP DATABASE ‹db1› CASCADE
+write *eventpb.DropType to event log for descriptor #73: DROP DATABASE ‹db1› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
 delete database namespace entry {0 0 db1} -> 61

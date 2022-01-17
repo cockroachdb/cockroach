@@ -73,7 +73,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
       StatementTag: DROP TYPE
       TargetMetadata:
         SourceElementID: 1
-        SubWorkID: 1
+        SubWorkID: 2
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 55

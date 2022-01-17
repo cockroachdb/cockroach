@@ -1100,8 +1100,8 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["'db1-a'.public", "'db1-a'.sc1", "'db1-a'.sc2"], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "Tag": "DROP DATABASE", "User": "root"}
-1  {"DatabaseName": "db2", "DroppedSchemaObjects": ["db2.public", "db2.sc3"], "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["\"'db1-a'\".public.\"'t1-esc'\""], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"DatabaseName": "db2", "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "Tag": "DROP DATABASE", "User": "root"}
 
 # Sanity: Dropping multiple objects in the builder or resolving any dependencies
 # should function fine.

@@ -616,7 +616,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 6
-        SubWorkID: 1
+        SubWorkID: 2
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 66
@@ -654,9 +654,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       Element:
         Database:
           databaseId: 54
-          dependentObjects:
-          - 55
-          - 56
       Statement: DROP DATABASE ‹db1› CASCADE
       StatementTag: DROP DATABASE
       TargetMetadata:
@@ -838,14 +835,6 @@ DROP DATABASE db1 CASCADE
   to:   [IndexName:{DescID: 60, IndexID: 1, Name: t1_pkey}, ABSENT]
   kind: Precedence
   rule: index unnamed after index no longer public
-- from: [Schema:{DescID: 55}, ABSENT]
-  to:   [Database:{DescID: 54}, ABSENT]
-  kind: Precedence
-  rule: parent dependencies
-- from: [Schema:{DescID: 56}, ABSENT]
-  to:   [Database:{DescID: 54}, ABSENT]
-  kind: Precedence
-  rule: parent dependencies
 - from: [Sequence:{DescID: 57}, ABSENT]
   to:   [Schema:{DescID: 55}, ABSENT]
   kind: Precedence

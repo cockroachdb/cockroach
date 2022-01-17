@@ -222,12 +222,15 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 	for _, subWorkID := range orderedSubWorkID {
 		// Determine which objects we should collect.
 		collectDependentViewNames := false
-		collectDependentSchemaNames := false
+		collectDependentTables := false
+		collectDependentSequences := false
 		sourceEvent := sourceEvents[subWorkID]
 		switch sourceEvent.event.(type) {
 		case *eventpb.DropDatabase:
-			// Drop database only reports dependent schemas.
-			collectDependentSchemaNames = true
+			// Log each of the objects that are dropped.
+			collectDependentViewNames = true
+			collectDependentTables = true
+			collectDependentSequences = true
 		case *eventpb.DropView, *eventpb.DropTable:
 			// Drop view and drop tables only cares about
 			// dependent views
@@ -236,13 +239,17 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 		var dependentObjects []string
 		for _, dependentEvent := range dependentEvents[subWorkID] {
 			switch ev := dependentEvent.event.(type) {
+			case *eventpb.DropSequence:
+				if collectDependentSequences {
+					dependentObjects = append(dependentObjects, ev.SequenceName)
+				}
+			case *eventpb.DropTable:
+				if collectDependentTables {
+					dependentObjects = append(dependentObjects, ev.TableName)
+				}
 			case *eventpb.DropView:
 				if collectDependentViewNames {
 					dependentObjects = append(dependentObjects, ev.ViewName)
-				}
-			case *eventpb.DropSchema:
-				if collectDependentSchemaNames {
-					dependentObjects = append(dependentObjects, ev.SchemaName)
 				}
 			}
 		}
