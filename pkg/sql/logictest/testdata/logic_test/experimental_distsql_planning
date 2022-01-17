@@ -1,3 +1,4 @@
+# LogicTest: !fakedist-declarative-schema
 # NOTE: all queries in this file should run with 'experimental_distsql_planning'
 # set to 'always' unless they are known to be unsupported. If you do need to
 # execute an unsupported query, use the following pattern:
