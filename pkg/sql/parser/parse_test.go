@@ -395,6 +395,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
 
+		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
 		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
