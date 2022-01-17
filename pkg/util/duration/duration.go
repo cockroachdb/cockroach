@@ -28,8 +28,10 @@ import (
 const (
 	// MicrosPerMilli is the amount of microseconds in a millisecond.
 	MicrosPerMilli = 1000
-	// MillisPerSec is the amount of seconds in a millisecond.
+	// MillisPerSec is the amount of milliseconds in a second.
 	MillisPerSec = 1000
+	// MicrosPerSec is the amount of microseconds in a second.
+	MicrosPerSec = MicrosPerMilli * MillisPerSec
 	// SecsPerMinute is the amount of seconds in a minute.
 	SecsPerMinute = 60
 	// SecsPerHour is the amount of seconds in an hour.

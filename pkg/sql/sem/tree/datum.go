@@ -2308,7 +2308,28 @@ func (d *DTimeTZ) Prev(ctx *EvalContext) (Datum, bool) {
 	if d.IsMin(ctx) {
 		return nil, false
 	}
-	return NewDTimeTZFromOffset(d.TimeOfDay-1, d.OffsetSecs), true
+	// In the common case, the absolute time doesn't change, we simply decrement
+	// the offset by one second and increment the time of day by one second. Once
+	// we hit the minimum offset for the current absolute time, then we decrement
+	// the absolute time by one microsecond and wrap around to the highest offset
+	// for the new absolute time. This aligns with how Before and After are
+	// defined for TimeTZ.
+	var newTimeOfDay timeofday.TimeOfDay
+	var newOffsetSecs int32
+	if d.OffsetSecs == timetz.MinTimeTZOffsetSecs ||
+		d.TimeOfDay+duration.MicrosPerSec > timeofday.Max {
+		newTimeOfDay = d.TimeOfDay - 1
+		shiftSeconds := int32((newTimeOfDay - timeofday.Min) / duration.MicrosPerSec)
+		if d.OffsetSecs+shiftSeconds > timetz.MaxTimeTZOffsetSecs {
+			shiftSeconds = timetz.MaxTimeTZOffsetSecs - d.OffsetSecs
+		}
+		newOffsetSecs = d.OffsetSecs + shiftSeconds
+		newTimeOfDay -= timeofday.TimeOfDay(shiftSeconds) * duration.MicrosPerSec
+	} else {
+		newTimeOfDay = d.TimeOfDay + duration.MicrosPerSec
+		newOffsetSecs = d.OffsetSecs - 1
+	}
+	return NewDTimeTZFromOffset(newTimeOfDay, newOffsetSecs), true
 }
 
 // Next implements the Datum interface.
@@ -2316,7 +2337,28 @@ func (d *DTimeTZ) Next(ctx *EvalContext) (Datum, bool) {
 	if d.IsMax(ctx) {
 		return nil, false
 	}
-	return NewDTimeTZFromOffset(d.TimeOfDay+1, d.OffsetSecs), true
+	// In the common case, the absolute time doesn't change, we simply increment
+	// the offset by one second and decrement the time of day by one second. Once
+	// we hit the maximum offset for the current absolute time, then we increment
+	// the absolute time by one microsecond and wrap around to the lowest offset
+	// for the new absolute time. This aligns with how Before and After are
+	// defined for TimeTZ.
+	var newTimeOfDay timeofday.TimeOfDay
+	var newOffsetSecs int32
+	if d.OffsetSecs == timetz.MaxTimeTZOffsetSecs ||
+		d.TimeOfDay-duration.MicrosPerSec < timeofday.Min {
+		newTimeOfDay = d.TimeOfDay + 1
+		shiftSeconds := int32((timeofday.Max - newTimeOfDay) / duration.MicrosPerSec)
+		if d.OffsetSecs-shiftSeconds < timetz.MinTimeTZOffsetSecs {
+			shiftSeconds = d.OffsetSecs - timetz.MinTimeTZOffsetSecs
+		}
+		newOffsetSecs = d.OffsetSecs - shiftSeconds
+		newTimeOfDay += timeofday.TimeOfDay(shiftSeconds) * duration.MicrosPerSec
+	} else {
+		newTimeOfDay = d.TimeOfDay - duration.MicrosPerSec
+		newOffsetSecs = d.OffsetSecs + 1
+	}
+	return NewDTimeTZFromOffset(newTimeOfDay, newOffsetSecs), true
 }
 
 // IsMax implements the Datum interface.
