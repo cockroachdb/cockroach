@@ -1,7 +1,6 @@
-# LogicTest: local !3node-tenant(52763)
-
 # Disable SQL Stats flush to prevents stats from being cleared from the
 # in-memory store.
+# LogicTest: local 3node-tenant
 
 statement ok
 SET CLUSTER SETTING sql.stats.flush.enabled = false;
@@ -112,6 +111,7 @@ SHOW CLUSTER SETTING debug.panic_on_failed_assertions
 statement ok
 SET application_name = ''; RESET distsql
 
+skipif config 3node-tenant #52763
 query TT colnames
 SELECT key,flags
   FROM test.crdb_internal.node_statement_statistics
