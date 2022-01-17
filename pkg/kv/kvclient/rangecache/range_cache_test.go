@@ -1563,13 +1563,16 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		StoreID:   4,
 		ReplicaID: 4,
 	}
+
+	staleRangeGeneration := roachpb.RangeGeneration(2)
+	nonStaleRangeGeneration := roachpb.RangeGeneration(3)
 	desc1 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep1, rep2,
 		},
-		Generation: 0,
+		Generation: nonStaleRangeGeneration,
 	}
 	desc2 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -1577,7 +1580,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep2, rep3,
 		},
-		Generation: 1,
+		Generation: nonStaleRangeGeneration + 1,
 	}
 	desc3 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -1585,7 +1588,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep1, rep2,
 		},
-		Generation: 2,
+		Generation: nonStaleRangeGeneration + 2,
 	}
 	startKey := desc1.StartKey
 
@@ -1613,7 +1616,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		Sequence: 1,
 	}
 	oldTok := tok
-	ok := tok.UpdateLease(ctx, l)
+	ok := tok.UpdateLease(ctx, l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.Equal(t, oldTok.Desc(), tok.Desc())
 	require.Equal(t, &l.Replica, tok.Leaseholder())
@@ -1635,13 +1638,21 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	require.True(t, ri.lease.Empty())
 	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ri.ClosedTimestampPolicy())
 
-	// Check that trying to update the lease to a non-member replica results
-	// in the entry's eviction and the token's invalidation.
+	// Check that trying to update the lease to a non-member replica results in
+	// the entry's eviction and the token's invalidation if the descriptor
+	// generation in the error is not older than the cached descriptor generation.
 	l = &roachpb.Lease{
 		Replica:  repNonMember,
 		Sequence: 2,
 	}
-	ok = tok.UpdateLease(ctx, l)
+	// Check that there's no eviction if the range desc generation in the error is
+	// stale.
+	ok = tok.UpdateLease(ctx, l, staleRangeGeneration)
+	require.False(t, ok)
+	require.True(t, tok.Valid())
+
+	// However, expect an eviction when the error's desc generation is non-stale.
+	ok = tok.UpdateLease(ctx, l, nonStaleRangeGeneration)
 	require.False(t, ok)
 	require.False(t, tok.Valid())
 	ri = cache.GetCached(ctx, startKey, false /* inverted */)
@@ -1664,10 +1675,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		Desc:  desc2,
 		Lease: roachpb.Lease{},
 	})
-	ok = tok.UpdateLease(ctx,
-		// Specify a lease compatible with desc2.
-		&roachpb.Lease{Replica: rep2, Sequence: 3},
-	)
+	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, tok)
 	require.Equal(t, &desc2, tok.Desc())
@@ -1682,7 +1690,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	})
 	// This time try to specify a lease that's not compatible with the desc. The
 	// entry should end up evicted from the cache.
-	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep3, Sequence: 4})
+	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep3, Sequence: 4}, 0 /* descGeneration */)
 	require.False(t, ok)
 	require.False(t, tok.Valid())
 	ri = cache.GetCached(ctx, startKey, false /* inverted */)
@@ -1726,7 +1734,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 1,
 	}
-	ok, e := e.updateLease(l)
+	ok, e := e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.True(t, l.Equal(e.Lease()))
 
@@ -1735,7 +1743,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Replica.Equal(*e.Leaseholder()))
@@ -1747,7 +1755,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep2,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Replica.Equal(*e.Leaseholder()))
@@ -1757,7 +1765,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Replica.Equal(*e.Leaseholder()))
@@ -1767,7 +1775,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 2,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Equal(*e.Lease()))
@@ -1777,7 +1785,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep2,
 		Sequence: 1,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.False(t, ok)
 	require.False(t, l.Equal(*e.Lease()))
 
@@ -1786,7 +1794,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep2,
 		Sequence: 2,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.True(t, l.Equal(e.Lease()))
 
@@ -1796,7 +1804,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Sequence: 2,
 	}
 	require.True(t, l.Equal(e.Lease()))
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.False(t, ok)
 	require.True(t, l.Equal(e.Lease()))
 
@@ -1806,7 +1814,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  repNonMember,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.Nil(t, e)
 }
