@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion"
 )
 
 // CollectionFactory is used to construct a new Collection.
@@ -22,6 +23,7 @@ type CollectionFactory struct {
 	settings       *cluster.Settings
 	leaseMgr       *lease.Manager
 	virtualSchemas catalog.VirtualSchemas
+	preemptor      singleversion.Preemptor
 	hydratedTables *hydratedtables.Cache
 }
 
@@ -31,12 +33,14 @@ func NewCollectionFactory(
 	settings *cluster.Settings,
 	leaseMgr *lease.Manager,
 	virtualSchemas catalog.VirtualSchemas,
+	preemptor singleversion.Preemptor,
 	hydratedTables *hydratedtables.Cache,
 ) *CollectionFactory {
 	return &CollectionFactory{
 		settings:       settings,
 		leaseMgr:       leaseMgr,
 		virtualSchemas: virtualSchemas,
+		preemptor:      preemptor,
 		hydratedTables: hydratedTables,
 	}
 }

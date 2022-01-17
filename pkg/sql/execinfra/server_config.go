@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -168,6 +169,9 @@ type ServerConfig struct {
 
 	// CollectionFactory is used to construct descs.Collections.
 	CollectionFactory *descs.CollectionFactory
+
+	// SingleVersion provides access to the singleversion leasing subsystem.
+	SingleVersion singleversion.Acquirer
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

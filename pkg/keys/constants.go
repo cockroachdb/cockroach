@@ -352,6 +352,9 @@ const (
 	TenantsTablePrimaryKeyIndexID            = 1
 	SpanConfigurationsTablePrimaryKeyIndexID = 1
 
+	SingleVersionDescriptorLeasePrimaryKeyIndexID = 1
+	SingleVersionDescriptorLeasePrimaryColFamID   = 0
+
 	// Reserved IDs for other system tables. Note that some of these IDs refer
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
 	// configuration for non-table ranges (e.g. Zone Configs).
@@ -389,24 +392,25 @@ const (
 	SystemPublicSchemaID = 29 // pseudo
 	// New NamespaceTableID for cluster version >= 20.1
 	// Ensures that NamespaceTable does not get gossiped again
-	NamespaceTableID                    = 30
-	ProtectedTimestampsMetaTableID      = 31
-	ProtectedTimestampsRecordsTableID   = 32
-	RoleOptionsTableID                  = 33
-	StatementBundleChunksTableID        = 34
-	StatementDiagnosticsRequestsTableID = 35
-	StatementDiagnosticsTableID         = 36
-	ScheduledJobsTableID                = 37
-	TenantsRangesID                     = 38 // pseudo
-	SqllivenessID                       = 39
-	MigrationsID                        = 40
-	JoinTokensTableID                   = 41
-	StatementStatisticsTableID          = 42
-	TransactionStatisticsTableID        = 43
-	DatabaseRoleSettingsTableID         = 44
-	TenantUsageTableID                  = 45
-	SQLInstancesTableID                 = 46
-	SpanConfigurationsTableID           = 47
+	NamespaceTableID                     = 30
+	ProtectedTimestampsMetaTableID       = 31
+	ProtectedTimestampsRecordsTableID    = 32
+	RoleOptionsTableID                   = 33
+	StatementBundleChunksTableID         = 34
+	StatementDiagnosticsRequestsTableID  = 35
+	StatementDiagnosticsTableID          = 36
+	ScheduledJobsTableID                 = 37
+	TenantsRangesID                      = 38 // pseudo
+	SqllivenessID                        = 39
+	MigrationsID                         = 40
+	JoinTokensTableID                    = 41
+	StatementStatisticsTableID           = 42
+	TransactionStatisticsTableID         = 43
+	DatabaseRoleSettingsTableID          = 44
+	TenantUsageTableID                   = 45
+	SQLInstancesTableID                  = 46
+	SpanConfigurationsTableID            = 47
+	SingleVersionDescriptorLeasesTableID = 48
 )
 
 // CommentType the type of the schema object on which a comment has been

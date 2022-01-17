@@ -15,10 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -108,7 +110,7 @@ func (cf *CollectionFactory) Txn(
 			}
 			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
 			retryErr, err := CheckTwoVersionInvariant(
-				ctx, db.Clock(), ie, &descsCol, txn, nil /* onRetryBackoff */)
+				ctx, db.Clock(), ie, &descsCol, txn, cf.preemptor, nil /* onRetryBackoff */)
 			if retryErr {
 				return errTwoVersionInvariantViolated
 			}
@@ -156,6 +158,7 @@ func CheckTwoVersionInvariant(
 	ie sqlutil.InternalExecutor,
 	descsCol *Collection,
 	txn *kv.Txn,
+	preemptor singleversion.Preemptor,
 	onRetryBackoff func(),
 ) (retryDueToViolation bool, _ error) {
 	descs := descsCol.GetDescriptorsWithNewVersion()
@@ -182,6 +185,18 @@ func CheckTwoVersionInvariant(
 	// not modified to ensure that our writes to those other descriptors in this
 	// transaction remain valid.
 	descsCol.ReleaseSpecifiedLeases(ctx, descs)
+
+	// Ensure that no singleversion leases exist by the time that the transaction
+	// commits.
+	if descsCol.settings.Version.IsActive(ctx, clusterversion.SingleVersionDescriptorLeaseTable) {
+		var toPreempt catalog.DescriptorIDSet
+		for _, idv := range descs {
+			toPreempt.Add(idv.ID)
+		}
+		if err := preemptor.EnsureNoSingleVersionLeases(ctx, txn, toPreempt); err != nil {
+			return false, err
+		}
+	}
 
 	// We know that so long as there are no leases on the updated descriptors as of
 	// the current provisional commit timestamp for this transaction then if this

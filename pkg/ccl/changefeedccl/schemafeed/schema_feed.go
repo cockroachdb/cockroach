@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -96,6 +97,16 @@ func New(
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
 	m.mu.typeDeps = typeDependencyTracker{deps: make(map[descpb.ID][]descpb.ID)}
+
+	if cfg.Settings.Version.IsActive(ctx, clusterversion.SingleVersionDescriptorLeaseTable) {
+		lm := newLeasedSchemaFeed(
+			cfg.SingleVersion,
+			targets,
+			initialHighwater,
+			m,
+		)
+		return lm
+	}
 	return m
 }
 

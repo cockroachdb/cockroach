@@ -1,0 +1,36 @@
+put action=lease id=(1, 2, 3) session=foo
+----
+
+scan action=lease id=(2, 3)
+----
+lease, 2, foo
+lease, 3, foo
+
+scan action=lease id=(2, 1)
+----
+lease, 1, foo
+lease, 2, foo
+
+sql
+SELECT * FROM $TABLE
+----
+lease, 1, foo
+lease, 2, foo
+lease, 3, foo
+
+put action=notify id=(1, 3) session=bar
+----
+
+del action=lease id=(3, 1) session=foo
+----
+
+sql
+SELECT * FROM $TABLE
+----
+lease, 2, foo
+notify, 1, bar
+notify, 3, bar
+
+scan action=lease id=(2, 1)
+----
+lease, 2, foo

@@ -43,6 +43,7 @@ go_test(
     size = "small",
     srcs = [
         "dep_test.go",
+        "descriptor_id_set_test.go",
         "descriptor_test.go",
         "table_col_map_test.go",
         "table_col_set_test.go",

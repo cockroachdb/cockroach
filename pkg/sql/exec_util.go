@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/singleversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -1248,6 +1249,9 @@ type ExecutorConfig struct {
 	// SystemIDChecker is used to check whether an ID is part of the
 	// system database.
 	SystemIDChecker *catalog.SystemIDChecker
+
+	// SingleVersion is used to preempt single-version leases.
+	SingleVersion singleversion.Preemptor
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
