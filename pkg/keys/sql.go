@@ -141,6 +141,18 @@ func (e sqlEncoder) SequenceKey(tableID uint32) roachpb.Key {
 	return k
 }
 
+// CurrentSequenceKey returns the key used to store the current value of
+// a sequence, after the use of nextval() and alter_sequence_stmt.
+func (e sqlEncoder) CurrentSequenceKey(tableID uint32) roachpb.Key {
+	k := e.IndexPrefix(tableID, SequenceIndexID)
+	k = encoding.EncodeUvarintAscending(k, 0)    // Primary key value
+	k = MakeFamilyKey(k, SequenceColumnFamilyID) // Column family
+
+	// Column family added to distinguish from SequenceKey()
+	k = MakeFamilyKey(k, SequenceColumnFamilyID)
+	return k
+}
+
 // DescIDSequenceKey returns the key used for the descriptor ID sequence.
 func (e sqlEncoder) DescIDSequenceKey() roachpb.Key {
 	if e.ForSystemTenant() {
