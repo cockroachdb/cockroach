@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -69,23 +69,56 @@ func (o *notExprProjOp) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	inputVec, outputVec := batch.ColVec(o.inputIdx), batch.ColVec(o.outputIdx)
-	inputNulls := inputVec.Nulls()
+	inputBools, inputNulls := inputVec.Bool(), inputVec.Nulls()
 	outputBools, outputNulls := outputVec.Bool(), outputVec.Nulls()
 	if outputNulls.MaybeHasNulls() {
 		// Unsetting any potential nulls in the output in case there are null
 		// values present beforehand.
 		outputNulls.UnsetNulls()
 	}
-	if sel := batch.Selection(); sel != nil {
-		sel = sel[:n]
-		for _, idx := range sel {
-			projectOutput(idx, inputNulls, outputNulls, inputVec, outputBools)
+	if inputNulls.MaybeHasNulls() {
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, idx := range sel {
+				if inputNulls.NullAt(idx) {
+					outputNulls.SetNull(idx)
+				} else {
+					exprVal := inputBools.Get(idx)
+					outputBools.Set(idx, !exprVal)
+				}
+			}
+		} else {
+			inputBools = inputBools[:n]
+			outputBools = outputBools[:n]
+			for idx := 0; idx < n; idx++ {
+				if inputNulls.NullAt(idx) {
+					outputNulls.SetNull(idx)
+				} else {
+					//gcassert:bce
+					exprVal := inputBools.Get(idx)
+					//gcassert:bce
+					outputBools.Set(idx, !exprVal)
+				}
+			}
 		}
 	} else {
-		outputBools = outputBools[:n]
-		for idx := range outputBools {
-			projectOutput(idx, inputNulls, outputNulls, inputVec, outputBools)
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, idx := range sel {
+				exprVal := inputBools.Get(idx)
+				outputBools.Set(idx, !exprVal)
+			}
+		} else {
+			inputBools = inputBools[:n]
+			outputBools = outputBools[:n]
+			for idx := 0; idx < n; idx++ {
+				//gcassert:bce
+				exprVal := inputBools.Get(idx)
+				//gcassert:bce
+				outputBools.Set(idx, !exprVal)
+			}
 		}
+
 	}
 	return batch
 }
@@ -121,22 +154,50 @@ func (o *notExprSelOp) Next() coldata.Batch {
 			return batch
 		}
 		inputVec, selectedValuesIdx := batch.ColVec(o.inputIdx), 0
-		inputNulls, sel := inputVec.Nulls(), batch.Selection()
-		useValue := sel != nil
-		if useValue {
-			sel = sel[:n]
-		} else {
-			batch.SetSelection(true)
-			sel = batch.Selection()[:n]
-		}
-		for i, val := range sel {
-			idx := i
-			if useValue {
-				idx = val
+		inputNulls, inputBools := inputVec.Nulls(), inputVec.Bool()
+		if inputNulls.MaybeHasNulls() {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, idx := range sel {
+					if !inputNulls.NullAt(idx) && !inputBools.Get(idx) {
+						sel[selectedValuesIdx] = idx
+						selectedValuesIdx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel = batch.Selection()[:n]
+				inputBools = inputBools[:n]
+				for idx := 0; idx < n; idx++ {
+					if !inputNulls.NullAt(idx) {
+						//gcassert:bce
+						if !inputBools.Get(idx) {
+							sel[selectedValuesIdx] = idx
+							selectedValuesIdx++
+						}
+					}
+				}
 			}
-			if !inputNulls.NullAt(idx) && !inputVec.Bool().Get(idx) {
-				sel[selectedValuesIdx] = idx
-				selectedValuesIdx++
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, idx := range sel {
+					if !inputBools.Get(idx) {
+						sel[selectedValuesIdx] = idx
+						selectedValuesIdx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel = batch.Selection()[:n]
+				inputBools = inputBools[:n]
+				for idx := 0; idx < n; idx++ {
+					//gcassert:bce
+					if !inputBools.Get(idx) {
+						sel[selectedValuesIdx] = idx
+						selectedValuesIdx++
+					}
+				}
 			}
 		}
 		if selectedValuesIdx > 0 {

@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -86,7 +86,7 @@ func TestNotExprProjOp(t *testing.T) {
 		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return NewNotExprProjOp(testAllocator, input[0], 0, 1), nil
 		}
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
+		colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{{types.Bool}}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 	}
 }
 
@@ -105,49 +105,49 @@ func TestNotExprSelOp(t *testing.T) {
 		selExpr      string
 	}{
 		{
-			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with no NULL",
+			desc:         "SELECT c FROM t WHERE NOT c -- NOT expr with no NULL",
 			inputTuples:  colexectestutils.Tuples{{true}, {false}, {true}, {false}},
 			outputTuples: colexectestutils.Tuples{{false}, {false}},
 			selExpr:      "NOT",
 		},
 		{
-			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with only FALSE",
+			desc:         "SELECT c FROM t WHERE NOT c -- NOT expr with only FALSE",
 			inputTuples:  colexectestutils.Tuples{{false}, {false}, {false}, {false}},
 			outputTuples: colexectestutils.Tuples{{false}, {false}, {false}, {false}},
 			selExpr:      "NOT",
 		},
 		{
-			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with only TRUE",
+			desc:         "SELECT c FROM t WHERE NOT c -- NOT expr with only TRUE",
 			inputTuples:  colexectestutils.Tuples{{true}, {true}, {true}, {true}},
 			outputTuples: colexectestutils.Tuples{},
 			selExpr:      "NOT",
 		},
 		{
-			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with only one FALSE and rest TRUE",
+			desc:         "SELECT c FROM t WHERE NOT c -- NOT expr with only one FALSE and rest TRUE",
 			inputTuples:  colexectestutils.Tuples{{true}, {false}, {true}, {true}},
 			outputTuples: colexectestutils.Tuples{{false}},
 			selExpr:      "NOT",
 		},
 		{
-			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with only one TRUE and rest FALSE",
+			desc:         "SELECT c FROM t WHERE NOT c -- NOT expr with only one TRUE and rest FALSE",
 			inputTuples:  colexectestutils.Tuples{{false}, {true}, {false}, {false}},
 			outputTuples: colexectestutils.Tuples{{false}, {false}, {false}},
 			selExpr:      "NOT",
 		},
 		{
-			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with FALSE and NULL",
+			desc:         "SELECT c FROM t WHERE NOT c -- NOT expr with FALSE and NULL",
 			inputTuples:  colexectestutils.Tuples{{nil}, {nil}, {false}, {nil}},
 			outputTuples: colexectestutils.Tuples{{false}},
 			selExpr:      "NOT",
 		},
 		{
-			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with TRUE, FALSE and NULL",
+			desc:         "SELECT c FROM t WHERE NOT c -- NOT expr with TRUE, FALSE and NULL",
 			inputTuples:  colexectestutils.Tuples{{false}, {true}, {false}, {nil}},
 			outputTuples: colexectestutils.Tuples{{false}, {false}},
 			selExpr:      "NOT",
 		},
 		{
-			desc:         "SELECT c FROM t WHERE NOT c IS TRUE -- NOT expr with only NULL",
+			desc:         "SELECT c FROM t WHERE NOT c -- NOT expr with only NULL",
 			inputTuples:  colexectestutils.Tuples{{nil}, {nil}, {nil}, {nil}},
 			outputTuples: colexectestutils.Tuples{},
 			selExpr:      "NOT",
