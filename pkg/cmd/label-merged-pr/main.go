@@ -88,17 +88,23 @@ func main() {
 			log.Printf("Ref %s has not yet appeared in a released version.", ref)
 			continue
 		}
-		pr, err := getPrInfo(ref)
+		prs, err := getPrNumbers(ref)
 		if err != nil {
 			log.Fatalf("Cannot find PR for ref %s: %+v\n", ref, err)
 		}
-		log.Printf("Labeling PR#%s (ref %s) using git tag %s", pr, ref, tag)
-		if dryRun {
-			log.Println("DRY RUN: skipping labeling")
+		if len(prs) == 0 {
+			log.Printf("No PRs for ref %s. There should be at least one.", ref)
 			continue
 		}
-		if err := labelPR(http.DefaultClient, repository, token, pr, tag); err != nil {
-			log.Fatalf("Failed on label creation for Pull Request %s: '%s'\n", pr, err)
+		for _, pr := range prs {
+			log.Printf("Labeling PR#%s (ref %s) using git tag %s", pr, ref, tag)
+			if dryRun {
+				log.Println("DRY RUN: skipping labeling")
+				continue
+			}
+			if err := labelPR(http.DefaultClient, repository, token, pr, tag); err != nil {
+				log.Fatalf("Failed on label creation for Pull Request %s: '%s'\n", pr, err)
+			}
 		}
 	}
 }
@@ -113,8 +119,9 @@ func readToken(path string) (string, error) {
 
 func filterPullRequests(text string) []string {
 	var shas []string
+	matchMerge := regexp.MustCompile(`Merge (#|pull request)`)
 	for _, line := range strings.Split(text, "\n") {
-		if !strings.Contains(line, "Merge pull request") {
+		if !matchMerge.MatchString(line) {
 			continue
 		}
 		sha := strings.Fields(line)[0]
@@ -175,26 +182,25 @@ func getFirstTagContainingRef(ref string) (string, error) {
 	return version, nil
 }
 
-func getPrNumber(text string) string {
-	for _, prNumber := range strings.Fields(text) {
+func extractPrNumbers(text string) []string {
+	var numbers []string
+	lines := strings.SplitN(text, "\n", 2)
+	for _, prNumber := range strings.Fields(lines[0]) {
 		if strings.HasPrefix(prNumber, "#") {
-			return strings.TrimPrefix(prNumber, "#")
+			numbers = append(numbers, strings.TrimPrefix(prNumber, "#"))
 		}
 	}
-	return ""
+	return numbers
 }
 
-func getPrInfo(ref string) (string, error) {
+func getPrNumbers(ref string) ([]string, error) {
 	cmd := exec.Command("git", "show", "--oneline", "--format=format:%h %s", ref)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	pr := getPrNumber(string(out))
-	if pr == "" {
-		return "", fmt.Errorf("cannot find PR number")
-	}
-	return pr, nil
+	prs := extractPrNumbers(string(out))
+	return prs, nil
 }
 
 func apiCall(client *http.Client, url string, token string, payload interface{}) error {

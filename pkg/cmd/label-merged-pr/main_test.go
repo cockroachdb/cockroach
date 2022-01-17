@@ -23,18 +23,29 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetPrNumber(t *testing.T) {
+func TestExtractPrNumbers(t *testing.T) {
 	tests := []struct {
 		input    string
-		expected string
+		expected []string
 	}{
-		{"Test #1212 pass test", "1212"},
-		{"FAIL", ""},
+		{
+			"99a4816fc2 Merge pull request #69991 from cockroachdb/blathers/backport-release-21.2-69961",
+			[]string{"69991"},
+		},
+		{
+			"478a4d8ca4 Merge #69674 #69881 #69910 #69922",
+			[]string{"69674", "69881", "69910", "69922"},
+		},
+		{
+			"c8a62f290a Merge #64957\ndiff --cc pkg/ccl/sqlproxyccl/denylist/BUILD.bazel # comment",
+			[]string{"64957"},
+		},
+		{"FAIL", nil},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			assert.Equal(t, getPrNumber(tc.input), tc.expected)
+			assert.Equal(t, tc.expected, extractPrNumbers(tc.input))
 		})
 	}
 }
@@ -77,6 +88,11 @@ func TestFilterPullRequests(t *testing.T) {
 						 2222 Merge pull request #2222
 						 3333 Merge pull request #3333
 						 4444 Merge pull request #4444`, []string{"1111", "2222", "3333", "4444"}},
+		{`478a4d8ca4 Merge #69674 #69881 #69910 #69922
+			d855b7b5f7 Merge #69957
+			1a33383ccc Merge pull request #69969 from jbowens/jackson/pebble-release-21.2-6c12d67b83e6
+			99a4816fc2 Merge pull request #69991 from cockroachdb/blathers/backport-release-21.2-69961`,
+			[]string{"478a4d8ca4", "d855b7b5f7", "1a33383ccc", "99a4816fc2"}},
 		{`1111 Pull request #1111
 						 2222 Merge request #2222
 					   3333 Super pull request #3333
@@ -85,7 +101,7 @@ func TestFilterPullRequests(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			assert.Equal(t, filterPullRequests(tc.input), tc.expected)
+			assert.Equal(t, tc.expected, filterPullRequests(tc.input))
 		})
 	}
 
