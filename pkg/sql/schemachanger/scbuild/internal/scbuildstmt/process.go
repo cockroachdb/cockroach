@@ -88,7 +88,6 @@ func Process(b BuildCtx, n tree.Statement) {
 	if !info.IsFullySupported(b.EvalCtx().SessionData().NewSchemaChangerMode) {
 		panic(scerrors.NotImplementedError(n))
 	}
-
 	// Next invoke the callback function, with the concrete types.
 	fn := reflect.ValueOf(info.fn)
 	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}

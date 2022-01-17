@@ -15,6 +15,8 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/sql/catalog",
@@ -48,6 +50,7 @@ go_test(
         "//pkg/base",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -66,9 +69,9 @@ go_test(
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
         "//pkg/sql/schemachanger/scexec/scmutationexec",
-        "//pkg/sql/schemachanger/scgraphviz",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",

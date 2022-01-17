@@ -28,14 +28,19 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 	}
 	// Find the table first.
 	tables := make([]tblDropCtx, 0, len(n.Names))
-	for _, name := range n.Names {
-		_, tbl := b.ResolveTable(name.ToUnresolvedObjectName(), ResolveParams{
+	for idx := range n.Names {
+		name := &n.Names[idx]
+		prefix, tbl := b.ResolveTable(name.ToUnresolvedObjectName(), ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
 		if tbl == nil {
+			b.MarkNameAsNonExistent(name)
 			continue
 		}
+		// Mutate the AST to have the fully resolved name from above, which will be
+		// used for both event logging and errors.
+		name.ObjectNamePrefix = prefix.NamePrefix()
 		// Only decompose the tables first into elements, next we will check for
 		// dependent objects, in case they are all dropped *together*.
 		newCtx := dropTableBasic(b, tbl)
@@ -81,8 +86,8 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 				onErrPanic(err)
 
 				return pgerror.Newf(
-					pgcode.DependentObjectsStillExist, "cannot drop table %q because view %q depends on it",
-					name, depViewName)
+					pgcode.DependentObjectsStillExist, "cannot drop relation %q because view %q depends on it",
+					name.Object(), depViewName.Object())
 			}
 			dropView(c, dependentDesc, behavior)
 			return nil
@@ -119,14 +124,36 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 				ReferenceColumns: fk.OriginColumns,
 			})
 		})
-		// Detect any sequence ownerships and clean them up no cascade
-		// is required.
+		// Detect any sequence ownerships and clean them up if only the
+		// cascade option is specified, specifically if other objects rely
+		// on the sequence.
+		cleanSequenceOwnedBy := func(seq catalog.TableDescriptor) {
+			dropSequence(b, seq, tree.DropCascade)
+			if behavior == tree.DropCascade {
+				return
+			}
+			scpb.ForEachRelationDependedOnBy(c, func(
+				status scpb.Status,
+				targetStatus scpb.Status,
+				depBy *scpb.RelationDependedOnBy,
+			) {
+				if depBy.TableID != seq.GetID() {
+					return
+				}
+				if depBy.DependedOnBy == tbl.GetID() {
+					return
+				}
+				panic(pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"cannot drop table a because other objects depend on it"))
+			})
+		}
 		scpb.ForEachSequenceOwnedBy(c, func(_, _ scpb.Status, sequenceOwnedBy *scpb.SequenceOwnedBy) {
 			if sequenceOwnedBy.OwnerTableID != tbl.GetID() {
 				return
 			}
-			sequence := c.MustReadTable(sequenceOwnedBy.SequenceID)
-			dropSequence(b, sequence, tree.DropCascade)
+			seq := c.MustReadTable(sequenceOwnedBy.SequenceID)
+			cleanSequenceOwnedBy(seq)
 		})
 	}
 }

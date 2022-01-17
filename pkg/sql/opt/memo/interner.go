@@ -18,13 +18,13 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -630,6 +630,9 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	}
 	h.HashOrderingChoice(val.Ordering)
 	h.HashFloat64(val.LimitHint)
+	for _, region := range val.Distribution.Regions {
+		h.HashString(region)
+	}
 }
 
 func (h *hasher) HashLockingItem(val *tree.LockingItem) {
@@ -1206,13 +1209,13 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 	// should not be considered equivalent by the interner (e.g. decimal values
 	// 1.0 and 1.00).
 	if !colinfo.CanHaveCompositeKeyEncoding(val.ResolvedType()) {
-		b, err = rowenc.EncodeTableKey(b, val, encoding.Ascending)
+		b, err = keyside.Encode(b, val, encoding.Ascending)
 		if err == nil {
 			return b
 		}
 	}
 
-	b, err = rowenc.EncodeTableValue(b, descpb.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
+	b, err = valueside.Encode(b, valueside.NoColumnID, val, nil /* scratch */)
 	if err != nil {
 		panic(err)
 	}

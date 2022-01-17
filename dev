@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 
-set -uo pipefail
+set -euo pipefail
 
 # Bump this counter to force rebuilding `dev` on all machines.
-DEV_VERSION=2
+DEV_VERSION=4
 
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
 BINARY_DIR=$THIS_DIR/bin/dev-versions
 BINARY_PATH=$BINARY_DIR/dev.$DEV_VERSION
 
-if [ ! -f "$BINARY_PATH" ]; then
+if [[ ! -f "$BINARY_PATH" || ! -z "${DEV_FORCE_REBUILD-}" ]]; then
     echo "$BINARY_PATH not found, building..."
     mkdir -p $BINARY_DIR
     bazel build //pkg/cmd/dev --config nonogo
     cp $(bazel info bazel-bin --config nonogo)/pkg/cmd/dev/dev_/dev $BINARY_PATH
+    # The Bazel-built binary won't have write permissions.
+    chmod a+w $BINARY_PATH
 fi
 
 exec $BINARY_PATH "$@"

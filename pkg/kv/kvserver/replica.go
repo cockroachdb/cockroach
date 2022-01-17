@@ -264,6 +264,16 @@ type Replica struct {
 	// miss out on anything.
 	raftCtx context.Context
 
+	// breaker is a per-Replica circuit breaker. Its purpose is to avoid incurring
+	// large (infinite) latencies on client requests when the Replica is unable to
+	// serve commands. This circuit breaker does *not* recruit the occasional
+	// request to determine whether it is safe to heal the breaker. Instead, it
+	// has its own probe that is executed asynchronously and determines when the
+	// Replica is healthy again.
+	//
+	// See replica_circuit_breaker.go for details.
+	breaker *replicaCircuitBreaker
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
@@ -279,6 +289,47 @@ type Replica struct {
 		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.
 		decoder replicaDecoder
+
+		// The last seen replica descriptors from incoming Raft messages. These are
+		// stored so that the replica still knows the replica descriptors for itself
+		// and for its message recipients in the circumstances when its RangeDescriptor
+		// is out of date.
+		//
+		// Normally, a replica knows about the other replica descriptors for a
+		// range via the RangeDescriptor stored in Replica.mu.state.Desc. But that
+		// descriptor is only updated during a Split or ChangeReplicas operation.
+		// There are periods during a Replica's lifetime when that information is
+		// out of date:
+		//
+		// 1. When a replica is being newly created as the result of an incoming
+		// Raft message for it. This is the common case for ChangeReplicas and an
+		// uncommon case for Splits. The leader will be sending the replica
+		// messages and the replica needs to be able to respond before it can
+		// receive an updated range descriptor (via a snapshot,
+		// changeReplicasTrigger, or splitTrigger).
+		//
+		// 2. If the node containing a replica is partitioned or down while the
+		// replicas for the range are updated. When the node comes back up, other
+		// replicas may begin communicating with it and it needs to be able to
+		// respond. Unlike 1 where there is no range descriptor, in this situation
+		// the replica has a range descriptor but it is out of date. Note that a
+		// replica being removed from a node and then quickly re-added before the
+		// replica has been GC'd will also use the last seen descriptors. In
+		// effect, this is another path for which the replica's local range
+		// descriptor is out of date.
+		//
+		// The last seen replica descriptors are updated on receipt of every raft
+		// message via Replica.setLastReplicaDescriptors (see
+		// Store.HandleRaftRequest). These last seen descriptors are used when
+		// the replica's RangeDescriptor contains missing or out of date descriptors
+		// for a replica (see Replica.sendRaftMessageRaftMuLocked).
+		//
+		// Removing a replica from Store.mu.replicas is not a problem because
+		// when a replica is completely removed, it won't be recreated until
+		// there is another event that will repopulate the replicas map in the
+		// range descriptor. When it is temporarily dropped and recreated, the
+		// newly recreated replica will have a complete range descriptor.
+		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
 	}
 
 	// Contains the lease history when enabled.
@@ -498,47 +549,6 @@ type Replica struct {
 		// this kind of risk though: a replica that gets stuck on an otherwise
 		// live node will not lose leaseholdership.
 		lastUpdateTimes lastUpdateTimesMap
-
-		// The last seen replica descriptors from incoming Raft messages. These are
-		// stored so that the replica still knows the replica descriptors for itself
-		// and for its message recipients in the circumstances when its RangeDescriptor
-		// is out of date.
-		//
-		// Normally, a replica knows about the other replica descriptors for a
-		// range via the RangeDescriptor stored in Replica.mu.state.Desc. But that
-		// descriptor is only updated during a Split or ChangeReplicas operation.
-		// There are periods during a Replica's lifetime when that information is
-		// out of date:
-		//
-		// 1. When a replica is being newly created as the result of an incoming
-		// Raft message for it. This is the common case for ChangeReplicas and an
-		// uncommon case for Splits. The leader will be sending the replica
-		// messages and the replica needs to be able to respond before it can
-		// receive an updated range descriptor (via a snapshot,
-		// changeReplicasTrigger, or splitTrigger).
-		//
-		// 2. If the node containing a replica is partitioned or down while the
-		// replicas for the range are updated. When the node comes back up, other
-		// replicas may begin communicating with it and it needs to be able to
-		// respond. Unlike 1 where there is no range descriptor, in this situation
-		// the replica has a range descriptor but it is out of date. Note that a
-		// replica being removed from a node and then quickly re-added before the
-		// replica has been GC'd will also use the last seen descriptors. In
-		// effect, this is another path for which the replica's local range
-		// descriptor is out of date.
-		//
-		// The last seen replica descriptors are updated on receipt of every raft
-		// message via Replica.setLastReplicaDescriptors (see
-		// Store.HandleRaftRequest). These last seen descriptors are used when
-		// the replica's RangeDescriptor contains missing or out of date descriptors
-		// for a replica (see Replica.sendRaftMessage).
-		//
-		// Removing a replica from Store.mu.replicas is not a problem because
-		// when a replica is completely removed, it won't be recreated until
-		// there is another event that will repopulate the replicas map in the
-		// range descriptor. When it is temporarily dropped and recreated, the
-		// newly recreated replica will have a complete range descriptor.
-		lastToReplica, lastFromReplica roachpb.ReplicaDescriptor
 
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]ReplicaChecksum
@@ -940,7 +950,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 			// I wish this could be a Fatal, but unfortunately it's possible for the
 			// lease to be incoherent with the descriptor after a leaseholder was
 			// brutally removed through `cockroach debug unsafe-remove-dead-replicas`.
-			log.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, &l)
+			log.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
 			// Let's not return an incoherent lease; for example if we end up
 			// returning it to a client through a br.RangeInfos, the client will freak
 			// out.
@@ -1063,13 +1073,11 @@ func (r *Replica) mergeInProgressRLocked() bool {
 }
 
 // setLastReplicaDescriptors sets the most recently seen replica
-// descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
-// to do so.
-func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
-	r.mu.Lock()
-	r.mu.lastFromReplica = req.FromReplica
-	r.mu.lastToReplica = req.ToReplica
-	r.mu.Unlock()
+// descriptors to those contained in the *RaftMessageRequest.
+func (r *Replica) setLastReplicaDescriptorsRaftMuLocked(req *RaftMessageRequest) {
+	r.raftMu.AssertHeld()
+	r.raftMu.lastFromReplica = req.FromReplica
+	r.raftMu.lastToReplica = req.ToReplica
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
@@ -1229,6 +1237,9 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
 	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
 	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
+	if err := r.breaker.Signal().Err(); err != nil {
+		ri.CircuitBreakerError = err.Error()
+	}
 
 	return ri
 }

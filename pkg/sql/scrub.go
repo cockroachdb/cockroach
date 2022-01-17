@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -224,6 +223,7 @@ func (n *scrubNode) startScrubTable(
 				return err
 			}
 			n.run.checkQueue = append(n.run.checkQueue, checks...)
+
 		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
 				return pgerror.Newf(pgcode.Syntax,
@@ -234,8 +234,8 @@ func (n *scrubNode) startScrubTable(
 					"cannot use AS OF SYSTEM TIME with PHYSICAL option")
 			}
 			physicalCheckSet = true
-			physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
-			n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
+			return pgerror.Newf(pgcode.FeatureNotSupported, "PHYSICAL scrub not implemented")
+
 		case *tree.ScrubOptionConstraint:
 			if constraintsSet {
 				return pgerror.Newf(pgcode.Syntax,
@@ -248,6 +248,7 @@ func (n *scrubNode) startScrubTable(
 				return err
 			}
 			n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
+
 		default:
 			panic(errors.AssertionFailedf("unhandled SCRUB option received: %+v", v))
 		}
@@ -269,8 +270,7 @@ func (n *scrubNode) startScrubTable(
 		}
 		n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
 
-		physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
-		n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
+		// Physical checks are no longer implemented.
 	}
 	return nil
 }
@@ -333,17 +333,6 @@ func pairwiseOp(left []string, right []string, op string) []string {
 		res[i] = fmt.Sprintf("%s %s %s", left[i], op, right[i])
 	}
 	return res
-}
-
-// createPhysicalCheckOperations will return the physicalCheckOperation
-// for all indexes on a table.
-func createPhysicalCheckOperations(
-	tableDesc catalog.TableDescriptor, tableName *tree.TableName,
-) (checks []checkOperation) {
-	for _, idx := range tableDesc.ActiveIndexes() {
-		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, idx))
-	}
-	return checks
 }
 
 // createIndexCheckOperations will return the checkOperations for the
@@ -467,41 +456,4 @@ func createConstraintCheckOperations(
 		}
 	}
 	return results, nil
-}
-
-// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If non-nil
-// rowContainerHelper is returned, the caller must close it.
-func scrubRunDistSQL(
-	ctx context.Context, planCtx *PlanningCtx, p *planner, plan *PhysicalPlan, columnTypes []*types.T,
-) (*rowContainerHelper, error) {
-	var rowContainer rowContainerHelper
-	rowContainer.Init(columnTypes, &p.extendedEvalCtx, "scrub" /* opName */)
-	rowResultWriter := NewRowResultWriter(&rowContainer)
-	recv := MakeDistSQLReceiver(
-		ctx,
-		rowResultWriter,
-		tree.Rows,
-		p.ExecCfg().RangeDescriptorCache,
-		p.txn,
-		p.ExecCfg().Clock,
-		p.extendedEvalCtx.Tracing,
-		p.ExecCfg().ContentionRegistry,
-		nil, /* testingPushCallback */
-	)
-	defer recv.Release()
-
-	// Copy the evalCtx, as dsp.Run() might change it.
-	evalCtxCopy := p.extendedEvalCtx
-	p.extendedEvalCtx.DistSQLPlanner.Run(
-		planCtx, p.txn, plan, recv, &evalCtxCopy, nil, /* finishedSetupFn */
-	)()
-	if rowResultWriter.Err() != nil {
-		rowContainer.Close(ctx)
-		return nil, rowResultWriter.Err()
-	} else if rowContainer.Len() == 0 {
-		rowContainer.Close(ctx)
-		return nil, nil
-	}
-
-	return &rowContainer, nil
 }

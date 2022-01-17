@@ -115,7 +115,7 @@ func checkIfDescOrElementAreDropped(b BuildCtx, id descpb.ID) bool {
 	// statement for example DROP TABLE A, B. Otherwise, the statement phase
 	// should have marked the descriptor already.
 	matches := false
-	b.ForEachNode(func(_, targetStatus scpb.Status, elem scpb.Element) {
+	b.ForEachElementStatus(func(_, targetStatus scpb.Status, elem scpb.Element) {
 		if matches {
 			return
 		}

@@ -64,7 +64,16 @@ func lookupOrIndexJoinBuildChildReqOrdering(
 	//
 	// This case indicates that we didn't do a good job pushing down equalities
 	// (see #36219), but it should be handled correctly here nevertheless.
-	return trimColumnGroups(&res, &child.Relational().FuncDeps)
+	res = trimColumnGroups(&res, &child.Relational().FuncDeps)
+
+	// The propagation of FDs might not be perfect; in that case we need to
+	// simplify the required ordering, or risk passing through unnecessary columns
+	// in provided orderings.
+	if fds := &child.Relational().FuncDeps; res.CanSimplify(fds) {
+		res = res.Copy()
+		res.Simplify(fds)
+	}
+	return res
 }
 
 func indexJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {

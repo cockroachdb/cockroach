@@ -443,6 +443,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`, ``},
 
+		{`CREATE MATERIALIZED VIEW a AS SELECT 1 WITH NO DATA`, 74083, ``, ``},
+
 		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT[1][2])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT ARRAY[1][2])`, 32552, ``, ``},
@@ -512,7 +514,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
 
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
-		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``, ``},
 
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`, ``},
 

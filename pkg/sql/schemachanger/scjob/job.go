@@ -79,14 +79,20 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.Codec,
 		execCfg.Settings,
 		execCfg.IndexValidator,
+		execCfg.CommentUpdaterFactory,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
+		execCtx.SessionData(),
 	)
 
 	return scrun.RunSchemaChangesInJob(
-		ctx, execCfg.DeclarativeSchemaChangerTestingKnobs, execCfg.Settings,
-		deps, n.job.ID(), payload.DescriptorIDs,
-		*newSchemaChangeDetails, *newSchemaChangeProgress,
+		ctx,
+		execCfg.DeclarativeSchemaChangerTestingKnobs,
+		execCfg.Settings,
+		deps,
+		n.job.ID(),
+		*newSchemaChangeDetails,
+		*newSchemaChangeProgress,
 		n.rollback,
 	)
 }

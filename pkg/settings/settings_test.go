@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -152,11 +153,11 @@ var strFooA = settings.RegisterStringSetting(settings.TenantWritable, "str.foo",
 var strBarA = settings.RegisterStringSetting(settings.SystemOnly, "str.bar", "desc", "bar")
 var i1A = settings.RegisterIntSetting(settings.TenantWritable, "i.1", "desc", 0)
 var i2A = settings.RegisterIntSetting(settings.TenantWritable, "i.2", "desc", 5)
-var fA = settings.RegisterFloatSetting(settings.TenantWritable, "f", "desc", 5.4)
+var fA = settings.RegisterFloatSetting(settings.TenantReadOnly, "f", "desc", 5.4)
 var dA = settings.RegisterDurationSetting(settings.TenantWritable, "d", "desc", time.Second)
 var duA = settings.RegisterPublicDurationSettingWithExplicitUnit(settings.TenantWritable, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration)
 var _ = settings.RegisterDurationSetting(settings.TenantWritable, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
-var eA = settings.RegisterEnumSetting(settings.TenantWritable, "e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
+var eA = settings.RegisterEnumSetting(settings.SystemOnly, "e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting(settings.TenantWritable, "zzz", "desc", mb)
 var mA = func() *settings.VersionSetting {
 	s := settings.MakeVersionSetting(&dummyVersionSettingImpl{})
@@ -346,36 +347,34 @@ func TestCache(t *testing.T) {
 		// doesn't have one and it would crash.
 	})
 
-	t.Run("lookup", func(t *testing.T) {
-		if actual, ok := settings.Lookup("i.1", settings.LookupForLocalAccess); !ok || i1A != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", i1A, actual, ok)
+	t.Run("lookup-system", func(t *testing.T) {
+		for _, s := range []settings.Setting{i1A, iVal, fA, fVal, dA, dVal, eA, mA, duA} {
+			result, ok := settings.Lookup(s.Key(), settings.LookupForLocalAccess, settings.ForSystemTenant)
+			if !ok {
+				t.Fatalf("lookup(%s) failed", s.Key())
+			}
+			if result != s {
+				t.Fatalf("expected %v, got %v", s, result)
+			}
 		}
-		if actual, ok := settings.Lookup("i.Val", settings.LookupForLocalAccess); !ok || iVal != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", iVal, actual, ok)
+	})
+	t.Run("lookup-tenant", func(t *testing.T) {
+		for _, s := range []settings.Setting{i1A, fA, dA, duA} {
+			result, ok := settings.Lookup(s.Key(), settings.LookupForLocalAccess, false /* forSystemTenant */)
+			if !ok {
+				t.Fatalf("lookup(%s) failed", s.Key())
+			}
+			if result != s {
+				t.Fatalf("expected %v, got %v", s, result)
+			}
 		}
-		if actual, ok := settings.Lookup("f", settings.LookupForLocalAccess); !ok || fA != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", fA, actual, ok)
-		}
-		if actual, ok := settings.Lookup("fVal", settings.LookupForLocalAccess); !ok || fVal != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", fVal, actual, ok)
-		}
-		if actual, ok := settings.Lookup("d", settings.LookupForLocalAccess); !ok || dA != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", dA, actual, ok)
-		}
-		if actual, ok := settings.Lookup("dVal", settings.LookupForLocalAccess); !ok || dVal != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", dVal, actual, ok)
-		}
-		if actual, ok := settings.Lookup("e", settings.LookupForLocalAccess); !ok || eA != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", eA, actual, ok)
-		}
-		if actual, ok := settings.Lookup("v.1", settings.LookupForLocalAccess); !ok || mA != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", mA, actual, ok)
-		}
-		if actual, ok := settings.Lookup("d_with_explicit_unit", settings.LookupForLocalAccess); !ok || duA != actual {
-			t.Fatalf("expected %v, got %v (exists: %v)", duA, actual, ok)
-		}
-		if actual, ok := settings.Lookup("dne", settings.LookupForLocalAccess); ok {
-			t.Fatalf("expected nothing, got %v", actual)
+	})
+	t.Run("lookup-tenant-fail", func(t *testing.T) {
+		for _, s := range []settings.Setting{iVal, fVal, dVal, eA, mA} {
+			_, ok := settings.Lookup(s.Key(), settings.LookupForLocalAccess, false /* forSystemTenant */)
+			if ok {
+				t.Fatalf("lookup(%s) should have failed", s.Key())
+			}
 		}
 	})
 
@@ -687,10 +686,14 @@ func TestCache(t *testing.T) {
 }
 
 func TestIsReportable(t *testing.T) {
-	if v, ok := settings.Lookup("bool.t", settings.LookupForLocalAccess); !ok || !settings.TestingIsReportable(v) {
+	if v, ok := settings.Lookup(
+		"bool.t", settings.LookupForLocalAccess, settings.ForSystemTenant,
+	); !ok || !settings.TestingIsReportable(v) {
 		t.Errorf("expected 'bool.t' to be marked as isReportable() = true")
 	}
-	if v, ok := settings.Lookup("sekretz", settings.LookupForLocalAccess); !ok || settings.TestingIsReportable(v) {
+	if v, ok := settings.Lookup(
+		"sekretz", settings.LookupForLocalAccess, settings.ForSystemTenant,
+	); !ok || settings.TestingIsReportable(v) {
 		t.Errorf("expected 'sekretz' to be marked as isReportable() = false")
 	}
 }
@@ -707,7 +710,7 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
 	var changes int
-	s, ok := settings.Lookup(maxName, settings.LookupForLocalAccess)
+	s, ok := settings.Lookup(maxName, settings.LookupForLocalAccess, settings.ForSystemTenant)
 	if !ok {
 		t.Fatalf("expected lookup of %s to succeed", maxName)
 	}
@@ -796,6 +799,31 @@ func TestOverride(t *testing.T) {
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
 	u.ResetRemaining(ctx)
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
+}
+
+func TestSystemOnlyDisallowedOnTenant(t *testing.T) {
+	skip.UnderNonTestBuild(t)
+
+	ctx := context.Background()
+	sv := &settings.Values{}
+	sv.Init(ctx, settings.TestOpaque)
+	sv.SetNonSystemTenant()
+
+	// Check that we can still read non-SystemOnly settings.
+	if expected, actual := "", strFooA.Get(sv); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Get did not panic")
+			} else if !strings.Contains(fmt.Sprint(r), "attempted to set forbidden setting") {
+				t.Errorf("received unexpected panic: %v", r)
+			}
+		}()
+		strBarA.Get(sv)
+	}()
 }
 
 func setDummyVersion(dv dummyVersion, vs *settings.VersionSetting, sv *settings.Values) error {

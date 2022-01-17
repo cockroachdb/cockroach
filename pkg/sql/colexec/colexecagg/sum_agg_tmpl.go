@@ -24,7 +24,7 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -98,15 +98,6 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
 	numNonNull uint64
-	// {{if .NeedsHelper}}
-	// {{/*
-	// overloadHelper is used only when we perform the summation of integers
-	// and get a decimal result which is the case when {{if .NeedsHelper}}
-	// evaluates to true. In all other cases we don't want to wastefully
-	// allocate the helper.
-	// */}}
-	overloadHelper execgen.OverloadHelper
-	// {{end}}
 }
 
 var _ AggregateFunc = &sum_SUMKIND_TYPE_AGGKINDAgg{}
@@ -122,17 +113,6 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// {{if .NeedsHelper}}
-	// {{/*
-	// overloadHelper is used only when we perform the summation of integers
-	// and get a decimal result which is the case when {{if .NeedsHelper}}
-	// evaluates to true. In all other cases we don't want to wastefully
-	// allocate the helper.
-	// */}}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	// {{end}}
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
@@ -253,11 +233,6 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Remove(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
-	// {{if .NeedsHelper}}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	// {{end}}
 	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()

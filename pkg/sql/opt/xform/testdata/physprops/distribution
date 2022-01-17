@@ -1,0 +1,271 @@
+# Tests for distribution property with a non-partitioned table.
+
+exec-ddl
+CREATE TABLE abc (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    UNIQUE INDEX bc (b, c)
+)
+----
+
+exec-ddl
+ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=us,+dc=central,+rack=1]'
+----
+
+exec-ddl
+ALTER INDEX abc@bc CONFIGURE ZONE USING constraints='[+region=us,-region=eu,+region=ap]'
+----
+
+opt locality=(region=us)
+SELECT a FROM abc
+----
+scan abc
+ ├── columns: a:1!null
+ ├── key: (1)
+ └── distribution: us
+
+opt locality=(region=eu)
+SELECT a FROM abc
+----
+distribute
+ ├── columns: a:1!null
+ ├── key: (1)
+ ├── distribution: eu
+ ├── input distribution: us
+ └── scan abc
+      ├── columns: a:1!null
+      └── key: (1)
+
+opt locality=(region=us)
+SELECT a FROM abc WHERE b = 1
+----
+distribute
+ ├── columns: a:1!null
+ ├── key: (1)
+ ├── distribution: us
+ ├── input distribution: ap,us
+ └── project
+      ├── columns: a:1!null
+      ├── key: (1)
+      └── scan abc@bc
+           ├── columns: a:1!null b:2!null
+           ├── constraint: /2/3: [/1 - /1]
+           ├── key: (1)
+           └── fd: ()-->(2)
+
+opt locality=(region=us)
+SELECT * FROM abc WHERE a > 10
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── constraint: /1: [/11 - ]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ └── distribution: us
+
+opt locality=(region=ap)
+SELECT * FROM abc WHERE a > 10
+----
+distribute
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ ├── distribution: ap
+ ├── input distribution: us
+ └── scan abc
+      ├── columns: a:1!null b:2 c:3
+      ├── constraint: /1: [/11 - ]
+      ├── key: (1)
+      └── fd: (1)-->(2,3), (2,3)~~>(1)
+
+# Combined with sorting.
+opt locality=(region=ap)
+SELECT * FROM abc WHERE a > 10 ORDER BY c
+----
+distribute
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ ├── ordering: +3
+ ├── distribution: ap
+ ├── input distribution: us
+ └── sort
+      ├── columns: a:1!null b:2 c:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (2,3)~~>(1)
+      ├── ordering: +3
+      └── scan abc
+           ├── columns: a:1!null b:2 c:3
+           ├── constraint: /1: [/11 - ]
+           ├── key: (1)
+           └── fd: (1)-->(2,3), (2,3)~~>(1)
+
+
+# Tests for distribution property with a partitioned table.
+
+exec-ddl
+CREATE TABLE abc_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west', 'central')),
+    t INT NOT NULL CHECK (t IN (1, 2, 3)),
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    UNIQUE WITHOUT INDEX (c),
+    UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
+      PARTITION east VALUES IN (('east', 1), ('east', 2)),
+      PARTITION west VALUES IN (('west', DEFAULT)),
+      PARTITION default VALUES IN (DEFAULT)
+    ),
+    INDEX d_idx (r, d) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]'
+----
+
+exec-ddl
+ALTER PARTITION "default" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@d_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+opt locality=(region=east)
+SELECT a FROM abc_part WHERE r = 'east' AND t = 1
+----
+project
+ ├── columns: a:3!null
+ ├── key: (3)
+ ├── distribution: east
+ └── scan abc_part@c_idx
+      ├── columns: r:1!null t:2!null a:3!null
+      ├── constraint: /1/2/5: [/'east'/1 - /'east'/1]
+      ├── key: (3)
+      ├── fd: ()-->(1,2)
+      └── distribution: east
+
+opt locality=(region=west)
+SELECT a FROM abc_part WHERE r = 'east' AND t = 1
+----
+distribute
+ ├── columns: a:3!null
+ ├── key: (3)
+ ├── distribution: west
+ ├── input distribution: east
+ └── project
+      ├── columns: a:3!null
+      ├── key: (3)
+      └── scan abc_part@c_idx
+           ├── columns: r:1!null t:2!null a:3!null
+           ├── constraint: /1/2/5: [/'east'/1 - /'east'/1]
+           ├── key: (3)
+           └── fd: ()-->(1,2)
+
+opt locality=(region=west)
+SELECT a FROM abc_part WHERE r IN ('east', 'west') AND d = 10
+----
+distribute
+ ├── columns: a:3!null
+ ├── key: (3)
+ ├── distribution: west
+ ├── input distribution: east,west
+ └── project
+      ├── columns: a:3!null
+      ├── key: (3)
+      └── scan abc_part@d_idx
+           ├── columns: r:1!null a:3!null d:6!null
+           ├── constraint: /1/6/3
+           │    ├── [/'east'/10 - /'east'/10]
+           │    └── [/'west'/10 - /'west'/10]
+           ├── key: (3)
+           └── fd: ()-->(6), (3)-->(1)
+
+opt locality=(region=east)
+SELECT a FROM abc_part WHERE d = 10
+----
+distribute
+ ├── columns: a:3!null
+ ├── key: (3)
+ ├── distribution: east
+ ├── input distribution: central,east,west
+ └── project
+      ├── columns: a:3!null
+      ├── key: (3)
+      └── scan abc_part@d_idx
+           ├── columns: a:3!null d:6!null
+           ├── constraint: /1/6/3
+           │    ├── [/'central'/10 - /'central'/10]
+           │    ├── [/'east'/10 - /'east'/10]
+           │    └── [/'west'/10 - /'west'/10]
+           ├── key: (3)
+           └── fd: ()-->(6)
+
+# Combined with sorting.
+opt locality=(region=east)
+SELECT a FROM abc_part WHERE d = 10 ORDER BY c
+----
+distribute
+ ├── columns: a:3!null  [hidden: c:5]
+ ├── key: (3)
+ ├── fd: (3)-->(5), (5)~~>(3)
+ ├── ordering: +5
+ ├── distribution: east
+ ├── input distribution: central,east,west
+ └── sort
+      ├── columns: a:3!null c:5
+      ├── key: (3)
+      ├── fd: (3)-->(5), (5)~~>(3)
+      ├── ordering: +5
+      └── project
+           ├── columns: a:3!null c:5
+           ├── key: (3)
+           ├── fd: (3)-->(5), (5)~~>(3)
+           └── index-join abc_part
+                ├── columns: a:3!null c:5 d:6!null
+                ├── key: (3)
+                ├── fd: ()-->(6), (3)-->(5), (5)~~>(3)
+                └── scan abc_part@d_idx
+                     ├── columns: a:3!null d:6!null
+                     ├── constraint: /1/6/3
+                     │    ├── [/'central'/10 - /'central'/10]
+                     │    ├── [/'east'/10 - /'east'/10]
+                     │    └── [/'west'/10 - /'west'/10]
+                     ├── key: (3)
+                     └── fd: ()-->(6)

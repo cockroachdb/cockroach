@@ -33,7 +33,7 @@ go_library(
         "//pkg/util/duration",  # keep
         "//pkg/util/json",  # keep
         "//pkg/util/mon",
-        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_marusama_semaphore//:semaphore",
     ],
@@ -47,6 +47,7 @@ go_test(
         "mergejoiner_test.go",
     ],
     embed = [":colexecjoin"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

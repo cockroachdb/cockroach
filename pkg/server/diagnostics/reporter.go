@@ -209,7 +209,9 @@ func (r *Reporter) CreateReport(
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
 			name := string(tree.MustBeDString(row[0]))
-			info.AlteredSettings[name] = settings.RedactedValue(name, &r.Settings.SV)
+			info.AlteredSettings[name] = settings.RedactedValue(
+				name, &r.Settings.SV, r.TenantID == roachpb.SystemTenantID,
+			)
 		}
 		if err != nil {
 			// No need to clear AlteredSettings map since we only make best

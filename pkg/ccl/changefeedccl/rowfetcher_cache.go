@@ -41,7 +41,7 @@ type rowFetcherCache struct {
 	collection *descs.Collection
 	db         *kv.DB
 
-	a rowenc.DatumAlloc
+	a tree.DatumAlloc
 }
 
 var rfCacheConfig = cache.Config{
@@ -177,8 +177,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		0,     /* lockTimeout */
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&c.a,
 		nil, /* memMonitor */
 		rfArgs,

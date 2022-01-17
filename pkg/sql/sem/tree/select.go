@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -270,7 +271,7 @@ func (node *StatementSource) Format(ctx *FmtCtx) {
 }
 
 // IndexID is a custom type for IndexDescriptor IDs.
-type IndexID uint32
+type IndexID = catid.IndexID
 
 // IndexFlags represents "@<index_name|index_id>" or "@{param[,param]}" where
 // param is one of:

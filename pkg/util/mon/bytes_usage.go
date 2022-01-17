@@ -13,6 +13,7 @@ package mon
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"math/bits"
 
@@ -781,5 +782,59 @@ func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	}
 	if neededBytes <= mm.mu.curBudget.used-margin {
 		mm.mu.curBudget.Shrink(ctx, mm.mu.curBudget.used-neededBytes)
+	}
+}
+
+// ReadAll is like io.ReadAll except it additionally asks the BoundAccount acct
+// permission, if it is non-nil, it grows its buffer while reading. When the
+// caller releases the returned slice it shrink the bound account by its cap.
+func ReadAll(ctx context.Context, r io.Reader, acct *BoundAccount) ([]byte, error) {
+	if acct == nil {
+		b, err := io.ReadAll(r)
+		return b, err
+	}
+
+	const starting, maxIncrease = 1024, 8 << 20
+	if err := acct.Grow(ctx, starting); err != nil {
+		return nil, err
+	}
+
+	b := make([]byte, 0, starting)
+
+	for {
+		// If we've filled our buffer, ask the monitor for more, up to its cap again
+		// or max, whichever is less (so we double until we hit 8mb then grow by 8mb
+		// each time thereafter), then alloc a new buffer that is that much bigger
+		// and copy the existing buffer over.
+		if len(b) == cap(b) {
+			grow := cap(b)
+			if grow > maxIncrease {
+				// If we're realloc'ing at the max size it's probably worth checking if
+				// we've been cancelled too.
+				if err := ctx.Err(); err != nil {
+					acct.Shrink(ctx, int64(cap(b)))
+					return nil, err
+				}
+				grow = maxIncrease
+			}
+			if err := acct.Grow(ctx, int64(grow)); err != nil {
+				// We were denied so release whatever we had before returning the error.
+				acct.Shrink(ctx, int64(cap(b)))
+				return nil, err
+			}
+			realloc := make([]byte, len(b), cap(b)+grow)
+			copy(realloc, b)
+			b = realloc
+		}
+
+		// Read into our buffer until we get an error.
+		n, err := r.Read(b[len(b):cap(b)])
+		b = b[:len(b)+n]
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return b, err
+		}
 	}
 }

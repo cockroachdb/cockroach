@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/gorhill/cronexpr"
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1078,8 +1078,10 @@ INSERT INTO t values (1), (10), (100);
 		// to the next scheduled recurrence.
 		for _, id := range []int64{fullID, incID} {
 			s := th.loadSchedule(t, id)
+			e, err := cron.ParseStandard(s.ScheduleExpr())
+			require.NoError(t, err)
 			require.EqualValues(t,
-				cronexpr.MustParse(s.ScheduleExpr()).Next(th.env.Now()).Round(time.Microsecond),
+				e.Next(th.env.Now()).Round(time.Microsecond),
 				s.NextRun())
 		}
 

@@ -5,12 +5,15 @@ CREATE SEQUENCE defaultdb.SQ1
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 54}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
+    *scop.RemoveTableComment
+      TableID: 54
 PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], TXN_DROPPED] -> DROPPED
@@ -30,26 +33,28 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+          redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+          statementtag: DROP SEQUENCE
 PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        sequence:
+        Sequence:
           sequenceId: 54
-      Metadata:
-        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+      StatementTag: DROP SEQUENCE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 54
@@ -71,12 +76,15 @@ CREATE TABLE defaultdb.blog_posts2 (id INT8 PRIMARY KEY, val INT8 DEFAULT nextva
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 54}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
+    *scop.RemoveTableComment
+      TableID: 54
 PreCommitPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], TXN_DROPPED] -> DROPPED
@@ -122,26 +130,28 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
-      State:
+      TargetState:
         Authorization:
-          Username: root
+          UserName: root
         Statements:
         - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+          redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+          statementtag: DROP SEQUENCE
 PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
-      DescID: 54
+      Authorization:
+        UserName: root
       Element:
-        sequence:
+        Sequence:
           sequenceId: 54
-      Metadata:
-        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-        Username: root
+      Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+      StatementTag: DROP SEQUENCE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 54

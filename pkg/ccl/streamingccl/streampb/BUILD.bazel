@@ -9,6 +9,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb:roachpb_proto",
+        "//pkg/util:util_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
@@ -23,6 +24,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb:with-mocks",
+        "//pkg/util",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
@@ -30,6 +32,7 @@ go_proto_library(
 
 go_library(
     name = "streampb",
+    srcs = ["empty.go"],
     embed = [":streampb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb",
     visibility = ["//visibility:public"],

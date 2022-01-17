@@ -683,6 +683,7 @@ func (a internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
+	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/RangeFeed")
 	rfAdapter := rangeFeedClientAdapter{
 		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
 	}
@@ -691,6 +692,7 @@ func (a internalClientAdapter) RangeFeed(
 	args.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
 	go func() {
 		defer cancel()
+		defer sp.Finish()
 		err := a.server.RangeFeed(args, rfAdapter)
 		if err == nil {
 			err = io.EOF
@@ -727,13 +729,57 @@ func (a internalClientAdapter) GossipSubscription(
 	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_GossipSubscriptionClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
+	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/GossipSubscription")
 	gsAdapter := gossipSubscriptionClientAdapter{
 		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
 	}
 
 	go func() {
 		defer cancel()
+		defer sp.Finish()
 		err := a.server.GossipSubscription(args, gsAdapter)
+		if err == nil {
+			err = io.EOF
+		}
+		gsAdapter.errC <- err
+	}()
+
+	return gsAdapter, nil
+}
+
+type tenantSettingsClientAdapter struct {
+	respStreamClientAdapter
+}
+
+// roachpb.Internal_TenantSettingsServer methods.
+func (a tenantSettingsClientAdapter) Recv() (*roachpb.TenantSettingsEvent, error) {
+	e, err := a.recvInternal()
+	if err != nil {
+		return nil, err
+	}
+	return e.(*roachpb.TenantSettingsEvent), nil
+}
+
+// roachpb.Internal_TenantSettingsServer methods.
+func (a tenantSettingsClientAdapter) Send(e *roachpb.TenantSettingsEvent) error {
+	return a.sendInternal(e)
+}
+
+var _ roachpb.Internal_TenantSettingsClient = tenantSettingsClientAdapter{}
+var _ roachpb.Internal_TenantSettingsServer = tenantSettingsClientAdapter{}
+
+// TenantSettings is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) TenantSettings(
+	ctx context.Context, args *roachpb.TenantSettingsRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_TenantSettingsClient, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	gsAdapter := tenantSettingsClientAdapter{
+		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
+	}
+
+	go func() {
+		defer cancel()
+		err := a.server.TenantSettings(args, gsAdapter)
 		if err == nil {
 			err = io.EOF
 		}

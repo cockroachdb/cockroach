@@ -100,7 +100,7 @@ type PlanHookState interface {
 	CreateSchemaNamespaceEntry(ctx context.Context, schemaNameKey roachpb.Key,
 		schemaID descpb.ID) error
 	MigrationJobDeps() migration.JobDeps
-	SpanConfigReconciliationJobDeps() spanconfig.ReconciliationDependencies
+	SpanConfigReconciler() spanconfig.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 

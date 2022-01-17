@@ -13,9 +13,7 @@ package execinfrapb
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -320,7 +318,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			typ := dStartOffset.ResolvedType()
 			spec.Start.OffsetType = DatumInfo{Encoding: descpb.DatumEncoding_VALUE, Type: typ}
 			var buf []byte
-			var a rowenc.DatumAlloc
+			var a tree.DatumAlloc
 			datum := rowenc.DatumToEncDatum(typ, dStartOffset)
 			buf, err = datum.Encode(typ, &a, descpb.DatumEncoding_VALUE, buf)
 			if err != nil {
@@ -364,7 +362,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				typ := dEndOffset.ResolvedType()
 				spec.End.OffsetType = DatumInfo{Encoding: descpb.DatumEncoding_VALUE, Type: typ}
 				var buf []byte
-				var a rowenc.DatumAlloc
+				var a tree.DatumAlloc
 				datum := rowenc.DatumToEncDatum(typ, dEndOffset)
 				buf, err = datum.Encode(typ, &a, descpb.DatumEncoding_VALUE, buf)
 				if err != nil {
@@ -502,42 +500,8 @@ func (spec *WindowerSpec_Frame) ConvertToAST() (*tree.WindowFrame, error) {
 	}, nil
 }
 
-// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
-// underlying Table field.
-func (spec *TableReaderSpec) BuildTableDescriptor() catalog.TableDescriptor {
-	return tabledesc.NewUnsafeImmutable(&spec.Table)
-}
-
-// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
-// underlying Table field.
-func (spec *JoinReaderSpec) BuildTableDescriptor() catalog.TableDescriptor {
-	return tabledesc.NewUnsafeImmutable(&spec.Table)
-}
-
-// BuildTableDescriptors returns a catalog.TableDescriptor slice wrapping the
-// underlying Tables field.
-func (spec *ZigzagJoinerSpec) BuildTableDescriptors() []catalog.TableDescriptor {
-	ret := make([]catalog.TableDescriptor, len(spec.Tables))
-	for i := range spec.Tables {
-		ret[i] = tabledesc.NewUnsafeImmutable(&spec.Tables[i])
-	}
-	return ret
-}
-
-// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
-// underlying Table field.
-func (spec *InvertedJoinerSpec) BuildTableDescriptor() catalog.TableDescriptor {
-	return tabledesc.NewUnsafeImmutable(&spec.Table)
-}
-
-// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
-// underlying Table field.
-func (spec *BackfillerSpec) BuildTableDescriptor() catalog.TableDescriptor {
-	return tabledesc.NewUnsafeImmutable(&spec.Table)
-}
-
-// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
-// underlying Table field.
-func (spec *BulkRowWriterSpec) BuildTableDescriptor() catalog.TableDescriptor {
-	return tabledesc.NewUnsafeImmutable(&spec.Table)
+// IsIndexJoin returns true if spec defines an index join (as opposed to a
+// lookup join).
+func (spec *JoinReaderSpec) IsIndexJoin() bool {
+	return len(spec.LookupColumns) == 0 && spec.LookupExpr.Empty()
 }

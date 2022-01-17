@@ -12,9 +12,8 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,8 +74,7 @@ type sumInt16WindowAgg struct {
 	curAgg apd.Decimal
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
-	numNonNull     uint64
-	overloadHelper execgen.OverloadHelper
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumInt16WindowAgg{}
@@ -84,10 +82,7 @@ var _ AggregateFunc = &sumInt16WindowAgg{}
 func (a *sumInt16WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	// Unnecessary memory accounting can have significant overhead for window
@@ -105,9 +100,9 @@ func (a *sumInt16WindowAgg) Compute(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -126,9 +121,9 @@ func (a *sumInt16WindowAgg) Compute(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -137,7 +132,7 @@ func (a *sumInt16WindowAgg) Compute(
 			}
 		}
 	}
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -186,10 +181,7 @@ func (a *sumInt16WindowAggAlloc) newAggFunc() AggregateFunc {
 func (a *sumInt16WindowAgg) Remove(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	_, _ = col.Get(endIdx-1), col.Get(startIdx)
@@ -204,9 +196,9 @@ func (a *sumInt16WindowAgg) Remove(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -225,9 +217,9 @@ func (a *sumInt16WindowAgg) Remove(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -236,7 +228,7 @@ func (a *sumInt16WindowAgg) Remove(
 			}
 		}
 	}
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -249,8 +241,7 @@ type sumInt32WindowAgg struct {
 	curAgg apd.Decimal
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
-	numNonNull     uint64
-	overloadHelper execgen.OverloadHelper
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumInt32WindowAgg{}
@@ -258,10 +249,7 @@ var _ AggregateFunc = &sumInt32WindowAgg{}
 func (a *sumInt32WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	// Unnecessary memory accounting can have significant overhead for window
@@ -279,9 +267,9 @@ func (a *sumInt32WindowAgg) Compute(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -300,9 +288,9 @@ func (a *sumInt32WindowAgg) Compute(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -311,7 +299,7 @@ func (a *sumInt32WindowAgg) Compute(
 			}
 		}
 	}
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -360,10 +348,7 @@ func (a *sumInt32WindowAggAlloc) newAggFunc() AggregateFunc {
 func (a *sumInt32WindowAgg) Remove(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	_, _ = col.Get(endIdx-1), col.Get(startIdx)
@@ -378,9 +363,9 @@ func (a *sumInt32WindowAgg) Remove(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -399,9 +384,9 @@ func (a *sumInt32WindowAgg) Remove(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -410,7 +395,7 @@ func (a *sumInt32WindowAgg) Remove(
 			}
 		}
 	}
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -423,8 +408,7 @@ type sumInt64WindowAgg struct {
 	curAgg apd.Decimal
 	// numNonNull tracks the number of non-null values we have seen for the group
 	// that is currently being aggregated.
-	numNonNull     uint64
-	overloadHelper execgen.OverloadHelper
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumInt64WindowAgg{}
@@ -432,10 +416,7 @@ var _ AggregateFunc = &sumInt64WindowAgg{}
 func (a *sumInt64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	// Unnecessary memory accounting can have significant overhead for window
@@ -453,9 +434,9 @@ func (a *sumInt64WindowAgg) Compute(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -474,9 +455,9 @@ func (a *sumInt64WindowAgg) Compute(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -485,7 +466,7 @@ func (a *sumInt64WindowAgg) Compute(
 			}
 		}
 	}
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -534,10 +515,7 @@ func (a *sumInt64WindowAggAlloc) newAggFunc() AggregateFunc {
 func (a *sumInt64WindowAgg) Remove(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	_, _ = col.Get(endIdx-1), col.Get(startIdx)
@@ -552,9 +530,9 @@ func (a *sumInt64WindowAgg) Remove(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -573,9 +551,9 @@ func (a *sumInt64WindowAgg) Remove(
 
 				{
 
-					tmpDec := &_overloadHelper.TmpDec1
+					var tmpDec apd.Decimal //gcassert:noescape
 					tmpDec.SetInt64(int64(v))
-					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, tmpDec); err != nil {
+					if _, err := tree.ExactCtx.Sub(&a.curAgg, &a.curAgg, &tmpDec); err != nil {
 						colexecerror.ExpectedError(err)
 					}
 				}
@@ -584,7 +562,7 @@ func (a *sumInt64WindowAgg) Remove(
 			}
 		}
 	}
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -605,7 +583,7 @@ var _ AggregateFunc = &sumDecimalWindowAgg{}
 func (a *sumDecimalWindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	// Unnecessary memory accounting can have significant overhead for window
@@ -653,7 +631,7 @@ func (a *sumDecimalWindowAgg) Compute(
 			}
 		}
 	}
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}
@@ -702,7 +680,7 @@ func (a *sumDecimalWindowAggAlloc) newAggFunc() AggregateFunc {
 func (a *sumDecimalWindowAgg) Remove(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
 ) {
-	oldCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	oldCurAggSize := a.curAgg.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	_, _ = col.Get(endIdx-1), col.Get(startIdx)
@@ -747,7 +725,7 @@ func (a *sumDecimalWindowAgg) Remove(
 			}
 		}
 	}
-	newCurAggSize := tree.SizeOfDecimal(&a.curAgg)
+	newCurAggSize := a.curAgg.Size()
 	if newCurAggSize != oldCurAggSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
 	}

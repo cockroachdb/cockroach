@@ -14,7 +14,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -59,7 +58,7 @@ type rangeOffsetHandler interface {
 
 func newRangeOffsetHandler(
 	evalCtx *tree.EvalContext,
-	datumAlloc *rowenc.DatumAlloc,
+	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
 	ordColType *types.T,
 	ordColAsc, isStart bool,
@@ -77,26 +76,17 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartAscInt16{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetPrecedingStartAscInt32{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartAscInt64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DecimalFamily:
@@ -106,9 +96,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartAscDecimal{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.FloatFamily:
@@ -118,9 +105,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartAscFloat64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.IntervalFamily:
@@ -130,9 +114,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartAscInterval{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DateFamily:
@@ -142,9 +123,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartAscDate{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimestampTZFamily, types.TimestampFamily:
@@ -154,9 +132,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartAscTimestamp{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimeTZFamily, types.TimeFamily:
@@ -168,7 +143,7 @@ func newRangeOffsetHandler(
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -180,26 +155,17 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartDescInt16{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetPrecedingStartDescInt32{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingStartDescInt64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DecimalFamily:
@@ -209,9 +175,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartDescDecimal{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.FloatFamily:
@@ -221,9 +184,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartDescFloat64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.IntervalFamily:
@@ -233,9 +193,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartDescInterval{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DateFamily:
@@ -245,9 +202,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartDescDate{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimestampTZFamily, types.TimestampFamily:
@@ -257,9 +211,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingStartDescTimestamp{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimeTZFamily, types.TimeFamily:
@@ -271,7 +222,7 @@ func newRangeOffsetHandler(
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -286,26 +237,17 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndAscInt16{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetPrecedingEndAscInt32{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndAscInt64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DecimalFamily:
@@ -315,9 +257,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndAscDecimal{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.FloatFamily:
@@ -327,9 +266,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndAscFloat64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.IntervalFamily:
@@ -339,9 +275,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndAscInterval{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DateFamily:
@@ -351,9 +284,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndAscDate{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimestampTZFamily, types.TimestampFamily:
@@ -363,9 +293,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndAscTimestamp{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimeTZFamily, types.TimeFamily:
@@ -377,7 +304,7 @@ func newRangeOffsetHandler(
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -389,26 +316,17 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndDescInt16{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetPrecedingEndDescInt32{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetPrecedingEndDescInt64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DecimalFamily:
@@ -418,9 +336,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndDescDecimal{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.FloatFamily:
@@ -430,9 +345,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndDescFloat64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.IntervalFamily:
@@ -442,9 +354,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndDescInterval{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DateFamily:
@@ -454,9 +363,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndDescDate{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimestampTZFamily, types.TimestampFamily:
@@ -466,9 +372,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetPrecedingEndDescTimestamp{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimeTZFamily, types.TimeFamily:
@@ -480,7 +383,7 @@ func newRangeOffsetHandler(
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -498,26 +401,17 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartAscInt16{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetFollowingStartAscInt32{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartAscInt64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DecimalFamily:
@@ -527,9 +421,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartAscDecimal{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.FloatFamily:
@@ -539,9 +430,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartAscFloat64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.IntervalFamily:
@@ -551,9 +439,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartAscInterval{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DateFamily:
@@ -563,9 +448,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartAscDate{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimestampTZFamily, types.TimestampFamily:
@@ -575,9 +457,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartAscTimestamp{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimeTZFamily, types.TimeFamily:
@@ -589,7 +468,7 @@ func newRangeOffsetHandler(
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -601,26 +480,17 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartDescInt16{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetFollowingStartDescInt32{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingStartDescInt64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DecimalFamily:
@@ -630,9 +500,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartDescDecimal{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.FloatFamily:
@@ -642,9 +509,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartDescFloat64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.IntervalFamily:
@@ -654,9 +518,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartDescInterval{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DateFamily:
@@ -666,9 +527,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartDescDate{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimestampTZFamily, types.TimestampFamily:
@@ -678,9 +536,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingStartDescTimestamp{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimeTZFamily, types.TimeFamily:
@@ -692,7 +547,7 @@ func newRangeOffsetHandler(
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -707,26 +562,17 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndAscInt16{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetFollowingEndAscInt32{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndAscInt64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DecimalFamily:
@@ -736,9 +582,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndAscDecimal{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.FloatFamily:
@@ -748,9 +591,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndAscFloat64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.IntervalFamily:
@@ -760,9 +600,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndAscInterval{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DateFamily:
@@ -772,9 +609,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndAscDate{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimestampTZFamily, types.TimestampFamily:
@@ -784,9 +618,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndAscTimestamp{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimeTZFamily, types.TimeFamily:
@@ -798,7 +629,7 @@ func newRangeOffsetHandler(
 						}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -810,26 +641,17 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndDescInt16{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int16),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case 32:
 						op := &rangeHandlerOffsetFollowingEndDescInt32{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int32),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					case -1:
 					default:
 						op := &rangeHandlerOffsetFollowingEndDescInt64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(int64),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DecimalFamily:
@@ -839,9 +661,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndDescDecimal{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(apd.Decimal),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.FloatFamily:
@@ -851,9 +670,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndDescFloat64{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(float64),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.IntervalFamily:
@@ -863,9 +679,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndDescInterval{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.DateFamily:
@@ -875,9 +688,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndDescDate{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimestampTZFamily, types.TimestampFamily:
@@ -887,9 +697,6 @@ func newRangeOffsetHandler(
 						op := &rangeHandlerOffsetFollowingEndDescTimestamp{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(duration.Duration),
 						}
-						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
-							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				case types.TimeTZFamily, types.TimeFamily:
@@ -901,7 +708,7 @@ func newRangeOffsetHandler(
 						}
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						return op
 					}
 				}
@@ -915,10 +722,9 @@ func newRangeOffsetHandler(
 // rangeOffsetHandlerBase extracts common fields and methods of the
 // rangeOffsetHandler utility operators.
 type rangeOffsetHandlerBase struct {
-	storedCols     *colexecutils.SpillingBuffer
-	ordColIdx      int
-	peersColIdx    int
-	overloadHelper execgen.OverloadHelper
+	storedCols  *colexecutils.SpillingBuffer
+	ordColIdx   int
+	peersColIdx int
 }
 
 // rangeHandlerOffsetPrecedingStartAscInt16 is a utility operator used to retrieve the location of
@@ -949,11 +755,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt16{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -1098,11 +899,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt32{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -1247,11 +1043,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInt64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -1396,11 +1187,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDecimal{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -1534,11 +1320,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscFloat64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -1688,11 +1469,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscInterval{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -1819,11 +1595,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDate{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -1980,11 +1751,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscTimestamp{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -2099,7 +1865,8 @@ func (h *rangeHandlerOffsetPrecedingStartAscTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingStartAscDatum struct {
 	rangeOffsetHandlerBase
-	offset tree.Datum
+	overloadHelper execgen.BinaryOverloadHelper
+	offset         tree.Datum
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDatum{}
@@ -2123,11 +1890,11 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartAscDatum{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
+	// and TimeTZ columns since they aren't yet handled natively.
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -2261,11 +2028,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt16{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -2383,11 +2145,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt32{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -2505,11 +2262,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInt64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -2627,11 +2379,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDecimal{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -2738,11 +2485,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescFloat64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -2865,11 +2607,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescInterval{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -2969,11 +2706,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDate{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -3103,11 +2835,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescTimestamp{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -3195,7 +2922,8 @@ func (h *rangeHandlerOffsetPrecedingStartDescTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingStartDescDatum struct {
 	rangeOffsetHandlerBase
-	offset tree.Datum
+	overloadHelper execgen.BinaryOverloadHelper
+	offset         tree.Datum
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDatum{}
@@ -3219,11 +2947,11 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingStartDescDatum{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingStartDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
+	// and TimeTZ columns since they aren't yet handled natively.
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -3330,11 +3058,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt16{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -3496,11 +3219,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt32{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -3662,11 +3380,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInt64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -3828,11 +3541,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDecimal{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -3983,11 +3691,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscFloat64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -4154,11 +3857,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscInterval{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -4302,11 +4000,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDate{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -4480,11 +4173,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscTimestamp{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -4616,7 +4304,8 @@ func (h *rangeHandlerOffsetPrecedingEndAscTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingEndAscDatum struct {
 	rangeOffsetHandlerBase
-	offset tree.Datum
+	overloadHelper execgen.BinaryOverloadHelper
+	offset         tree.Datum
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDatum{}
@@ -4640,11 +4329,11 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndAscDatum{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
+	// and TimeTZ columns since they aren't yet handled natively.
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -4795,11 +4484,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt16{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -4934,11 +4618,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt32{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -5073,11 +4752,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInt64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -5212,11 +4886,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDecimal{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -5340,11 +5009,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescFloat64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -5484,11 +5148,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescInterval{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -5605,11 +5264,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDate{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -5756,11 +5410,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescTimestamp{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -5865,7 +5514,8 @@ func (h *rangeHandlerOffsetPrecedingEndDescTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetPrecedingEndDescDatum struct {
 	rangeOffsetHandlerBase
-	offset tree.Datum
+	overloadHelper execgen.BinaryOverloadHelper
+	offset         tree.Datum
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDatum{}
@@ -5889,11 +5539,11 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetPrecedingEndDescDatum{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetPrecedingEndDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
+	// and TimeTZ columns since they aren't yet handled natively.
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -6017,11 +5667,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt16{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -6166,11 +5811,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt32{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -6315,11 +5955,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInt64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -6464,11 +6099,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDecimal{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -6602,11 +6232,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscFloat64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -6756,11 +6381,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscInterval{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -6887,11 +6507,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDate{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -7048,11 +6663,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscTimestamp{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -7167,7 +6777,8 @@ func (h *rangeHandlerOffsetFollowingStartAscTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingStartAscDatum struct {
 	rangeOffsetHandlerBase
-	offset tree.Datum
+	overloadHelper execgen.BinaryOverloadHelper
+	offset         tree.Datum
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDatum{}
@@ -7191,11 +6802,11 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartAscDatum{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
+	// and TimeTZ columns since they aren't yet handled natively.
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -7329,11 +6940,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt16{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -7451,11 +7057,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt32{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -7573,11 +7174,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInt64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -7695,11 +7291,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDecimal{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -7806,11 +7397,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescFloat64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -7933,11 +7519,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescInterval{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -8037,11 +7618,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDate{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -8171,11 +7747,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescTimestamp{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -8263,7 +7834,8 @@ func (h *rangeHandlerOffsetFollowingStartDescTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingStartDescDatum struct {
 	rangeOffsetHandlerBase
-	offset tree.Datum
+	overloadHelper execgen.BinaryOverloadHelper
+	offset         tree.Datum
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDatum{}
@@ -8287,11 +7859,11 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingStartDescDatum{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingStartDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
+	// and TimeTZ columns since they aren't yet handled natively.
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -8398,11 +7970,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt16{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -8564,11 +8131,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt32{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -8730,11 +8292,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInt64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -8896,11 +8453,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDecimal{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -9051,11 +8603,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscFloat64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -9222,11 +8769,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscInterval{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -9370,11 +8912,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDate{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -9548,11 +9085,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscTimestamp{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -9684,7 +9216,8 @@ func (h *rangeHandlerOffsetFollowingEndAscTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingEndAscDatum struct {
 	rangeOffsetHandlerBase
-	offset tree.Datum
+	overloadHelper execgen.BinaryOverloadHelper
+	offset         tree.Datum
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDatum{}
@@ -9708,11 +9241,11 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndAscDatum{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndAscDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
+	// and TimeTZ columns since they aren't yet handled natively.
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -9863,11 +9396,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt16{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescInt16) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10002,11 +9530,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt32{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescInt32) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10141,11 +9664,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInt64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescInt64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10280,11 +9798,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDecimal{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescDecimal) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10408,11 +9921,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescFloat64{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescFloat64) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10552,11 +10060,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescInterval{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescInterval) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10673,11 +10176,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDate{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescDate) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10824,11 +10322,6 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescTimestamp{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescTimestamp) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
-	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -10933,7 +10426,8 @@ func (h *rangeHandlerOffsetFollowingEndDescTimestamp) close() {
 // the start or end bound for each row when in RANGE mode with an offset.
 type rangeHandlerOffsetFollowingEndDescDatum struct {
 	rangeOffsetHandlerBase
-	offset tree.Datum
+	overloadHelper execgen.BinaryOverloadHelper
+	offset         tree.Datum
 }
 
 var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDatum{}
@@ -10957,11 +10451,11 @@ var _ rangeOffsetHandler = &rangeHandlerOffsetFollowingEndDescDatum{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *rangeHandlerOffsetFollowingEndDescDatum) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
+	// and TimeTZ columns since they aren't yet handled natively.
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -11069,7 +10563,7 @@ func (b *rangeOffsetHandlerBase) startPartition(
 
 // decodeOffset decodes the given encoded offset into the given type.
 func decodeOffset(
-	datumAlloc *rowenc.DatumAlloc, orderColType *types.T, typedOffset []byte,
+	datumAlloc *tree.DatumAlloc, orderColType *types.T, typedOffset []byte,
 ) interface{} {
 	offsetType := getOffsetType(orderColType)
 	datum, err := execinfra.DecodeDatum(datumAlloc, offsetType, typedOffset)

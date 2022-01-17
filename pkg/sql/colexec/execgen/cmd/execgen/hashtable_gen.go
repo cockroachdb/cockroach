@@ -81,6 +81,8 @@ func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) err
 		"_RIGHT_TYPE_WIDTH", typeWidthReplacement,
 		"_ProbeType", "{{.Left.VecMethod}}",
 		"_BuildType", "{{.Right.VecMethod}}",
+		"_GLOBAL", "$global",
+		"_SELECT_DISTINCT", "$selectDistinct",
 		"_USE_PROBE_SEL", ".UseProbeSel",
 		"_PROBING_AGAINST_ITSELF", "$probingAgainstItself",
 		"_DELETING_PROBE_MODE", "$deletingProbeMode",
@@ -91,24 +93,19 @@ func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) err
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
 	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Right.Assign", 6))
 
-	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 6)
+	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 7)
 	s = checkColBody.ReplaceAllString(s,
-		`{{template "checkColBody" buildDict "Global" .Global "ProbeHasNulls" $1 "BuildHasNulls" $2 "SelectDistinct" $3 "UseProbeSel" $4 "ProbingAgainstItself" $5 "DeletingProbeMode" $6}}`,
+		`{{template "checkColBody" buildDict "Global" $1 "ProbeHasNulls" $2 "BuildHasNulls" $3 "SelectDistinct" $4 "UseProbeSel" $5 "ProbingAgainstItself" $6 "DeletingProbeMode" $7}}`,
 	)
 
-	checkColWithNulls := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 3)
+	checkColWithNulls := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 4)
 	s = checkColWithNulls.ReplaceAllString(s,
-		`{{template "checkColWithNulls" buildDict "Global" . "UseProbeSel" $1 "ProbingAgainstItself" $2 "DeletingProbeMode" $3}}`,
+		`{{template "checkColWithNulls" buildDict "Global" . "SelectDistinct" $1 "UseProbeSel" $2 "ProbingAgainstItself" $3 "DeletingProbeMode" $4}}`,
 	)
 
-	checkColFunctionTemplate := makeFunctionRegex("_CHECK_COL_FUNCTION_TEMPLATE", 2)
+	checkColFunctionTemplate := makeFunctionRegex("_CHECK_COL_FUNCTION_TEMPLATE", 3)
 	s = checkColFunctionTemplate.ReplaceAllString(s,
-		`{{template "checkColFunctionTemplate" buildDict "Global" . "ProbingAgainstItself" $1 "DeletingProbeMode" $2}}`,
-	)
-
-	checkColForDistinctWithNulls := makeFunctionRegex("_CHECK_COL_FOR_DISTINCT_WITH_NULLS", 1)
-	s = checkColForDistinctWithNulls.ReplaceAllString(s,
-		`{{template "checkColForDistinctWithNulls" buildDict "Global" . "UseProbeSel" $1}}`,
+		`{{template "checkColFunctionTemplate" buildDict "Global" . "SelectDistinct" $1 "ProbingAgainstItself" $2 "DeletingProbeMode" $3}}`,
 	)
 
 	checkBody := makeFunctionRegex("_CHECK_BODY", 3)

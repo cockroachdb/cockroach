@@ -112,13 +112,109 @@ git status --ignored --short go/src/github.com/cockroachdb/cockroach/pkg
 rm pkg/file_to_delete.go
 ----
 
-find /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach -name *.go
+bazel aquery --output=jsonproto //:go_path
 ----
 ----
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/kv/kvserver/storage_services.pb.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/roachpb/batch_generated-gen.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/expr-gen.og.go
-/private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/go_path/src/github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang/operator-gen.og.go
+{
+  "artifacts": [{
+    "id": 1,
+    "pathFragmentId": 1
+  }, {
+    "id": 2,
+    "pathFragmentId": 13
+  }, {
+    "id": 3,
+    "pathFragmentId": 15
+  }, {
+    "id": 4,
+    "pathFragmentId": 20
+  }],
+  "configuration": [{
+    "id": 1,
+    "mnemonic": "darwin-fastbuild",
+    "platformName": "darwin"
+  }],
+  "pathFragments": [{
+    "id": 1,
+    "label": "storage_services.pb.go",
+    "parentId": 2
+  }, {
+    "id": 2,
+    "label": "kvserver",
+    "parentId": 3
+  }, {
+    "id": 3,
+    "label": "kv",
+    "parentId": 4
+  }, {
+    "id": 4,
+    "label": "pkg",
+    "parentId": 5
+  }, {
+    "id": 5,
+    "label": "cockroach",
+    "parentId": 6
+  }, {
+    "id": 6,
+    "label": "cockroachdb",
+    "parentId": 7
+  }, {
+    "id": 7,
+    "label": "github.com",
+    "parentId": 8
+  }, {
+    "id": 8,
+    "label": "src",
+    "parentId": 9
+  }, {
+    "id": 9,
+    "label": "go_path",
+    "parentId": 10
+  }, {
+    "id": 10,
+    "label": "bin",
+    "parentId": 11
+  }, {
+    "id": 11,
+    "label": "darwin-fastbuild",
+    "parentId": 12
+  }, {
+    "id": 12,
+    "label": "bazel-out"
+  }, {
+    "id": 13,
+    "label": "batch_generated-gen.go",
+    "parentId": 14
+  }, {
+    "id": 14,
+    "label": "roachpb",
+    "parentId": 4
+  }, {
+    "id": 15,
+    "label": "expr-gen.og.go",
+    "parentId": 16
+  }, {
+    "id": 16,
+    "label": "lang",
+    "parentId": 17
+  }, {
+    "id": 17,
+    "label": "optgen",
+    "parentId": 18
+  }, {
+    "id": 18,
+    "label": "opt",
+    "parentId": 19
+  }, {
+    "id": 19,
+    "label": "sql",
+    "parentId": 4
+  }, {
+    "id": 20,
+    "label": "operator-gen.og.go",
+    "parentId": 16
+  }]
+}
 ----
 ----
 

@@ -29,5 +29,6 @@ go_test(
     name = "colexecargs_test",
     srcs = ["dep_test.go"],
     embed = [":colexecargs"],
+    tags = ["no-remote"],
     deps = ["//pkg/testutils/buildutil"],
 )

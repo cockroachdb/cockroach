@@ -508,7 +508,7 @@ func (e *LeaseRejectedError) Error() string {
 }
 
 func (e *LeaseRejectedError) message(_ *Error) string {
-	return fmt.Sprintf("cannot replace lease %s with %s: %s", &e.Existing, e.Requested.String(), e.Message)
+	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested.String(), e.Message)
 }
 
 var _ ErrorDetailInterface = &LeaseRejectedError{}
@@ -622,7 +622,7 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(
 ) {
 	if !l.Empty() {
 		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
-			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", &l, desc)
+			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", l, desc)
 		}
 	}
 	e.Ranges = append(e.Ranges, RangeInfo{
@@ -650,6 +650,9 @@ func (e *AmbiguousResultError) Error() string {
 }
 
 func (e *AmbiguousResultError) message(_ *Error) string {
+	if e.WrappedErr != nil {
+		return fmt.Sprintf("result is ambiguous (%v)", e.WrappedErr)
+	}
 	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
 }
 
@@ -888,11 +891,18 @@ var _ ErrorDetailInterface = &WriteIntentError{}
 // NewWriteTooOldError creates a new write too old error. The function accepts
 // the timestamp of the operation that hit the error, along with the timestamp
 // immediately after the existing write which had a higher timestamp and which
-// caused the error.
-func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp) *WriteTooOldError {
+// caused the error. An optional Key parameter is accepted to denote one key
+// where this error was encountered.
+func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp, key Key) *WriteTooOldError {
+	if len(key) > 0 {
+		oldKey := key
+		key = make([]byte, len(oldKey))
+		copy(key, oldKey)
+	}
 	return &WriteTooOldError{
 		Timestamp:       operationTS,
 		ActualTimestamp: actualTS,
+		Key:             key,
 	}
 }
 
@@ -901,6 +911,10 @@ func (e *WriteTooOldError) Error() string {
 }
 
 func (e *WriteTooOldError) message(_ *Error) string {
+	if len(e.Key) > 0 {
+		return fmt.Sprintf("WriteTooOldError: write for key %s at timestamp %s too old; wrote at %s",
+			e.Key, e.Timestamp, e.ActualTimestamp)
+	}
 	return fmt.Sprintf("WriteTooOldError: write at timestamp %s too old; wrote at %s",
 		e.Timestamp, e.ActualTimestamp)
 }

@@ -15,8 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -91,33 +89,18 @@ func constructPlan(
 // list of descriptor IDs for columns in the given cols set. Columns are
 // identified by their ordinal position in the table schema.
 func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) scanColumnsConfig {
-	// Set visibility=execinfra.ScanVisibilityPublicAndNotPublic, since all
-	// columns in the "cols" set should be projected, regardless of whether
-	// they're public or non-public. The caller decides which columns to
-	// include (or not include). Note that when wantedColumns is non-empty,
-	// the visibility flag will never trigger the addition of more columns.
 	colCfg := scanColumnsConfig{
-		wantedColumns:         make([]tree.ColumnID, 0, cols.Len()),
-		wantedColumnsOrdinals: make([]uint32, 0, cols.Len()),
-		visibility:            execinfra.ScanVisibilityPublicAndNotPublic,
+		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 	}
 	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
 		col := table.Column(ord)
-		colOrd := ord
 		if col.Kind() == cat.Inverted {
-			typ := col.DatumType()
-			colOrd = col.InvertedSourceColumnOrdinal()
+			colCfg.invertedColumnType = col.DatumType()
+			colOrd := col.InvertedSourceColumnOrdinal()
 			col = table.Column(colOrd)
-			colCfg.invertedColumn = &struct {
-				colID tree.ColumnID
-				typ   *types.T
-			}{
-				colID: tree.ColumnID(col.ColID()),
-				typ:   typ,
-			}
+			colCfg.invertedColumnID = tree.ColumnID(col.ColID())
 		}
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ColID()))
-		colCfg.wantedColumnsOrdinals = append(colCfg.wantedColumnsOrdinals, uint32(colOrd))
 	}
 	return colCfg
 }
@@ -297,7 +280,7 @@ func constructVirtualScan(
 
 func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
 	for _, id := range colCfg.wantedColumns {
-		if colinfo.IsColIDSystemColumn(descpb.ColumnID(id)) {
+		if colinfo.IsColIDSystemColumn(id) {
 			return true
 		}
 	}

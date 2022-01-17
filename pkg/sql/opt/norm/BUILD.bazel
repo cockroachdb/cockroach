@@ -40,7 +40,7 @@ go_library(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
@@ -51,7 +51,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/json",
         "//pkg/util/log",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -194,21 +194,17 @@ func NewColBatchScan(
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
 		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
-	if spec.IsCheck {
+	if spec.DeprecatedIsCheck {
 		// cFetchers don't support these checks.
 		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
 	}
 
 	limitHint := rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
-	// TODO(ajwerner): The need to construct an immutable here
-	// indicates that we're probably doing this wrong. Instead we should be
-	// just setting the ID and Version in the spec or something like that and
-	// retrieving the hydrated immutable from cache.
-	table := spec.BuildTableDescriptor()
+	table := flowCtx.TableDescriptor(&spec.Table)
 	invertedColumn := tabledesc.FindInvertedColumn(table, spec.InvertedColumn)
 	tableArgs, _, err := populateTableArgs(
 		ctx, flowCtx, table, table.ActiveIndexes()[spec.IndexIdx],
-		invertedColumn, spec.Visibility, spec.HasSystemColumns, post, helper,
+		invertedColumn, spec.HasSystemColumns, post, helper,
 	)
 	if err != nil {
 		return nil, err

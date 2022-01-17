@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
@@ -49,7 +50,7 @@ type tableReader struct {
 	// fetcher wraps a row.Fetcher, allowing the tableReader to add a stat
 	// collection layer.
 	fetcher rowFetcher
-	alloc   rowenc.DatumAlloc
+	alloc   tree.DatumAlloc
 
 	scanStats execinfra.ScanStats
 
@@ -103,12 +104,9 @@ func newTableReader(
 	tr.batchBytesLimit = batchBytesLimit
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	tableDesc := spec.BuildTableDescriptor()
+	tableDesc := flowCtx.TableDescriptor(&spec.Table)
 	invertedColumn := tabledesc.FindInvertedColumn(tableDesc, spec.InvertedColumn)
-	cols := tableDesc.PublicColumns()
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = tableDesc.DeletableColumns()
-	}
+	cols := tableDesc.DeletableColumns()
 	columnIdxMap := catalog.ColumnIDToOrdinalMap(cols)
 	resultTypes := catalog.ColumnTypesWithInvertedCol(cols, invertedColumn)
 
@@ -152,10 +150,8 @@ func newTableReader(
 		columnIdxMap,
 		spec.Reverse,
 		neededColumns,
-		spec.IsCheck,
 		flowCtx.EvalCtx.Mon,
 		&tr.alloc,
-		spec.Visibility,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		spec.HasSystemColumns,

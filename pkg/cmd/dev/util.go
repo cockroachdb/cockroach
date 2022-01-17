@@ -57,6 +57,14 @@ func mustGetFlagBool(cmd *cobra.Command, name string) bool {
 	return val
 }
 
+func mustGetFlagInt(cmd *cobra.Command, name string) int {
+	val, err := cmd.Flags().GetInt(name)
+	if err != nil {
+		log.Fatalf("unexpected error: %v", err)
+	}
+	return val
+}
+
 func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 	val, err := cmd.Flags().GetDuration(name)
 	if err != nil {

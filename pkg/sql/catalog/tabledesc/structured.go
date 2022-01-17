@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -36,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"google.golang.org/protobuf/proto"
 )
 
 // Mutable is a custom type for TableDescriptors
@@ -2177,7 +2177,7 @@ func (desc *wrapper) PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span {
 
 // IndexSpan implements the TableDescriptor interface.
 func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roachpb.Span {
-	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, desc, indexID))
+	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), indexID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
@@ -2391,13 +2391,13 @@ func (desc *wrapper) IsLocalityGlobal() bool {
 }
 
 // GetRegionalByTableRegion implements the TableDescriptor interface.
-func (desc *wrapper) GetRegionalByTableRegion() (descpb.RegionName, error) {
+func (desc *wrapper) GetRegionalByTableRegion() (catpb.RegionName, error) {
 	if !desc.IsLocalityRegionalByTable() {
 		return "", errors.AssertionFailedf("%s is not REGIONAL BY TABLE", desc.Name)
 	}
 	region := desc.LocalityConfig.GetRegionalByTable().Region
 	if region == nil {
-		return descpb.RegionName(tree.PrimaryRegionNotSpecifiedName), nil
+		return catpb.RegionName(tree.PrimaryRegionNotSpecifiedName), nil
 	}
 	return *region, nil
 }
@@ -2424,7 +2424,7 @@ func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) 
 func (desc *wrapper) GetMultiRegionEnumDependencyIfExists() bool {
 	if desc.IsLocalityRegionalByTable() {
 		regionName, _ := desc.GetRegionalByTableRegion()
-		return regionName != descpb.RegionName(tree.PrimaryRegionNotSpecifiedName)
+		return regionName != catpb.RegionName(tree.PrimaryRegionNotSpecifiedName)
 	}
 	return false
 }
@@ -2442,15 +2442,15 @@ func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
 }
 
 // LocalityConfigRegionalByTable returns a config for a REGIONAL BY TABLE table.
-func LocalityConfigRegionalByTable(region tree.Name) descpb.TableDescriptor_LocalityConfig {
-	l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-		RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
+func LocalityConfigRegionalByTable(region tree.Name) catpb.LocalityConfig {
+	l := &catpb.LocalityConfig_RegionalByTable_{
+		RegionalByTable: &catpb.LocalityConfig_RegionalByTable{},
 	}
 	if region != tree.PrimaryRegionNotSpecifiedName {
-		regionName := descpb.RegionName(region)
+		regionName := catpb.RegionName(region)
 		l.RegionalByTable.Region = &regionName
 	}
-	return descpb.TableDescriptor_LocalityConfig{Locality: l}
+	return catpb.LocalityConfig{Locality: l}
 }
 
 // SetTableLocalityRegionalByRow sets the descriptor's locality config to
@@ -2465,13 +2465,13 @@ func (desc *Mutable) SetTableLocalityRegionalByRow(regionColName tree.Name) {
 }
 
 // LocalityConfigRegionalByRow returns a config for a REGIONAL BY ROW table.
-func LocalityConfigRegionalByRow(regionColName tree.Name) descpb.TableDescriptor_LocalityConfig {
-	rbr := &descpb.TableDescriptor_LocalityConfig_RegionalByRow{}
+func LocalityConfigRegionalByRow(regionColName tree.Name) catpb.LocalityConfig {
+	rbr := &catpb.LocalityConfig_RegionalByRow{}
 	if regionColName != tree.RegionalByRowRegionNotSpecifiedName {
-		rbr.As = proto.String(string(regionColName))
+		rbr.As = (*string)(&regionColName)
 	}
-	return descpb.TableDescriptor_LocalityConfig{
-		Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+	return catpb.LocalityConfig{
+		Locality: &catpb.LocalityConfig_RegionalByRow_{
 			RegionalByRow: rbr,
 		},
 	}
@@ -2488,10 +2488,10 @@ func (desc *Mutable) SetTableLocalityGlobal() {
 }
 
 // LocalityConfigGlobal returns a config for a GLOBAL table.
-func LocalityConfigGlobal() descpb.TableDescriptor_LocalityConfig {
-	return descpb.TableDescriptor_LocalityConfig{
-		Locality: &descpb.TableDescriptor_LocalityConfig_Global_{
-			Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+func LocalityConfigGlobal() catpb.LocalityConfig {
+	return catpb.LocalityConfig{
+		Locality: &catpb.LocalityConfig_Global_{
+			Global: &catpb.LocalityConfig_Global{},
 		},
 	}
 }

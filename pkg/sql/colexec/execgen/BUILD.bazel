@@ -5,7 +5,7 @@ go_library(
     srcs = [
         "execgen.go",
         "inline.go",
-        "overloads_util.go",
+        "overloads_bin_util.go",
         "placeholders.go",
         "supported_bin_cmp_ops.go",
         "template.go",
@@ -16,7 +16,6 @@ go_library(
     deps = [
         "//pkg/sql/colexecerror",
         "//pkg/sql/sem/tree",
-        "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dave_dst//:dst",
         "@com_github_dave_dst//decorator",

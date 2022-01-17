@@ -22,6 +22,7 @@
 package colexecproj
 
 import (
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -47,6 +48,7 @@ var (
 	_ = coldataext.CompareDatum
 	_ sqltelemetry.EnumTelemetryType
 	_ telemetry.Counter
+	_ apd.Context
 )
 
 // {{/*
@@ -79,35 +81,36 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 // around the problem we specify it here.
 type projConstOpBase struct {
 	colexecop.OneInputHelper
-	allocator      *colmem.Allocator
-	colIdx         int
-	outputIdx      int
-	overloadHelper execgen.OverloadHelper
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
 }
 
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
 	colexecop.OneInputHelper
-	allocator      *colmem.Allocator
-	col1Idx        int
-	col2Idx        int
-	outputIdx      int
-	overloadHelper execgen.OverloadHelper
+	allocator *colmem.Allocator
+	col1Idx   int
+	col2Idx   int
+	outputIdx int
 }
 
 // {{define "projOp"}}
 
 type _OP_NAME struct {
 	projOpBase
+	// {{if .NeedsBinaryOverloadHelper}}
+	execgen.BinaryOverloadHelper
+	// {{end}}
 }
 
 func (p _OP_NAME) Next() coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
+	// {{if .NeedsBinaryOverloadHelper}}
+	// In order to inline the templated code of the binary overloads operating
+	// on datums, we need to have a `_overloadHelper` local variable of type
+	// `execgen.BinaryOverloadHelper`.
+	_overloadHelper := p.BinaryOverloadHelper
+	// {{end}}
 	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
@@ -173,7 +176,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 	// If _HAS_NULLS is false, then there are no input Nulls. _outNulls is
 	// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	// {{if _HAS_NULLS}}
-	projVec.SetNulls(_outNulls.Or(col1Nulls).Or(col2Nulls))
+	projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
 	// {{end}}
 	// {{end}}
 	// {{end}}
@@ -262,7 +265,6 @@ func GetProjectionOperator(
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,
 		outputIdx:      outputIdx,
-		overloadHelper: execgen.OverloadHelper{BinFn: binFn, EvalCtx: evalCtx},
 	}
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
@@ -283,7 +285,11 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						// {{range .RightWidths}}
 						case _RIGHT_TYPE_WIDTH:
-							return &_OP_NAME{projOpBase: projOpBase}, nil
+							op := &_OP_NAME{projOpBase: projOpBase}
+							// {{if .NeedsBinaryOverloadHelper}}
+							op.BinaryOverloadHelper = execgen.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							// {{end}}
+							return op, nil
 							// {{end}}
 						}
 						// {{end}}

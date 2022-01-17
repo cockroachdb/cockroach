@@ -22,7 +22,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -756,8 +756,7 @@ func (jsonFalse) Size() uintptr { return 0 }
 func (jsonTrue) Size() uintptr { return 0 }
 
 func (j jsonNumber) Size() uintptr {
-	intVal := j.Coeff
-	return decimalSize + uintptr(cap(intVal.Bits()))*wordSize
+	return j.Coeff.Size()
 }
 
 func (j jsonString) Size() uintptr {
