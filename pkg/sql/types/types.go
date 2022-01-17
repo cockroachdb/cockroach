@@ -2789,15 +2789,15 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"jsonpath":      22513,
 	"line":          21286,
 	"lseg":          21286,
-	"macaddr":       -1,
-	"macaddr8":      -1,
-	"money":         -1,
+	"macaddr":       45813,
+	"macaddr8":      45813,
+	"money":         41578,
 	"path":          21286,
 	"pg_lsn":        -1,
 	"tsquery":       7821,
 	"tsvector":      7821,
 	"txid_snapshot": -1,
-	"xml":           -1,
+	"xml":           43355,
 }
 
 // SQLString outputs the GeoMetadata in a SQL-compatible string.
