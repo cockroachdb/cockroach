@@ -12,6 +12,7 @@ package scbuild
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -114,8 +115,23 @@ func (b buildCtx) ResolveRelation(
 		}
 		panic(sqlerrors.NewUndefinedRelationError(name))
 	}
-	if err := b.AuthorizationAccessor().CheckPrivilege(b, rel, p.RequiredPrivilege); err != nil {
-		panic(err)
+	// If we own the schema then we can manipulate the underlying relation.
+	_, schema := b.CatalogReader().MayResolveSchema(b, prefix.NamePrefix())
+	isOwner := false
+	if schema.GetName() != catconstants.PublicSchemaName &&
+		schema.SchemaKind() != catalog.SchemaPublic &&
+		schema.SchemaKind() != catalog.SchemaVirtual &&
+		schema.SchemaKind() != catalog.SchemaTemporary {
+		var err error
+		isOwner, err = b.AuthorizationAccessor().HasOwnership(b, schema)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if !isOwner {
+		if err := b.AuthorizationAccessor().CheckPrivilege(b, rel, p.RequiredPrivilege); err != nil {
+			panic(err)
+		}
 	}
 	return prefix, rel
 }
