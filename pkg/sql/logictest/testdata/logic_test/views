@@ -1205,12 +1205,20 @@ DROP table t1nest CASCADE
 
 # Validate the objects being dropped
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'CascadeDroppedViews'
-FROM system.eventlog
-WHERE "eventType" in ('drop_view', 'drop_table') AND
-(json_extract_path(info::JSONB, 'CascadeDroppedViews') @> '["db2.public.v3nest", "db2.public.v2nest", "db2.public.v1nest"]' OR
- json_extract_path(info::JSONB, 'CascadeDroppedViews')  @> '["db2.public.v1nest", "db2.public.v2nest", "db2.public.v3nest"]')
-ORDER BY "timestamp" DESC, info
-LIMIT 1
+SELECT "reportingID",
+       (info::JSONB - 'Timestamp' - 'DescriptorID')
+       || (
+			SELECT json_build_object(
+					'CascadeDroppedViews',
+					json_agg(value ORDER BY value)
+			       )
+			  FROM ROWS FROM (
+					json_array_elements((info::JSONB)->'CascadeDroppedViews')
+			       )
+		)
+  FROM system.eventlog
+ WHERE "eventType" IN ('drop_view', 'drop_table')
+ ORDER BY "timestamp"
+ LIMIT 1;
 ----
- 1  {"EventType": "drop_table", "Statement": "DROP TABLE db2.public.t1nest CASCADE", "TableName": "db2.public.t1nest", "Tag": "DROP TABLE", "User": "root"}
+1  {"CascadeDroppedViews": null, "EventType": "drop_view", "Statement": "DROP VIEW test.public.num_ref_view", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.num_ref_view"}
