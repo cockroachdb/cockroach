@@ -3527,6 +3527,7 @@ comment_stmt:
     $$.val = &tree.CommentOnConstraint{Constraint:tree.Name($4), Table: $6.unresolvedObjectName(), Comment: $8.strPtr()}
   }
 | COMMENT ON EXTENSION error { return unimplemented(sqllex, "comment on extension") }
+| COMMENT ON FUNCTION error { return unimplemented(sqllex, "comment on function") }
 
 comment_text:
   SCONST
