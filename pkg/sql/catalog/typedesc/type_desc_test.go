@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catval"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
@@ -351,27 +353,27 @@ func TestValidateTypeDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	descs := catalog.MakeMapDescGetter()
-	descs.Descriptors[100] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
+	var cb nstree.MutableCatalog
+	cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name: "db",
 		ID:   100,
-	}).BuildImmutable()
-	descs.Descriptors[101] = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+	}).BuildImmutable())
+	cb.UpsertDescriptorEntry(schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ID:       101,
 		ParentID: 100,
 		Name:     "schema",
-	}).BuildImmutable()
-	descs.Descriptors[102] = typedesc.NewBuilder(&descpb.TypeDescriptor{
+	}).BuildImmutable())
+	cb.UpsertDescriptorEntry(typedesc.NewBuilder(&descpb.TypeDescriptor{
 		ID:   102,
 		Name: "type",
-	}).BuildImmutable()
-	descs.Descriptors[200] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
+	}).BuildImmutable())
+	cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name: "multi-region-db",
 		ID:   200,
 		RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
 			PrimaryRegion: "us-east-1",
 		},
-	}).BuildImmutable()
+	}).BuildImmutable())
 
 	defaultPrivileges := descpb.NewBasePrivilegeDescriptor(security.RootUserName())
 	invalidPrivileges := descpb.NewBasePrivilegeDescriptor(security.RootUserName())
@@ -780,7 +782,8 @@ func TestValidateTypeDesc(t *testing.T) {
 	for i, test := range testData {
 		desc := typedesc.NewBuilder(&test.desc).BuildImmutable()
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		if err := catalog.ValidateSelfAndCrossReferences(ctx, descs, desc); err == nil {
+		ve := cb.Validate(ctx, catalog.NoValidationTelemetry, catalog.ValidationLevelCrossReferences, desc)
+		if err := ve.CombinedError(); err == nil {
 			t.Errorf("#%d expected err: %s but found nil: %v", i, expectedErr, test.desc)
 		} else if expectedErr != err.Error() {
 			t.Errorf("#%d expected err: %s but found: %s", i, expectedErr, err)
@@ -824,7 +827,6 @@ func TestTableImplicitTypeDescCannotBeSerializedOrValidated(t *testing.T) {
 
 	desc := typedesc.NewBuilder(td).BuildImmutable()
 
-	ctx := context.Background()
-	err := catalog.Validate(ctx, nil, catalog.NoValidationTelemetry, catalog.ValidationLevelSelfOnly, desc).CombinedError()
+	err := catval.ValidateSelf(desc)
 	require.Contains(t, err.Error(), "kind TABLE_IMPLICIT_RECORD_TYPE should never be serialized")
 }

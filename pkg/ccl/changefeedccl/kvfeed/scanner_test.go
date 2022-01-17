@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -62,7 +62,7 @@ CREATE TABLE t (a INT PRIMARY KEY);
 INSERT INTO t VALUES (1), (2), (3);
 `)
 
-	descr := catalogkv.TestingGetTableDescriptor(kvdb, keys.SystemSQLCodec, "defaultdb", "t")
+	descr := desctestutils.TestingGetPublicTableDescriptor(kvdb, keys.SystemSQLCodec, "defaultdb", "t")
 	span := tableSpan(uint32(descr.GetID()))
 
 	exportTime := kvdb.Clock().Now()

@@ -31,8 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -120,10 +121,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	tbDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	var dbDesc catalog.DatabaseDescriptor
-	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		dbDesc, err = catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, tbDesc.GetParentID())
+	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+		dbDesc, err = col.MustGetDatabaseDescByID(ctx, txn, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -283,11 +284,11 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
-	tbDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	tb2Desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
+	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
-	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		dbDesc, err = catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, tbDesc.GetParentID())
+	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+		dbDesc, err = col.MustGetDatabaseDescByID(ctx, txn, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -424,7 +425,7 @@ func TestDropIndex(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
 	idx, err := tableDesc.FindIndexWithName("foo")
 	if err != nil {
@@ -436,7 +437,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -462,7 +463,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	newIdx, err := tableDesc.FindIndexWithName("foo")
 	if err != nil {
 		t.Fatal(err)
@@ -525,7 +526,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	index, err := tableDesc.FindIndexWithName("foo")
 	if err != nil {
 		t.Fatal(err)
@@ -564,7 +565,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	// TODO(benesch): Run scrub here. It can't currently handle the way t.kv
 	// declares column families.
 
-	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -588,7 +589,7 @@ func TestDropTable(t *testing.T) {
 	parentDatabaseID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "t"))
 	parentSchemaID := descpb.ID(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	nameKey := catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, parentDatabaseID, parentSchemaID, "kv")
 	gr, err := kvDB.Get(ctx, nameKey)
 
@@ -687,7 +688,7 @@ func TestDropTableDeleteData(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		descs = append(descs, catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName))
+		descs = append(descs, desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName))
 
 		parentDatabaseID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "t"))
 		parentSchemaID := descpb.ID(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
@@ -843,7 +844,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	sqlutils.CreateTable(t, sqlDBRaw, "t", "a INT", numRows, sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
 	// Give the table an old format version.
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tableDesc.FormatVersion = descpb.FamilyFormatVersion
 	tableDesc.Version++
 	if err := writeTableDesc(ctx, kvDB, tableDesc); err != nil {
@@ -857,9 +858,13 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		tableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
-		return err
+	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+		tbl, err := col.MustGetTableDescByID(ctx, txn, tableDesc.ID)
+		if err != nil {
+			return err
+		}
+		tableDesc = tabledesc.NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
+		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -944,7 +949,7 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
@@ -1270,8 +1275,8 @@ CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
 `)
 	require.NoError(t, err)
 
-	parentDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "parent")
-	childDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
+	parentDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "parent")
+	childDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
 
 	_, err = sqlDB.Exec(`DROP DATABASE t CASCADE;`)
 	require.NoError(t, err)
@@ -1337,7 +1342,7 @@ func TestDropPhysicalTableGC(t *testing.T) {
 		_, err := sqlDB.Exec(fmt.Sprintf(`CREATE %s test.%s %s;`, table.sqlType, table.name, table.createClause))
 		require.NoError(t, err)
 		// Fetch table descriptor ID for future system table lookups.
-		tableDescriptor := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", table.name)
+		tableDescriptor := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", table.name)
 		require.NotNil(t, tableDescriptor)
 		tableDescriptorId := tableDescriptor.GetID()
 		if table.sqlType != "VIEW" {

@@ -27,8 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -758,33 +757,33 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 
 	// Read descriptor without validation.
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	hasSameNameSchema := func(dbName string) bool {
-		exists := false
-		var desc catalog.DatabaseDescriptor
-		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, collection *descs.Collection,
-		) error {
+	hasSameNameSchema := func(dbName string) (exists bool) {
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 			// Using this method to avoid validation.
-			allDescs, err := catalogkv.GetAllDescriptors(ctx, txn, execCfg.Codec, false)
+			nameKey := descpb.NameInfo{Name: dbName}
+			id, err := col.GetDescriptorID(ctx, txn, nameKey)
 			if err != nil {
 				return err
 			}
-			for _, d := range allDescs {
-				if d.GetName() == dbName {
-					desc, err = catalog.AsDatabaseDescriptor(d)
-					require.NoError(t, err, "unable to cast to database descriptor")
-					return nil
+			res, err := txn.Get(ctx, catalogkeys.MakeDescMetadataKey(execCfg.Codec, id))
+			if err != nil {
+				return err
+			}
+			var desc descpb.Descriptor
+			err = res.ValueProto(&desc)
+			if err != nil {
+				return err
+			}
+			_, dbDesc, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, res.Value.Timestamp)
+			require.NotNil(t, dbDesc)
+			for name := range dbDesc.Schemas {
+				if name == dbName {
+					exists = true
+					break
 				}
 			}
 			return nil
 		}))
-		require.NoError(t, desc.ForEachSchemaInfo(
-			func(id descpb.ID, name string, isDropped bool) error {
-				if name == dbName {
-					exists = true
-				}
-				return nil
-			}))
 		return exists
 	}
 	require.Falsef(t, hasSameNameSchema(dbName), "corrupted descriptor exists")

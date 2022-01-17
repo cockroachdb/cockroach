@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -66,7 +66,7 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Ensure there aren't any name collisions.
-	exists, schemaID, err := schemaExists(ctx, txn, execCfg.Codec, db.GetID(), schemaName)
+	exists, schemaID, err := schemaExists(ctx, txn, descriptors, db.GetID(), schemaName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -138,7 +138,7 @@ func CreateSchemaDescriptorWithPrivileges(
 	var id descpb.ID
 	var err error
 	if allocateID {
-		id, err = catalogkv.GenerateUniqueDescID(ctx, kvDB, codec)
+		id, err = descidgen.GenerateUniqueDescID(ctx, kvDB, codec)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -231,7 +231,6 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, db.ID, desc.Name),
 		desc.ID,
 		desc,
-		params.ExecCfg().Settings,
 		tree.AsStringWithFQNames(n, params.Ann()),
 	); err != nil {
 		return err

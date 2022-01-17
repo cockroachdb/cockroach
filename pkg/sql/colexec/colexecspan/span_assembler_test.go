@@ -230,11 +230,7 @@ func makeTable(useColFamilies bool) catalog.TableDescriptor {
 		NextMutationID: 1,
 	}
 
-	ctx := context.Background()
 	b := tabledesc.NewBuilder(&testTableDesc)
-	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
-	if err != nil {
-		log.Fatalf(ctx, "Error when building descriptor of system table %q: %s", testTableDesc.Name, err)
-	}
+	b.RunPostDeserializationChanges()
 	return b.BuildImmutableTable()
 }

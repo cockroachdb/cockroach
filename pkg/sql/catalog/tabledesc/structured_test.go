@@ -21,8 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catval"
 	. "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -300,9 +301,8 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	}
 	for i, test := range tests {
 		b := NewBuilder(&test.desc)
-		err := b.RunPostDeserializationChanges(context.Background(), nil)
+		b.RunPostDeserializationChanges()
 		desc := b.BuildImmutableTable()
-		require.NoError(t, err)
 		changes, err := GetPostDeserializationChanges(desc)
 		require.NoError(t, err)
 		upgraded := changes.UpgradedFormatVersion
@@ -555,12 +555,11 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("#%d", i+1), func(t *testing.T) {
 			b := NewBuilder(&test.desc)
-			err := b.RunPostDeserializationChanges(context.Background(), nil)
+			b.RunPostDeserializationChanges()
 			desc := b.BuildImmutableTable()
-			require.NoError(t, err)
 			changes, err := GetPostDeserializationChanges(desc)
 			require.NoError(t, err)
-			err = catalog.ValidateSelf(desc)
+			err = catval.ValidateSelf(desc)
 			if test.expValidErr != "" {
 				require.EqualError(t, err, test.expValidErr)
 				return
@@ -580,8 +579,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 
 			// Run post-deserialization changes again, descriptor should not change.
 			b2 := NewBuilder(desc.TableDesc())
-			err = b2.RunPostDeserializationChanges(context.Background(), nil)
-			require.NoError(t, err)
+			b2.RunPostDeserializationChanges()
 			desc2 := b2.BuildImmutableTable()
 			changes2, err := GetPostDeserializationChanges(desc2)
 			require.NoError(t, err)
@@ -705,7 +703,7 @@ func TestKeysPerRow(t *testing.T) {
 			tableName := fmt.Sprintf("t%d", i)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
 
-			desc := catalogkv.TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
+			desc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
 			require.NotNil(t, desc)
 			keys, err := desc.KeysPerRow(test.indexID)
 			if err != nil {
@@ -835,7 +833,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)
 
 	// Get the descriptor for the table.
-	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tbl")
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tbl")
 
 	// Setting a default value on the computed column should fail.
 	tdb.ExpectErr(t, expectedErrRE, `ALTER TABLE t.tbl ALTER COLUMN b SET DEFAULT 2`)
@@ -852,16 +850,16 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	// This modified table descriptor should fail validation.
 	{
 		broken := NewBuilder(desc).BuildImmutableTable()
-		require.Error(t, catalog.ValidateSelf(broken))
+		require.Error(t, catval.ValidateSelf(broken))
 	}
 
 	// This modified table descriptor should be fixed by removing the default
 	// expression.
 	{
 		b := NewBuilder(desc)
-		require.NoError(t, b.RunPostDeserializationChanges(context.Background(), nil /* dg */))
+		b.RunPostDeserializationChanges()
 		fixed := b.BuildImmutableTable()
-		require.NoError(t, catalog.ValidateSelf(fixed))
+		require.NoError(t, catval.ValidateSelf(fixed))
 		changes, err := GetPostDeserializationChanges(fixed)
 		require.NoError(t, err)
 		require.True(t, changes.RemovedDefaultExprFromComputedColumn)

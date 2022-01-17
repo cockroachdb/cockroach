@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -161,7 +160,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		return err
 	}
 
-	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc)
 	if err != nil {
 		return err
 	}
@@ -405,17 +404,8 @@ func createConstraintCheckOperations(
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
-	dg := catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec)
 	constraints, err := tableDesc.GetConstraintInfoWithLookup(func(id descpb.ID) (catalog.TableDescriptor, error) {
-		desc, err := dg.GetDesc(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		table, ok := desc.(catalog.TableDescriptor)
-		if !ok {
-			return nil, catalog.WrapTableDescRefErr(id, catalog.ErrDescriptorNotFound)
-		}
-		return table, nil
+		return p.Descriptors().GetImmutableTableByID(ctx, p.Txn(), id, tree.ObjectLookupFlagsWithRequired())
 	})
 	if err != nil {
 		return nil, err

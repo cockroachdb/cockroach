@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -215,10 +214,9 @@ func (p *planner) dropEnumValue(
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {
-	err := catalogkv.CheckObjectCollision(
+	err := p.Descriptors().CheckObjectCollision(
 		ctx,
 		p.txn,
-		p.ExecCfg().Codec,
 		n.desc.ParentID,
 		n.desc.ParentSchemaID,
 		tree.NewUnqualifiedTypeName(newName),
@@ -242,7 +240,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 	newArrayName, err := findFreeArrayTypeName(
 		ctx,
 		p.txn,
-		p.ExecCfg().Codec,
+		p.Descriptors(),
 		n.desc.ParentID,
 		n.desc.ParentSchemaID,
 		newName,

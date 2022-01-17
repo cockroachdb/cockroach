@@ -166,6 +166,9 @@ func TestExamineDescriptors(t *testing.T) {
 			},
 			expected: `Examining 1 descriptors and 0 namespace entries...
   ParentID   0, ParentSchemaID 29: relation "" (2): different id in descriptor table: 1
+  ParentID   0, ParentSchemaID 29: relation "" (2): empty table name
+  ParentID   0, ParentSchemaID 29: relation "" (2): invalid parent ID 0
+  ParentID   0, ParentSchemaID 29: relation "" (2): table must contain at least 1 column
 `,
 		},
 		{ // 4
@@ -407,7 +410,6 @@ func TestExamineDescriptors(t *testing.T) {
 			expected: "Examining 1 descriptors and 3 namespace entries...\n",
 		},
 		{ // 17
-			valid: false,
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
@@ -550,8 +552,8 @@ func TestExamineDescriptors(t *testing.T) {
 		} else {
 			require.NoErrorf(t, err, msg)
 		}
-		require.Equalf(t, test.valid, valid, msg)
 		require.Equalf(t, test.expected, buf.String(), msg)
+		require.Equalf(t, test.valid, valid, msg)
 	}
 }
 

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -819,8 +818,13 @@ type txnModesSetter interface {
 // validateDescriptor is a convenience function for validating
 // descriptors in the context of a planner.
 func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Descriptor) error {
-	bdg := catalogkv.NewOneLevelUncachedDescGetter(p.Txn(), p.ExecCfg().Codec)
-	return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descriptor)
+	return p.Descriptors().Validate(
+		ctx,
+		p.Txn(),
+		catalog.NoValidationTelemetry,
+		catalog.ValidationLevelCrossReferences,
+		descriptor,
+	)
 }
 
 // QueryRowEx executes the supplied SQL statement and returns a single row, or

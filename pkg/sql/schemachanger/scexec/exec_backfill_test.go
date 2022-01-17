@@ -44,14 +44,14 @@ func TestExecBackfill(t *testing.T) {
 	ctx := context.Background()
 
 	setupTestDeps := func(
-		t *testing.T, tdb *sqlutils.SQLRunner, descs nstree.Map,
+		t *testing.T, tdb *sqlutils.SQLRunner, descs nstree.Catalog,
 	) (*gomock.Controller, *MockBackfillTracker, *MockBackfiller, *sctestdeps.TestState) {
 		mc := gomock.NewController(t)
 		bt := NewMockBackfillTracker(mc)
 		bf := NewMockBackfiller(mc)
 		deps := sctestdeps.NewTestDependencies(
 			sctestdeps.WithDescriptors(descs),
-			sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb)),
+			sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 			sctestdeps.WithBackfillTracker(bt),
 			sctestdeps.WithBackfiller(bf),
 		)
@@ -94,10 +94,10 @@ func TestExecBackfill(t *testing.T) {
 		return idx
 	}
 
-	findTableWithName := func(descs nstree.Map, name string) (tab catalog.TableDescriptor) {
-		_ = descs.IterateByID(func(entry catalog.NameEntry) error {
+	findTableWithName := func(c nstree.Catalog, name string) (tab catalog.TableDescriptor) {
+		_ = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
 			var ok bool
-			tab, ok = entry.(catalog.TableDescriptor)
+			tab, ok = desc.(catalog.TableDescriptor)
 			if ok && tab.GetName() == name {
 				return iterutil.StopIteration()
 			}
@@ -124,12 +124,12 @@ func TestExecBackfill(t *testing.T) {
 		{name: "simple", f: func(t *testing.T, tdb *sqlutils.SQLRunner) {
 			tdb.Exec(t, "create table foo (i INT PRIMARY KEY, j INT)")
 			descs := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb)
-			tab := findTableWithName(descs, "foo")
+			tab := findTableWithName(descs.Catalog, "foo")
 			require.NotNil(t, tab)
 			mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
 			addIndexMutation(t, mut, "idx", 2, "j")
-			descs.Upsert(mut)
-			mc, bt, bf, deps := setupTestDeps(t, tdb, descs)
+			descs.UpsertDescriptorEntry(mut)
+			mc, bt, bf, deps := setupTestDeps(t, tdb, descs.Catalog)
 			defer mc.Finish()
 			desc, err := deps.Catalog().MustReadImmutableDescriptor(ctx, mut.GetID())
 			require.NoError(t, err)
@@ -180,26 +180,26 @@ func TestExecBackfill(t *testing.T) {
 				descs := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb)
 				var fooID descpb.ID
 				{
-					tab := findTableWithName(descs, "foo")
+					tab := findTableWithName(descs.Catalog, "foo")
 					require.NotNil(t, tab)
 					fooID = tab.GetID()
 					mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
 					addIndexMutation(t, mut, "idx", 2, "j")
 					addIndexMutation(t, mut, "idx", 3, "k", "j")
-					descs.Upsert(mut)
+					descs.UpsertDescriptorEntry(mut)
 				}
 				var barID descpb.ID
 				{
-					tab := findTableWithName(descs, "bar")
+					tab := findTableWithName(descs.Catalog, "bar")
 					require.NotNil(t, tab)
 					barID = tab.GetID()
 					mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
 					addIndexMutation(t, mut, "idx", 4, "j")
 					addIndexMutation(t, mut, "idx", 5, "k", "j")
-					descs.Upsert(mut)
+					descs.UpsertDescriptorEntry(mut)
 				}
 
-				mc, bt, bf, deps := setupTestDeps(t, tdb, descs)
+				mc, bt, bf, deps := setupTestDeps(t, tdb, descs.Catalog)
 				defer mc.Finish()
 				foo := getTableDescriptor(ctx, t, deps, fooID)
 				bar := getTableDescriptor(ctx, t, deps, barID)

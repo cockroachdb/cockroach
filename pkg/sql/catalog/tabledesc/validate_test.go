@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catval"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1594,7 +1596,7 @@ func TestValidateTableDesc(t *testing.T) {
 		t.Run(d.err, func(t *testing.T) {
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
-			err := catalog.ValidateSelf(desc)
+			err := catval.ValidateSelf(desc)
 			if d.err == "" && err != nil {
 				t.Errorf("%d: expected success, but found error: \"%+v\"", i, err)
 			} else if d.err != "" && err == nil {
@@ -1836,16 +1838,16 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		descs := catalog.MakeMapDescGetter()
-		descs.Descriptors[1] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable()
+		var cb nstree.MutableCatalog
+		cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable())
 		for _, otherDesc := range test.otherDescs {
 			otherDesc.Privileges = descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
-			descs.Descriptors[otherDesc.ID] = NewBuilder(&otherDesc).BuildImmutable()
+			cb.UpsertDescriptorEntry(NewBuilder(&otherDesc).BuildImmutable())
 		}
 		desc := NewBuilder(&test.desc).BuildImmutable()
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-		results := catalog.Validate(ctx, descs, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
+		results := cb.Validate(ctx, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
 		if err := results.CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)

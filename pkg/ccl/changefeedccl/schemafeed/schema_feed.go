@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -613,7 +613,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 
-	var descs []catalog.Descriptor
+	var descriptors []catalog.Descriptor
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
@@ -661,16 +661,16 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 					return err
 				}
 
-				b := catalogkv.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
+				b := descbuilder.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
 				if b != nil && (b.DescriptorType() == catalog.Table || b.DescriptorType() == catalog.Type) {
-					descs = append(descs, b.BuildImmutable())
+					descriptors = append(descriptors, b.BuildImmutable())
 				}
 			}
 		}(); err != nil {
 			return nil, err
 		}
 	}
-	return descs, nil
+	return descriptors, nil
 }
 
 type doNothingSchemaFeed struct{}
