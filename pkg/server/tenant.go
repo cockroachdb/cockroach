@@ -450,10 +450,12 @@ func makeTenantSQLServerArgs(
 	// clusters.
 	var protectedTSProvider protectedts.Provider
 	{
+		protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 		pp, err := ptprovider.New(ptprovider.Config{
 			DB:               db,
 			InternalExecutor: circularInternalExecutor,
 			Settings:         st,
+			Knobs:            protectedtsKnobs,
 		})
 		if err != nil {
 			panic(err)

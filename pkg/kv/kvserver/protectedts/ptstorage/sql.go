@@ -37,6 +37,26 @@ WITH
     new_record AS (` + protectInsertRecordCTE + `)
 SELECT
     failed,
+    total_bytes AS prev_total_bytes,
+    version AS prev_version
+FROM
+    checks, current_meta;`
+
+	// The `target` column was added to `system.protected_ts_records` as part of
+	// the tenant migration `AlterSystemProtectedTimestampAddColumn` necessitating
+	// queries that write to the table with and without the column. In a
+	// mixed-version state (prior to the migration) we use the queries without tha
+	// target column.
+	//
+	// TODO(adityamaru): Delete this in 22.2.
+	protectQueryWithoutTarget = `
+WITH
+    current_meta AS (` + currentMetaCTE + `),
+    checks AS (` + protectChecksCTE + `),
+    updated_meta AS (` + protectUpsertMetaCTE + `),
+    new_record AS (` + protectInsertRecordWithoutTargetCTE + `)
+SELECT
+    failed,
     num_spans AS prev_spans,
     total_bytes AS prev_total_bytes,
     version AS prev_version
@@ -85,6 +105,20 @@ RETURNING
 	protectInsertRecordCTE = `
 INSERT
 INTO
+    system.protected_ts_records (id, ts, meta_type, meta, num_spans, spans, target)
+(
+    SELECT
+        $4, $5, $6, $7, $8, $9, $10
+    WHERE
+        NOT EXISTS(SELECT * FROM checks WHERE failed)
+)
+RETURNING
+    id
+`
+
+	protectInsertRecordWithoutTargetCTE = `
+INSERT
+INTO
     system.protected_ts_records (id, ts, meta_type, meta, num_spans, spans)
 (
     SELECT
@@ -96,9 +130,27 @@ RETURNING
     id
 `
 
-	getRecordsQueryBase = `
+	// The `target` column was added to `system.protected_ts_records` as part of
+	// the tenant migration `AlterSystemProtectedTimestampAddColumn` necessitating
+	// queries that read from the table with and without the column. In a
+	// mixed-version state (prior to the migration) we use the queries without tha
+	// target column.
+	//
+	// TODO(adityamaru): Delete this in 22.2.
+	getRecordsWithoutTargetQueryBase = `
 SELECT
     id, ts, meta_type, meta, spans, verified
+FROM
+    system.protected_ts_records`
+
+	getRecordsWithoutTargetQuery = getRecordsWithoutTargetQueryBase + ";"
+	getRecordWithoutTargetQuery  = getRecordsWithoutTargetQueryBase + `
+WHERE
+    id = $1;`
+
+	getRecordsQueryBase = `
+SELECT
+    id, ts, meta_type, meta, spans, verified, target
 FROM
     system.protected_ts_records`
 

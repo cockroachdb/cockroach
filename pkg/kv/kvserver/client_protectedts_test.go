@@ -137,7 +137,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	beforeWrites := s0.Clock().Now()
 	gcSoon()
 
-	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor))
+	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor),
+		nil /* knobs */)
 	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB())
 	startKey := getTableStartKey("foo")
 	ptsRec := ptpb.Record{

@@ -45,4 +45,5 @@ type TestingKnobs struct {
 	SQLLivenessKnobs            ModuleTestingKnobs
 	TelemetryLoggingKnobs       ModuleTestingKnobs
 	DialerKnobs                 ModuleTestingKnobs
+	ProtectedTS                 ModuleTestingKnobs
 }
