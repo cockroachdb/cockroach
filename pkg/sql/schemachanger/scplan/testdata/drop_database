@@ -616,7 +616,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       StatementTag: DROP DATABASE
       TargetMetadata:
         SourceElementID: 6
-        SubWorkID: 1
+        SubWorkID: 2
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 66
