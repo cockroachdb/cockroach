@@ -5644,6 +5644,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
 
 				COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+				COMMENT ON FUNCTION f() is 'f';
 				CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
 
 				ALTER AGGREGATE myavg(integer) RENAME TO my_average;
@@ -5765,12 +5766,13 @@ revoke privileges on sequence: could not be parsed
 grant privileges on sequence: could not be parsed
 grant privileges on sequence: could not be parsed
 comment on extension: could not be parsed
+comment on function: could not be parsed
 create extension if not exists with: could not be parsed
 alter aggregate: could not be parsed
 alter domain: could not be parsed
-create function: could not be parsed
 `,
-			`alter function: could not be parsed
+			`create function: could not be parsed
+alter function: could not be parsed
 alter table alter column add: could not be parsed
 copy from unsupported format: could not be parsed
 grant privileges on schema with: could not be parsed
