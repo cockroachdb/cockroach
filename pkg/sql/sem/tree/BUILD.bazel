@@ -219,6 +219,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/util/duration",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
