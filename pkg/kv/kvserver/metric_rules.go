@@ -21,6 +21,7 @@ import (
 
 const (
 	unavailableRangesRuleName             = "UnavailableRanges"
+	trippedReplicaCircuitBreakersRuleName = "TrippedReplicaCircuitBreakers"
 	underreplicatedRangesRuleName         = "UnderreplicatedRanges"
 	requestsStuckInRaftRuleName           = "RequestsStuckInRaft"
 	highOpenFDCountRuleName               = "HighOpenFDCount"
@@ -38,6 +39,7 @@ const (
 // YAML format.
 func CreateAndAddRules(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
 	createAndRegisterUnavailableRangesRule(ctx, ruleRegistry)
+	createAndRegisterTrippedReplicaCircuitBreakersRule(ctx, ruleRegistry)
 	createAndRegisterUnderReplicatedRangesRule(ctx, ruleRegistry)
 	createAndRegisterRequestsStuckInRaftRule(ctx, ruleRegistry)
 	createAndRegisterHighOpenFDCountRule(ctx, ruleRegistry)
@@ -61,6 +63,30 @@ func createAndRegisterUnavailableRangesRule(
 	})
 	recommendedHoldDuration := 10 * time.Minute
 	help := "This check detects when the number of ranges with less than quorum replicas live are non-zero for too long"
+
+	rule, err := metric.NewAlertingRule(
+		trippedReplicaCircuitBreakersRuleName,
+		expr,
+		annotations,
+		nil,
+		recommendedHoldDuration,
+		help,
+		true,
+	)
+	maybeAddRuleToRegistry(ctx, err, unavailableRangesRuleName, rule, ruleRegistry)
+}
+
+func createAndRegisterTrippedReplicaCircuitBreakersRule(
+	ctx context.Context, ruleRegistry *metric.RuleRegistry,
+) {
+	expr := "(sum by(instance, cluster) (kv_replica_circuit_breaker_num_tripped_replicas)) > 0"
+	var annotations []metric.LabelPair
+	annotations = append(annotations, metric.LabelPair{
+		Name:  proto.String("summary"),
+		Value: proto.String("Instance {{ $labels.instance }} has {{ $value }} tripped per-Replica circuit breakers"),
+	})
+	recommendedHoldDuration := 10 * time.Minute
+	help := "This check detects when Replicas have stopped serving traffic as a result of KV health issues"
 
 	unavailableRanges, err := metric.NewAlertingRule(
 		unavailableRangesRuleName,
