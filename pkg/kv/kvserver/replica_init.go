@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -128,7 +129,14 @@ func newUnloadedReplica(
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
 
-	r.breaker = newReplicaCircuitBreaker(store.cfg.Settings, store.stopper, r.AmbientContext, r)
+	r.breaker = newReplicaCircuitBreaker(
+		store.cfg.Settings, store.stopper, r.AmbientContext, r, func() {
+			telemetry.Inc(telemetryTripAsync)
+			r.store.Metrics().ReplicaCircuitBreakerCumTripped.Inc(1)
+			store.Metrics().ReplicaCircuitBreakerCurTripped.Inc(1)
+		}, func() {
+			store.Metrics().ReplicaCircuitBreakerCurTripped.Dec(1)
+		})
 	return r
 }
 
