@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -359,10 +358,11 @@ CREATE TABLE crdb_internal.tables (
 	generator: func(ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+			all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 			if err != nil {
 				return err
 			}
+			descs := all.OrderedDescriptors()
 			dbNames := make(map[descpb.ID]string)
 			scNames := make(map[descpb.ID]string)
 			// TODO(richardjcai): Remove this case for keys.PublicSchemaID in 22.2.
@@ -562,10 +562,11 @@ CREATE TABLE crdb_internal.schema_changes (
   direction     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
+		descs := all.OrderedDescriptors()
 		// Note: we do not use forEachTableDesc() here because we want to
 		// include added and dropped descriptors.
 		for _, desc := range descs {
@@ -3028,10 +3029,11 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, nil, err
 		}
-		descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return nil, nil, err
 		}
+		descs := all.OrderedDescriptors()
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint32]string)
 		tableNames := make(map[uint32]string)
@@ -4449,11 +4451,11 @@ CREATE TABLE crdb_internal.invalid_objects (
 	) error {
 		// The internalLookupContext will only have descriptors in the current
 		// database. To deal with this, we fall through.
-		m, err := catalogkv.GetAllDescriptorsAndNamespaceEntriesUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
+		c, err := p.Descriptors().GetCatalogUnvalidated(ctx, p.txn)
 		if err != nil {
 			return err
 		}
-		descs := m.OrderedDescriptors()
+		descs := c.OrderedDescriptors()
 		// Collect all marshaled job metadata and account for its memory usage.
 		acct := p.EvalContext().Mon.MakeBoundAccount()
 		defer acct.Close(ctx)
@@ -4481,8 +4483,8 @@ CREATE TABLE crdb_internal.invalid_objects (
 					)
 				}
 			}
-			ve := catalog.ValidateWithRecover(ctx, m, catalog.ValidationLevelAllPreTxnCommit, descriptor)
-			for _, validationError := range ve.Errors() {
+			ve := c.ValidateWithRecover(ctx, descriptor)
+			for _, validationError := range ve {
 				addValidationErrorRow(validationError)
 			}
 			jobs.ValidateJobReferencesInDescriptor(descriptor, jmg, addValidationErrorRow)
@@ -4491,7 +4493,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 
 		const allowAdding = true
 		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
-			ctx, p, dbContext, hideVirtual, allowAdding, descs, func(
+			ctx, p, dbContext, hideVirtual, allowAdding, c, func(
 				dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.TableDescriptor, _ tableLookupFn,
 			) error {
 				return addRowsForObject(dbDesc, schema, descriptor)
@@ -4501,7 +4503,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 
 		// Validate type descriptors.
 		return forEachTypeDescWithTableLookupInternalFromDescriptors(
-			ctx, p, dbContext, allowAdding, descs, func(
+			ctx, p, dbContext, allowAdding, c, func(
 				dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.TypeDescriptor, _ tableLookupFn,
 			) error {
 				return addRowsForObject(dbDesc, schema, descriptor)
@@ -4730,7 +4732,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		}
 		// Get all descriptors which will be used to determine
 		// which ones are missing.
-		dg, err := catalogkv.GetAllDescriptorsAndNamespaceEntriesUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
+		c, err := p.Descriptors().GetCatalogUnvalidated(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -4793,7 +4795,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			}
 
 			// Skip over descriptors that are known
-			if _, ok := dg.Descriptors[descpb.ID(id)]; ok {
+			if c.LookupDescriptorEntry(descpb.ID(id)) != nil {
 				err := scanAndGenerateRows()
 				if err != nil {
 					return err

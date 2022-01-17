@@ -54,7 +54,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/execinfra",

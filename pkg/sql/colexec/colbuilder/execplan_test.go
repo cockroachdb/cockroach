@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -82,7 +82,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	streamingMemAcc := evalCtx.Mon.MakeBoundAccount()
 	defer streamingMemAcc.Close(ctx)
 
-	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tr := execinfrapb.TableReaderSpec{
 		Table: *desc.TableDesc(),
 		Spans: make([]roachpb.Span, 1),

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -55,7 +55,7 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 		t.Fatal(err)
 	}
 
-	descBeforeRefresh := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	descBeforeRefresh := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
 
 	// Update the view and refresh it.
 	if _, err := sqlDB.Exec(`
@@ -179,7 +179,7 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 		t.Fatal(err)
 	}
 
-	descBeforeRefresh := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	descBeforeRefresh := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
 
 	// Add a zone config to delete all table data.
 	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.GetID())
@@ -226,7 +226,7 @@ CREATE TABLE t.t (x INT);
 INSERT INTO t.t VALUES (1), (2);
 CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 `)
-	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
 	// Add a zone config to delete all table data.
 	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlRaw, desc.GetID())
 	require.NoError(t, err)

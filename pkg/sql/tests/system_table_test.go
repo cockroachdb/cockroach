@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -189,7 +190,7 @@ func TestSystemTableLiterals(t *testing.T) {
 			if err != nil {
 				t.Fatalf("test: %+v, err: %v", test, err)
 			}
-			require.NoError(t, catalog.ValidateSelf(gen))
+			require.NoError(t, descbuilder.ValidateSelf(gen))
 
 			if test.pkg.TableDesc().Equal(gen.TableDesc()) {
 				return

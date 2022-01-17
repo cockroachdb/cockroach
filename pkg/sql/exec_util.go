@@ -85,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -3170,6 +3171,17 @@ func DescsTxn(
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
 	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
+}
+
+// TestingDescsTxn is a convenience function for running a transaction on
+// descriptors when you have a serverutils.TestServerInterface.
+func TestingDescsTxn(
+	ctx context.Context,
+	s serverutils.TestServerInterface,
+	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
+) error {
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	return DescsTxn(ctx, &execCfg, f)
 }
 
 // NewRowMetrics creates a row.Metrics struct for either internal or user

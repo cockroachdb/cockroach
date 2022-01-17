@@ -155,13 +155,12 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	// the predefined forEachTableAll() function because we need to look
 	// at all _visible_ descriptors, not just those on which the current
 	// user has permission.
-	descs, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
+	all, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
 	if err != nil {
 		return err
 	}
 
-	lCtx := newInternalLookupCtx(params.ctx, descs,
-		nil /*prefix - we want all descriptors */, nil /* fallback */)
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), nil /*prefix - we want all descriptors */)
 	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
 		tableDescriptor := lCtx.tbDescs[tbID]

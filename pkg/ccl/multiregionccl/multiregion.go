@@ -14,8 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -92,7 +92,7 @@ func initializeMultiRegionMetadata(
 
 	// Generate a unique ID for the multi-region enum type descriptor here as
 	// well.
-	regionEnumID, err := catalogkv.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
+	regionEnumID, err := descidgen.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
 	if err != nil {
 		return nil, err
 	}

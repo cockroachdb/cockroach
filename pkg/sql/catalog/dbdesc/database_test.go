@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catval"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -113,7 +115,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 		t.Run(d.err, func(t *testing.T) {
 			desc := NewBuilder(&d.desc).BuildImmutable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
-			if err := catalog.ValidateSelf(desc); err == nil {
+			if err := catval.ValidateSelf(desc); err == nil {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, d.desc)
 			} else if expectedErr != err.Error() {
 				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, expectedErr, err)
@@ -269,26 +271,22 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 
 	for i, test := range tests {
 		privilege := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
-		descs := catalog.MakeMapDescGetter()
+		var cb nstree.MutableCatalog
 		test.desc.Privileges = privilege
 		desc := NewBuilder(&test.desc).BuildImmutable()
-		descs.Descriptors[test.desc.ID] = desc
+		cb.UpsertDescriptorEntry(desc)
 		test.multiRegionEnum.Privileges = privilege
-		descs.Descriptors[test.multiRegionEnum.ID] = typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable()
+		cb.UpsertDescriptorEntry(typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable())
 		for _, schemaDesc := range test.schemaDescs {
 			schemaDesc.Privileges = privilege
-			descs.Descriptors[schemaDesc.ID] = schemadesc.NewBuilder(&schemaDesc).BuildImmutable()
+			cb.UpsertDescriptorEntry(schemadesc.NewBuilder(&schemaDesc).BuildImmutable())
 		}
-		for _, desc := range descs.Descriptors {
-			namespaceKey := descpb.NameInfo{
-				ParentID:       desc.GetParentID(),
-				ParentSchemaID: desc.GetParentSchemaID(),
-				Name:           desc.GetName(),
-			}
-			descs.Namespace[namespaceKey] = desc.GetID()
-		}
+		_ = cb.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+			cb.UpsertNamespaceEntry(desc, desc.GetID())
+			return nil
+		})
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		results := catalog.Validate(ctx, descs, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
+		results := cb.Validate(ctx, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
 		if err := results.CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
@@ -306,7 +304,6 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 func TestFixDroppedSchemaName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 	const (
 		dbName = "foo"
 		dbID   = 1
@@ -319,7 +316,7 @@ func TestFixDroppedSchemaName(t *testing.T) {
 		},
 	}
 	b := NewBuilder(&dbDesc)
-	require.NoError(t, b.RunPostDeserializationChanges(ctx, nil))
+	b.RunPostDeserializationChanges()
 	desc := b.BuildCreatedMutableDatabase()
 	require.Truef(t, desc.HasPostDeserializationChanges(), "expected changes in descriptor, found none")
 	_, ok := desc.Schemas[dbName]

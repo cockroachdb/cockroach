@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -221,10 +220,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	err := catalogkv.CheckObjectCollision(
+	err := p.Descriptors().CheckObjectCollision(
 		params.ctx,
 		params.p.txn,
-		p.ExecCfg().Codec,
 		targetDbDesc.GetID(),
 		targetSchemaDesc.GetID(),
 		newTn,
@@ -279,7 +277,7 @@ func (n *renameTableNode) Close(context.Context)        {}
 func (p *planner) dependentViewError(
 	ctx context.Context, typeName, objName string, parentID, viewID descpb.ID, op string,
 ) error {
-	viewDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, viewID)
+	viewDesc, err := p.Descriptors().MustGetTableDescByID(ctx, p.txn, viewID)
 	if err != nil {
 		return err
 	}

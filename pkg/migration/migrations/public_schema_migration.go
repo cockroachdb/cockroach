@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -117,13 +116,10 @@ func createPublicSchemaDescriptor(
 	// Remove namespace entry for old public schema.
 	b.Del(oldKey)
 	b.CPut(newKey, publicSchemaID, nil)
-	if err := catalogkv.WriteNewDescToBatch(
+	if err := descriptors.WriteNewDescToBatch(
 		ctx,
 		false,
-		d.Settings,
 		b,
-		d.Codec,
-		publicSchemaID,
 		publicSchemaDesc,
 	); err != nil {
 		return err
@@ -143,10 +139,11 @@ func createPublicSchemaDescriptor(
 	if err := descriptors.WriteDescToBatch(ctx, false, dbDesc, b); err != nil {
 		return err
 	}
-	allDescriptors, err := descriptors.GetAllDescriptors(ctx, txn)
+	all, err := descriptors.GetAllDescriptors(ctx, txn)
 	if err != nil {
 		return err
 	}
+	allDescriptors := all.OrderedDescriptors()
 	if err := migrateObjectsInDatabase(ctx, dbID, d, txn, publicSchemaID, descriptors, allDescriptors); err != nil {
 		return err
 	}

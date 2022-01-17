@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -768,15 +767,13 @@ func fullyQualifyScheduledBackupTargetTables(
 				// Otherwise, no updates are needed since the schema field refers to the
 				// database.
 				var resolvedSchema bool
-				if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn,
-					col *descs.Collection) error {
-					dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, p.CurrentDatabase(),
-						tree.DatabaseLookupFlags{Required: true})
+				if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+					flags := tree.DatabaseLookupFlags{Required: true}
+					dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, p.CurrentDatabase(), flags)
 					if err != nil {
 						return err
 					}
-					resolvedSchema, _, err = catalogkv.ResolveSchemaID(ctx, txn, p.ExecCfg().Codec,
-						dbDesc.GetID(), tp.SchemaName.String(), p.ExecCfg().Settings.Version)
+					resolvedSchema, _, err = col.ResolveSchemaID(ctx, txn, dbDesc.GetID(), tp.SchemaName.String())
 					return err
 				}); err != nil {
 					return nil, err
