@@ -318,7 +318,7 @@ func startConnExecutor(
 		TestingKnobs:            ExecutorTestingKnobs{},
 		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, gw, st),
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
-		CollectionFactory:       descs.NewCollectionFactory(st, nil, nil, nil),
+		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
 	}
 	pool := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,

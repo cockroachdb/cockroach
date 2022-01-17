@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -119,7 +119,7 @@ USE data2;
 CREATE SCHEMA empty_schema;
 CREATE TABLE data2.foo (a int);
 `)
-	tableDesc := catalogkv.TestingGetTableDescriptor(backupKVDB, keys.SystemSQLCodec, "data2", "foo")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(backupKVDB, keys.SystemSQLCodec, "data2", "foo")
 	// Store the highest user-table ID for later assertions.
 	maxBackupTableID := tableDesc.GetID()
 

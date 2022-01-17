@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -424,7 +424,7 @@ USE t;
 							// Ensure that the mutations corresponding to the primary key change are cleaned up and
 							// that the job did not succeed even though it was canceled.
 							testutils.SucceedsSoon(t, func() error {
-								tableDesc := catalogkv.TestingGetTableDescriptor(
+								tableDesc := desctestutils.TestingGetPublicTableDescriptor(
 									kvDB, keys.SystemSQLCodec, "t", "test",
 								)
 								if len(tableDesc.AllMutations()) != 0 {
@@ -481,7 +481,7 @@ USE t;
 								return nil
 							})
 
-							tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+							tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 							if _, err := sqltestutils.AddImmediateGCZoneConfig(db, tableDesc.GetID()); err != nil {
 								t.Fatal(err)
 							}
@@ -912,7 +912,7 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 
 	fetchIndexes := func(tableName string) []catalog.Index {
 		kvDB := c.Servers[0].DB()
-		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		return desc.NonDropIndexes()
 	}
 

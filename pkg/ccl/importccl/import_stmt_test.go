@@ -51,8 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -1938,8 +1938,8 @@ func TestFailedImportGC(t *testing.T) {
 	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
 	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		td, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
+	if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+		td, err = col.MustGetTableDescByID(ctx, txn, tableID)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -6064,7 +6064,6 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.Conns[0]
 		sqlDB := sqlutils.MakeSQLRunner(conn)
-		kvDB := tc.Server(0).DB()
 
 		beforeImport, err := tree.MakeDTimestampTZ(tc.Server(0).Clock().Now().GoTime(), time.Millisecond)
 		if err != nil {
@@ -6130,8 +6129,8 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		for _, schemaID := range schemaIDs {
 			// Expect that the schema descriptor is deleted.
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				_, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, schemaID)
+			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+				_, err = col.MustGetSchemaDescByID(ctx, txn, schemaID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}
@@ -6143,8 +6142,8 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		for _, tableID := range tableIDs {
 			// Expect that the table descriptor is deleted.
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				_, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
+			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+				_, err = col.MustGetTableDescByID(ctx, txn, tableID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -301,7 +300,7 @@ func ResolveSchemaNameByID(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	dbID descpb.ID,
+	db catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
 	version clusterversion.Handle,
 ) (string, error) {
@@ -310,14 +309,14 @@ func ResolveSchemaNameByID(
 	if schemaName, ok := staticSchemaMap[uint32(schemaID)]; ok {
 		return schemaName, nil
 	}
-	schemas, err := GetForDatabase(ctx, txn, codec, dbID)
+	schemas, err := GetForDatabase(ctx, txn, codec, db)
 	if err != nil {
 		return "", err
 	}
 	if schema, ok := schemas[schemaID]; ok {
 		return schema.Name, nil
 	}
-	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, dbID)
+	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, db.GetID())
 }
 
 // SchemaEntryForDB entry for an individual schema,
@@ -331,11 +330,11 @@ type SchemaEntryForDB struct {
 // schema ids to SchemaEntryForDB structures for a
 //given database.
 func GetForDatabase(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, db catalog.DatabaseDescriptor,
 ) (map[descpb.ID]SchemaEntryForDB, error) {
-	log.Eventf(ctx, "fetching all schema descriptor IDs for %d", dbID)
+	log.Eventf(ctx, "fetching all schema descriptor IDs for database %q (%d)", db.GetName(), db.GetID())
 
-	nameKey := catalogkeys.MakeSchemaNameKey(codec, dbID, "" /* name */)
+	nameKey := catalogkeys.MakeSchemaNameKey(codec, db.GetID(), "" /* name */)
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, err
@@ -343,12 +342,8 @@ func GetForDatabase(
 
 	ret := make(map[descpb.ID]SchemaEntryForDB, len(kvs)+1)
 
-	dbDesc, err := catalogkv.GetDatabaseDescByID(ctx, txn, codec, dbID)
-	if err != nil {
-		return nil, err
-	}
 	// This is needed at least for the temp system db during restores.
-	if !dbDesc.HasPublicSchemaWithDescriptor() {
+	if !db.HasPublicSchemaWithDescriptor() {
 		ret[descpb.ID(keys.PublicSchemaID)] = SchemaEntryForDB{
 			Name:      tree.PublicSchema,
 			Timestamp: txn.ReadTimestamp(),

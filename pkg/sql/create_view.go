@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
@@ -131,7 +131,6 @@ func (n *createViewNode) startExec(params runParams) error {
 	if err != nil && !sqlerrors.IsRelationAlreadyExistsError(err) {
 		return err
 	}
-	nameKey := catalogkeys.NewNameKeyComponents(n.dbDesc.GetID(), schema.GetID(), n.viewName.Table())
 	if err != nil {
 		switch {
 		case n.ifNotExists:
@@ -139,7 +138,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		case n.replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := catalogkv.GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, nameKey)
+			id, err := params.p.Descriptors().LookupObjectID(
+				params.ctx,
+				params.p.txn,
+				n.dbDesc.GetID(),
+				schema.GetID(),
+				n.viewName.Table(),
+			)
 			if err != nil {
 				return err
 			}
@@ -191,7 +196,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	} else {
 		// If we aren't replacing anything, make a new table descriptor.
-		id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+		id, err := descidgen.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 		if err != nil {
 			return err
 		}
@@ -260,10 +265,9 @@ func (n *createViewNode) startExec(params runParams) error {
 		// do some basic string formatting (not accurate in the general case).
 		if err = params.p.createDescriptorWithID(
 			params.ctx,
-			catalogkeys.EncodeNameKey(params.ExecCfg().Codec, nameKey),
+			catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.viewName.Table()),
 			id,
 			&desc,
-			params.EvalContext().Settings,
 			fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
 		); err != nil {
 			return err

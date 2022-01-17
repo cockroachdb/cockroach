@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -84,10 +85,10 @@ func TestHydratedCache(t *testing.T) {
 		assertMetrics(t, m, 0, 1)
 
 		// Change the database name.
-		dbDesc := dbdesc.NewBuilder(dg.Descriptors[dbID].(catalog.DatabaseDescriptor).DatabaseDesc()).BuildExistingMutableDatabase()
+		dbDesc := dbdesc.NewBuilder(dg.LookupDescriptorEntry(dbID).(catalog.DatabaseDescriptor).DatabaseDesc()).BuildExistingMutableDatabase()
 		dbDesc.SetName("new_name")
 		dbDesc.Version++
-		dg.Descriptors[dbID] = dbDesc.ImmutableCopy()
+		dg.UpsertDescriptorEntry(dbDesc.ImmutableCopy())
 
 		// Ensure that we observe a new descriptor get created due to
 		// the name change.
@@ -152,9 +153,9 @@ func TestHydratedCache(t *testing.T) {
 		assertMetrics(t, m, 0, 1)
 
 		// Change the type descriptor.
-		typDesc := typedesc.NewBuilder(dg.Descriptors[typ1ID].(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutableType()
+		typDesc := typedesc.NewBuilder(dg.LookupDescriptorEntry(typ1ID).(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutableType()
 		typDesc.Version++
-		dg.Descriptors[typ1ID] = typedesc.NewBuilder(typDesc.TypeDesc()).BuildImmutable()
+		dg.UpsertDescriptorEntry(typedesc.NewBuilder(typDesc.TypeDesc()).BuildImmutable())
 
 		// Ensure that a new descriptor is returned.
 		retrieved, err := c.GetHydratedTableDescriptor(ctx, td, res)
@@ -200,7 +201,7 @@ func TestHydratedCache(t *testing.T) {
 		c := NewCache(cluster.MakeTestingClusterSettings())
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
-		mut := tabledesc.NewBuilder(dg.Descriptors[tableUDTID].(catalog.TableDescriptor).TableDesc()).BuildExistingMutable()
+		mut := tabledesc.NewBuilder(dg.LookupDescriptorEntry(tableUDTID).(catalog.TableDescriptor).TableDesc()).BuildExistingMutable()
 		mut.MaybeIncrementVersion()
 		td := mut.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
@@ -214,7 +215,7 @@ func TestHydratedCache(t *testing.T) {
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
 
-		mut := typedesc.NewBuilder(dg.Descriptors[typ1ID].(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutable()
+		mut := typedesc.NewBuilder(dg.LookupDescriptorEntry(typ1ID).(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutable()
 		mut.MaybeIncrementVersion()
 		dgWithMut := mkDescGetter(append(descs, mut)...)
 		resWithMut := &descGetterTypeDescriptorResolver{dg: &dgWithMut}
@@ -361,18 +362,15 @@ var (
 	}
 )
 
-func mkDescGetter(descs ...catalog.MutableDescriptor) catalog.MapDescGetter {
-	ret := catalog.MapDescGetter{
-		Descriptors: make(map[descpb.ID]catalog.Descriptor, len(descs)),
-	}
+func mkDescGetter(descs ...catalog.MutableDescriptor) (cb nstree.MutableCatalog) {
 	for _, desc := range descs {
-		ret.Descriptors[desc.GetID()] = desc.ImmutableCopy()
+		cb.UpsertDescriptorEntry(desc.ImmutableCopy())
 	}
-	return ret
+	return cb
 }
 
 type descGetterTypeDescriptorResolver struct {
-	dg              catalog.DescGetter
+	dg              *nstree.MutableCatalog
 	called          func(ctx context.Context, id descpb.ID) error
 	unqualifiedName bool
 	calls           int
@@ -387,24 +385,15 @@ func (d *descGetterTypeDescriptorResolver) GetTypeDescriptor(
 			return tree.TypeName{}, nil, err
 		}
 	}
-	desc, err := d.dg.GetDesc(ctx, id)
-	if err != nil {
-		return tree.TypeName{}, nil, err
-	}
+	desc := d.dg.LookupDescriptorEntry(id)
 	if d.unqualifiedName {
 		return tree.MakeUnqualifiedTypeName(desc.GetName()),
 			desc.(catalog.TypeDescriptor), nil
 	}
-	dbDesc, err := d.dg.GetDesc(ctx, desc.GetParentID())
-	if err != nil {
-		return tree.TypeName{}, nil, err
-	}
+	dbDesc := d.dg.LookupDescriptorEntry(desc.GetParentID())
 	// Assume we've got a user-defined schema.
 	// TODO(ajwerner): Unify this with some other resolution logic.
-	scDesc, err := d.dg.GetDesc(ctx, desc.GetParentSchemaID())
-	if err != nil {
-		return tree.TypeName{}, nil, err
-	}
+	scDesc := d.dg.LookupDescriptorEntry(desc.GetParentSchemaID())
 	name := tree.MakeQualifiedTypeName(dbDesc.GetName(), scDesc.GetName(), desc.GetName())
 	return name, desc.(catalog.TypeDescriptor), nil
 }
