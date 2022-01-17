@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "desctestutils",
+    srcs = ["descriptor_test_utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/internal/catkv",
+        "//pkg/sql/catalog/tabledesc",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

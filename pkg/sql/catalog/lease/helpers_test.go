@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -173,13 +174,13 @@ func (m *Manager) PublishMultiple(
 			for _, id := range ids {
 				// Re-read the current versions of the descriptor, this time
 				// transactionally.
-				desc, err := catalogkv.MustGetMutableDescriptorByID(ctx, txn, m.storage.codec, id)
+				desc, err := catkv.MustGetDescriptorByID(ctx, txn, m.storage.codec, id, catalog.Any)
 				// Due to details in #51417, it is possible for a user to request a
 				// descriptor which no longer exists. In that case, just return an error.
 				if err != nil {
 					return err
 				}
-				descsToUpdate[id] = desc
+				descsToUpdate[id] = desc.NewBuilder().BuildExistingMutable()
 				if expectedVersions[id] != desc.GetVersion() {
 					// The version changed out from under us. Someone else must be
 					// performing a schema change operation.
@@ -212,9 +213,9 @@ func (m *Manager) PublishMultiple(
 
 			b := txn.NewBatch()
 			for id, desc := range descs {
-				if err := catalogkv.WriteDescToBatch(ctx, false /* kvTrace */, m.storage.settings, b, m.storage.codec, id, desc); err != nil {
-					return err
-				}
+				descKey := catalogkeys.MakeDescMetadataKey(m.storage.codec, id)
+				descDesc := desc.DescriptorProto()
+				b.Put(descKey, descDesc)
 			}
 			if logEvent != nil {
 				// If an event log is required for this update, ensure that the

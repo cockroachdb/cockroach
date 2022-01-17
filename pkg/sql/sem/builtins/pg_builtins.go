@@ -1270,7 +1270,7 @@ SELECT description
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
 				oid := int(oidArg.DInt)
-				table, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), oid)
+				tableDescI, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), oid)
 				if err != nil {
 					// For postgres compatibility, it is expected that rather returning
 					// an error this return nonUpdatableEvents (Zero) because there could
@@ -1280,8 +1280,8 @@ SELECT description
 					}
 					return nonUpdatableEvents, err
 				}
-				tableDesc, ok := table.(catalog.TableDescriptor)
-				if !ok || !tableDesc.IsTable() || tableDesc.IsVirtualTable() {
+				tableDesc := tableDescI.(catalog.TableDescriptor)
+				if !tableDesc.IsTable() || tableDesc.IsVirtualTable() {
 					return nonUpdatableEvents, nil
 				}
 
@@ -1314,7 +1314,7 @@ SELECT description
 					// System columns are not updatable.
 					return tree.DBoolFalse, nil
 				}
-				table, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), oid)
+				tableDescI, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), oid)
 				if err != nil {
 					if sqlerrors.IsUndefinedRelationError(err) {
 						// For postgres compatibility, it is expected that rather returning
@@ -1324,8 +1324,8 @@ SELECT description
 					}
 					return tree.DBoolFalse, err
 				}
-				tableDesc, ok := table.(catalog.TableDescriptor)
-				if !ok || !tableDesc.IsTable() || tableDesc.IsVirtualTable() {
+				tableDesc := tableDescI.(catalog.TableDescriptor)
+				if !tableDesc.IsTable() || tableDesc.IsVirtualTable() {
 					return tree.DBoolFalse, nil
 				}
 

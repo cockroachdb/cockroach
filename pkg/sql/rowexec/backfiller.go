@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -193,11 +193,12 @@ func GetResumeSpans(
 	jobsRegistry *jobs.Registry,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
+	col *descs.Collection,
 	tableID descpb.ID,
 	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
 ) ([]roachpb.Span, *jobs.Job, int, error) {
-	tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tableID)
+	tableDesc, err := col.MustGetTableDescByID(ctx, txn, tableID)
 	if err != nil {
 		return nil, nil, 0, err
 	}

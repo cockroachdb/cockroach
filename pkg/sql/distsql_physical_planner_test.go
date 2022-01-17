@@ -33,8 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -166,7 +166,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 				return
 			default:
 				// Split the table at a random row.
-				tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(
+				tableDesc := desctestutils.TestingGetTableDescriptor(
 					cdb, keys.SystemSQLCodec, "test", "public", "t",
 				)
 
@@ -1316,17 +1316,12 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-
 	makeTableDesc := func() catalog.TableDescriptor {
 		tableDesc := descpb.TableDescriptor{
 			PrimaryIndex: descpb.IndexDescriptor{},
 		}
 		b := tabledesc.NewBuilder(&tableDesc)
-		err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
-		if err != nil {
-			log.Fatalf(ctx, "error when building a table descriptor: %v", err)
-		}
+		b.RunPostDeserializationChanges()
 		return b.BuildImmutableTable()
 	}
 

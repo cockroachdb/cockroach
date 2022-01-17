@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -121,11 +120,10 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return nil
 	}
 
-	// TODO(ajwerner): Use the collection here.
-	exists, _, err := catalogkv.LookupObjectID(
-		ctx, p.txn, p.ExecCfg().Codec, tableDesc.GetParentID(), desiredSchemaID, tableDesc.GetName(),
+	objectID, err := p.Descriptors().LookupObjectID(
+		ctx, p.txn, tableDesc.GetParentID(), desiredSchemaID, tableDesc.GetName(),
 	)
-	if err == nil && exists {
+	if err == nil && objectID != descpb.InvalidID {
 		return pgerror.Newf(pgcode.DuplicateRelation,
 			"relation %s already exists in schema %s", tableDesc.GetName(), n.newSchema)
 	} else if err != nil {

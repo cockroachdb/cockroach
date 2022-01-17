@@ -80,7 +80,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/distsql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",

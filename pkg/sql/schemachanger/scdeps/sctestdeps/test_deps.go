@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -277,14 +276,14 @@ func (s *TestState) mayGetByName(
 		ParentSchemaID: parentSchemaID,
 		Name:           name,
 	}
-	id, found := s.namespace[key]
-	if !found {
+	id := s.catalog.LookupNamespaceEntry(key)
+	if id == descpb.InvalidID {
 		return nil
 	}
 	if id == keys.PublicSchemaID {
 		return schemadesc.GetPublicSchema()
 	}
-	b := descBuilder(s.descriptors, id)
+	b := s.descBuilder(id)
 	if b == nil {
 		return nil
 	}
@@ -296,16 +295,17 @@ func (s *TestState) ReadObjectNamesAndIDs(
 	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
 ) (names tree.TableNames, ids descpb.IDs) {
 	m := make(map[string]descpb.ID)
-	for nameInfo, id := range s.namespace {
-		if nameInfo.ParentID == db.GetID() && nameInfo.GetParentSchemaID() == schema.GetID() {
-			m[nameInfo.Name] = id
+	_ = s.catalog.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+		if e.GetParentID() == db.GetID() && e.GetParentSchemaID() == schema.GetID() {
+			m[e.GetName()] = e.GetID()
 			names = append(names, tree.MakeTableNameWithSchema(
 				tree.Name(db.GetName()),
 				tree.Name(schema.GetName()),
-				tree.Name(nameInfo.Name),
+				tree.Name(e.GetName()),
 			))
 		}
-	}
+		return nil
+	})
 	sort.Slice(names, func(i, j int) bool {
 		return names[i].Object() < names[j].Object()
 	})
@@ -406,7 +406,7 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 }
 
 func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDescriptor, error) {
-	b := descBuilder(s.descriptors, id)
+	b := s.descBuilder(id)
 	if b == nil {
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading mutable descriptor #%d", id)
 	}
@@ -414,10 +414,7 @@ func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDesc
 }
 
 func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descriptor, error) {
-	b := descBuilder(s.syntheticDescriptors, id)
-	if b == nil {
-		b = descBuilder(s.descriptors, id)
-	}
+	b := s.descBuilderWithSynthetic(id)
 	if b == nil {
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading immutable descriptor #%d", id)
 	}
@@ -425,12 +422,19 @@ func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descripto
 }
 
 // descBuilder is used to ensure that the contents of descs are copied on read.
-func descBuilder(descs nstree.Map, id descpb.ID) catalog.DescriptorBuilder {
-	entry := descs.GetByID(id)
-	if entry == nil {
-		return nil
+func (s *TestState) descBuilder(id descpb.ID) catalog.DescriptorBuilder {
+	if desc := s.catalog.LookupDescriptorEntry(id); desc != nil {
+		return desc.NewBuilder()
 	}
-	return entry.(catalog.Descriptor).NewBuilder()
+	return nil
+}
+
+// descBuilder is used to ensure that the contents of descs are copied on read.
+func (s *TestState) descBuilderWithSynthetic(id descpb.ID) catalog.DescriptorBuilder {
+	if desc := s.synthetic.LookupDescriptorEntry(id); desc != nil {
+		return desc.NewBuilder()
+	}
+	return s.descBuilder(id)
 }
 
 var _ scexec.Dependencies = (*TestState)(nil)
@@ -451,12 +455,12 @@ func (s *TestState) MustReadImmutableDescriptor(
 
 // AddSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
 func (s *TestState) AddSyntheticDescriptor(desc catalog.Descriptor) {
-	s.syntheticDescriptors.Upsert(desc)
+	s.synthetic.UpsertDescriptorEntry(desc)
 }
 
 // RemoveSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
 func (s *TestState) RemoveSyntheticDescriptor(id descpb.ID) {
-	s.syntheticDescriptors.Remove(id)
+	s.synthetic.DeleteDescriptorEntry(id)
 }
 
 var _ scexec.Catalog = (*TestState)(nil)
@@ -566,8 +570,8 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	})
 	for _, nameInfo := range names {
 		expectedID := b.namesToDelete[nameInfo]
-		actualID, hasEntry := b.s.namespace[nameInfo]
-		if !hasEntry {
+		actualID := b.s.catalog.LookupNamespaceEntry(nameInfo)
+		if actualID == descpb.InvalidID {
 			return errors.AssertionFailedf(
 				"cannot delete missing namespace entry %v", nameInfo)
 		}
@@ -584,11 +588,11 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 			}
 		}
 		b.s.LogSideEffectf("delete %s namespace entry %v -> %d", nameType, nameInfo, expectedID)
-		delete(b.s.namespace, nameInfo)
+		b.s.catalog.DeleteNamespaceEntry(nameInfo)
 	}
 	for _, desc := range b.descs {
 		var old protoutil.Message
-		if b := descBuilder(b.s.descriptors, desc.GetID()); b != nil {
+		if b := b.s.descBuilder(desc.GetID()); b != nil {
 			old = b.BuildImmutable().DescriptorProto()
 		}
 		diff := sctestutils.ProtoDiff(old, desc.DescriptorProto(), sctestutils.DiffArgs{
@@ -596,37 +600,14 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 			CompactLevel: 3,
 		})
 		b.s.LogSideEffectf("upsert descriptor #%d\n%s", desc.GetID(), diff)
-		b.s.descriptors.Upsert(desc)
+		b.s.catalog.UpsertDescriptorEntry(desc)
 	}
 	for _, deletedID := range b.descriptorsToDelete.Ordered() {
 		b.s.LogSideEffectf("delete descriptor #%d", deletedID)
-		b.s.descriptors.Remove(deletedID)
+		b.s.catalog.DeleteDescriptorEntry(deletedID)
 	}
-	return catalog.Validate(ctx, b.s, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...).CombinedError()
-}
-
-var _ catalog.DescGetter = (*TestState)(nil)
-
-// GetDesc implements the catalog.DescGetter interface.
-func (s *TestState) GetDesc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
-	b := descBuilder(s.descriptors, id)
-	if b == nil {
-		return nil, nil
-	}
-	return b.BuildImmutable(), nil
-}
-
-// GetNamespaceEntry implements the catalog.DescGetter interface.
-func (s *TestState) GetNamespaceEntry(
-	ctx context.Context, parentID, parentSchemaID descpb.ID, name string,
-) (descpb.ID, error) {
-	nameInfo := descpb.NameInfo{
-		ParentID:       parentID,
-		ParentSchemaID: parentSchemaID,
-		Name:           name,
-	}
-	// GetNamespaceEntry is best-effort.
-	return s.namespace[nameInfo], nil
+	ve := b.s.catalog.Validate(ctx, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
+	return ve.CombinedError()
 }
 
 // Partitioner implements the scexec.Dependencies interface.

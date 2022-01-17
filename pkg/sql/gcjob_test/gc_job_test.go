@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -96,13 +96,18 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				myTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myTableID)
+			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				myImm, err := col.MustGetTableDescByID(ctx, txn, myTableID)
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
-				return err
+				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
+				myOtherImm, err := col.MustGetTableDescByID(ctx, txn, myOtherTableID)
+				if err != nil {
+					return err
+				}
+				myOtherTableDesc = tabledesc.NewBuilder(myOtherImm.TableDesc()).BuildExistingMutableTable()
+				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -223,8 +228,8 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				}
 			}
 
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				myTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myTableID)
+			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				myImm, err := col.MustGetTableDescByID(ctx, txn, myTableID)
 				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
@@ -233,13 +238,18 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
+				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
+				myOtherImm, err := col.MustGetTableDescByID(ctx, txn, myOtherTableID)
 				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")
 					return nil
 				}
-				return err
+				if err != nil {
+					return err
+				}
+				myOtherTableDesc = tabledesc.NewBuilder(myOtherImm.TableDesc()).BuildExistingMutableTable()
+				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}

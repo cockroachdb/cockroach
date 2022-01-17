@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -88,7 +88,7 @@ func TestEnsureNoDrainingNames(t *testing.T) {
 	// Check that the draining name persists in the descriptor and in the db's
 	// schema mapping.
 	{
-		db := catalogkv.TestingGetDatabaseDescriptor(s.DB(), c, "t")
+		db := desctestutils.TestingGetDatabaseDescriptor(s.DB(), c, "t")
 		_ = db.ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error {
 			switch name {
 			case "foo":
@@ -98,7 +98,7 @@ func TestEnsureNoDrainingNames(t *testing.T) {
 			}
 			return nil
 		})
-		foo := catalogkv.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "foo")
+		foo := desctestutils.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "foo")
 		require.NotEmpty(t, foo.GetDrainingNames())
 	}
 
@@ -120,15 +120,15 @@ func TestEnsureNoDrainingNames(t *testing.T) {
 	// Check that there are no draining names and that the database schema mapping
 	// is correct.
 	{
-		db := catalogkv.TestingGetDatabaseDescriptor(s.DB(), c, "t")
+		db := desctestutils.TestingGetDatabaseDescriptor(s.DB(), c, "t")
 		_ = db.ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error {
 			require.False(t, isDropped)
 			require.True(t, name == "foo" || name == "bar")
 			return nil
 		})
-		foo := catalogkv.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "foo")
+		foo := desctestutils.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "foo")
 		require.Empty(t, foo.GetDrainingNames())
-		bar := catalogkv.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "bar")
+		bar := desctestutils.TestingGetSchemaDescriptor(s.DB(), c, db.GetID(), "bar")
 		require.Empty(t, bar.GetDrainingNames())
 	}
 }

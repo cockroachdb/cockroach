@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -859,15 +858,14 @@ func readPostgresStmt(
 		// Otherwise, we silently ignore the drop statement and continue with the import.
 		for _, name := range names {
 			tableName := name.ToUnresolvedObjectName().String()
-			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				dbDesc, err := catalogkv.GetDatabaseDescByID(ctx, txn, p.ExecCfg().Codec, parentID)
+			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				dbDesc, err := col.MustGetDatabaseDescByID(ctx, txn, parentID)
 				if err != nil {
 					return err
 				}
-				err = catalogkv.CheckObjectCollision(
+				err = col.CheckObjectCollision(
 					ctx,
 					txn,
-					p.ExecCfg().Codec,
 					parentID,
 					dbDesc.GetSchemaID(tree.PublicSchema),
 					tree.NewUnqualifiedTableName(tree.Name(tableName)),

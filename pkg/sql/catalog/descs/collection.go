@@ -23,10 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -40,21 +41,18 @@ import (
 func makeCollection(
 	leaseMgr *lease.Manager,
 	settings *cluster.Settings,
+	codec keys.SQLCodec,
 	hydratedTables *hydratedtables.Cache,
 	virtualSchemas catalog.VirtualSchemas,
 	temporarySchemaProvider TemporarySchemaProvider,
 ) Collection {
-	codec := keys.SystemSQLCodec
-	if leaseMgr != nil { // permitted for testing
-		codec = leaseMgr.Codec()
-	}
 	return Collection{
 		settings:       settings,
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
 		kv:             makeKVDescriptors(codec),
-		temporary:      makeTemporaryDescriptors(codec, temporarySchemaProvider),
+		temporary:      makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
 	}
 }
 
@@ -216,14 +214,20 @@ func (tc *Collection) WriteDescToBatch(
 ) error {
 	desc.MaybeIncrementVersion()
 	if !tc.skipValidationOnWrite && ValidateOnWriteEnabled.Get(&tc.settings.SV) {
-		if err := catalog.ValidateSelf(desc); err != nil {
+		if err := validate.Self(desc); err != nil {
 			return err
 		}
 	}
 	if err := tc.AddUncommittedDescriptor(desc); err != nil {
 		return err
 	}
-	return catalogkv.WriteDescToBatch(ctx, kvTrace, tc.settings, b, tc.codec(), desc.GetID(), desc)
+	descKey := catalogkeys.MakeDescMetadataKey(tc.codec(), desc.GetID())
+	proto := desc.DescriptorProto()
+	if kvTrace {
+		log.VEventf(ctx, 2, "Put %s -> %s", descKey, proto)
+	}
+	b.Put(descKey, proto)
+	return nil
 }
 
 // WriteDesc constructs a new Batch, calls WriteDescToBatch and runs it.
@@ -262,9 +266,7 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 // GetAllDescriptors returns all descriptors visible by the transaction,
 // first checking the Collection's cached descriptors for validity if validate
 // is set to true before defaulting to a key-value scan, if necessary.
-func (tc *Collection) GetAllDescriptors(
-	ctx context.Context, txn *kv.Txn,
-) ([]catalog.Descriptor, error) {
+func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	return tc.kv.getAllDescriptors(ctx, txn)
 }
 
@@ -297,12 +299,12 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 	if !found {
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 	}
-	descs, err := tc.GetAllDescriptors(ctx, txn)
+	all, err := tc.GetAllDescriptors(ctx, txn)
 	if err != nil {
 		return nil, err
 	}
 	var ret []catalog.TableDescriptor
-	for _, desc := range descs {
+	for _, desc := range all.OrderedDescriptors() {
 		if desc.GetParentID() == dbID {
 			if table, ok := desc.(catalog.TableDescriptor); ok {
 				ret = append(ret, table)
@@ -316,9 +318,9 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 // visible by the transaction. This uses the schema cache locally
 // if possible, or else performs a scan on kv.
 func (tc *Collection) GetSchemasForDatabase(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+	ctx context.Context, txn *kv.Txn, dbDesc catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
-	return tc.kv.getSchemasForDatabase(ctx, txn, dbID)
+	return tc.kv.getSchemasForDatabase(ctx, txn, dbDesc)
 }
 
 // GetObjectNamesAndIDs returns the names and IDs of all objects in a database and schema.

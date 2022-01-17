@@ -203,7 +203,7 @@ func (p *planner) renameSchema(
 	}
 
 	// Check that there isn't a name collision with the new name.
-	found, _, err := schemaExists(ctx, p.txn, p.ExecCfg().Codec, db.ID, newName)
+	found, _, err := schemaExists(ctx, p.txn, p.Descriptors(), db.ID, newName)
 	if err != nil {
 		return err
 	}

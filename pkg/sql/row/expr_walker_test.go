@@ -198,7 +198,6 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 				seqDesc := createAndIncrementSeqDescriptor(ctx, t, id, keys.TODOSQLCodec,
 					test.incrementBy, test.seqIDToOpts[id], db)
 				seqMetadata := &SequenceMetadata{
-					id:              descpb.ID(id),
 					seqDesc:         seqDesc,
 					instancesPerRow: test.instancesPerRow,
 					curChunk:        nil,
