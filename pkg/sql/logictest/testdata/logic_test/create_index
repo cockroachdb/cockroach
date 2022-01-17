@@ -233,6 +233,11 @@ CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
 
 subtest pause
 
+# Intentionally, disable the declarative schema changer for this
+# part of the test, since we are pausing jobs intentionally below.
+statement ok
+SET experimental_use_new_schema_changer = 'off'
+
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow'
 

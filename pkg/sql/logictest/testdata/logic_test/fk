@@ -1004,9 +1004,11 @@ DROP TABLE a
 
 # Check proper GC job description formatting when removing FK back-references when dropping a table (#59221).
 query T
-SELECT description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for updating table "a"%'
+SELECT job_type FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND
+ (description LIKE 'GC for updating table "a"%' OR
+  description = 'GC for dropping descriptor 105');
 ----
-GC for updating table "a" after removing constraint "fk_self_id" from table "test.public.a"; DROP TABLE test.public.a
+SCHEMA CHANGE GC
 
 statement ok
 DROP TABLE b

@@ -1075,6 +1075,7 @@ AND name != 'sql.stats.automatic_collection.enabled'
 AND name NOT LIKE '%sql.defaults.vectorize%'
 AND name NOT LIKE '%sql.testing%'
 AND name NOT LIKE '%sql.defaults.experimental_distsql_planning%'
+AND name NOT LIKE '%sql.defaults.experimental_new_schema_changer.enabled%'
 ORDER BY name
 ----
 cluster.secret
@@ -1110,7 +1111,7 @@ SELECT name, value
 FROM system.settings
 WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
   'sql.stats.automatic_collection.enabled', 'sql.defaults.vectorize',
-  'sql.defaults.experimental_distsql_planning')
+  'sql.defaults.experimental_distsql_planning', 'sql.defaults.experimental_new_schema_changer.enabled')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true

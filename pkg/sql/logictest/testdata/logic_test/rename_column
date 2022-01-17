@@ -49,7 +49,7 @@ id name  species
 
 user testuser
 
-statement error pq: must be owner of table users or have CREATE privilege on table users
+statement error (pq: must be owner of table users or have CREATE privilege on table users)* (user testuser does not have CREATE privilege on relation users)*
 ALTER TABLE users RENAME COLUMN name TO username
 
 user root
