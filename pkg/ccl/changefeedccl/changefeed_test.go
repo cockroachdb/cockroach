@@ -2296,12 +2296,12 @@ func TestChangefeedVirtualComputedColumn(t *testing.T) {
 		defer closeFeed(t, cc)
 
 		assertPayloads(t, cc, []string{
-			`cc: [1]->{"after": {"a": 1, "b": 1, "c": null}, "before": null}`,
+			`cc: [1]->{"after": {"a": 1, "b": 1}, "before": null}`,
 		})
 
 		sqlDB.Exec(t, `UPDATE cc SET b=10 WHERE a=1`)
 		assertPayloads(t, cc, []string{
-			`cc: [1]->{"after": {"a": 1, "b": 10, "c": null}, "before": {"a": 1, "b": 1, "c": null}}`,
+			`cc: [1]->{"after": {"a": 1, "b": 10}, "before": {"a": 1, "b": 1}}`,
 		})
 	}
 

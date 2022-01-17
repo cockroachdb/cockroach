@@ -771,6 +771,9 @@ func tableToAvroSchema(
 		fieldIdxByColIdx: make(map[int]int),
 	}
 	for _, col := range tableDesc.PublicColumns() {
+		if col.IsVirtual() {
+			continue
+		}
 		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
