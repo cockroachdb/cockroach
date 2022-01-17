@@ -31,7 +31,9 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	if db == nil {
 		return
 	}
-
+	if string(n.Name) == b.SessionData().Database && b.SessionData().SafeUpdates {
+		panic(pgerror.DangerousStatementf("DROP DATABASE on current database"))
+	}
 	dropIDs := catalog.DescriptorIDSet{}
 	{
 		c := b.WithNewSourceElementID()
