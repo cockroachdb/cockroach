@@ -93,6 +93,7 @@ func dropType(b BuildCtx, typ catalog.TypeDescriptor, behavior tree.DropBehavior
 		DescriptorID: typ.GetID(),
 		Name:         typ.GetName(),
 	})
+	b.IncrementSubWorkID()
 	b.EnqueueDrop(&scpb.Type{TypeID: arrayType.GetID()})
 	b.EnqueueDrop(&scpb.Namespace{
 		DatabaseID:   arrayType.GetParentID(),
