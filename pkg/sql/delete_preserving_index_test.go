@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -96,7 +96,7 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 		<-atBackfillStage
 		// Find the descriptors for the indices.
 		codec := keys.SystemSQLCodec
-		tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
+		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 		var index *descpb.IndexDescriptor
 		var ord int
 		for idx, i := range tableDesc.Mutations {
@@ -457,7 +457,7 @@ func TestMergeProcess(t *testing.T) {
 		}
 
 		codec := keys.SystemSQLCodec
-		tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
+		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 		lm := server.LeaseManager().(*lease.Manager)
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
@@ -495,7 +495,7 @@ func TestMergeProcess(t *testing.T) {
 		}
 
 		mTest.makeMutationsActive(ctx)
-		tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
+		tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 
 		dstIndex, err := tableDesc.FindIndexWithName(test.dstIndex)
 		if err != nil {

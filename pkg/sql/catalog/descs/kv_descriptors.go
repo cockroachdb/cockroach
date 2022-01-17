@@ -16,9 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,30 +59,23 @@ type kvDescriptors struct {
 // TODO(ajwerner): Unify this struct with the uncommittedDescriptors set.
 // TODO(ajwerner): Unify the sql.internalLookupCtx with the descs.Collection.
 type allDescriptors struct {
-	descs []catalog.Descriptor
-	byID  map[descpb.ID]int
+	c nstree.Catalog
 }
 
-func (d *allDescriptors) init(descriptors []catalog.Descriptor) {
-	d.descs = descriptors
-	d.byID = make(map[descpb.ID]int, len(descriptors))
-	for i, desc := range descriptors {
-		d.byID[desc.GetID()] = i
-	}
+func (d *allDescriptors) init(c nstree.Catalog) {
+	d.c = c
 }
 
 func (d *allDescriptors) clear() {
-	d.descs = nil
-	d.byID = nil
+	*d = allDescriptors{}
 }
 
-func (d *allDescriptors) isEmpty() bool {
-	return d.descs == nil
+func (d *allDescriptors) isUnset() bool {
+	return !d.c.IsInitialized()
 }
 
 func (d *allDescriptors) contains(id descpb.ID) bool {
-	_, exists := d.byID[id]
-	return exists
+	return d.c.IsInitialized() && d.c.LookupDescriptorEntry(id) != nil
 }
 
 func makeKVDescriptors(codec keys.SQLCodec) kvDescriptors {
@@ -152,7 +146,7 @@ func (kd *kvDescriptors) lookupName(
 		}
 	}
 	// Fall back to querying the namespace table.
-	found, id, err := catalogkv.LookupObjectID(
+	found, id, err := catkv.LookupID(
 		ctx, txn, kd.codec, parentID, parentSchemaID, name,
 	)
 	if err != nil || !found {
@@ -220,72 +214,83 @@ func (kd *kvDescriptors) getByID(
 		return dbdesc.NewBuilder(systemschema.SystemDB.DatabaseDesc()).BuildExistingMutable(), nil
 	}
 
-	return catalogkv.MustGetMutableDescriptorByID(ctx, txn, kd.codec, id)
+	imm, err := catkv.MustGetDescriptorByID(ctx, txn, kd.codec, id, catalog.Any)
+	if err != nil {
+		return nil, err
+	}
+	return imm.NewBuilder().BuildExistingMutable(), err
 }
 
 func (kd *kvDescriptors) getAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]catalog.Descriptor, error) {
-	if kd.allDescriptors.isEmpty() {
-		descs, err := catalogkv.GetAllDescriptors(ctx, txn, kd.codec, true /* shouldRunPostDeserializationChanges */)
+) (nstree.Catalog, error) {
+	if kd.allDescriptors.isUnset() {
+		c, err := catkv.GetCatalogUnvalidated(ctx, txn, kd.codec)
 		if err != nil {
-			return nil, err
+			return nstree.Catalog{}, err
+		}
+
+		descs := c.OrderedDescriptors()
+		ve := c.Validate(ctx, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, descs...)
+		if err := ve.CombinedError(); err != nil {
+			return nstree.Catalog{}, err
 		}
 
 		// There could be tables with user defined types that need hydrating.
 		if err := HydrateGivenDescriptors(ctx, descs); err != nil {
 			// If we ran into an error hydrating the types, that means that we
 			// have some sort of corrupted descriptor state. Rather than disable
-			// uses of GetAllDescriptors, just log the error.
+			// uses of getAllDescriptors, just log the error.
 			log.Errorf(ctx, "%s", err.Error())
 		}
 
-		kd.allDescriptors.init(descs)
+		kd.allDescriptors.init(c)
 	}
-	return kd.allDescriptors.descs, nil
+	return kd.allDescriptors.c, nil
 }
 
 func (kd *kvDescriptors) getAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
 	if kd.allDatabaseDescriptors == nil {
-		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, kd.codec)
+		c, err := catkv.GetAllDatabaseDescriptorIDs(ctx, txn, kd.codec)
 		if err != nil {
 			return nil, err
 		}
-		dbDescs, err := catalogkv.GetDatabaseDescriptorsFromIDs(
-			ctx, txn, kd.codec, dbDescIDs,
-		)
+		dbDescs, err := catkv.MustGetDescriptorsByID(ctx, txn, kd.codec, c.OrderedDescriptorIDs(), catalog.Database)
 		if err != nil {
 			return nil, err
 		}
-		kd.allDatabaseDescriptors = dbDescs
+		kd.allDatabaseDescriptors = make([]catalog.DatabaseDescriptor, len(dbDescs))
+		for i, dbDesc := range dbDescs {
+			kd.allDatabaseDescriptors[i] = dbDesc.(catalog.DatabaseDescriptor)
+		}
 	}
 	return kd.allDatabaseDescriptors, nil
 }
 
 func (kd *kvDescriptors) getSchemasForDatabase(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
 	if kd.allSchemasForDatabase == nil {
 		kd.allSchemasForDatabase = make(map[descpb.ID]map[descpb.ID]string)
 	}
-	if _, ok := kd.allSchemasForDatabase[dbID]; !ok {
+	if _, ok := kd.allSchemasForDatabase[db.GetID()]; !ok {
 		var err error
-		allSchemas, err := resolver.GetForDatabase(ctx, txn, kd.codec, dbID)
+		allSchemas, err := resolver.GetForDatabase(ctx, txn, kd.codec, db)
 		if err != nil {
 			return nil, err
 		}
-		kd.allSchemasForDatabase[dbID] = make(map[descpb.ID]string)
+		kd.allSchemasForDatabase[db.GetID()] = make(map[descpb.ID]string)
 		for id, entry := range allSchemas {
-			kd.allSchemasForDatabase[dbID][id] = entry.Name
+			kd.allSchemasForDatabase[db.GetID()][id] = entry.Name
 		}
 	}
-	return kd.allSchemasForDatabase[dbID], nil
+	return kd.allSchemasForDatabase[db.GetID()], nil
 }
 
 func (kd *kvDescriptors) idDefinitelyDoesNotExist(id descpb.ID) bool {
-	if kd.allDescriptors.isEmpty() {
+	if kd.allDescriptors.isUnset() {
 		return false
 	}
 	return !kd.allDescriptors.contains(id)

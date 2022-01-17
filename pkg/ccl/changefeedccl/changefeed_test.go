@@ -52,8 +52,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -1054,7 +1054,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			context.Background(), &f.Server().ClusterSettings().SV, maxCheckpointSize)
 
 		// Note the tableSpan to avoid resolved events that leave no gaps
-		fooDesc := catalogkv.TestingGetTableDescriptor(
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
 			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
 		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
@@ -4597,7 +4597,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
 		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 1000)`)
 
-		fooDesc := catalogkv.TestingGetTableDescriptor(
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
 			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
 		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 

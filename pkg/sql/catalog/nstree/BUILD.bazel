@@ -7,6 +7,7 @@ go_library(
         "by_id_map.go",
         "by_name.go",
         "by_name_map.go",
+        "catalog.go",
         "map.go",
         "set.go",
         "tree.go",
@@ -16,7 +17,9 @@ go_library(
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/internal/catval",
         "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_btree//:btree",
     ],
 )

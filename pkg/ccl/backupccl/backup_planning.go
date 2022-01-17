@@ -39,8 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1445,7 +1445,7 @@ func getBackupDetailAndManifest(
 		descriptorProtos = initialDetails.ResolvedTargets
 		targetDescs = make([]catalog.Descriptor, len(descriptorProtos))
 		for i := range descriptorProtos {
-			targetDescs[i] = catalogkv.NewBuilder(&descriptorProtos[i]).BuildExistingMutable()
+			targetDescs[i] = descbuilder.NewBuilder(&descriptorProtos[i]).BuildExistingMutable()
 		}
 	}
 

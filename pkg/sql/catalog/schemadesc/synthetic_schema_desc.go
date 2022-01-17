@@ -92,13 +92,13 @@ func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
 func (p synthetic) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, nil
 }
-func (p synthetic) ValidateSelf(vea catalog.ValidationErrorAccumulator) {}
+func (p synthetic) ValidateSelf(_ catalog.ValidationErrorAccumulator) {}
 func (p synthetic) ValidateCrossReferences(
-	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
 func (p synthetic) ValidateTxnCommit(
-	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
 func (p synthetic) SchemaKind() catalog.ResolvedSchemaKind { return p.kind() }

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -161,7 +161,7 @@ func expectedSCJobCount(scName string, isClusterRestore, after bool) int {
 func validateTable(
 	t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, dbName string, tableName string,
 ) {
-	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
 	// There should be no mutations on these table descriptors at this point.
 	require.Equal(t, 0, len(desc.TableDesc().Mutations))
 

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -240,7 +239,7 @@ func changefeedPlanHook(
 					return err
 				}
 				_, qualified := opts[changefeedbase.OptFullTableName]
-				name, err := getChangefeedTargetName(ctx, table, *p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
+				name, err := getChangefeedTargetName(ctx, table, p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
 				if err != nil {
 					return err
 				}
@@ -870,14 +869,15 @@ func (b *changefeedResumer) OnPauseRequest(
 // getQualifiedTableName returns the database-qualified name of the table
 // or view represented by the provided descriptor.
 func getQualifiedTableName(
-	ctx context.Context, execCfg sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
+	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (string, error) {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, execCfg.Codec, desc.GetParentID())
+	col := execCfg.CollectionFactory.MakeCollection(nil /* temporarySchemaProvider */)
+	dbDesc, err := col.MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
 	if err != nil {
 		return "", err
 	}
 	schemaID := desc.GetParentSchemaID()
-	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, desc.GetParentID(), schemaID, execCfg.Settings.Version)
+	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, dbDesc, schemaID, execCfg.Settings.Version)
 	if err != nil {
 		return "", err
 	}
@@ -893,7 +893,7 @@ func getQualifiedTableName(
 func getChangefeedTargetName(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	execCfg sql.ExecutorConfig,
+	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	qualified bool,
 ) (string, error) {

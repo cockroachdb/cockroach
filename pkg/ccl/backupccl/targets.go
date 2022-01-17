@@ -23,10 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -48,7 +49,7 @@ func getRelevantDescChanges(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	startTime, endTime hlc.Timestamp,
-	descs []catalog.Descriptor,
+	descriptors []catalog.Descriptor,
 	expanded []descpb.ID,
 	priorIDs map[descpb.ID]descpb.ID,
 	fullCluster bool,
@@ -72,7 +73,7 @@ func getRelevantDescChanges(
 	// changes. This is initially the descriptors matched (as of endTime) by our
 	// target spec, plus those that belonged to a DB that our spec expanded at any
 	// point in the interval.
-	interestingIDs := make(map[descpb.ID]struct{}, len(descs))
+	interestingIDs := make(map[descpb.ID]struct{}, len(descriptors))
 
 	systemTableIDsToExcludeFromBackup, err := GetSystemTableIDsToExcludeFromClusterBackup(ctx, execCfg)
 	if err != nil {
@@ -101,7 +102,7 @@ func getRelevantDescChanges(
 
 	// The descriptors that currently (endTime) match the target spec (desc) are
 	// obviously interesting to our backup.
-	for _, i := range descs {
+	for _, i := range descriptors {
 		interestingIDs[i.GetID()] = struct{}{}
 		if table, isTable := i.(catalog.TableDescriptor); isTable {
 
@@ -121,7 +122,7 @@ func getRelevantDescChanges(
 	}
 
 	if !startTime.IsEmpty() {
-		starting, err := backupresolver.LoadAllDescs(ctx, execCfg.Codec, execCfg.DB, startTime)
+		starting, err := backupresolver.LoadAllDescs(ctx, execCfg, startTime)
 		if err != nil {
 			return nil, err
 		}
@@ -158,7 +159,7 @@ func getRelevantDescChanges(
 		if isInterestingID(change.ID) {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			desc := catalogkv.NewBuilder(change.Desc).BuildExistingMutable()
+			desc := descbuilder.NewBuilder(change.Desc).BuildExistingMutable()
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
@@ -297,7 +298,7 @@ func fullClusterTargetsRestore(
 func fullClusterTargetsBackup(
 	ctx context.Context, execCfg *sql.ExecutorConfig, endTime hlc.Timestamp,
 ) ([]catalog.Descriptor, []descpb.ID, error) {
-	allDescs, err := backupresolver.LoadAllDescs(ctx, execCfg.Codec, execCfg.DB, endTime)
+	allDescs, err := backupresolver.LoadAllDescs(ctx, execCfg, endTime)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -485,7 +486,7 @@ func findLastSchemaChangeTime(
 			}
 
 			if rev.ID == tbDesc.GetID() {
-				d := catalogkv.NewBuilder(rev.Desc).BuildExistingMutable()
+				d := descbuilder.NewBuilder(rev.Desc).BuildExistingMutable()
 				revDesc, _ := catalog.AsTableDescriptor(d)
 				if !reflect.DeepEqual(revDesc.PublicColumns(), tbDesc.PublicColumns()) {
 					return lastSchemaChangeTime
@@ -503,7 +504,7 @@ func findLastSchemaChangeTime(
 func checkMultiRegionCompatible(
 	ctx context.Context,
 	txn *kv.Txn,
-	codec keys.SQLCodec,
+	col *descs.Collection,
 	table *tabledesc.Mutable,
 	database catalog.DatabaseDescriptor,
 ) error {
@@ -546,7 +547,7 @@ func checkMultiRegionCompatible(
 		// For REGION BY TABLE IN <region> tables, allow the restore if the
 		// database has the region.
 		regionEnumID := database.GetRegionConfig().RegionEnumID
-		regionEnum, err := catalogkv.MustGetTypeDescByID(ctx, txn, codec, regionEnumID)
+		regionEnum, err := col.MustGetTypeDescByID(ctx, txn, regionEnumID)
 		if err != nil {
 			return err
 		}

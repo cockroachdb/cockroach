@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -193,7 +193,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 		}
 		md.TypeDescriptor = *typ
 	case nil:
-		b := catalogkv.NewBuilderWithMVCCTimestamp(&desc, newModTime)
+		b := descbuilder.NewBuilderWithMVCCTimestamp(&desc, newModTime)
 		if b == nil {
 			return pgerror.Newf(pgcode.InvalidObjectDefinition, "invalid new descriptor %+v", desc)
 		}
@@ -717,7 +717,7 @@ func unsafeReadDescriptor(
 	if err := descRow.ValueProto(&descProto); err != nil {
 		return nil, notice, err
 	}
-	if b := catalogkv.NewBuilderWithMVCCTimestamp(&descProto, descRow.Value.Timestamp); b != nil {
+	if b := descbuilder.NewBuilderWithMVCCTimestamp(&descProto, descRow.Value.Timestamp); b != nil {
 		mut = b.BuildExistingMutable()
 	}
 	return mut, notice, nil

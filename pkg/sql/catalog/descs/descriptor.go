@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -263,11 +264,14 @@ func getSchemaByName(
 		return true, sc, nil
 	}
 	if isTemporarySchema(name) {
-		if refuseFurtherLookup, sc, err := tc.temporary.getSchemaByName(
-			ctx, txn, db.GetID(), name, tc.settings.Version,
-		); refuseFurtherLookup || sc != nil || err != nil {
-			return sc != nil, sc, err
+		if sc := tc.temporary.getSchemaByName(ctx, db.GetID(), name); sc != nil {
+			return true, sc, nil
 		}
+		exists, scID, err := tc.kv.lookupName(ctx, txn, nil /* maybeDB */, db.GetID(), keys.RootNamespaceID, name)
+		if !exists || err != nil {
+			return false, nil, err
+		}
+		return true, schemadesc.NewTemporarySchema(name, scID, db.GetID()), nil
 	}
 	if id := db.GetSchemaID(name); id != descpb.InvalidID {
 		// TODO(ajwerner): Fill in flags here or, more likely, get rid of

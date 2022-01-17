@@ -11,8 +11,6 @@
 package tabledesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -62,7 +60,7 @@ func NewBuilderForUncommittedVersion(desc *descpb.TableDescriptor) TableDescript
 // foreign key representation of a table descriptor.
 // When skipFKsWithNoMatchingTable is set, the FK upgrade is allowed
 // to proceed even in the case where a referenced table cannot be retrieved
-// by the DescGetter. Such upgrades are then not fully complete.
+// by the ValidationDereferencer. Such upgrades are then not fully complete.
 func NewBuilderForFKUpgrade(
 	desc *descpb.TableDescriptor, skipFKsWithNoMatchingTable bool,
 ) TableDescriptorBuilder {
@@ -98,12 +96,20 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
-	ctx context.Context, dg catalog.DescGetter,
-) error {
-	var err error
+func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() {
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
-	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
+	tdb.changes = maybeFillInDescriptor(tdb.maybeModified)
+}
+
+// RunPostRestoreChanges implements the catalog.DescriptorBuilder interface.
+func (tdb *tableDescriptorBuilder) RunPostRestoreChanges(
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
+) (err error) {
+	tdb.changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
+		descLookupFn,
+		tdb.skipFKsWithNoMatchingTable,
+		tdb.maybeModified,
+	)
 	return err
 }
 
@@ -183,11 +189,8 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 // This includes format upgrades and optional changes that can be handled by all version
 // (for example: additional default privileges).
 func maybeFillInDescriptor(
-	ctx context.Context,
-	dg catalog.DescGetter,
 	desc *descpb.TableDescriptor,
-	skipFKsWithNoMatchingTable bool,
-) (changes PostDeserializationTableDescriptorChanges, err error) {
+) (changes PostDeserializationTableDescriptorChanges) {
 	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
 
 	changes.FixedIndexEncodingType = maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex)
@@ -218,15 +221,7 @@ func maybeFillInDescriptor(
 		privilege.Table,
 		desc.GetName(),
 	)
-
-	if dg != nil {
-		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
-			ctx, dg, skipFKsWithNoMatchingTable /* skipFKsWithNoMatchingTable*/, desc)
-	}
-	if err != nil {
-		return PostDeserializationTableDescriptorChanges{}, err
-	}
-	return changes, nil
+	return changes
 }
 
 // maybeRemoveDefaultExprFromComputedColumns removes DEFAULT expressions on
@@ -271,8 +266,7 @@ func maybeRemoveDefaultExprFromComputedColumns(desc *descpb.TableDescriptor) (ha
 // at backup and restore time and occurs in a hacky way. All of that upgrading
 // should get reworked but we're leaving this here for now for simplicity.
 func maybeUpgradeForeignKeyRepresentation(
-	ctx context.Context,
-	dg catalog.DescGetter,
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
 	skipFKsWithNoMatchingTable bool,
 	desc *descpb.TableDescriptor,
 ) (bool, error) {
@@ -287,7 +281,7 @@ func maybeUpgradeForeignKeyRepresentation(
 	// cluster (after finalizing the upgrade) have foreign key mutations.
 	for i := range desc.Indexes {
 		newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-			ctx, dg, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
+			descLookupFn, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
 		)
 		if err != nil {
 			return false, err
@@ -295,7 +289,7 @@ func maybeUpgradeForeignKeyRepresentation(
 		changed = changed || newChanged
 	}
 	newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-		ctx, dg, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
+		descLookupFn, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
 	)
 	if err != nil {
 		return false, err
@@ -308,8 +302,7 @@ func maybeUpgradeForeignKeyRepresentation(
 // maybeUpgradeForeignKeyRepOnIndex is the meat of the previous function - it
 // tries to upgrade a particular index's foreign key representation.
 func maybeUpgradeForeignKeyRepOnIndex(
-	ctx context.Context,
-	dg catalog.DescGetter,
+	descLookupFn func(id descpb.ID) catalog.Descriptor,
 	otherUnupgradedTables map[descpb.ID]catalog.TableDescriptor,
 	desc *descpb.TableDescriptor,
 	idx *descpb.IndexDescriptor,
@@ -324,9 +317,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 		if _, found := otherUnupgradedTables[id]; found {
 			return nil
 		}
-		d, err := dg.GetDesc(ctx, id)
-		if err != nil {
-			return err
+		d := descLookupFn(id)
+		if d == nil {
+			return catalog.WrapTableDescRefErr(id, catalog.ErrDescriptorNotFound)
 		}
 		tbl, ok := d.(catalog.TableDescriptor)
 		if !ok {

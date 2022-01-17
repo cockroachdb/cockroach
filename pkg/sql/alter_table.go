@@ -824,12 +824,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateFkInTxn(
-					params.ctx, params.p.LeaseMgr(),
+					params.ctx,
 					params.ExecCfg().InternalExecutorFactory,
 					params.p.SessionData(),
 					n.tableDesc,
 					params.EvalContext().Txn,
-					name, params.EvalContext().Codec,
+					params.p.Descriptors(),
+					name,
 				); err != nil {
 					return err
 				}

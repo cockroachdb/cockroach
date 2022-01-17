@@ -72,13 +72,15 @@ type DescriptorBuilder interface {
 	// built by this builder.
 	DescriptorType() DescriptorType
 
-	// RunPostDeserializationChanges attempts to perform post-deserialization
-	// changes to the descriptor being built.
-	// These changes are always done on a best-effort basis, meaning that all
-	// arguments other than ctx are optional. As of writing this, the only other
-	// argument is a DescGetter and a nil value will cause table foreign-key
-	// representation upgrades to be skipped.
-	RunPostDeserializationChanges(ctx context.Context, dg DescGetter) error
+	// RunPostDeserializationChanges attempts to perform changes to the descriptor
+	// being built from a deserialized protobuf.
+	RunPostDeserializationChanges()
+
+	// RunPostRestoreChanges attempts to perform changes to the descriptor
+	// being built from a deserialized protobuf obtained by restoring a backup.
+	// This is to compensate for the fact that these are not subject to cluster
+	// upgrade migrations
+	RunPostRestoreChanges(descLookupFn func(id descpb.ID) Descriptor) error
 
 	// BuildImmutable returns an immutable Descriptor.
 	BuildImmutable() Descriptor
@@ -505,6 +507,9 @@ type TableDescriptor interface {
 	// CheckConstraintUsesColumn returns whether the check constraint uses the
 	// specified column.
 	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
+	// IsShardColumn returns true if col corresponds to a non-dropped hash sharded
+	// index. This method assumes that col is currently a member of desc.
+	IsShardColumn(col Column) bool
 
 	// GetFamilies returns the column families of this table. All tables contain
 	// at least one column family. The returned list is sorted by family ID.

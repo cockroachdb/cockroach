@@ -769,10 +769,7 @@ func registerSystemTable(
 		fn(&tbl)
 	}
 	b := tabledesc.NewBuilder(&tbl)
-	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
-	if err != nil {
-		log.Fatalf(ctx, "Error when building descriptor of system table %q: %s", tbl.Name, err)
-	}
+	b.RunPostDeserializationChanges()
 	desc := b.BuildImmutableTable()
 	SystemTableDescriptors[createTableStmt] = desc
 	return desc

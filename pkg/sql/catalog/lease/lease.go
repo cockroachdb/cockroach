@@ -29,8 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -122,7 +123,7 @@ func (m *Manager) WaitForOneVersion(
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, m.Codec(), id)
+			desc, err = catkv.MustGetDescriptorByID(ctx, txn, m.Codec(), id, catalog.Any)
 			return err
 		}); err != nil {
 			return nil, err
@@ -285,7 +286,7 @@ func getDescriptorsFromStoreForInterval(
 				if err := value.GetProto(&desc); err != nil {
 					return err
 				}
-				descBuilder := catalogkv.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
+				descBuilder := descbuilder.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
 
 				// Construct a historical descriptor with expiration.
 				histDesc := historicalDescriptor{
@@ -888,7 +889,7 @@ func (m *Manager) resolveName(
 		}
 		var found bool
 		var err error
-		found, id, err = catalogkv.LookupObjectID(ctx, txn, m.storage.codec, parentID, parentSchemaID, name)
+		found, id, err = catkv.LookupID(ctx, txn, m.storage.codec, parentID, parentSchemaID, name)
 		if err != nil {
 			return err
 		}

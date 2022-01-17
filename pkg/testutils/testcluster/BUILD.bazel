@@ -52,7 +52,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
-        "//pkg/sql/catalog/catalogkv",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
