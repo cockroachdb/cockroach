@@ -85,6 +85,7 @@ go_library(
         "role_spec.go",
         "run_control.go",
         "schedule.go",
+        "schema_feature_name.go",
         "scrub.go",
         "select.go",
         "set.go",
