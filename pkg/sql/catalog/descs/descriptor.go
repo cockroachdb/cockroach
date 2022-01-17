@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -248,6 +249,9 @@ func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
 // a namespace lookup because the mapping of database to schema is stored on
 // the database itself. This is an important optimization in the case when
 // the schema does not exist.
+//
+// TODO(ajwerner): Understand and rationalize the namespace lookup given the
+// schema lookup by ID path only returns descriptors owned by this session.
 func getSchemaByName(
 	ctx context.Context,
 	tc *Collection,
@@ -263,11 +267,14 @@ func getSchemaByName(
 		return true, sc, nil
 	}
 	if isTemporarySchema(name) {
-		if refuseFurtherLookup, sc, err := tc.temporary.getSchemaByName(
-			ctx, txn, db.GetID(), name, tc.settings.Version,
-		); refuseFurtherLookup || sc != nil || err != nil {
-			return sc != nil, sc, err
+		if sc := tc.temporary.getSchemaByName(ctx, db.GetID(), name); sc != nil {
+			return true, sc, nil
 		}
+		exists, scID, err := tc.kv.lookupName(ctx, txn, nil /* maybeDB */, db.GetID(), keys.RootNamespaceID, name)
+		if !exists || err != nil {
+			return false, nil, err
+		}
+		return true, schemadesc.NewTemporarySchema(name, scID, db.GetID()), nil
 	}
 	if id := db.GetSchemaID(name); id != descpb.InvalidID {
 		// TODO(ajwerner): Fill in flags here or, more likely, get rid of

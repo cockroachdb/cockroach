@@ -35,6 +35,8 @@ go_test(
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/internal/catval",
+        "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",

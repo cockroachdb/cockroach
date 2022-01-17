@@ -77,7 +77,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc)
 	if err != nil {
 		return nil, err
 	}

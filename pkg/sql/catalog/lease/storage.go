@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -105,11 +105,7 @@ func (s storage) acquire(
 			expiration = minExpiration.Add(int64(time.Millisecond), 0)
 		}
 
-		// TODO (lucy): Previously this called getTableDescFromID followed by a call
-		// to ValidateSelf() instead of Validate(), to avoid the cross-table
-		// checks. Does this actually matter? We already potentially do cross-table
-		// checks when populating pre-19.2 foreign keys.
-		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
+		desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, id, catalog.Any)
 		if err != nil {
 			return err
 		}
@@ -221,7 +217,7 @@ func (s storage) getForExpiration(
 		if err != nil {
 			return err
 		}
-		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
+		desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, id, catalog.Any)
 		if err != nil {
 			return err
 		}

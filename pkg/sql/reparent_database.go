@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -79,7 +79,7 @@ func (p *planner) ReparentDatabase(
 	}
 
 	// Ensure that this database wouldn't collide with a name under the new database.
-	exists, _, err := schemaExists(ctx, p.txn, p.ExecCfg().Codec, parent.ID, db.Name)
+	exists, _, err := schemaExists(ctx, p.txn, p.Descriptors(), parent.ID, db.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	ctx, p, codec := params.ctx, params.p, params.ExecCfg().Codec
 
 	// Make a new schema corresponding to the target db.
-	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, codec)
+	id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, codec)
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,6 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, n.newParent.ID, schema.GetName()),
 		id,
 		schema,
-		params.ExecCfg().Settings,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err

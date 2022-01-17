@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "catkv",
+    srcs = [
+        "catalog_query.go",
+        "descriptors.go",
+        "namespace.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv",
+    visibility = ["//pkg/sql/catalog:__subpackages__"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descbuilder",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/internal/catval",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

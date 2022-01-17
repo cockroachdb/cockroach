@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -118,7 +118,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			if _, err := sqlDB.Exec(sql); err != nil {
 				t.Fatal(err)
 			}
-			desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
+			desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
 			idx, err := desc.FindIndexWithName(tc.index)
 			if err != nil {
 				t.Fatal(err)

@@ -18,8 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -96,7 +97,7 @@ func doCreateSequence(
 	opts tree.SequenceOptions,
 	jobDesc string,
 ) error {
-	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+	id, err := descidgen.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 	if err != nil {
 		return err
 	}
@@ -141,9 +142,7 @@ func doCreateSequence(
 	// desc.ValidateSelf() needed here.
 
 	key := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), scDesc.GetID(), name.Object())
-	if err = params.p.createDescriptorWithID(
-		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,
-	); err != nil {
+	if err = params.p.createDescriptorWithID(params.ctx, key, id, desc, jobDesc); err != nil {
 		return err
 	}
 
@@ -248,7 +247,7 @@ func NewSequenceTableDesc(
 		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 	}
 
-	if err := catalog.ValidateSelf(&desc); err != nil {
+	if err := descbuilder.ValidateSelf(&desc); err != nil {
 		return nil, err
 	}
 	return &desc, nil

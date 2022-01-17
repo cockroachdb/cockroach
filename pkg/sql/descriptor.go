@@ -20,12 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -72,10 +71,10 @@ func (p *planner) createDatabase(
 	dbName := string(database.Name)
 	dKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, dbName)
 
-	if exists, databaseID, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
+	if exists, databaseID, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, dbName); err == nil && exists {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			desc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, databaseID)
+			desc, err := p.Descriptors().MustGetDatabaseDescByID(ctx, p.txn, databaseID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -92,7 +91,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return nil, false, err
 	}
@@ -149,7 +148,7 @@ func (p *planner) createDatabase(
 		return nil, true, err
 	}
 
-	if err := p.createDescriptorWithID(ctx, dKey, id, desc, nil, jobDesc); err != nil {
+	if err := p.createDescriptorWithID(ctx, dKey, id, desc, jobDesc); err != nil {
 		return nil, true, err
 	}
 
@@ -171,7 +170,7 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 		return descpb.InvalidID, nil
 	}
 
-	publicSchemaID, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	publicSchemaID, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return descpb.InvalidID, err
 	}
@@ -199,7 +198,6 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema),
 		publicSchemaDesc.GetID(),
 		publicSchemaDesc,
-		p.ExecCfg().Settings,
 		tree.AsStringWithFQNames(database, p.Ann()),
 	); err != nil {
 		return descpb.InvalidID, err
@@ -231,7 +229,6 @@ func (p *planner) createDescriptorWithID(
 	idKey roachpb.Key,
 	id descpb.ID,
 	descriptor catalog.Descriptor,
-	st *cluster.Settings,
 	jobDesc string,
 ) error {
 	if descriptor.GetID() == 0 {
@@ -257,13 +254,10 @@ func (p *planner) createDescriptorWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
 	b.CPut(idKey, descID, nil)
-	if err := catalogkv.WriteNewDescToBatch(
+	if err := p.Descriptors().WriteNewDescToBatch(
 		ctx,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		st,
 		b,
-		p.ExecCfg().Codec,
-		descID,
 		descriptor,
 	); err != nil {
 		return err

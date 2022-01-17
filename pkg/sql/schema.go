@@ -15,17 +15,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func schemaExists(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, schema string,
+	ctx context.Context, txn *kv.Txn, col *descs.Collection, parentID descpb.ID, schema string,
 ) (bool, descpb.ID, error) {
 	// Check statically known schemas.
 	if schema == tree.PublicSchema {
@@ -37,7 +36,7 @@ func schemaExists(
 		}
 	}
 	// Now lookup in the namespace for other schemas.
-	exists, schemaID, err := catalogkv.LookupObjectID(ctx, txn, codec, parentID, keys.RootNamespaceID, schema)
+	exists, schemaID, err := col.LookupSchemaID(ctx, txn, parentID, schema)
 	if err != nil {
 		return false, descpb.InvalidID, err
 	}

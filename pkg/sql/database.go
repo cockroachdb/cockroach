@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -43,7 +42,7 @@ func (p *planner) renameDatabase(
 	}
 
 	// Check that the new name is available.
-	if exists, _, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, newName); err == nil && exists {
+	if exists, _, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, newName); err == nil && exists {
 		return pgerror.Newf(pgcode.DuplicateDatabase,
 			"the new database name %q already exists", newName)
 	} else if err != nil {
@@ -104,12 +103,12 @@ func (p *planner) forEachMutableTableInDatabase(
 	dbDesc catalog.DatabaseDescriptor,
 	fn func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error,
 ) error {
-	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
 
-	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbDesc)
 	for _, tbID := range lCtx.tbIDs {
 		desc := lCtx.tbDescs[tbID]
 		if desc.Dropped() {
