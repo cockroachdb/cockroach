@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvcoord
+package kvcoord_test
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -188,7 +189,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 			DisableScanner: true,
 		},
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 
 	// This is purely to silence log spam.
 	config.TestingSetupZoneConfigHook(s.Stopper())
