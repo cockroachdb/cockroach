@@ -247,6 +247,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   refreshStatementDiagnosticsRequests: noop,
   refreshNodes: noop,
   refreshNodesLiveness: noop,
+  refreshUserSQLRoles: noop,
   diagnosticsReports: [],
   dismissStatementDiagnosticsAlertMessage: noop,
   createStatementDiagnosticsReport: noop,
@@ -254,4 +255,5 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     showStatementDiagnosticsLink: true,
   },
   isTenant: false,
+  hasViewActivityRedactedRole: false,
 });

@@ -53,6 +53,11 @@ storiesOf("StatementDetails", module)
   .add("Overview tab", () => (
     <StatementDetails {...getStatementDetailsPropsFixture()} />
   ))
+  .add("with VIEWACTIVITYREDACTED", () => {
+    const props = getStatementDetailsPropsFixture();
+    props.hasViewActivityRedactedRole = true;
+    return <StatementDetails {...props} />;
+  })
   .add("Diagnostics tab", () => {
     const props = getStatementDetailsPropsFixture();
     props.history.location.search = new URLSearchParams([

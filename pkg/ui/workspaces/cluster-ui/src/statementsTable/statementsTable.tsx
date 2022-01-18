@@ -268,6 +268,7 @@ export function makeStatementsColumns(
   nodeRegions: { [nodeId: string]: string },
   statType: StatisticType,
   isTenant: boolean,
+  hasViewActivityRedactedRole: boolean,
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
   onDiagnosticsDownload?: (report: IStatementDiagnosticsReport) => void,
@@ -285,7 +286,7 @@ export function makeStatementsColumns(
     ...makeCommonColumns(statements, totalWorkload, nodeRegions, statType),
   );
 
-  if (activateDiagnosticsRef && !isTenant) {
+  if (activateDiagnosticsRef && !isTenant && !hasViewActivityRedactedRole) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
       name: "diagnostics",
       title: statisticsTableTitles.diagnostics(statType),
