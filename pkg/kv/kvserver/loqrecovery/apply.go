@@ -40,6 +40,10 @@ type PrepareStoreReport struct {
 	// Replicas identified as ones that doesn't need updating (currently because
 	// update was already done).
 	SkippedReplicas []PrepareReplicaReport
+	// TombstonedNodes contains node ids that were marked as tombstoned in local
+	// node storage to prevent further connections from them in case they are
+	// restarted in error.
+	TombstonedNodes []roachpb.NodeID
 }
 
 // PrepareReplicaReport contains information about prepared change for a replica.
@@ -97,7 +101,7 @@ func PrepareUpdateReplicas(
 
 	// Map contains a set of store names that were found in plan for this node,
 	// but were not configured in this command invocation.
-	missing := make(map[roachpb.StoreID]struct{})
+	missing := make(storeIDSet)
 	for _, update := range plan.Updates {
 		if nodeID != update.NodeID() {
 			continue
@@ -132,8 +136,27 @@ func PrepareUpdateReplicas(
 	}
 
 	if len(missing) > 0 {
-		report.MissingStores = storeSliceFromSet(missing)
+		report.MissingStores = missing.asSlice()
 	}
+
+	for _, deadNodeID := range plan.TombstonedNodeIDs {
+		k := keys.StoreNodeTombstoneKey(deadNodeID)
+		for _, batch := range batches {
+			var v roachpb.Value
+			if err := v.SetProto(&hlc.Timestamp{WallTime: updateTime.UnixNano()}); err != nil {
+				return PrepareStoreReport{}, errors.Wrapf(err,
+					"failed preparing node tombstone for node n%d", deadNodeID)
+			}
+			if err := storage.MVCCPut(
+				ctx, batch, nil /* MVCCStats */, k, hlc.Timestamp{}, v, nil, /* txn */
+			); err != nil {
+				return PrepareStoreReport{}, errors.Wrapf(err,
+					"failed writing node tombstone for node n%d", deadNodeID)
+			}
+		}
+	}
+	report.TombstonedNodes = plan.TombstonedNodeIDs
+
 	return report, nil
 }
 

@@ -44,7 +44,7 @@ func (m updatedLocationsMap) add(node roachpb.NodeID, store roachpb.StoreID) {
 func (m updatedLocationsMap) asMapOfSlices() map[roachpb.NodeID][]roachpb.StoreID {
 	newMap := make(map[roachpb.NodeID][]roachpb.StoreID)
 	for k, v := range m {
-		newMap[k] = storeSliceFromSet(v)
+		newMap[k] = v.asSlice()
 	}
 	return newMap
 }
@@ -77,6 +77,9 @@ type PlanningReport struct {
 	// UpdatedNodes contains information about nodes with their stores where plan
 	// needs to be applied. Stores are sorted in ascending order.
 	UpdatedNodes map[roachpb.NodeID][]roachpb.StoreID
+	// IntactNodes contains nodeIDs that doesn't need to update replicas, but
+	// could be optionally updated to tombstone dead nodes for safety reasons.
+	IntactNodes []roachpb.NodeID
 }
 
 // ReplicaUpdateReport contains detailed info about changes planned for
@@ -113,8 +116,8 @@ func PlanReplicas(
 	if err != nil {
 		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, err
 	}
-	report.PresentStores = storeSliceFromSet(availableStoreIDs)
-	report.MissingStores = storeSliceFromSet(missingStores)
+	report.PresentStores = availableStoreIDs.asSlice()
+	report.MissingStores = missingStores.asSlice()
 
 	replicasByRangeID := groupReplicasByRangeID(replicas)
 	// proposedSurvivors contain decisions for all ranges in keyspace. it
@@ -142,7 +145,19 @@ func PlanReplicas(
 		}
 	}
 	report.UpdatedNodes = updatedLocations.asMapOfSlices()
-	return loqrecoverypb.ReplicaUpdatePlan{Updates: plan}, report, nil
+	// If we devised a plan that removes some replicas then we also need to check
+	// which nodes were removed so that recovery could put node tombstones locally
+	// on live nodes to prevent dead nodes from resurrecting if they were
+	// restarted in error.
+	var removedNodes []roachpb.NodeID
+	if len(plan) > 0 {
+		removedNodes = findDeadNodes(nodes, missingStores)
+		report.IntactNodes = findIntactNodes(nodes, report.UpdatedNodes, removedNodes)
+	}
+	return loqrecoverypb.ReplicaUpdatePlan{
+		Updates:           plan,
+		TombstonedNodeIDs: removedNodes,
+	}, report, nil
 }
 
 // validateReplicaSets evaluates provided set of replicas and an optional
@@ -447,6 +462,41 @@ func makeReplicaUpdateIfNeeded(
 		},
 		NextReplicaID: nextReplicaID + nextReplicaIDIncrement + 1,
 	}, true
+}
+
+// findDeadNodes creates a slice containing nodeIDs of nodes where all stores
+// were designated as dead.
+func findDeadNodes(replicaInfos clusterReplicaInfos, deadStores storeIDSet) []roachpb.NodeID {
+	liveNodes := make(nodeIDSet)
+	deadNodes := make(nodeIDSet)
+	replicaInfos.visit(func(replica roachpb.ReplicaDescriptor) {
+		if _, ok := deadStores[replica.StoreID]; ok {
+			deadNodes[replica.NodeID] = struct{}{}
+		} else {
+			liveNodes[replica.NodeID] = struct{}{}
+		}
+	})
+	// If not all stores has been mounted for node we don't want to make the node
+	// unreachable, otherwise the data from live stores would be lost.
+	deadNodes.removeSet(liveNodes)
+	return deadNodes.asSlice()
+}
+
+// findIntactNodes creates a slice containing nodes that has replicas, are
+// live but doesn't need to apply any recovery changes.
+func findIntactNodes(
+	replicaInfos clusterReplicaInfos,
+	updatedNodesIDs map[roachpb.NodeID][]roachpb.StoreID,
+	removedNodeIDs []roachpb.NodeID,
+) []roachpb.NodeID {
+	intactNodes := make(nodeIDSet)
+	replicaInfos.visit(func(replica roachpb.ReplicaDescriptor) {
+		if _, ok := updatedNodesIDs[replica.NodeID]; !ok {
+			intactNodes[replica.NodeID] = struct{}{}
+		}
+	})
+	intactNodes.removeSlice(removedNodeIDs)
+	return intactNodes.asSlice()
 }
 
 // makeReplicaUpdateReport creates a detailed report of changes that needs to

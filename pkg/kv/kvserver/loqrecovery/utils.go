@@ -15,15 +15,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 type storeIDSet map[roachpb.StoreID]struct{}
 
-// storeSliceFromSet unwraps map to a sorted list of StoreIDs.
-func storeSliceFromSet(set storeIDSet) []roachpb.StoreID {
-	storeIDs := make([]roachpb.StoreID, 0, len(set))
-	for k := range set {
+// asSlice unwraps map to a sorted list of StoreIDs.
+func (s storeIDSet) asSlice() []roachpb.StoreID {
+	storeIDs := make([]roachpb.StoreID, 0, len(s))
+	for k := range s {
 		storeIDs = append(storeIDs, k)
 	}
 	sort.Slice(storeIDs, func(i, j int) bool {
@@ -35,7 +36,7 @@ func storeSliceFromSet(set storeIDSet) []roachpb.StoreID {
 // Make a string of stores 'set' in ascending order.
 func joinStoreIDs(storeIDs storeIDSet) string {
 	storeNames := make([]string, 0, len(storeIDs))
-	for _, id := range storeSliceFromSet(storeIDs) {
+	for _, id := range storeIDs.asSlice() {
 		storeNames = append(storeNames, fmt.Sprintf("s%d", id))
 	}
 	return strings.Join(storeNames, ", ")
@@ -101,4 +102,42 @@ func (e *KeyspaceCoverageError) ErrorDetail() string {
 	return fmt.Sprintf(
 		"Key space covering is not complete. Discovered following inconsistencies:\n%s\n",
 		strings.Join(descriptions, "\n"))
+}
+
+// nodeIDSet helper type to remove clutter from node set manipulation
+type nodeIDSet map[roachpb.NodeID]struct{}
+
+func (s nodeIDSet) asSlice() []roachpb.NodeID {
+	var nodeIDs []roachpb.NodeID
+	for nodeID := range s {
+		nodeIDs = append(nodeIDs, nodeID)
+	}
+	sort.Slice(nodeIDs, func(i, j int) bool {
+		return nodeIDs[i] < nodeIDs[j]
+	})
+	return nodeIDs
+}
+
+func (s nodeIDSet) removeSet(other nodeIDSet) {
+	for nodeID := range other {
+		delete(s, nodeID)
+	}
+}
+
+func (s nodeIDSet) removeSlice(other []roachpb.NodeID) {
+	for _, nodeID := range other {
+		delete(s, nodeID)
+	}
+}
+
+type clusterReplicaInfos []loqrecoverypb.NodeReplicaInfo
+
+func (c clusterReplicaInfos) visit(visitor func(roachpb.ReplicaDescriptor)) {
+	for _, nodeReplicas := range c {
+		for _, replicaInfo := range nodeReplicas.Replicas {
+			for _, replica := range replicaInfo.Desc.InternalReplicas {
+				visitor(replica)
+			}
+		}
+	}
 }

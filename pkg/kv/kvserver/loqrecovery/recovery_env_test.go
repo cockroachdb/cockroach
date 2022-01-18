@@ -270,7 +270,7 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 		return "", err
 	}
 	// We only marshal actual data without container to reduce clutter.
-	out, err := yaml.Marshal(e.plan.Updates)
+	out, err := yaml.Marshal(e.plan)
 	if err != nil {
 		t.Fatalf("failed to marshal plan into yaml for verification: %v", err)
 	}

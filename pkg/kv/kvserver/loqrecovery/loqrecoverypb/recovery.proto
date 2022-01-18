@@ -57,9 +57,15 @@ message ReplicaUpdate {
     (gogoproto.moretags) = 'yaml:"NextReplicaID"'];
 }
 
-// ReplicaUpdatePlan Collection of updates for all recoverable replicas in the cluster.
+// ReplicaUpdatePlan Collection of updates for all recoverable replicas in the cluster
+// as well as other metadata changes that is needed to guardrail from accidental errors
+// when performing recovery.
 message ReplicaUpdatePlan {
-  repeated ReplicaUpdate updates = 1 [(gogoproto.nullable) = false];
+  repeated ReplicaUpdate updates = 1 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = 'yaml:"Updates"'];
+  repeated int32 tombstoned_node_ids = 2 [(gogoproto.customname) = "TombstonedNodeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.moretags) = 'yaml:"RemovedNodeIDs,omitempty,flow"'];
 }
 
 // ReplicaRecoveryRecord is a struct that loss of quorum recovery commands

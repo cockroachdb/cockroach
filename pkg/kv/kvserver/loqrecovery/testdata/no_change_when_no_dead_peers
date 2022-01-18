@@ -41,7 +41,7 @@ ok
 
 make-plan
 ----
-[]
+Updates: []
 
 apply-plan stores=(1,2,3)
 ----

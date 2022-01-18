@@ -39,6 +39,7 @@ ok
 
 make-plan
 ----
+Updates:
 - RangeID: 1
   StartKey: /Min
   OldReplicaID: 1
@@ -47,6 +48,7 @@ make-plan
     StoreID: 1
     ReplicaID: 16
   NextReplicaID: 17
+RemovedNodeIDs: [3, 4, 5]
 
 apply-plan stores=(1,2)
 ----

@@ -342,9 +342,14 @@ Discarded live replicas: %d
 	}
 
 	_, _ = fmt.Fprint(stderr, "Plan created\nTo complete recovery, distribute the plan to the"+
-		" below nodes and invoke `debug recover apply-plan` on:\n")
+		" below nodes and\n 1) perform replica recovery by invoking `debug recover apply-plan` on:\n")
 	for node, stores := range report.UpdatedNodes {
-		_, _ = fmt.Fprintf(stderr, "- node n%d, store(s) %s\n", node, joinStoreIDs(stores))
+		_, _ = fmt.Fprintf(stderr, "  - node n%d, store(s) %s\n", node, joinStoreIDs(stores))
+	}
+	_, _ = fmt.Fprintf(stderr, " 2) additionally tobmstone deleted nodes to prevent accidental"+
+		" restart by invoking `debug recover apply-plan` on:\n")
+	for _, node := range report.IntactNodes {
+		_, _ = fmt.Fprintf(stderr, "  - node n%d\n", node)
 	}
 
 	return nil
@@ -448,13 +453,18 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 			r.Replica, r.RangeID())
 	}
 
+	if len(prepReport.UpdatedReplicas) == 0 &&
+		len(prepReport.MissingStores) == 0 &&
+		len(prepReport.TombstonedNodes) == 0 {
+		_, _ = fmt.Fprintf(stderr, "No updates planned on this node.\n")
+		return nil
+	}
+
 	if len(prepReport.UpdatedReplicas) == 0 {
 		if len(prepReport.MissingStores) > 0 {
 			return errors.Newf("stores %s expected on the node but no paths were provided",
 				joinStoreIDs(prepReport.MissingStores))
 		}
-		_, _ = fmt.Fprintf(stderr, "No updates planned on this node.\n")
-		return nil
 	}
 
 	for _, r := range prepReport.UpdatedReplicas {
@@ -466,6 +476,11 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 				r.AbortedTransactionID.Short())
 		}
 		_, _ = fmt.Fprintf(stderr, "%s\n", message)
+	}
+
+	if len(prepReport.TombstonedNodes) > 0 {
+		_, _ = fmt.Fprintf(stderr, "\nNodes [%s] marked as tombstoned to prevent accidental rejoin\n",
+			joinNodeIDs(prepReport.TombstonedNodes))
 	}
 
 	switch debugRecoverExecuteOpts.confirmAction {
@@ -499,6 +514,14 @@ func joinStoreIDs(storeIDs []roachpb.StoreID) string {
 		storeNames = append(storeNames, fmt.Sprintf("s%d", id))
 	}
 	return strings.Join(storeNames, ", ")
+}
+
+func joinNodeIDs(nodeIDs []roachpb.NodeID) string {
+	nodeNames := make([]string, 0, len(nodeIDs))
+	for _, id := range nodeIDs {
+		nodeNames = append(nodeNames, fmt.Sprintf("n%d", id))
+	}
+	return strings.Join(nodeNames, ", ")
 }
 
 // setDebugRecoverContextDefaults resets values of command line flags to
