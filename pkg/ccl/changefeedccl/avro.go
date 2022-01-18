@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -754,7 +755,10 @@ const (
 // If a name suffix is provided (as opposed to avroSchemaNoSuffix), it will be
 // appended to the end of the avro record's name.
 func tableToAvroSchema(
-	tableDesc catalog.TableDescriptor, nameSuffix string, namespace string,
+	tableDesc catalog.TableDescriptor,
+	nameSuffix string,
+	namespace string,
+	virtualColumnVisibility string,
 ) (*avroDataRecord, error) {
 	name := SQLNameToAvroName(tableDesc.GetName())
 	if nameSuffix != avroSchemaNoSuffix {
@@ -771,6 +775,9 @@ func tableToAvroSchema(
 		fieldIdxByColIdx: make(map[int]int),
 	}
 	for _, col := range tableDesc.PublicColumns() {
+		if col.IsVirtual() && virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsOmitted) {
+			continue
+		}
 		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
