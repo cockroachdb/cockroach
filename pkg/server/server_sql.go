@@ -553,10 +553,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
 			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "bulk-adder-monitor")
-			if !codec.ForSystemTenant() {
-				// Tenants aren't allowed to split, so force off the split-after opt.
-				opts.SplitAndScatterAfter = func() int64 { return kvserverbase.DisableExplicitSplits }
-			}
 			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon)
 		},
 
