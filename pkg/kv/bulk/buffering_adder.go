@@ -93,7 +93,7 @@ func MakeBulkAdder(
 	if opts.SplitAndScatterAfter == nil {
 		// splitting _before_ hitting max reduces chance of auto-splitting after the
 		// range is full and is more expensive to split/move.
-		opts.SplitAndScatterAfter = func() int64 { return 48 << 20 }
+		opts.SplitAndScatterAfter = func() int64 { return 384 << 20 }
 	} else if opts.SplitAndScatterAfter() == kvserverbase.DisableExplicitSplits {
 		opts.SplitAndScatterAfter = nil
 	}
