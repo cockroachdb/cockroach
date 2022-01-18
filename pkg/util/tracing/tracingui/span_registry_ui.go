@@ -98,7 +98,10 @@ func init() {
 			}
 			keyAnnotation := ""
 			if t.inherited {
-				keyAnnotation = "<span title='inherited'>(↓)</span>"
+				keyAnnotation = "<span title='from parent'>(↓)</span>"
+			}
+			if t.copiedFromChild {
+				keyAnnotation = "<span title='from child'>(↑)</span>"
 			}
 
 			k, v := t.key, t.val
@@ -241,16 +244,16 @@ func serveHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, tr *
 			childrenMap[p.ParentSpanID] = append(childrenMap[p.ParentSpanID], &processedSpans[i])
 		}
 	}
-	// Propagate the highlight tags up.
+	// Propagate tags up.
 	for _, s := range processedSpans {
 		for _, t := range s.Tags {
-			if !t.highlight {
+			if !t.propagateUp || t.copiedFromChild {
 				continue
 			}
-			propagateInterestingTagUpwards(t, &s, spansMap)
+			propagateTagUpwards(t, &s, spansMap)
 		}
 	}
-	// Propagate the inherit tags down.
+	// Propagate tags down.
 	for _, s := range processedSpans {
 		for _, t := range s.Tags {
 			if !t.inherit || t.inherited {
@@ -310,24 +313,26 @@ type processedTag struct {
 	caption  string
 	link     string
 	hidden   bool
-	// copiedFromChild is set if this tag did not originate on the owner span, but
-	// instead was propagated upwards from a child span.
-	copiedFromChild bool
 	// highlight is set if the tag should be rendered with a little exclamation
 	// mark.
 	highlight bool
+
 	// inherit is set if this tag should be passed down to children, and
 	// recursively.
 	inherit bool
 	// inherited is set if this tag was passed over from an ancestor.
 	inherited bool
+
+	propagateUp bool
+	// copiedFromChild is set if this tag did not originate on the owner span, but
+	// instead was propagated upwards from a child span.
+	copiedFromChild bool
 }
 
-// propagateInterestingTagUpwards copies tag from sp to all of sp's ancestors.
-func propagateInterestingTagUpwards(
-	tag processedTag, sp *processedSpan, spans map[uint64]*processedSpan,
-) {
+// propagateTagUpwards copies tag from sp to all of sp's ancestors.
+func propagateTagUpwards(tag processedTag, sp *processedSpan, spans map[uint64]*processedSpan) {
 	tag.copiedFromChild = true
+	tag.inherit = false
 	parentID := sp.ParentSpanID
 	for {
 		p, ok := spans[parentID]
@@ -342,6 +347,7 @@ func propagateInterestingTagUpwards(
 func propagateInheritTagDownwards(
 	tag processedTag, sp *processedSpan, children map[uint64][]*processedSpan,
 ) {
+	tag.propagateUp = false
 	tag.inherited = true
 	tag.hidden = true
 	for _, child := range children[sp.SpanID] {
@@ -388,6 +394,7 @@ func processTag(k, v string, snap tracing.SpansSnapshot) processedTag {
 		// Take only the first 8 bytes, to keep the text shorter.
 		txnIDShort := v[:8]
 		p.val = txnIDShort
+		p.propagateUp = true
 		p.highlight = true
 		p.link = txnIDShort
 		txnState := findTxnState(txnID, snap)
@@ -400,6 +407,7 @@ func processTag(k, v string, snap tracing.SpansSnapshot) processedTag {
 		}
 	case "statement":
 		p.inherit = true
+		p.propagateUp = true
 	}
 
 	return p
