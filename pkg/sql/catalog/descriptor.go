@@ -447,9 +447,8 @@ type TableDescriptor interface {
 	// details.
 	AccessibleColumns() []Column
 	// ReadableColumns is a list of columns (including those undergoing a schema
-	// change) which can be scanned. Columns in the process of a schema change
-	// are all set to nullable while column backfilling is still in
-	// progress, as mutation columns may have NULL values.
+	// change) which can be scanned. Note that mutation columns may produce NULL
+	// values when scanned, even if they are marked as not nullable.
 	ReadableColumns() []Column
 	// UserDefinedTypeColumns returns a slice of Column interfaces
 	// containing the table's columns with user defined types, in the
