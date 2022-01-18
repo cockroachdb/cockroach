@@ -273,7 +273,9 @@ CREATE TABLE system.scheduled_jobs (
 )
 ```
 
-State on the schedule's behavior and current status are stored in the following protobufs:
+State on the schedule's behavior and current status are stored in the
+`schedule_details` and `schedule_state` columns respectively which follow the
+following protobuf formats:
 
 ```protobuf
 // How to schedule and execute the job.
@@ -477,19 +479,19 @@ TODO(MB)
 
 ### Restore
 Before reading through this code walk through of restore, watch the [MOLTing tutorial](https://cockroachlabs.udemy.com/course/general-onboarding/learn/lecture/22164146#overview)
-on restore. This walk through doesn't consider the distinct code paths each type of 
-RESTORE may take. 
+on restore. This walkthrough doesn't consider the distinct code paths each type
+of RESTORE may take.
 
 #### Planning
 In addition to general CCL job planning, [planning a restore](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1771) 
 has the following main components.
-- [Resolves](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1826)
+- [Resolve](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1826)
 the location of the backup files we seek to restore.
-- [Figures out](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1910) 
+- [Figure out](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1910)
 which descriptors the user wants to restore. Descriptors are objects that hold metadata about 
-  various 
+  various
   SQL objects, like [columns](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/sql/catalog/descpb/structured.proto#L123)
-or [databases](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/sql/catalog/descpb/structured.proto#L123).
+or [databases](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/sql/catalog/descpb/structured.proto#L1275).
 - [Allocate](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L2028) new descriptor IDs for the descriptors we're restoring from the backup files. Why do 
   this? Every descriptor on disk has a unique id, so RESTORE must resolve ID collisions between the 
 stale ID's in the back up and any IDs in the target cluster.
@@ -497,7 +499,7 @@ stale ID's in the back up and any IDs in the target cluster.
 #### Execution
 When a gateway node [resumes](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_job.go#L1371)
 a restore job, the following occurs before any processors spin up. For more on processors, check 
-out the discussion in [Life of a Query](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/life_of_a_query.md#physical-planning-and-execution). 
+out the related section in [Life of a Query](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/life_of_a_query.md#physical-planning-and-execution).
 - [Write](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_job.go#L1441)
 the new descriptors to disk in an offline state so no users can interact with the 
   descriptors during the restore. 
@@ -505,10 +507,12 @@ the new descriptors to disk in an offline state so no users can interact with th
 a list of key spans we need to restore from the restoring descriptors. A key span is just an 
   interval in the *backup's* key space.
 
-We're now ready to begin loading the backup data into our cockroach cluster. Important note: the 
-last range in the restoring cluster's key space is one big empty range, with a key span 
-starting above the highest key with data in the cluster up to the max key allowed in the cluster. 
-We want to restore to that empty range.
+We're now ready to begin loading the backup data into our cockroach cluster.
+
+**Important note**: the last range in the restoring cluster's key space is one big
+empty range, with a key span starting above the highest key with data in the
+cluster up to the max key allowed in the cluster.  We want to restore to that
+empty range.
 
 Our first task is to split this massive empty range up into smaller ranges that we will restore 
 data into, and randomly assign nodes to be leaseholders for these new ranges. More concretely, 
@@ -516,7 +520,7 @@ the restore job's gateway node will [iterate through](https://github.com/cockroa
 the list of key spans we seek to restore, and round robin assign them to nodes in the cluster which
 will then each start up a split and scatter processor. 
 
-A split and scatter processor will then do the following, for each key span it processes:
+Each split and scatter processor will then do the following, for each key span it processes:
 - Issue a [split key request](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L94) 
   to the kv layer at the beginning key of the next span it will 
   process, which splits that big empty range at that given key, creating a new range to import data 
