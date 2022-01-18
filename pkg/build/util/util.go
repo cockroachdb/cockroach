@@ -13,11 +13,47 @@
 package util
 
 import (
+	"encoding/xml"
 	"fmt"
+	"io"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
+
+// Below are data structures representing the `test.xml` schema.
+// Ref: https://github.com/bazelbuild/rules_go/blob/master/go/tools/bzltestutil/xml.go
+type testSuites struct {
+	XMLName xml.Name    `xml:"testsuites"`
+	Suites  []testSuite `xml:"testsuite"`
+}
+
+type testSuite struct {
+	XMLName   xml.Name    `xml:"testsuite"`
+	TestCases []*testCase `xml:"testcase"`
+	Attrs     []xml.Attr  `xml:",any,attr"`
+}
+
+type testCase struct {
+	XMLName xml.Name `xml:"testcase"`
+	// Note that we deliberately exclude the `classname` attribute. It never
+	// contains useful information (always just the name of the package --
+	// this isn't Java so there isn't a classname) and excluding it causes
+	// the TeamCity UI to display the same data in a slightly more coherent
+	// and usable way.
+	Name    string      `xml:"name,attr"`
+	Time    string      `xml:"time,attr"`
+	Failure *xmlMessage `xml:"failure,omitempty"`
+	Error   *xmlMessage `xml:"error,omitempty"`
+	Skipped *xmlMessage `xml:"skipped,omitempty"`
+}
+
+type xmlMessage struct {
+	Message  string     `xml:"message,attr"`
+	Attrs    []xml.Attr `xml:",any,attr"`
+	Contents string     `xml:",chardata"`
+}
 
 // OutputOfBinaryRule returns the path of the binary produced by the
 // given build target, relative to bazel-bin. That is,
@@ -77,4 +113,39 @@ func OutputsOfGenrule(target, xmlQueryOutput string) ([]string, error) {
 		ret = append(ret, relBinPath)
 	}
 	return ret, nil
+}
+
+// MungeTestXML parses and slightly munges the XML in the source file and writes
+// it to the output file. TeamCity kind of knows how to interpret the schema,
+// but the schema isn't *exactly* what it's expecting. By munging the XML's
+// here we ensure that the TC test view is as useful as possible.
+// Helper function meant to be used with maybeStageArtifact.
+func MungeTestXML(srcContent []byte, outFile io.Writer) error {
+	// Parse the XML into a testSuites struct.
+	suites := testSuites{}
+	err := xml.Unmarshal(srcContent, &suites)
+	// Note that we return an error if parsing fails. This isn't
+	// unexpected -- if we read the XML file before it's been
+	// completely written to disk, that will happen. Returning the
+	// error will cancel the write to disk, which is exactly what we
+	// want.
+	if err != nil {
+		return err
+	}
+	// We only want the first test suite in the list of suites.
+	return writeToFile(&suites.Suites[0], outFile)
+}
+
+func writeToFile(suite interface{}, outFile io.Writer) error {
+	bytes, err := xml.MarshalIndent(suite, "", "\t")
+	if err != nil {
+		return err
+	}
+	_, err = outFile.Write(bytes)
+	if err != nil {
+		return err
+	}
+	// Insert a newline just to make our lives a little easier.
+	_, err = outFile.Write([]byte("\n"))
+	return err
 }
