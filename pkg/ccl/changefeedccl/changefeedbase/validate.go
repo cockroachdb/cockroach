@@ -56,13 +56,17 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 }
 
 // WarningsForTable returns any known nonfatal issues with running a changefeed on this kind of table.
-func WarningsForTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor) []error {
+func WarningsForTable(
+	targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor, opts map[string]string,
+) []error {
 	warnings := []error{}
-	for _, col := range tableDesc.AccessibleColumns() {
-		if col.IsVirtual() {
-			warnings = append(warnings,
-				errors.Errorf("Changefeeds will emit null values for virtual column %s in table %s", col.ColName(), tableDesc.GetName()),
-			)
+	if _, ok := opts[OptVirtualColumns]; !ok {
+		for _, col := range tableDesc.AccessibleColumns() {
+			if col.IsVirtual() {
+				warnings = append(warnings,
+					errors.Errorf("Changefeeds will filter out values for virtual column %s in table %s", col.ColName(), tableDesc.GetName()),
+				)
+			}
 		}
 	}
 	return warnings
