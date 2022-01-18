@@ -26,7 +26,8 @@ import "./debug.styl";
 import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDsSelector } from "src/redux/nodes";
-import { refreshNodes } from "src/redux/apiReducers";
+import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
+import { selectHasViewActivityRedactedRole } from "src/redux/user";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
@@ -153,6 +154,38 @@ const NodeIDSelectorConnected = connect(
   },
 )(NodeIDSelector);
 
+function StatementDiagnosticsSelector(props: {
+  canSeeDebugPanelLink: boolean;
+  refreshUserSQLRoles: typeof refreshUserSQLRoles;
+}) {
+  const { canSeeDebugPanelLink, refreshUserSQLRoles } = props;
+
+  useEffect(() => {
+    refreshUserSQLRoles();
+  }, [refreshUserSQLRoles]);
+
+  return (
+    canSeeDebugPanelLink && (
+      <DebugPanelLink
+        name="Statement Diagnostics History"
+        url="#/reports/statements/diagnosticshistory"
+        note="View the history of statement diagnostics requests"
+      />
+    )
+  );
+}
+
+const StatementDiagnosticsConnected = connect(
+  (state: AdminUIState) => {
+    return {
+      canSeeDebugPanelLink: !selectHasViewActivityRedactedRole(state),
+    };
+  },
+  {
+    refreshUserSQLRoles,
+  },
+)(StatementDiagnosticsSelector);
+
 export default function Debug() {
   const [nodeID, setNodeID] = useState<string>("local");
   return (
@@ -191,11 +224,7 @@ export default function Debug() {
           url="#/data-distribution"
           note="View the distribution of table data across nodes and verify zone configuration."
         />
-        <DebugPanelLink
-          name="Statement Diagnostics History"
-          url="#/reports/statements/diagnosticshistory"
-          note="View the history of statement diagnostics requests"
-        />
+        <StatementDiagnosticsConnected />
         <PanelTitle>Configuration</PanelTitle>
         <DebugPanelLink
           name="Cluster Settings"

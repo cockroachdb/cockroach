@@ -71,6 +71,7 @@ export interface TransactionDetailsStateProps {
   timeScale: TimeScale;
   error?: Error | null;
   isTenant: UIConfigState["isTenant"];
+  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   nodeRegions: { [nodeId: string]: string };
   statements?: Statement[];
   transaction: TransactionInfo;
@@ -79,6 +80,7 @@ export interface TransactionDetailsStateProps {
 
 export interface TransactionDetailsDispatchProps {
   refreshData: (req?: StatementsRequest) => void;
+  refreshUserSQLRoles: () => void;
 }
 
 export type TransactionDetailsProps = TransactionDetailsStateProps &
@@ -124,6 +126,11 @@ export class TransactionDetails extends React.Component<
     };
   }
 
+  static defaultProps: Partial<TransactionDetailsProps> = {
+    isTenant: false,
+    hasViewActivityRedactedRole: false,
+  };
+
   getTransactionStateInfo = (): void => {
     const { transaction, aggregatedTs, statements } = this.props;
     const statementFingerprintIds =
@@ -166,6 +173,7 @@ export class TransactionDetails extends React.Component<
 
   componentDidMount(): void {
     this.refreshData();
+    this.props.refreshUserSQLRoles();
   }
 
   componentDidUpdate(): void {
@@ -218,7 +226,7 @@ export class TransactionDetails extends React.Component<
             statementsForTransaction.length == 0 || transactionText.length == 0
           }
           render={() => {
-            const { isTenant } = this.props;
+            const { isTenant, hasViewActivityRedactedRole } = this.props;
             const { sortSetting, pagination } = this.state;
             const txnScopedStmts = statementsForTransaction.filter(
               s =>
@@ -385,6 +393,7 @@ export class TransactionDetails extends React.Component<
                         nodeRegions,
                         "transactionDetails",
                         isTenant,
+                        hasViewActivityRedactedRole,
                       )}
                       className={cx("statements-table")}
                       sortSetting={sortSetting}
