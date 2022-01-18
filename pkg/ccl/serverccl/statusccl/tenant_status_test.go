@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -91,6 +92,9 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	ctx := context.Background()
 
 	serverParams, _ := tests.CreateTestServerParams()
+	serverParams.Knobs.SpanConfig = &spanconfig.TestingKnobs{
+		ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
+	}
 	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: serverParams,
 	})
