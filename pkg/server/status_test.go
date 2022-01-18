@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -1819,6 +1820,9 @@ func TestStatusAPIStatements(t *testing.T) {
 					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
 					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
 				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
+				},
 			},
 		},
 	})
@@ -1931,6 +1935,9 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause:  "AS OF SYSTEM TIME '-1us'",
 					StubTimeNow: func() time.Time { return timeutil.Unix(aggregatedTs, 0) },
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
 				},
 			},
 		},
