@@ -83,6 +83,7 @@ sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences refere
 sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
 sql.defaults.datestyle	enumeration	iso, mdy	default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
 sql.defaults.datestyle.enabled	boolean	false	default value for datestyle_enabled session setting
+sql.defaults.default_hash_sharded_index_bucket_count	integer	8	used as bucket count if bucket count is not specified in hash sharded index definition
 sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
 sql.defaults.disallow_full_table_scans.enabled	boolean	false	setting to true rejects queries that have planned a full table scan
 sql.defaults.distsql	enumeration	auto	default distributed SQL execution mode [off = 0, auto = 1, on = 2, always = 3]

@@ -13,11 +13,13 @@ package tabledesc
 import (
 	"context"
 	"fmt"
+	"go/constant"
 	"math"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -221,6 +223,15 @@ func MakeColumnDefDescs(
 func EvalShardBucketCount(
 	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
 ) (int32, error) {
+	// If shardBuckets is not specified, use default bucket count from cluster setting.
+	if _, ok := shardBuckets.(tree.DefaultVal); ok {
+		shardBuckets = tree.NewNumVal(
+			constant.MakeInt64(catconstants.DefaultHashShardedIndexBucketCount.Get(&evalCtx.Settings.SV)),
+			"",    /* origString */
+			false, /* negative */
+		)
+	}
+
 	const invalidBucketCountMsg = `BUCKET_COUNT must be a 32-bit integer greater than 1, got %v`
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
 		ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,

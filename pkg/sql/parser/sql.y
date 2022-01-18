@@ -6951,7 +6951,14 @@ col_qualification_elem:
   {
     $$.val = tree.PrimaryKeyConstraint{}
   }
-| PRIMARY KEY USING HASH WITH BUCKET_COUNT '=' a_expr
+| PRIMARY KEY USING HASH
+{
+  $$.val = tree.ShardedPrimaryKeyConstraint{
+    Sharded: true,
+    ShardBuckets: tree.DefaultVal{},
+  }
+}
+| PRIMARY KEY USING HASH WITH_LA BUCKET_COUNT '=' a_expr
 {
   $$.val = tree.ShardedPrimaryKeyConstraint{
     Sharded: true,
@@ -7279,10 +7286,17 @@ opt_storing:
   }
 
 opt_hash_sharded:
-  USING HASH WITH BUCKET_COUNT '=' a_expr
+  USING HASH WITH_LA BUCKET_COUNT '=' a_expr
   {
     $$.val = &tree.ShardedIndexDef{
       ShardBuckets: $6.expr(),
+    }
+  }
+  |
+  USING HASH
+  {
+    $$.val = &tree.ShardedIndexDef{
+      ShardBuckets: tree.DefaultVal{},
     }
   }
   | /* EMPTY */

@@ -897,3 +897,34 @@ TABLE t
  └── computed column expressions
       └── crdb_internal_a_shard_8
            └── mod(fnv32(crdb_internal.datums_to_bytes(a)), 8)
+
+subtest test_default_bucket_count
+
+statement ok
+CREATE TABLE t_default_bucket_8 (a INT PRIMARY KEY USING HASH);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_8]
+----
+CREATE TABLE public.t_default_bucket_8 (
+   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+   a INT8 NOT NULL,
+   CONSTRAINT t_default_bucket_8_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 8,
+   FAMILY "primary" (a)
+)
+
+statement ok
+SET CLUSTER SETTING sql.defaults.default_hash_sharded_index_bucket_count = 16
+
+statement ok
+CREATE TABLE t_default_bucket_16 (a INT PRIMARY KEY USING HASH);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_16]
+----
+CREATE TABLE public.t_default_bucket_16 (
+   crdb_internal_a_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+   a INT8 NOT NULL,
+   CONSTRAINT t_default_bucket_16_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 16,
+   FAMILY "primary" (a)
+)
