@@ -292,6 +292,16 @@ message UsersResponse {
   repeated User users = 1 [(gogoproto.nullable) = false];
 }
 
+// UserSQLRolesRequest requests a list of roles of the logged in SQL user.
+message UserSQLRolesRequest {
+}
+
+// UserSQLRolesResponse returns a list of roles for the logged SQL user.
+message UserSQLRolesResponse {
+  // roles is a list of roles for the SQL user.
+  repeated string roles = 1;
+}
+
 // EventsRequest is a request for event log entries, optionally filtered
 // by the specified event type and/or target_id.
 message EventsRequest {
@@ -805,6 +815,13 @@ service Admin {
   rpc Users(UsersRequest) returns (UsersResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/users"
+    };
+  }
+
+  // URL: /_admin/v1/sqlroles
+  rpc UserSQLRoles(UserSQLRolesRequest) returns (UserSQLRolesResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/sqlroles"
     };
   }
 

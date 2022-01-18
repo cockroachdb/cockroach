@@ -4262,6 +4262,46 @@ User is a CockroachDB user.
 
 
 
+## UserSQLRoles
+
+`GET /_admin/v1/sqlroles`
+
+URL: /_admin/v1/sqlroles
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+UserSQLRolesRequest requests a list roles of the logged SQL user.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+UserSQLRolesResponse returns a list of roles for the logged SQL user.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| roles | [string](#cockroach.server.serverpb.UserSQLRolesResponse-string) | repeated | roles is a list of roles for the SQL user. | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Databases
 
 `GET /_admin/v1/databases`
