@@ -315,22 +315,12 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 		c.writable = c.public
 		c.nonDrop = c.public
 	} else {
-		readableDescs := make([]descpb.ColumnDescriptor, 0, numMutations)
-		readableBackingStructs := make([]column, 0, numMutations)
 		for _, col := range c.deletable {
 			if !col.DeleteOnly() {
 				lazyAllocAppendColumn(&c.writable, col, numDeletable)
 			}
 			if !col.Dropped() {
 				lazyAllocAppendColumn(&c.nonDrop, col, numDeletable)
-			}
-			if !col.Public() && !col.IsNullable() {
-				j := len(readableDescs)
-				readableDescs = append(readableDescs, *col.ColumnDesc())
-				readableDescs[j].Nullable = true
-				readableBackingStructs = append(readableBackingStructs, *col.(*column))
-				readableBackingStructs[j].desc = &readableDescs[j]
-				col = &readableBackingStructs[j]
 			}
 			lazyAllocAppendColumn(&c.readable, col, numDeletable)
 		}
