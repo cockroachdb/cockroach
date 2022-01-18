@@ -938,3 +938,10 @@ CREATE TABLE t74216 (
     a REGTYPE,
     UNIQUE ((a::STRING))
 )
+
+# create index using an expression works even when retried
+statement ok
+BEGIN;
+CREATE INDEX t_a_times_three_idx ON t ((a * 3));
+SELECT crdb_internal.force_retry('10ms');
+COMMIT
