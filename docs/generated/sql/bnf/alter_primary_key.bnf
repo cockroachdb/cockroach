@@ -1,5 +1,7 @@
 alter_onetable_stmt ::=
 	'ALTER' 'TABLE' table_name 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
+	| 'ALTER' 'TABLE' table_name 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' 'USING' 'HASH'
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' 
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' 'USING' 'HASH'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' 
