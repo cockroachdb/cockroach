@@ -331,7 +331,16 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SpanConfig: &spanconfig.TestingKnobs{
+						ConfigureScratchRange: true,
+					},
+				},
+			},
+		},
 	)
 	defer tc.Stopper().Stop(context.Background())
 
@@ -833,6 +842,11 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 					{
 						Key: "rack", Value: strconv.Itoa(i),
 					},
+				},
+			},
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
 				},
 			},
 		}
