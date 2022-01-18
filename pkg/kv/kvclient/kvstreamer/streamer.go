@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -390,22 +391,21 @@ func (s *Streamer) Enqueue(
 	// TODO(yuzefovich): we might want to have more fine-grained lock
 	// acquisitions once pipelining is implemented.
 	s.mu.Lock()
-	locked := true
 	defer func() {
-		if retErr != nil {
-			if !locked {
-				s.mu.Lock()
-				locked = true
-			}
-			if s.mu.err == nil {
-				// Set the error so that mainLoop of the worker coordinator
-				// exits as soon as possible, without issuing any more requests.
-				s.mu.err = retErr
+		// We assume that the Streamer's mutex is held when Enqueue returns.
+		s.mu.AssertHeld()
+		defer s.mu.Unlock()
+		if buildutil.CrdbTestBuild {
+			if s.mu.err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(s.mu.err, "s.mu.err is non-nil"))
 			}
 		}
-		if locked {
-			s.mu.Unlock()
-		}
+		// Set the error (if present) so that mainLoop of the worker coordinator
+		// exits as soon as possible, without issuing any requests. Note that
+		// s.mu.err couldn't have already been set by the worker coordinator or
+		// the asynchronous requests because the worker coordinator starts
+		// issuing the requests only after Enqueue() returns.
+		s.mu.err = retErr
 	}()
 
 	if enqueueKeys != nil && len(enqueueKeys) != len(reqs) {
@@ -511,18 +511,8 @@ func (s *Streamer) Enqueue(
 		}
 	}
 
-	// Release the Streamer's mutex so that there is no overlap with the
-	// budget's mutex - the budget's mutex needs to be acquired first in order
-	// to eliminate a potential deadlock.
-	s.mu.Unlock()
-	locked = false
-
-	// Account for the memory used by all the requests. We allow the budget to
-	// go into debt iff a single request was enqueued. This is needed to support
-	// the case of arbitrarily large keys - the caller is expected to produce
-	// requests with such cases one at a time.
-	allowDebt := len(reqs) == 1
-	if err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt); err != nil {
+	err = s.enqueueMemoryAccountingLocked(ctx, totalReqsMemUsage, len(reqs))
+	if err != nil {
 		return err
 	}
 
@@ -530,6 +520,28 @@ func (s *Streamer) Enqueue(
 	// one singleRangeBatch object has been appended to s.mu.requestsToServe.
 	s.coordinator.mu.hasWork.Signal()
 	return nil
+}
+
+// enqueueMemoryAccountingLocked accounts for the memory used by all the
+// requests that are added in Enqueue.
+//
+// It assumes that the mutex of s is being held and guarantees that it will be
+// held when the function returns too.
+func (s *Streamer) enqueueMemoryAccountingLocked(
+	ctx context.Context, totalReqsMemUsage int64, numReqs int,
+) error {
+	s.mu.AssertHeld()
+	// Per the contract of the budget's mutex (which must be acquired first,
+	// before the Streamer's mutex), we cannot hold the mutex of s, so we have
+	// to release it first and acquire right before returning from this
+	// function.
+	s.mu.Unlock()
+	defer s.mu.Lock()
+	// We allow the budget to go into debt iff a single request was enqueued.
+	// This is needed to support the case of arbitrarily large keys - the caller
+	// is expected to produce requests with such cases one at a time.
+	allowDebt := numReqs == 1
+	return s.budget.consume(ctx, totalReqsMemUsage, allowDebt)
 }
 
 // GetResults blocks until at least one result is available. If the operation
