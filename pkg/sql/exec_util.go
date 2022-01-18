@@ -325,6 +325,14 @@ var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var maxHashShardedIndexRangePreSplit = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"sql.hash_sharded_range_pre_split.max",
+	"max pre-split ranges to have when adding hash sharded index to an existing table",
+	16,
+	settings.PositiveInt,
+).WithPublic()
+
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.defaults.zigzag_join.enabled",
