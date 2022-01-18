@@ -214,13 +214,14 @@ var _ = [...]interface{}{
 	//   4. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the
 	//   store 'ident' record. They all share `localStorePrefix`.
-	StoreClusterVersionKey, // "cver"
-	StoreGossipKey,         // "goss"
-	StoreHLCUpperBoundKey,  // "hlcu"
-	StoreIdentKey,          // "iden"
-	StoreNodeTombstoneKey,  // "ntmb"
-	StoreLastUpKey,         // "uptm"
-	StoreCachedSettingsKey, // "stng"
+	StoreClusterVersionKey,        // "cver"
+	StoreGossipKey,                // "goss"
+	StoreHLCUpperBoundKey,         // "hlcu"
+	StoreIdentKey,                 // "iden"
+	StoreUnsafeReplicaRecoveryKey, // "loqr"
+	StoreNodeTombstoneKey,         // "ntmb"
+	StoreCachedSettingsKey,        // "stng"
+	StoreLastUpKey,                // "uptm"
 
 	//   5. Range lock keys for all replicated locks. All range locks share
 	//   LocalRangeLockTablePrefix. Locks can be acquired on global keys and on

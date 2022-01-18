@@ -42,3 +42,15 @@ message DebugSendKvBatch {
   CommonDebugEventDetails debug = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   string batch_request = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
+
+// DebugRecoverReplica is recorded when unsafe loss of quorum recovery is performed.
+message DebugRecoverReplica {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonDebugEventDetails debug = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  int64 range_id = 3 [(gogoproto.customname) = "RangeID"];
+  int64 store_id = 4 [(gogoproto.customname) = "StoreID"];
+  int32 survivor_replica_id = 5 [(gogoproto.customname) = "SurvivorReplicaID"];
+  int32 updated_replica_id = 6 [(gogoproto.customname) = "UpdatedReplicaID"];
+  string start_key = 7;
+  string end_key = 8;
+}

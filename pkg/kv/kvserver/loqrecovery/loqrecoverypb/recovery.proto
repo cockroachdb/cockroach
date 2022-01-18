@@ -43,21 +43,50 @@ message ReplicaUpdate {
 
   int64 range_id = 1 [(gogoproto.customname) = "RangeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
-    (gogoproto.moretags) = "yaml:\"RangeID\""];
+    (gogoproto.moretags) = 'yaml:"RangeID"'];
   bytes start_key = 2 [
     (gogoproto.casttype) = "RecoveryKey",
-    (gogoproto.moretags) = "yaml:\"StartKey\""];
+    (gogoproto.moretags) = 'yaml:"StartKey"'];
   int32 old_replica_id = 3 [(gogoproto.customname) = "OldReplicaID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
-    (gogoproto.moretags) = "yaml:\"OldReplicaID\""];
+    (gogoproto.moretags) = 'yaml:"OldReplicaID"'];
   roachpb.ReplicaDescriptor new_replica = 4 [(gogoproto.nullable) = false,
-    (gogoproto.moretags) = "yaml:\"NewReplica\""];
+    (gogoproto.moretags) = 'yaml:"NewReplica"'];
   int32 next_replica_id = 5 [(gogoproto.customname) = "NextReplicaID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
-    (gogoproto.moretags) = "yaml:\"NextReplicaID\""];
+    (gogoproto.moretags) = 'yaml:"NextReplicaID"'];
 }
 
 // ReplicaUpdatePlan Collection of updates for all recoverable replicas in the cluster.
 message ReplicaUpdatePlan {
   repeated ReplicaUpdate updates = 1 [(gogoproto.nullable) = false];
+}
+
+// ReplicaRecoveryRecord is a struct that loss of quorum recovery commands
+// write to the store locally when replicas are rewritten to preserve information
+// about changes. This records are then consumed on startup to post data to
+// appropriate destinations like log, rangelog etc.
+// This struct is a union of all necessary information that is needed by all
+// downstream destinations.
+message ReplicaRecoveryRecord {
+  // Timestamp of loss of quorum recovery application phase. Timestamp is chosen by process
+  // rewriting changes before any replica is rewritten. All events created by single process
+  // will share the same timestamp. Different processes updating different stores will
+  // produce different timestamps even if updates originated from the same recovery plan.
+  // Expressed as nanoseconds since the Unix epoch.
+  int64 timestamp = 1;
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID",
+    (gogoproto.moretags) = 'yaml:"RangeID"'];
+  bytes start_key = 3 [
+    (gogoproto.casttype) = "RecoveryKey",
+    (gogoproto.moretags) = 'yaml:"StartKey"'];
+  bytes end_key = 4 [
+    (gogoproto.casttype) = "RecoveryKey",
+    (gogoproto.moretags) = 'yaml:"StartKey"'];
+  int32 old_replica_id = 5 [(gogoproto.customname) = "OldReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID",
+    (gogoproto.moretags) = 'yaml:"OldReplicaID"'];
+  roachpb.ReplicaDescriptor new_replica = 6 [(gogoproto.nullable) = false,
+    (gogoproto.moretags) = 'yaml:"NewReplica"'];
 }

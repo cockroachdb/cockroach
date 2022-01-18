@@ -560,7 +560,7 @@ func (z *zigzagJoiner) fetchRowFromSide(
 		return false
 	}
 	for {
-		fetchedRow, _, _, err = z.infos[side].fetcher.NextRow(ctx)
+		fetchedRow, err = z.infos[side].fetcher.NextRow(ctx)
 		if fetchedRow == nil || err != nil {
 			return fetchedRow, err
 		}

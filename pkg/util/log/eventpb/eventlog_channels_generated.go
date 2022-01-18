@@ -23,6 +23,9 @@ func (m *NodeRecommissioned) LoggingChannel() logpb.Channel { return logpb.Chann
 func (m *NodeRestart) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *DebugRecoverReplica) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *DebugSendKvBatch) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.

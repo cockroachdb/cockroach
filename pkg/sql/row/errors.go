@@ -258,7 +258,7 @@ func DecodeRowInfo(
 	if err := rf.StartScanFrom(ctx, &f, false /* traceKV */); err != nil {
 		return nil, nil, nil, err
 	}
-	datums, _, _, err := rf.NextRowDecoded(ctx)
+	datums, err := rf.NextRowDecoded(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}

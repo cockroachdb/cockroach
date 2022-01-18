@@ -330,7 +330,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	iv.Cols = append(iv.Cols, cb.added...)
 	cb.evalCtx.IVarContainer = iv
 	for i := int64(0); i < int64(chunkSize); i++ {
-		datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
+		datums, err := cb.fetcher.NextRowDecoded(ctx)
 		if err != nil {
 			return roachpb.Key{}, err
 		}
@@ -890,7 +890,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		return nil
 	}
 	for i := int64(0); i < chunkSize; i++ {
-		encRow, _, _, err := fetcher.NextRow(ctx)
+		encRow, err := fetcher.NextRow(ctx)
 		if err != nil {
 			return nil, nil, 0, err
 		}
