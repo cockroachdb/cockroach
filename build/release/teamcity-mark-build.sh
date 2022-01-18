@@ -4,13 +4,13 @@ source "$(dirname "${0}")/teamcity-support.sh"
 
 # mark_build marks a build with a given label specified as a parameter on
 # docker. For example, calling this function on the label "qualified", on a
-# v19.2.4 build would tag it as `latest-release-19.2-qualified-build`.
+# v19.2.4 build would tag it as `latest-v19.2-qualified-build`.
 mark_build() {
   tc_start_block "Variable Setup"
   build_label=$1
 
   # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
-  release_branch="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^(release-[0-9]+\.[0-9]+)|(master)" || echo"")"
+  release_branch="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
 
   if [[ -z "${DRY_RUN}" ]] ; then
     google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
