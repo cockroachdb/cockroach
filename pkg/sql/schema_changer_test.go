@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
@@ -7490,4 +7491,76 @@ func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
 		`SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE'`,
 	).Scan(&id)
 	require.Equal(t, scJobID, id)
+}
+
+func TestHashShardedIndexRangePreSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	getShardedIndexRanges := func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) ([]kv.KeyValue, error) {
+		indexSpan := tableDesc.IndexSpan(codec, descpb.IndexID(2))
+		ranges, err := kvDB.Scan(
+			ctx,
+			keys.RangeMetaKey(keys.MustAddr(indexSpan.Key)),
+			keys.RangeMetaKey(keys.MustAddr(indexSpan.EndKey)),
+
+			100,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return ranges, nil
+	}
+
+	var runBeforePreSplitting func(tbl *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error
+	var runAfterPreSplitting func(tbl *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeHashShardedIndexRangePreSplit: func(tbl *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
+				return runBeforePreSplitting(tbl, kvDB, codec)
+			},
+			RunAfterHashShardedIndexRangePreSplit: func(tbl *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
+				return runAfterPreSplitting(tbl, kvDB, codec)
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	tdb.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test_split(a INT PRIMARY KEY, b INT NOT NULL);
+`,
+	)
+
+	runBeforePreSplitting = func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
+		ranges, err := getShardedIndexRanges(tableDesc, kvDB, codec)
+		if err != nil {
+			return err
+		}
+		if len(ranges) != 0 {
+			return errors.Newf("expected 0 ranges but found %d", len(ranges))
+		}
+		return nil
+	}
+
+	runAfterPreSplitting = func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
+		ranges, err := getShardedIndexRanges(tableDesc, kvDB, codec)
+		if err != nil {
+			return err
+		}
+		if len(ranges) != 8 {
+			return errors.Newf("expected 8 ranges but found %d", len(ranges))
+		}
+		return nil
+	}
+
+	tdb.Exec(t, `
+SET experimental_enable_hash_sharded_indexes = on;
+CREATE INDEX idx_test_split_b ON t.test_split (b) USING HASH WITH BUCKET_COUNT = 8;
+`)
 }

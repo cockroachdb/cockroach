@@ -1,0 +1,41 @@
+# 3node-tenant is blocked from running this file due to heavy reliance on
+# unavailable node IDs in this test.
+# LogicTest: !3node-tenant
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = on;
+CREATE TABLE t_hash_pre_split (
+  a INT PRIMARY KEY,
+  b INT
+);
+
+query TITTT retry
+SELECT t.name, r.table_id, r.index_name, r.start_pretty, r.end_pretty
+FROM crdb_internal.tables t
+JOIN crdb_internal.ranges r ON t.table_id = r.table_id
+WHERE t.name = 't_hash_pre_split'
+AND t.state = 'PUBLIC'
+AND r.split_enforced_until IS NOT NULL;
+----
+
+statement ok
+CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH BUCKET_COUNT = 8;
+
+query TITTT colnames,retry
+SELECT t.name, r.table_id, r.index_name, r.start_pretty, r.end_pretty
+FROM crdb_internal.tables t
+JOIN crdb_internal.ranges r ON t.table_id = r.table_id
+WHERE t.name = 't_hash_pre_split'
+AND t.state = 'PUBLIC'
+AND r.split_enforced_until IS NOT NULL;
+----
+name              table_id  index_name              start_pretty   end_pretty
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2    /Table/92/2/0
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/0  /Table/92/2/1
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/1  /Table/92/2/2
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/2  /Table/92/2/3
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/3  /Table/92/2/4
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/4  /Table/92/2/5
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/5  /Table/92/2/6
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/6  /Table/92/2/7
+t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/7  /Max
