@@ -231,6 +231,7 @@ func CheckSSTConflicts(
 // can be copied across without recomputation.
 func UpdateSSTTimestamps(sst []byte, ts hlc.Timestamp) ([]byte, error) {
 	sstOut := &MemFile{}
+	sstOut.Buffer.Grow(len(sst))
 	writer := MakeIngestionSSTWriter(sstOut)
 	defer writer.Close()
 
