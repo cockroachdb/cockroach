@@ -2285,30 +2285,69 @@ func TestChangefeedVirtualComputedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE cc (
-		a INT primary key, b INT, c INT AS (b + 1) VIRTUAL NOT NULL
-	)`)
-		sqlDB.Exec(t, `INSERT INTO cc VALUES (1, 1)`)
-
-		cc := feed(t, f, `CREATE CHANGEFEED FOR cc with diff`)
-		defer closeFeed(t, cc)
-
-		assertPayloads(t, cc, []string{
-			`cc: [1]->{"after": {"a": 1, "b": 1, "c": null}, "before": null}`,
-		})
-
-		sqlDB.Exec(t, `UPDATE cc SET b=10 WHERE a=1`)
-		assertPayloads(t, cc, []string{
-			`cc: [1]->{"after": {"a": 1, "b": 10, "c": null}, "before": {"a": 1, "b": 1, "c": null}}`,
-		})
+	tests := map[string]struct {
+		formatOpt               changefeedbase.FormatType
+		virtualColumnVisibility changefeedbase.VirtualColumnVisibility
+		changeFeedStmt          string
+		payloadAfterInsert      []string
+		payloadAfterUpdate      []string
+	}{
+		`format="json",virtual_columns="omitted"`: {
+			formatOpt:               changefeedbase.OptFormatJSON,
+			virtualColumnVisibility: changefeedbase.OptVirtualColumnsOmitted,
+			payloadAfterInsert:      []string{`cc: [1]->{"after": {"a": 1, "b": 1}, "before": null}`},
+			payloadAfterUpdate:      []string{`cc: [1]->{"after": {"a": 1, "b": 10}, "before": {"a": 1, "b": 1}}`},
+		},
+		`format="json",virtual_columns="null"`: {
+			formatOpt:               changefeedbase.OptFormatJSON,
+			virtualColumnVisibility: changefeedbase.OptVirtualColumnsNull,
+			payloadAfterInsert:      []string{`cc: [1]->{"after": {"a": 1, "b": 1, "c": null}, "before": null}`},
+			payloadAfterUpdate:      []string{`cc: [1]->{"after": {"a": 1, "b": 10, "c": null}, "before": {"a": 1, "b": 1, "c": null}}`},
+		},
+		`format="avro",virtual_columns="omitted"`: {
+			formatOpt:               changefeedbase.OptFormatAvro,
+			virtualColumnVisibility: changefeedbase.OptVirtualColumnsOmitted,
+			payloadAfterInsert:      []string{`cc: {"a":{"long":1}}->{"after":{"cc":{"a":{"long":1},"b":{"long":1}}},"before":null}`},
+			payloadAfterUpdate:      []string{`cc: {"a":{"long":1}}->{"after":{"cc":{"a":{"long":1},"b":{"long":10}}},"before":{"cc_before":{"a":{"long":1},"b":{"long":1}}}}`},
+		},
+		`format="avro",virtual_columns="null"`: {
+			formatOpt:               changefeedbase.OptFormatAvro,
+			virtualColumnVisibility: changefeedbase.OptVirtualColumnsNull,
+			payloadAfterInsert:      []string{`cc: {"a":{"long":1}}->{"after":{"cc":{"a":{"long":1},"b":{"long":1},"c":null}},"before":null}`},
+			payloadAfterUpdate:      []string{`cc: {"a":{"long":1}}->{"after":{"cc":{"a":{"long":1},"b":{"long":10},"c":null}},"before":{"cc_before":{"a":{"long":1},"b":{"long":1},"c":null}}}`},
+		},
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
+	for _, test := range tests {
+		testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(db)
+
+			sqlDB.Exec(t, `CREATE TABLE cc (
+					a INT primary key, b INT, c INT AS (b + 1) VIRTUAL NOT NULL
+				)`)
+			defer sqlDB.Exec(t, `DROP TABLE cc`)
+
+			sqlDB.Exec(t, `INSERT INTO cc VALUES (1, 1)`)
+
+			changeFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR cc WITH diff, format="%s", virtual_columns="%s"`,
+				test.formatOpt, test.virtualColumnVisibility))
+			defer closeFeed(t, changeFeed)
+
+			assertPayloads(t, changeFeed, test.payloadAfterInsert)
+
+			sqlDB.Exec(t, `UPDATE cc SET b=10 WHERE a=1`)
+
+			assertPayloads(t, changeFeed, test.payloadAfterUpdate)
+		}
+
+		if test.formatOpt != changefeedbase.OptFormatAvro {
+			t.Run(`sinkless`, sinklessTest(testFn))
+			t.Run(`enterprise`, enterpriseTest(testFn))
+			t.Run(`webhook`, webhookTest(testFn))
+		}
+
+		t.Run(`kafka`, kafkaTest(testFn))
+	}
 }
 
 func TestChangefeedUpdatePrimaryKey(t *testing.T) {
