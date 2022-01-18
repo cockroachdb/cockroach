@@ -1749,6 +1749,44 @@ func TestAdminAPILocations(t *testing.T) {
 	}
 }
 
+func TestAdminAPISQLRoles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	var res serverpb.UserSQLRolesResponse
+
+	// No roles added to the user.
+	if err := getAdminJSONProtoWithAdminOption(s, "sqlroles", &res, false /* isAdmin */); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Roles) != 0 {
+		t.Errorf("Expected 0 roles, but got %v", res.Roles)
+	}
+
+	// One role added to the user.
+	sqlDB.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	if err := getAdminJSONProtoWithAdminOption(s, "sqlroles", &res, false /* isAdmin */); err != nil {
+		t.Fatal(err)
+	}
+	expRoles := []string{"VIEWACTIVITY"}
+	if !reflect.DeepEqual(res.Roles, expRoles) {
+		t.Errorf("Expected roles %v, but got %v", expRoles, res.Roles)
+	}
+
+	// Two roles added to the user.
+	sqlDB.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+	if err := getAdminJSONProtoWithAdminOption(s, "sqlroles", &res, false /* isAdmin */); err != nil {
+		t.Fatal(err)
+	}
+	expRoles = []string{"VIEWACTIVITY", "VIEWACTIVITYREDACTED"}
+	if !reflect.DeepEqual(res.Roles, expRoles) {
+		t.Errorf("Expected roles %v, but got %v", expRoles, res.Roles)
+	}
+}
+
 func TestAdminAPIQueryPlan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
