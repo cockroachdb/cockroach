@@ -84,6 +84,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error getting first tag containing ref %s: %+v\n", ref, err)
 		}
+		if tag == "" {
+			log.Printf("Ref %s has not yet appeared in a released version.", ref)
+			continue
+		}
 		pr, err := getPrInfo(ref)
 		if err != nil {
 			log.Fatalf("Cannot find PR for ref %s: %+v\n", ref, err)
@@ -168,9 +172,6 @@ func getFirstTagContainingRef(ref string) (string, error) {
 		return "", err
 	}
 	version := matchVersion(string(out))
-	if version == "" {
-		return "", fmt.Errorf("cannot find valid version")
-	}
 	return version, nil
 }
 
