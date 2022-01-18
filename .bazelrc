@@ -1,12 +1,17 @@
 try-import %workspace%/.bazelrc.user
 
-build --symlink_prefix=_bazel/ --ui_event_filters=-DEBUG --define gotags=bazel,gss --experimental_proto_descriptor_sets_include_source_info --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
+build --define gotags=bazel,gss
+build --experimental_proto_descriptor_sets_include_source_info
+build --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
+build --symlink_prefix=_bazel/ --experimental_no_product_name_out_symlink
 test --config=test --experimental_ui_max_stdouterr_bytes=10485760
 build:with_ui --define cockroach_with_ui=y
 build:test --define crdb_test=y
 build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1 --test_sharding_strategy=disabled
 test:test --test_env=TZ=
 test:race --test_timeout=1200,6000,18000,72000
+
+build --ui_event_filters=-DEBUG
 query --ui_event_filters=-DEBUG
 
 # CI should always run with `--config=ci`.
@@ -22,7 +27,7 @@ test:ci --test_tmpdir=/artifacts/tmp
 build:cross --stamp
 build:cross --define cockroach_cross=y
 
-# cross-compilation configurations. Add e.g. --config=crosslinux to turn these on.
+# Cross-compilation configurations. Add e.g. --config=crosslinux to turn these on.
 build:crosslinux --platforms=//build/toolchains:cross_linux
 build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
 build:crosslinux --config=cross
@@ -36,10 +41,9 @@ build:crosslinuxarm --platforms=//build/toolchains:cross_linux_arm
 build:crosslinuxarm '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-unknown-linux-gnu'
 build:crosslinuxarm --config=cross
 
-# developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
+# Developer configurations. Add e.g. --config=devdarwinx86_64 to turn these on.
+# NB: This is consumed in `BUILD` files (see build/toolchains/BUILD.bazel).
 build:devdarwinx86_64 --platforms=//build/toolchains:darwin_x86_64
-# NOTE(ricky): This is consumed in `BUILD` files (see
-# `build/toolchains/BUILD.bazel`).
 build:devdarwinx86_64 --config=dev
 build:dev --define cockroach_bazel_dev=y
 build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh

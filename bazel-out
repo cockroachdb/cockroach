@@ -1,3 +1,0 @@
-This placeholder file prevents bazel from writing a symlink here which points to its output dir.
-That symlink often causes tools that traverse the repo to get confused when they find lots of extra go files.
-The _bazel/out symlink points to the same thing, but go doesn't traverse into paths that start with _.
