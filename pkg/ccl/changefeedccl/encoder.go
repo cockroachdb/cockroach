@@ -102,9 +102,10 @@ func getEncoder(opts map[string]string, targets jobspb.ChangefeedTargets) (Encod
 type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
 
-	targets jobspb.ChangefeedTargets
-	alloc   tree.DatumAlloc
-	buf     bytes.Buffer
+	targets                 jobspb.ChangefeedTargets
+	alloc                   tree.DatumAlloc
+	buf                     bytes.Buffer
+	virtualColumnVisibility string
 }
 
 var _ Encoder = &jsonEncoder{}
@@ -113,9 +114,10 @@ func makeJSONEncoder(
 	opts map[string]string, targets jobspb.ChangefeedTargets,
 ) (*jsonEncoder, error) {
 	e := &jsonEncoder{
-		targets: targets,
-		keyOnly: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
-		wrapped: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
+		targets:                 targets,
+		keyOnly:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
+		wrapped:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
+		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
 	}
 	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
 	_, e.mvccTimestampField = opts[changefeedbase.OptMVCCTimestamps]
@@ -199,8 +201,11 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 	var after map[string]interface{}
 	if !row.deleted {
 		columns := row.tableDesc.PublicColumns()
-		after = make(map[string]interface{}, len(columns))
+		after = make(map[string]interface{})
 		for i, col := range columns {
+			if col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsOmitted) {
+				continue
+			}
 			datum := row.datums[i]
 			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
 				return nil, err
@@ -220,8 +225,11 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 	var before map[string]interface{}
 	if row.prevDatums != nil && !row.prevDeleted {
 		columns := row.prevTableDesc.PublicColumns()
-		before = make(map[string]interface{}, len(columns))
+		before = make(map[string]interface{})
 		for i, col := range columns {
+			if col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsOmitted) {
+				continue
+			}
 			datum := row.prevDatums[i]
 			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
 				return nil, err
@@ -321,6 +329,7 @@ type confluentAvroEncoder struct {
 	schemaPrefix                       string
 	updatedField, beforeField, keyOnly bool
 	targets                            jobspb.ChangefeedTargets
+	virtualColumnVisibility            string
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -361,8 +370,9 @@ func newConfluentAvroEncoder(
 	opts map[string]string, targets jobspb.ChangefeedTargets,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
-		schemaPrefix: opts[changefeedbase.OptAvroSchemaPrefix],
-		targets:      targets,
+		schemaPrefix:            opts[changefeedbase.OptAvroSchemaPrefix],
+		targets:                 targets,
+		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
 	}
 
 	switch opts[changefeedbase.OptEnvelope] {
@@ -475,13 +485,13 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 		var beforeDataSchema *avroDataRecord
 		if e.beforeField && row.prevTableDesc != nil {
 			var err error
-			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, `before`, e.schemaPrefix)
+			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, `before`, e.schemaPrefix, e.virtualColumnVisibility)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		afterDataSchema, err := tableToAvroSchema(row.tableDesc, avroSchemaNoSuffix, e.schemaPrefix)
+		afterDataSchema, err := tableToAvroSchema(row.tableDesc, avroSchemaNoSuffix, e.schemaPrefix, e.virtualColumnVisibility)
 		if err != nil {
 			return nil, err
 		}
