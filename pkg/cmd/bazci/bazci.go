@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/alessio/shellescape"
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -254,7 +255,7 @@ func mungeTestXMLs(args parsedArgs) error {
 			return err
 		}
 		var buf bytes.Buffer
-		err = mungeTestXML(contents, &buf)
+		err = bazelutil.MungeTestXML(contents, &buf)
 		if err != nil {
 			return err
 		}
