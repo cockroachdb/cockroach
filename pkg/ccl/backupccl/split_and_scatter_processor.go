@@ -218,10 +218,7 @@ func newSplitAndScatterProcessor(
 		return nil, err
 	}
 
-	var scatterer = makeSplitAndScatterer(db, kr)
-	if !flowCtx.Cfg.Codec.ForSystemTenant() {
-		scatterer = noopSplitAndScatterer{}
-	}
+	scatterer := makeSplitAndScatterer(db, kr)
 	ssp := &splitAndScatterProcessor{
 		flowCtx:   flowCtx,
 		spec:      spec,
