@@ -12,7 +12,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { AppState } from "src/store";
+import { AppState, uiConfigActions } from "src/store";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
@@ -36,7 +36,10 @@ import {
   selectFilters,
   selectSearch,
 } from "./statementsPage.selectors";
-import { selectIsTenant } from "../store/uiConfig";
+import {
+  selectIsTenant,
+  selectHasViewActivityRedactedRole,
+} from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../timeScaleDropdown";
@@ -60,6 +63,7 @@ export const ConnectedStatementsPage = withRouter(
       timeScale: selectTimeScale(state),
       filters: selectFilters(state),
       isTenant: selectIsTenant(state),
+      hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
       lastReset: selectLastReset(state),
       nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
       search: selectSearch(state),
@@ -80,6 +84,8 @@ export const ConnectedStatementsPage = withRouter(
       },
       refreshStatementDiagnosticsRequests: () =>
         dispatch(statementDiagnosticsActions.refresh()),
+      refreshUserSQLRoles: () =>
+        dispatch(uiConfigActions.refreshUserSQLRoles()),
       resetSQLStats: () => dispatch(sqlStatsActions.reset()),
       dismissAlertMessage: () =>
         dispatch(

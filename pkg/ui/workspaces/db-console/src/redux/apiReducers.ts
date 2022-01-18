@@ -300,6 +300,15 @@ const queriesReducerObj = new CachedDataReducer(
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
 
+const userSQLRolesReducerObj = new CachedDataReducer(
+  api.getUserSQLRoles,
+  "userSQLRoles",
+  moment.duration(1, "m"),
+);
+
+export const invalidateUserSQLRoles = userSQLRolesReducerObj.invalidateData;
+export const refreshUserSQLRoles = userSQLRolesReducerObj.refresh;
+
 const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
   api.getStatementDiagnosticsReports,
   "statementDiagnosticsReports",
@@ -361,6 +370,7 @@ export interface APIReducersState {
   statementDiagnosticsReports: CachedDataReducerState<
     api.StatementDiagnosticsReportsResponseMessage
   >;
+  userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -397,6 +407,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
   [statementDiagnosticsReportsReducerObj.actionNamespace]:
     statementDiagnosticsReportsReducerObj.reducer,
+  [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
