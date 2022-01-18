@@ -3120,7 +3120,7 @@ type EvalDatabase interface {
 }
 
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.
-// Only one of DatabaseName, DatabaseOID, TableName, TableOID is filled.
+// Only one of { DatabaseName, DatabaseOID, TableName, TableOID } is filled.
 type HasPrivilegeSpecifier struct {
 
 	// Database privilege
@@ -3130,6 +3130,8 @@ type HasPrivilegeSpecifier struct {
 	// Table privilege
 	TableName *string
 	TableOID  *oid.Oid
+	// Sequences are stored internally as a table
+	IsSequence *bool
 
 	// Column privilege
 	// Requires TableName or TableOID.

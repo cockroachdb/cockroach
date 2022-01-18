@@ -406,11 +406,19 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 		if err != nil {
 			return nil, err
 		}
-		if err := validateColumnForHasPrivilegeSpecifier(
-			table,
-			specifier,
-		); err != nil {
-			return nil, err
+		if *specifier.IsSequence {
+			// has_table_privilege works with sequences, but has_sequence_privilege does not work with tables
+			if !table.IsSequence() {
+				return nil, pgerror.Newf(pgcode.WrongObjectType,
+					"\"%s\" is not a sequence", table.GetName())
+			}
+		} else {
+			if err := validateColumnForHasPrivilegeSpecifier(
+				table,
+				specifier,
+			); err != nil {
+				return nil, err
+			}
 		}
 		return table, nil
 	}
