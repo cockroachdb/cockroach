@@ -504,6 +504,12 @@ func (s *Streamer) Enqueue(
 		}
 	}
 
+	// Update the requestsToServe as if there are none. This is needed in order
+	// for the worker coordinator to not pick up any work until we account for
+	// totalReqsMemUsage.
+	numRequestsToServe := len(s.mu.requestsToServe)
+	s.mu.requestsToServe = s.mu.requestsToServe[:0]
+
 	// Release the Streamer's mutex so that there is no overlap with the
 	// budget's mutex - the budget's mutex needs to be acquired first in order
 	// to eliminate a potential deadlock.
@@ -524,6 +530,8 @@ func (s *Streamer) Enqueue(
 		return err
 	}
 
+	// Memory reservation was approved, so the requests are good to go.
+	s.mu.requestsToServe = s.mu.requestsToServe[:numRequestsToServe]
 	// TODO(yuzefovich): it might be better to notify the coordinator once
 	// one singleRangeBatch object has been appended to s.mu.requestsToServe.
 	s.coordinator.mu.hasWork.Signal()
