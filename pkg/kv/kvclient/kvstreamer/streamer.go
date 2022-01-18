@@ -390,22 +390,15 @@ func (s *Streamer) Enqueue(
 	// TODO(yuzefovich): we might want to have more fine-grained lock
 	// acquisitions once pipelining is implemented.
 	s.mu.Lock()
-	locked := true
 	defer func() {
-		if retErr != nil {
-			if !locked {
-				s.mu.Lock()
-				locked = true
-			}
-			if s.mu.err == nil {
-				// Set the error so that mainLoop of the worker coordinator
-				// exits as soon as possible, without issuing any more requests.
-				s.mu.err = retErr
-			}
+		// We assume that the Streamer's mutex is held when Enqueue returns.
+		s.mu.AssertHeld()
+		if retErr != nil && s.mu.err == nil {
+			// Set the error so that mainLoop of the worker coordinator exits as
+			// soon as possible, without issuing any more requests.
+			s.mu.err = retErr
 		}
-		if locked {
-			s.mu.Unlock()
-		}
+		s.mu.Unlock()
 	}()
 
 	if enqueueKeys != nil && len(enqueueKeys) != len(reqs) {
@@ -515,14 +508,19 @@ func (s *Streamer) Enqueue(
 	// budget's mutex - the budget's mutex needs to be acquired first in order
 	// to eliminate a potential deadlock.
 	s.mu.Unlock()
-	locked = false
 
 	// Account for the memory used by all the requests. We allow the budget to
 	// go into debt iff a single request was enqueued. This is needed to support
 	// the case of arbitrarily large keys - the caller is expected to produce
 	// requests with such cases one at a time.
 	allowDebt := len(reqs) == 1
-	if err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt); err != nil {
+	err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt)
+
+	// Now acquire the Streamer's mutex since the defer above assumes it is
+	// being held when this function returns.
+	s.mu.Lock()
+
+	if err != nil {
 		return err
 	}
 
