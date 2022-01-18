@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -390,22 +391,21 @@ func (s *Streamer) Enqueue(
 	// TODO(yuzefovich): we might want to have more fine-grained lock
 	// acquisitions once pipelining is implemented.
 	s.mu.Lock()
-	locked := true
 	defer func() {
-		if retErr != nil {
-			if !locked {
-				s.mu.Lock()
-				locked = true
-			}
-			if s.mu.err == nil {
-				// Set the error so that mainLoop of the worker coordinator
-				// exits as soon as possible, without issuing any more requests.
-				s.mu.err = retErr
+		// We assume that the Streamer's mutex is held when Enqueue returns.
+		s.mu.AssertHeld()
+		if buildutil.CrdbTestBuild {
+			if s.mu.err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(s.mu.err, "s.mu.err is non-nil"))
 			}
 		}
-		if locked {
-			s.mu.Unlock()
-		}
+		// Set the error (if present) so that mainLoop of the worker coordinator
+		// exits as soon as possible, without issuing any requests. Note that
+		// s.mu.err couldn't have already been set by the worker coordinator or
+		// the asynchronous requests because the worker coordinator starts
+		// issuing the requests only after Enqueue() returns.
+		s.mu.err = retErr
+		s.mu.Unlock()
 	}()
 
 	if enqueueKeys != nil && len(enqueueKeys) != len(reqs) {
@@ -515,14 +515,19 @@ func (s *Streamer) Enqueue(
 	// budget's mutex - the budget's mutex needs to be acquired first in order
 	// to eliminate a potential deadlock.
 	s.mu.Unlock()
-	locked = false
 
 	// Account for the memory used by all the requests. We allow the budget to
 	// go into debt iff a single request was enqueued. This is needed to support
 	// the case of arbitrarily large keys - the caller is expected to produce
 	// requests with such cases one at a time.
 	allowDebt := len(reqs) == 1
-	if err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt); err != nil {
+	err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt)
+
+	// Now acquire the Streamer's mutex since the defer above assumes it is
+	// being held when this function returns.
+	s.mu.Lock()
+
+	if err != nil {
 		return err
 	}
 
