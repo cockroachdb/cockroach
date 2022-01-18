@@ -767,7 +767,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 
 		sqlDB.ExpectErr(t, "cannot append a backup of specific", "BACKUP system.users TO ($1, $2, "+
 			"$3)", test.backups...)
-		//TODO(dt): prevent backing up different targets to same collection?
+		// TODO(dt): prevent backing up different targets to same collection?
 
 		sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 		sqlDB.Exec(t, "RESTORE DATABASE data FROM ($1, $2, $3)", test.backups...)
@@ -6793,7 +6793,14 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	var numExportRequests int
-	exportRequestSpans := make([]string, 0)
+
+	mu := struct {
+		syncutil.Mutex
+		exportRequestSpansSet map[string]struct{}
+		exportRequestSpans    []string
+	}{}
+	mu.exportRequestSpansSet = make(map[string]struct{})
+	mu.exportRequestSpans = make([]string, 0)
 
 	requestSpanStr := func(span roachpb.Span, timestamp hlc.Timestamp) string {
 		spanStr := ""
@@ -6816,10 +6823,15 @@ func TestPaginatedBackupTenant(t *testing.T) {
 			for _, ru := range request.Requests {
 				if exportRequest, ok := ru.GetInner().(*roachpb.ExportRequest); ok &&
 					!isLeasingExportRequest(exportRequest) {
-					exportRequestSpans = append(
-						exportRequestSpans,
-						requestSpanStr(roachpb.Span{Key: exportRequest.Key, EndKey: exportRequest.EndKey}, exportRequest.ResumeKeyTS),
-					)
+
+					mu.Lock()
+					defer mu.Unlock()
+					req := requestSpanStr(roachpb.Span{Key: exportRequest.Key, EndKey: exportRequest.EndKey}, exportRequest.ResumeKeyTS)
+					if _, found := mu.exportRequestSpansSet[req]; found {
+						return nil // nothing to do
+					}
+					mu.exportRequestSpansSet[req] = struct{}{}
+					mu.exportRequestSpans = append(mu.exportRequestSpans, req)
 					numExportRequests++
 				}
 			}
@@ -6846,8 +6858,12 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	_ = security.EmbeddedTenantIDs()
 
 	resetStateVars := func() {
+		mu.Lock()
+		defer mu.Unlock()
+
 		numExportRequests = 0
-		exportRequestSpans = exportRequestSpans[:0]
+		mu.exportRequestSpansSet = make(map[string]struct{})
+		mu.exportRequestSpans = mu.exportRequestSpans[:0]
 	}
 
 	_, conn10 := serverutils.StartTenant(t, srv,
@@ -6863,26 +6879,27 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage='0b'`)
 
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
-	require.Equal(t, 1, numExportRequests)
 	startingSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/56/1"), EndKey: []byte("/Tenant/10/Table/56/2")}
-	require.Equal(t, exportRequestSpans, []string{startingSpan.String()})
+	mu.Lock()
+	require.Equal(t, []string{startingSpan.String()}, mu.exportRequestSpans)
+	mu.Unlock()
 	resetStateVars()
 
 	// Two ExportRequests with one resume span.
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='50b'`)
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test2'`)
-	require.Equal(t, 2, numExportRequests)
 	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/56/1"),
 		EndKey: []byte("/Tenant/10/Table/56/2")}
 	resumeSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/56/1/510/0"),
 		EndKey: []byte("/Tenant/10/Table/56/2")}
-	require.Equal(t, exportRequestSpans, []string{startingSpan.String(), resumeSpan.String()})
+	mu.Lock()
+	require.Equal(t, []string{startingSpan.String(), resumeSpan.String()}, mu.exportRequestSpans)
+	mu.Unlock()
 	resetStateVars()
 
 	// One ExportRequest for every KV.
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test3'`)
-	require.Equal(t, 5, numExportRequests)
 	var expected []string
 	for _, resume := range []exportResumePoint{
 		{[]byte("/Tenant/10/Table/56/1"), []byte("/Tenant/10/Table/56/2"), withoutTS},
@@ -6893,7 +6910,9 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	} {
 		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
-	require.Equal(t, expected, exportRequestSpans)
+	mu.Lock()
+	require.Equal(t, expected, mu.exportRequestSpans)
+	mu.Unlock()
 	resetStateVars()
 
 	tenant10.Exec(t, `CREATE DATABASE baz; CREATE TABLE baz.bar(i int primary key, v string); INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510, 'e')`)
@@ -6920,7 +6939,9 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	} {
 		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
 	}
-	require.Equal(t, expected, exportRequestSpans)
+	mu.Lock()
+	require.Equal(t, expected, mu.exportRequestSpans)
+	mu.Unlock()
 	resetStateVars()
 
 	// TODO(adityamaru): Add a RESTORE inside tenant once it is supported.
@@ -8885,7 +8906,7 @@ DROP TABLE foo;
 }
 
 // TestRestoreNewDatabaseName tests the new_db_name optional feature for single database
-//restores, which allows the user to rename the database they intend to restore.
+// restores, which allows the user to rename the database they intend to restore.
 func TestRestoreNewDatabaseName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
