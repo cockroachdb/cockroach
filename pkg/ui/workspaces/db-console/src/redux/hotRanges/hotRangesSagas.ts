@@ -18,18 +18,16 @@ import {
 } from "./hotRangesActions";
 
 import HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
-import HotRangesResponse = cockroach.server.serverpb.HotRangesResponse;
+import HotRangesResponse = cockroach.server.serverpb.HotRangesResponseV2;
 import IHotRangesRequest = cockroach.server.serverpb.IHotRangesRequest;
 
 import { PayloadAction } from "oss/src/interfaces/action";
 
 export function* getHotRangesSaga(action: PayloadAction<IHotRangesRequest>) {
-  const hotRangesRequest = action.payload
-    ? new HotRangesRequest(action.payload)
-    : null;
+  const hotRangesRequest = new HotRangesRequest(action.payload);
   try {
     const resp: HotRangesResponse = yield call(getHotRanges, hotRangesRequest);
-    yield put(getHotRangesSucceededAction(resp));
+    yield put(getHotRangesSucceededAction(resp?.ranges));
   } catch (e) {
     yield put(getHotRangesFailedAction(e));
   }

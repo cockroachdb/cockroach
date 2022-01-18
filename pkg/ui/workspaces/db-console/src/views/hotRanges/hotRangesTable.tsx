@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip } from "antd";
 import moment from "moment";
-import { HotRange } from "../../redux/hotRanges/hotRangesReducer";
+import { cockroach } from "src/js/protos";
 import {
   ColumnDescriptor,
   SortedTable,
@@ -15,6 +15,7 @@ import styles from "./hotRanges.module.styl";
 
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);
+type HotRange = cockroach.server.serverpb.HotRangesResponseV2.HotRange;
 interface HotRangesTableProps {
   hotRangesList: HotRange[];
 }
@@ -50,9 +51,9 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
         </Tooltip>
       ),
       cell: (val: HotRange) => (
-        <Link to={`/reports/range/${val.rangeId}`}>{val.rangeId}</Link>
+        <Link to={`/reports/range/${val.range_id}`}>{val.range_id}</Link>
       ),
-      sort: val => val.rangeId,
+      sort: (val: HotRange) => val.range_id,
     },
     {
       name: "qps",
@@ -61,8 +62,8 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           QPS
         </Tooltip>
       ),
-      cell: val => <>{val.queriesPerSecond}</>,
-      sort: val => val.queriesPerSecond,
+      cell: (val: HotRange) => <>{val.qps}</>,
+      sort: (val: HotRange) => val.qps,
     },
     {
       name: "nodes",
@@ -71,10 +72,12 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Nodes
         </Tooltip>
       ),
-      cell: val => (
-        <Link to={`/node/${val.nodeIds[0]}`}>{val.nodeIds.join(", ")}</Link>
+      cell: (val: HotRange) => (
+        <Link to={`/node/${val.replica_node_ids[0]}`}>
+          {val.replica_node_ids.join(", ")}
+        </Link>
       ),
-      sort: val => val.nodeIds[0],
+      sort: (val: HotRange) => val.replica_node_ids[0],
     },
     {
       name: "leasholder",
@@ -83,8 +86,8 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Leaseholder
         </Tooltip>
       ),
-      cell: val => <>{val.leaseHolder}</>,
-      sort: val => val.leaseHolder,
+      cell: (val: HotRange) => <>{val.leaseholder_node_id}</>,
+      sort: (val: HotRange) => val.leaseholder_node_id,
     },
     {
       name: "database",
@@ -93,8 +96,8 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Database
         </Tooltip>
       ),
-      cell: val => <>{val.database}</>,
-      sort: val => val.database,
+      cell: (val: HotRange) => <>{val.database_name}</>,
+      sort: (val: HotRange) => val.database_name,
     },
     {
       name: "table",
@@ -103,27 +106,27 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Table
         </Tooltip>
       ),
-      cell: val => (
-        <Link to={`/database/${val.database}/table/${val.table}`}>
-          {val.table}
+      cell: (val: HotRange) => (
+        <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
+          {val.table_name}
         </Link>
       ),
-      sort: val => val.table,
+      sort: (val: HotRange) => val.table_name,
     },
-    {
-      name: "index",
-      title: (
-        <Tooltip placement="bottom" title="Index">
-          Index
-        </Tooltip>
-      ),
-      cell: val => <>{val.index}</>,
-      sort: val => val.index,
-    },
+    // {
+    //   name: "index",
+    //   title: (
+    //     <Tooltip placement="bottom" title="Index">
+    //       Index
+    //     </Tooltip>
+    //   ),
+    //   cell: (val: HotRange) => <>{val.index}</>,
+    //   sort: (val: HotRange) => val.index,
+    // },
   ];
 
   return (
-    <div>
+    <div className={cx("hotranges-wrapper")}>
       <div className={cx("hotranges-heading-container")}>
         <h4>
           <ResultsPerPageLabel
