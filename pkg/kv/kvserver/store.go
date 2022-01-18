@@ -2336,6 +2336,9 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 	}
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if err := s.mu.replicasByKey.VisitKeyRange(ctx, sp.Key, sp.EndKey, AscendingKeyOrder,
 		func(ctx context.Context, it replicaOrPlaceholder) error {
 			repl := it.repl
