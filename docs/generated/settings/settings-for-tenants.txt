@@ -61,7 +61,7 @@ server.oidc_authentication.client_secret	string		sets OIDC client secret
 server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console
 server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)
-server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) 
+server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback)
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)
 server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
 server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
@@ -85,7 +85,7 @@ sql.defaults.datestyle	enumeration	iso, mdy	default value for DateStyle session 
 sql.defaults.datestyle.enabled	boolean	false	default value for datestyle_enabled session setting
 sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
 sql.defaults.disallow_full_table_scans.enabled	boolean	false	setting to true rejects queries that have planned a full table scan
-sql.defaults.distsql	enumeration	auto	default distributed SQL execution mode [off = 0, auto = 1, on = 2, always = 3]
+sql.defaults.distsql	enumeration	auto	default distributed SQL execution mode; controls whether or not queries should be distributed across multiple SQL nodes; applies to all new sessions after change [off = 0, auto = 1, on = 2, always = 3]
 sql.defaults.experimental_alter_column_type.enabled	boolean	false	default value for experimental_alter_column_type session setting; enables the use of ALTER COLUMN TYPE for general conversions
 sql.defaults.experimental_auto_rehoming.enabled	boolean	false	default value for experimental_enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
 sql.defaults.experimental_distsql_planning	enumeration	off	default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]
@@ -121,7 +121,7 @@ sql.defaults.transaction_rows_read_err	integer	0	the limit for the number of row
 sql.defaults.transaction_rows_read_log	integer	0	the threshold for the number of rows read by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 sql.defaults.transaction_rows_written_err	integer	0	the limit for the number of rows written by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 sql.defaults.transaction_rows_written_log	integer	0	the threshold for the number of rows written by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
-sql.defaults.vectorize	enumeration	on	default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
+sql.defaults.vectorize	enumeration	on	default vectorize mode; changes whether or not to use the faster vectorized execution engine; applies to all new sessions after change [on = 0, on = 2, experimental_always = 3, off = 4]
 sql.defaults.zigzag_join.enabled	boolean	true	default value for enable_zigzag_join session setting; allows use of zig-zag join by default
 sql.distsql.max_running_flows	integer	-128	the value - when positive - used as is, or the value - when negative - multiplied by the number of CPUs on a node, to determine the maximum number of concurrent remote flows that can be run on the node
 sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage
