@@ -1483,10 +1483,11 @@ alter_sequence_options_stmt:
 // %Category: DDL
 // %Text:
 // ALTER DATABASE <name> RENAME TO <newname>
+// ALTER DATABASE <name> CONFIGURE ZONE <zone config>
 // ALTER DATABASE <name> OWNER TO <newowner>
 // ALTER DATABASE <name> CONVERT TO SCHEMA WITH PARENT <name>
-// ALTER DATABASE <name> ADD REGIONS <regions>
-// ALTER DATABASE <name> DROP REGIONS <regions>
+// ALTER DATABASE <name> ADD REGION [IF NOT EXISTS] <region>
+// ALTER DATABASE <name> DROP REGION [IF EXISTS] <region>
 // ALTER DATABASE <name> PRIMARY REGION <region>
 // ALTER DATABASE <name> SURVIVE <failure type>
 // %SeeAlso: WEBDOCS/alter-database.html
