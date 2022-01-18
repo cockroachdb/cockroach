@@ -1666,7 +1666,10 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (execPlan, er
 	distribution := distribute.ProvidedPhysical().Distribution
 	inputDistribution := distribute.Input.ProvidedPhysical().Distribution
 	if distribution.Equals(inputDistribution) {
-		return execPlan{}, errors.AssertionFailedf("distribution already provided by input")
+		// Don't bother creating a no-op distribution. This likely exists because
+		// the input is a Sort expression, and this is an artifact of how physical
+		// properties are enforced.
+		return input, err
 	}
 
 	// TODO(rytaft): This is currently a no-op. We should pass this distribution
