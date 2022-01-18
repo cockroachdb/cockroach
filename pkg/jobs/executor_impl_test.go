@@ -34,8 +34,13 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 		expectedNextRun time.Time
 	}{
 		{
-			onError:         jobspb.ScheduleDetails_RETRY_SCHED,
-			expectedNextRun: cronexpr.MustParse("@daily").Next(h.env.Now()).Round(time.Microsecond),
+			onError: jobspb.ScheduleDetails_RETRY_SCHED,
+			expectedNextRun: func() time.Time {
+				expr := cronexpr.MustParse("@daily")
+				nextRun, err := CronParseNext(expr, h.env.Now(), "@daily")
+				require.NoError(t, err)
+				return nextRun.Round(time.Microsecond)
+			}(),
 		},
 		{
 			onError:         jobspb.ScheduleDetails_RETRY_SOON,
