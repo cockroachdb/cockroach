@@ -37,6 +37,7 @@ storiesOf("Transactions Details", module)
       statements={data.statements as any}
       nodeRegions={nodeRegions}
       isTenant={false}
+      hasViewActivityRedactedRole={false}
       refreshData={noop}
     />
   ))
@@ -50,6 +51,7 @@ storiesOf("Transactions Details", module)
       statements={undefined}
       nodeRegions={nodeRegions}
       isTenant={false}
+      hasViewActivityRedactedRole={false}
       refreshData={noop}
     />
   ))
@@ -64,6 +66,7 @@ storiesOf("Transactions Details", module)
       nodeRegions={nodeRegions}
       error={error}
       isTenant={false}
+      hasViewActivityRedactedRole={false}
       refreshData={noop}
     />
   ));

@@ -33,6 +33,7 @@ storiesOf("StatementsSortedTable", module)
         { "1": "gcp-europe-west1", "2": "gcp-us-east1", "3": "gcp-us-west1" },
         "statement",
         false,
+        false,
       )}
       sortSetting={{
         ascending: false,
