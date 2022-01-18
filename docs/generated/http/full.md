@@ -4006,6 +4006,46 @@ Response object returned by ResetIndexUsageStatsRequest.
 
 
 
+## UserSQLRoles
+
+`GET /_status/sqlroles`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+UserSQLRolesRequest requests a list of roles of the logged in SQL user.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+UserSQLRolesResponse returns a list of roles for the logged SQL user.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| roles | [string](#cockroach.server.serverpb.UserSQLRolesResponse-string) | repeated | roles is a list of roles for the SQL user. | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

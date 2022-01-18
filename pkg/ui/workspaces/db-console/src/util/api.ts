@@ -136,6 +136,9 @@ export type StatementsRequestMessage = protos.cockroach.server.serverpb.Statemen
 export type ResetSQLStatsRequestMessage = protos.cockroach.server.serverpb.ResetSQLStatsRequest;
 export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.ResetSQLStatsResponse;
 
+export type UserSQLRolesRequestMessage = protos.cockroach.server.serverpb.UserSQLRolesRequest;
+export type UserSQLRolesResponseMessage = protos.cockroach.server.serverpb.UserSQLRolesResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -755,6 +758,18 @@ export function resetSQLStats(
   return timeoutFetch(
     serverpb.ResetSQLStatsResponse,
     `${STATUS_PREFIX}/resetsqlstats`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getUserSQLRoles(
+  req: UserSQLRolesRequestMessage,
+  timeout?: moment.Duration,
+): Promise<UserSQLRolesResponseMessage> {
+  return timeoutFetch(
+    serverpb.UserSQLRolesResponse,
+    `${STATUS_PREFIX}/sqlroles`,
     req as any,
     timeout,
   );
