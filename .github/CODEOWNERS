@@ -140,7 +140,7 @@
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-schema
 /pkg/ccl/testutilsccl/       @cockroachdb/test-eng-noreview
 /pkg/ccl/utilccl/            @cockroachdb/server-prs
-/pkg/ccl/workloadccl/        @cockroachdb/sql-experience
+/pkg/ccl/workloadccl/        @cockroachdb/sql-experience-noreview
 /pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-experience
 /pkg/clusterversion/         @cockroachdb/kv-prs-noreview
 /pkg/cmd/allocsim/           @cockroachdb/kv-prs
@@ -196,7 +196,7 @@
 /pkg/cmd/uptodate/           @cockroachdb/dev-inf
 /pkg/cmd/urlcheck/           @cockroachdb/docs
 /pkg/cmd/whoownsit/          @cockroachdb/test-eng
-/pkg/cmd/workload/           @cockroachdb/sql-experience
+/pkg/cmd/workload/           @cockroachdb/sql-experience-noreview
 /pkg/cmd/wraprules/          @cockroachdb/obs-inf-prs-noreview
 /pkg/cmd/zerosum/            @cockroachdb/kv-noreview
 /pkg/col/                    @cockroachdb/sql-queries
@@ -257,7 +257,7 @@
 /pkg/util/metric             @cockroachdb/obs-inf-prs
 /pkg/util/stop               @cockroachdb/server-prs
 /pkg/util/tracing            @cockroachdb/obs-inf-prs
-/pkg/workload/               @cockroachdb/sql-experience
+/pkg/workload/               @cockroachdb/sql-experience-noreview
 
 # Allow the security team to have insight into changes to
 # authn/authz code.
