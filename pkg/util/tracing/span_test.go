@@ -219,6 +219,27 @@ func TestImportRemoteSpans(t *testing.T) {
 	}
 }
 
+func TestImportRemoteSpansMaintainsRightByteSize(t *testing.T) {
+	tr1 := NewTracer()
+
+	child := tr1.StartSpan("child", WithRecording(RecordingStructured))
+	child.RecordStructured(&types.Int32Value{Value: 42})
+	child.RecordStructured(&types.StringValue{Value: "test"})
+
+	root := tr1.StartSpan("root", WithRecording(RecordingStructured))
+	root.ImportRemoteSpans(child.GetRecording(RecordingStructured))
+	c := root.i.crdb
+	c.mu.Lock()
+	buf := c.mu.recording.structured
+	sz := 0
+	for i := 0; i < buf.Len(); i++ {
+		sz += buf.Get(i).(memorySizable).MemorySize()
+	}
+	c.mu.Unlock()
+	require.NotZero(t, buf.size)
+	require.Equal(t, buf.size, int64(sz))
+}
+
 func TestSpanRecordStructured(t *testing.T) {
 	tr := NewTracer()
 	sp := tr.StartSpan("root", WithRecording(RecordingStructured))
