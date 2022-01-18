@@ -101,6 +101,59 @@ distribute
            ├── key: (1)
            └── fd: (1)-->(2,3), (2,3)~~>(1)
 
+# Combined with sorting. Distribute is not needed, but due to the way physical
+# properties are enforced (distribution is enforced before ordering), we end up
+# with a no-op distribute operator.
+opt locality=(region=us)
+SELECT * FROM abc WHERE a > 10 ORDER BY c
+----
+distribute
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ ├── ordering: +3
+ ├── distribution: us
+ ├── input distribution: us
+ └── sort
+      ├── columns: a:1!null b:2 c:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (2,3)~~>(1)
+      ├── ordering: +3
+      └── scan abc
+           ├── columns: a:1!null b:2 c:3
+           ├── constraint: /1: [/11 - ]
+           ├── key: (1)
+           └── fd: (1)-->(2,3), (2,3)~~>(1)
+
+# Combined with ordering. Sort is not needed.
+opt locality=(region=ap)
+SELECT * FROM abc WHERE a > 10 ORDER BY a
+----
+distribute
+ ├── columns: a:1!null b:2 c:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ ├── ordering: +1
+ ├── distribution: ap
+ ├── input distribution: us
+ └── scan abc
+      ├── columns: a:1!null b:2 c:3
+      ├── constraint: /1: [/11 - ]
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (2,3)~~>(1)
+      └── ordering: +1
+
+# Combined with ordering. Neither Sort nor Distribute is needed.
+opt locality=(region=us)
+SELECT * FROM abc WHERE a > 10 ORDER BY a
+----
+scan abc
+ ├── columns: a:1!null b:2 c:3
+ ├── constraint: /1: [/11 - ]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ ├── ordering: +1
+ └── distribution: us
 
 # Tests for distribution property with a partitioned table.
 

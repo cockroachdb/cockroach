@@ -338,3 +338,18 @@ vectorized: true
                   spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk99uGjsQxu_PU1hzk9PIhP0XICtFctTSlohCCpFaqUZos55N3IK9tb3tVhFXfba-V7W7JCmooCS9ANvj-Zjf5xluwX5dQAz9jxfDs8GI_P9qML2cvh--INP-sP_ykmgj0MyloCQ3eqntUb2sAzJFcjZtNvPv0t3ows3rhLvbQyKkTXWh3GZik0VeT8bvmhKWnI8Ho3URMr7bHUmVacJ44XkhrjOb2Ie3_Un_Ho-ckoOTCKOrXtRt9bIga0VJetzqhZnf6kS-6GAosm7QPQAKSgscJUu0EH-CCGYUcqNTtFabKnRbJwxECbFHQaq8cFV4RiHVBiG-BSfdAiGGy-RqgRNMBJq2BxQEukQu6p9tSFlu5DIxP4DCNE-UjUmbA-PQ5sB5eRJxXmL1ddV7w3nZy9rnv35yXma-4Lz0hTqtDt0DDm2PJEoQn2h3gwYojAsXE-ZTFlAWwWxFQRfugdS65Boh9lf0eW78R7upuL1nOXq0i2Cniwd4i0YmC1KoGhXFBv9s9Re7I93SeTvYNDqUS-mIvxPFe8qDDtQ3NA7FuZYKTTvcLNXMN2uWeTXScylKoPeyfpkbwjr3w8_CrRcL9z1a-BTSinDd-WgH5V3nh1p_KXLyWUtFtIoJqwTjEWHdTdAJKoGmZiXsmBIWVJ9D1tlJHD2FeII218riVp93dW1GAcU1NjNjdWFSvDA6rcs0x3GtqwMCrWtug-YwUPVV_W_6U-z_izjYKw43xN62ONwrjvaLo73i4y3xbPXf7wAAAP__Xc4AbA==
+
+# Regression test for #74890. Code should not panic due to distribution already
+# provided by input.
+statement ok nodeidx=3
+USE multi_region_test_db; CREATE TABLE t74890 AS
+SELECT generate_series(1, 5) AS g
+
+query I nodeidx=3
+USE multi_region_test_db; SELECT g FROM t74890 ORDER BY g
+----
+1
+2
+3
+4
+5
