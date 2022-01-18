@@ -138,7 +138,10 @@ message State {
 // Target is the format of the message encoded in the target column of the
 // system.protectedts_records table.
 message Target {
+  option (gogoproto.equal) = true;
   message SchemaObjectsTarget {
+    option (gogoproto.equal) = true;
+
     // IDs are the descriptor IDs of the schema objects being protected by this
     // Record. This field will only contain database and table IDs.
     repeated uint32 ids = 1 [(gogoproto.customname) = "IDs",
@@ -146,12 +149,16 @@ message Target {
   }
 
   message TenantsTarget {
+    option (gogoproto.equal) = true;
+
     // IDs correspond to the tenant keyspaces being protected by this Record.
     repeated roachpb.TenantID ids = 1 [(gogoproto.customname) = "IDs",
       (gogoproto.nullable) = false];
   }
 
   message ClusterTarget {
+    option (gogoproto.equal) = true;
+
     // ClusterTarget indicates that all SQL state in the cluster is being
     // protected by this Record. This includes all user defined schema objects,
     // as well as system tables used to configure the cluster. In a system

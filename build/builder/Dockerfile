@@ -114,8 +114,8 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-check.sh.
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.17.3.src.tar.gz -o golang.tar.gz \
- && echo '705c64251e5b25d5d55ede1039c6aa22bea40a7a931d14c370339853643c3df0 golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.17.6.src.tar.gz -o golang.tar.gz \
+ && echo '4dc1bbf3ff61f0c1ff2b19355e6d88151a70126268a47c761477686ef94748c8 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \

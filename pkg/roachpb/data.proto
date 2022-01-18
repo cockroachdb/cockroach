@@ -747,6 +747,7 @@ message RangeInfo {
 // It should be treated as opaque by users, and only created/accessed using the
 // public methods MakeTenantID, ToUint64, etc.
 message TenantID {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
   // InternalValue should not be set or accessed directly; use ToUint64.
   uint64 id = 1 [(gogoproto.customname) = "InternalValue"];
