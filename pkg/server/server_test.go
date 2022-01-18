@@ -806,6 +806,8 @@ func TestServeIndexHTML(t *testing.T) {
 </html>
 `
 
+	ctx := context.Background()
+
 	linkInFakeUI := func() {
 		ui.HaveUI = true
 	}
@@ -821,26 +823,20 @@ func TestServeIndexHTML(t *testing.T) {
 			// In test servers, web sessions are required by default.
 			DisableWebSessionAuthentication: true,
 		})
-		defer s.Stopper().Stop(context.Background())
+		defer s.Stopper().Stop(ctx)
 		tsrv := s.(*TestServer)
 
 		client, err := tsrv.GetHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		t.Run("short build", func(t *testing.T) {
 			resp, err := client.Get(s.AdminURL())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if resp.StatusCode != 200 {
-				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-			}
+			require.NoError(t, err)
+			require.Equal(t, 200, resp.StatusCode)
+
 			respBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			respString := string(respBytes)
 			expected := fmt.Sprintf(`<!DOCTYPE html>
 <title>CockroachDB</title>
@@ -848,25 +844,19 @@ Binary built without web UI.
 <hr>
 <em>%s</em>`,
 				build.GetInfo().Short())
-			if respString != expected {
-				t.Fatalf("expected %s; got %s", expected, respString)
-			}
+			require.Equal(t, expected, respString)
 		})
 
 		t.Run("non-short build", func(t *testing.T) {
 			linkInFakeUI()
 			defer unlinkFakeUI()
 			resp, err := client.Get(s.AdminURL())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if resp.StatusCode != 200 {
-				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-			}
+			require.NoError(t, err)
+			require.Equal(t, 200, resp.StatusCode)
+
 			respBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			respString := string(respBytes)
 			expected := fmt.Sprintf(
 				htmlTemplate,
@@ -877,9 +867,7 @@ Binary built without web UI.
 					1,
 				),
 			)
-			if respString != expected {
-				t.Fatalf("expected %s; got %s", expected, respString)
-			}
+			require.Equal(t, expected, respString)
 		})
 	})
 
@@ -887,17 +875,13 @@ Binary built without web UI.
 		linkInFakeUI()
 		defer unlinkFakeUI()
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(context.Background())
+		defer s.Stopper().Stop(ctx)
 		tsrv := s.(*TestServer)
 
 		loggedInClient, err := tsrv.GetAdminAuthenticatedHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		loggedOutClient, err := tsrv.GetHTTPClient()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		cases := []struct {
 			client http.Client
@@ -923,23 +907,28 @@ Binary built without web UI.
 			},
 		}
 
-		for _, testCase := range cases {
-			resp, err := testCase.client.Get(s.AdminURL())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if resp.StatusCode != 200 {
-				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-			}
-			respBytes, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-			respString := string(respBytes)
-			expected := fmt.Sprintf(htmlTemplate, testCase.json)
-			if respString != expected {
-				t.Fatalf("expected %s; got %s", expected, respString)
-			}
+		for i, testCase := range cases {
+			t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+				req, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL(), nil)
+				require.NoError(t, err)
+
+				// Work around this go runtime bug: https://github.com/golang/go/issues/50652
+				cancelCh := make(chan struct{})
+				//lint:ignore SA1019 need this until go bug is resolved
+				req.Cancel = cancelCh
+				defer func() { close(cancelCh) }()
+
+				resp, err := testCase.client.Do(req)
+				require.NoError(t, err)
+				require.Equal(t, 200, resp.StatusCode)
+
+				respBytes, err := ioutil.ReadAll(resp.Body)
+				require.NoError(t, err)
+
+				respString := string(respBytes)
+				expected := fmt.Sprintf(htmlTemplate, testCase.json)
+				require.Equal(t, expected, respString)
+			})
 		}
 	})
 }
