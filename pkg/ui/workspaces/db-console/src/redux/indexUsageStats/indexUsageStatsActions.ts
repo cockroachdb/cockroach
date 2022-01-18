@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Action } from "redux";
-import { PayloadAction } from "oss/src/interfaces/action";
+import { PayloadAction } from "src/interfaces/action";
 
 export const RESET_INDEX_USAGE_STATS =
   "cockroachui/indexUsageStats/RESET_INDEX_USAGE_STATS";
