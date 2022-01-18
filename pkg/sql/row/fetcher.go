@@ -1117,15 +1117,10 @@ func (rf *Fetcher) processValueBytes(
 // EncDatumRow. The row contains one value per table column, regardless of the
 // index used; values that are not needed (as per neededCols) are nil. The
 // EncDatumRow should not be modified and is only valid until the next call.
-// When there are no more rows, the EncDatumRow is nil. The error returned may
-// be a scrub.ScrubError, which the caller is responsible for unwrapping.
-// It also returns the table and index descriptor associated with the row
-// (relevant when more than one table is specified during initialization).
-func (rf *Fetcher) NextRow(
-	ctx context.Context,
-) (row rowenc.EncDatumRow, table catalog.TableDescriptor, index catalog.Index, err error) {
+// When there are no more rows, the EncDatumRow is nil.
+func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, err error) {
 	if rf.kvEnd {
-		return nil, nil, nil, nil
+		return nil, nil
 	}
 
 	// All of the columns for a particular row will be grouped together. We
@@ -1137,7 +1132,7 @@ func (rf *Fetcher) NextRow(
 	for {
 		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		if rf.traceKV {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
@@ -1145,11 +1140,11 @@ func (rf *Fetcher) NextRow(
 
 		rowDone, err := rf.NextKey(ctx)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		if rowDone {
 			err := rf.finalizeRow()
-			return rf.table.row, rf.table.desc, rf.table.index, err
+			return rf.table.row, err
 		}
 	}
 }
@@ -1157,18 +1152,14 @@ func (rf *Fetcher) NextRow(
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
-// It also returns the table and index descriptor associated with the row
-// (relevant when more than one table is specified during initialization).
-func (rf *Fetcher) NextRowDecoded(
-	ctx context.Context,
-) (datums tree.Datums, table catalog.TableDescriptor, index catalog.Index, err error) {
-	row, table, index, err := rf.NextRow(ctx)
+func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, err error) {
+	row, err := rf.NextRow(ctx)
 	if err != nil {
 		err = scrub.UnwrapScrubError(err)
-		return nil, nil, nil, err
+		return nil, err
 	}
 	if row == nil {
-		return nil, nil, nil, nil
+		return nil, nil
 	}
 
 	for i, encDatum := range row {
@@ -1177,12 +1168,12 @@ func (rf *Fetcher) NextRowDecoded(
 			continue
 		}
 		if err := encDatum.EnsureDecoded(rf.table.cols[i].GetType(), rf.alloc); err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		rf.table.decodedRow[i] = encDatum.Datum
 	}
 
-	return rf.table.decodedRow, table, index, nil
+	return rf.table.decodedRow, nil
 }
 
 // RowLastModified may only be called after NextRow has returned a non-nil row

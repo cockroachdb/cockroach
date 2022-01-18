@@ -49,8 +49,7 @@ type rowFetcher interface {
 		forceProductionKVBatchSize bool,
 	) error
 
-	NextRow(ctx context.Context) (
-		rowenc.EncDatumRow, catalog.TableDescriptor, catalog.Index, error)
+	NextRow(ctx context.Context) (rowenc.EncDatumRow, error)
 
 	// PartialKey is not stat-related but needs to be supported.
 	PartialKey(int) (roachpb.Key, error)

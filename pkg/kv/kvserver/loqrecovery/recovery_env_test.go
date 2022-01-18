@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -120,14 +121,15 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// Collect one or more range info "files" from stores.
 		out, err = e.handleCollectReplicas(t, d)
 	case "make-plan":
-		// Make plan out of multiple collected replica info.
+		// Make plan out of specified replica info "files".
 		out, err = e.handleMakePlan(t, d)
 	case "dump-store":
 		// Dump the content of the store (all descriptors) for verification.
 		out = e.handleDumpStore(t, d)
 	case "apply-plan":
-		// Create a plan from listed replicas.
 		out, err = e.handleApplyPlan(t, d)
+	case "dump-events":
+		out, err = e.dumpRecoveryEvents(t, d)
 	default:
 		t.Fatalf("%s: unknown command %s", d.Pos, d.Cmd)
 	}
@@ -372,12 +374,14 @@ func (e *quorumRecoveryEnv) parseStoresArg(
 	var stores []roachpb.StoreID
 	if d.HasArg("stores") {
 		for _, arg := range d.CmdArgs {
-			for _, id := range arg.Vals {
-				id, err := strconv.ParseInt(id, 10, 32)
-				if err != nil {
-					t.Fatalf("failed to parse store id: %v", err)
+			if arg.Key == "stores" {
+				for _, id := range arg.Vals {
+					id, err := strconv.ParseInt(id, 10, 32)
+					if err != nil {
+						t.Fatalf("failed to parse store id: %v", err)
+					}
+					stores = append(stores, roachpb.StoreID(id))
 				}
-				stores = append(stores, roachpb.StoreID(id))
 			}
 		}
 	} else {
@@ -425,8 +429,9 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 	ctx := context.Background()
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
 	nodes := e.groupStoresByNodeStore(t, stores)
+	updateTime := timeutil.Now()
 	for nodeID, stores := range nodes {
-		_, err := PrepareUpdateReplicas(ctx, e.plan, nodeID, stores)
+		_, err := PrepareUpdateReplicas(ctx, e.plan, uuid.DefaultGenerator, updateTime, nodeID, stores)
 		if err != nil {
 			return "", err
 		}
@@ -442,6 +447,33 @@ func (e *quorumRecoveryEnv) cleanupStores() {
 		store.engine.Close()
 	}
 	e.stores = nil
+}
+
+func (e *quorumRecoveryEnv) dumpRecoveryEvents(
+	t *testing.T, d datadriven.TestData,
+) (string, error) {
+	ctx := context.Background()
+
+	removeEvents := false
+	if d.HasArg("remove") {
+		d.ScanArgs(t, "remove", &removeEvents)
+	}
+
+	var events []string
+	logEvents := func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
+		event := record.AsStructuredLog()
+		events = append(events, fmt.Sprintf("Updated range r%d, Key:%s, Store:s%d ReplicaID:%d",
+			event.RangeID, event.StartKey, event.StoreID, event.UpdatedReplicaID))
+		return removeEvents, nil
+	}
+
+	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
+	for _, store := range stores {
+		if _, err := RegisterOfflineRecoveryEvents(ctx, e.stores[store].engine, logEvents); err != nil {
+			return "", err
+		}
+	}
+	return strings.Join(events, "\n"), nil
 }
 
 func descriptorView(desc roachpb.RangeDescriptor) storeDescriptorView {

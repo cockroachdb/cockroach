@@ -101,6 +101,7 @@ var buildTargetMapping = map[string]string{
 	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
 	"gofmt":            "@com_github_cockroachdb_gostdlib//cmd/gofmt:gofmt",
 	"goimports":        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports:goimports",
+	"label-merged-pr":  "//pkg/cmd/label-merged-pr:label-merged-pr",
 	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen:optgen",
 	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
 	"oss":              "//pkg/cmd/cockroach-oss:cockroach-oss",

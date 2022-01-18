@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -28,15 +29,16 @@ import (
 // PrepareStoreReport contains information about all prepared changes for the
 // stores. Its purpose is to inform user about actions to be performed.
 type PrepareStoreReport struct {
-	// MissingStores contains a set of stores that node on which this update is performed
-	// is expected to have according to update plan, but are not provided in config.
-	// While having a missing store is suspicious, it is not necessary a failure and
-	// user would be asked to confirm if it is a desired situation.
+	// MissingStores contains a set of stores that node on which this update is
+	// performed is expected to have according to update plan, but are not
+	// provided in config.
+	// While having a missing store is suspicious, it is not necessary a failure
+	// and user would be asked to confirm if it is a desired situation.
 	MissingStores []roachpb.StoreID
 	// Replicas contain update info about all replicas that are planned for update.
 	UpdatedReplicas []PrepareReplicaReport
-	// Replicas identified as ones that doesn't need updating (currently because update was
-	// already done).
+	// Replicas identified as ones that doesn't need updating (currently because
+	// update was already done).
 	SkippedReplicas []PrepareReplicaReport
 }
 
@@ -51,14 +53,15 @@ type PrepareReplicaReport struct {
 
 	// AlreadyUpdated is true if state of replica in store already matches desired
 	// target state. This would happen if the plan is applied more than once which
-	// is safe because it is idempotent, but we want to notify user of the situation.
+	// is safe because it is idempotent, but we want to notify user of the
+	// situation.
 	AlreadyUpdated bool
 
 	// RemovedReplicas is a set of replicas that were removed from range descriptor.
 	RemovedReplicas roachpb.ReplicaSet
 
-	// Fields indicating if descriptor change intent was found and removed as a part
-	// or recovery preparation.
+	// Fields indicating if descriptor change intent was found and removed as a
+	// part or recovery preparation.
 	AbortedTransaction   bool
 	AbortedTransactionID uuid.UUID
 }
@@ -68,33 +71,49 @@ type PrepareReplicaReport struct {
 // using provided batches and return a summary of changes that were done together
 // with any discrepancies found. The caller could then confirm actions and either
 // commit or discard the changes.
+// Changes also include update records in the store local keys that are consumed
+// on the first start of node. See keys.StoreUnsafeReplicaRecoveryKey for
+// details.
 func PrepareUpdateReplicas(
 	ctx context.Context,
 	plan loqrecoverypb.ReplicaUpdatePlan,
+	uuidGen uuid.Generator,
+	updateTime time.Time,
 	nodeID roachpb.NodeID,
 	batches map[roachpb.StoreID]storage.Batch,
 ) (PrepareStoreReport, error) {
 	var report PrepareStoreReport
-	// TODO(oleg): #73281 Track attempts to apply changes and also fill into audit log
-	// Make a pre-check for all found stores, so we could confirm action.
-	// Map contains a set of store names that were found in plan for this node, but were not
-	// configured in this command invocation.
+
+	// Map contains a set of store names that were found in plan for this node,
+	// but were not configured in this command invocation.
 	missing := make(map[roachpb.StoreID]struct{})
 	for _, update := range plan.Updates {
 		if nodeID != update.NodeID() {
 			continue
 		}
-		if batch, ok := batches[update.StoreID()]; !ok {
+		if readWriter, ok := batches[update.StoreID()]; !ok {
 			missing[update.StoreID()] = struct{}{}
 			continue
 		} else {
-			replicaReport, err := applyReplicaUpdate(ctx, batch, update)
+			replicaReport, err := applyReplicaUpdate(ctx, readWriter, update)
 			if err != nil {
-				return PrepareStoreReport{}, errors.Wrapf(err,
-					"failed to prepare update replica for range r%v on store s%d", update.RangeID, update.StoreID())
+				return PrepareStoreReport{}, errors.Wrapf(
+					err,
+					"failed to prepare update replica for range r%v on store s%d", update.RangeID,
+					update.StoreID())
 			}
 			if !replicaReport.AlreadyUpdated {
 				report.UpdatedReplicas = append(report.UpdatedReplicas, replicaReport)
+				uuid, err := uuidGen.NewV1()
+				if err != nil {
+					return PrepareStoreReport{}, errors.Wrap(err,
+						"failed to generate uuid to write replica recovery evidence record")
+				}
+				if err := writeReplicaRecoveryStoreRecord(
+					uuid, updateTime.UnixNano(), update, replicaReport, readWriter); err != nil {
+					return PrepareStoreReport{}, errors.Wrap(err,
+						"failed writing replica recovery evidence record")
+				}
 			} else {
 				report.SkippedReplicas = append(report.SkippedReplicas, replicaReport)
 			}
@@ -158,24 +177,24 @@ func applyReplicaUpdate(
 	if err != nil {
 		return PrepareReplicaReport{}, err
 	}
-	var desc roachpb.RangeDescriptor
-	if err := value.GetProto(&desc); err != nil {
+	var localDesc roachpb.RangeDescriptor
+	if err := value.GetProto(&localDesc); err != nil {
 		return PrepareReplicaReport{}, err
 	}
 	// Sanity check that this is indeed the right range.
-	if desc.RangeID != update.RangeID {
+	if localDesc.RangeID != update.RangeID {
 		return PrepareReplicaReport{}, errors.Errorf(
-			"unexpected range ID at key: expected r%d but found r%d", update.RangeID, desc.RangeID)
+			"unexpected range ID at key: expected r%d but found r%d", update.RangeID, localDesc.RangeID)
 	}
 	// Check if replica is in a fixed state already if we already applied the change.
-	if len(desc.InternalReplicas) == 1 &&
-		desc.InternalReplicas[0].ReplicaID == update.NewReplica.ReplicaID &&
-		desc.NextReplicaID == update.NextReplicaID {
+	if len(localDesc.InternalReplicas) == 1 &&
+		localDesc.InternalReplicas[0].ReplicaID == update.NewReplica.ReplicaID &&
+		localDesc.NextReplicaID == update.NextReplicaID {
 		report.AlreadyUpdated = true
 		return report, nil
 	}
 
-	sl := stateloader.Make(desc.RangeID)
+	sl := stateloader.Make(localDesc.RangeID)
 	ms, err := sl.LoadMVCCStats(ctx, readWriter)
 	if err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading MVCCStats")
@@ -239,23 +258,26 @@ func applyReplicaUpdate(
 		report.AbortedTransaction = true
 		report.AbortedTransactionID = intent.Txn.ID
 	}
-	newDesc := desc
-	replicas := []roachpb.ReplicaDescriptor{{
-		NodeID:    update.NewReplica.NodeID,
-		StoreID:   update.NewReplica.StoreID,
-		ReplicaID: update.NewReplica.ReplicaID,
-		Type:      update.NewReplica.Type,
-	}}
+	newDesc := localDesc
+	replicas := []roachpb.ReplicaDescriptor{
+		{
+			NodeID:    update.NewReplica.NodeID,
+			StoreID:   update.NewReplica.StoreID,
+			ReplicaID: update.NewReplica.ReplicaID,
+			Type:      update.NewReplica.Type,
+		},
+	}
 	newDesc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 	newDesc.NextReplicaID = update.NextReplicaID
 
-	if err := storage.MVCCPutProto(ctx, readWriter, &ms, key, clock.Now(),
+	if err := storage.MVCCPutProto(
+		ctx, readWriter, &ms, key, clock.Now(),
 		nil /* txn */, &newDesc); err != nil {
 		return PrepareReplicaReport{}, err
 	}
-	report.OldReplica = replicas[0]
-	report.RemovedReplicas = desc.Replicas()
-	report.RemovedReplicas.RemoveReplica(update.NewReplica.NodeID, update.NewReplica.StoreID)
+	report.RemovedReplicas = localDesc.Replicas()
+	report.OldReplica, _ = report.RemovedReplicas.RemoveReplica(
+		update.NewReplica.NodeID, update.NewReplica.StoreID)
 
 	// Refresh stats
 	if err := sl.SetMVCCStats(ctx, readWriter, &ms); err != nil {
@@ -271,28 +293,32 @@ type ApplyUpdateReport struct {
 	UpdatedStores []roachpb.StoreID
 }
 
-// CommitReplicaChanges saves content storage batches into stores. This is the second step
-// of applying recovery plan.
+// CommitReplicaChanges saves content storage batches into stores. This is the
+// second step of applying recovery plan.
 func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdateReport, error) {
 	var report ApplyUpdateReport
 	failed := false
 	var updateErrors []string
-	// Commit changes to all stores. Stores could have pending changes if plan contains replicas
-	// belonging to them, or have no changes if no replicas belong to it or if changes has been
-	// applied earlier, and we try to reapply the same plan twice.
+	// Commit changes to all stores. Stores could have pending changes if plan
+	// contains replicas belonging to them, or have no changes if no replicas
+	// belong to it or if changes has been applied earlier, and we try to reapply
+	// the same plan twice.
 	for id, batch := range batches {
-		if !batch.Empty() {
-			if err := batch.Commit(true); err != nil {
-				// If we fail here, we can only try to run the whole process from scratch as this store is somehow broken.
-				updateErrors = append(updateErrors, fmt.Sprintf("failed to update store s%d: %v", id, err))
-				failed = true
-			} else {
-				report.UpdatedStores = append(report.UpdatedStores, id)
-			}
+		if batch.Empty() {
+			continue
+		}
+		if err := batch.Commit(true); err != nil {
+			// If we fail here, we can only try to run the whole process from scratch
+			// as this store is somehow broken.
+			updateErrors = append(updateErrors, fmt.Sprintf("failed to update store s%d: %v", id, err))
+			failed = true
+		} else {
+			report.UpdatedStores = append(report.UpdatedStores, id)
 		}
 	}
 	if failed {
-		return report, errors.Errorf("failed to commit update to one or more stores: %s", strings.Join(updateErrors, "; "))
+		return report, errors.Errorf(
+			"failed to commit update to one or more stores: %s", strings.Join(updateErrors, "; "))
 	}
 	return report, nil
 }
