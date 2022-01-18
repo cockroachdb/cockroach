@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-var sequelizeReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedSequelizeRelease = "v6.0.0-alpha.0"
+var sequelizeCockroachDBReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedSequelizeCockroachDBRelease = "v6.0.5"
 
 // This test runs sequelize's full test suite against a single cockroach node.
 
@@ -65,12 +65,12 @@ func registerSequelize(r registry.Registry) {
 		}
 
 		t.Status("cloning Sequelize and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, t, "cockroachdb", "sequelize-cockroachdb", sequelizeReleaseTagRegex)
+		latestTag, err := repeatGetLatestTag(ctx, t, "cockroachdb", "sequelize-cockroachdb", sequelizeCockroachDBReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
 		t.L().Printf("Latest Sequelize release is %s.", latestTag)
-		t.L().Printf("Supported Sequelize release is %s.", supportedSequelizeRelease)
+		t.L().Printf("Supported Sequelize release is %s.", supportedSequelizeCockroachDBRelease)
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -125,7 +125,7 @@ func registerSequelize(r registry.Registry) {
 			c,
 			"https://github.com/cockroachdb/sequelize-cockroachdb.git",
 			"/mnt/data1/sequelize",
-			supportedSequelizeRelease,
+			supportedSequelizeCockroachDBRelease,
 			node,
 		); err != nil {
 			t.Fatal(err)
