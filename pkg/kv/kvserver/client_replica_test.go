@@ -2073,6 +2073,9 @@ func TestSystemZoneConfigs(t *testing.T) {
 					DisableLoadBasedSplitting: true,
 				},
 			},
+			// This test was written for the gossip-backed SystemConfigSpan
+			// infrastructure.
+			DisableSpanConfigs: true,
 			// Scan like a bat out of hell to ensure replication and replica GC
 			// happen in a timely manner.
 			ScanInterval: 50 * time.Millisecond,

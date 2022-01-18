@@ -198,7 +198,7 @@ var secondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	secondaryTenantsZoneConfigsEnabledSettingName,
 	"allow secondary tenants to set zone configurations; does not affect the system tenant",
-	false,
+	true,
 )
 
 // traceTxnThreshold can be used to log SQL transactions that take
@@ -1164,6 +1164,7 @@ type ExecutorConfig struct {
 	StreamingTestingKnobs                *StreamingTestingKnobs
 	SQLStatsTestingKnobs                 *sqlstats.TestingKnobs
 	TelemetryLoggingTestingKnobs         *TelemetryLoggingTestingKnobs
+	SpanConfigTestingKnobs               *spanconfig.TestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 

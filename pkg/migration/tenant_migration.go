@@ -36,7 +36,8 @@ type TenantDeps struct {
 	CollectionFactory *descs.CollectionFactory
 	LeaseManager      *lease.Manager
 	InternalExecutor  sqlutil.InternalExecutor
-	SpanConfig        struct { // deps for SeedTenantSpanConfigs; can be removed accordingly
+
+	SpanConfig struct { // deps for span config migrations; can be removed accordingly
 		spanconfig.KVAccessor
 		Default roachpb.SpanConfig
 	}

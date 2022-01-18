@@ -43,7 +43,6 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	ctx := context.Background()
 
 	args := base.TestServerArgs{
-		EnableSpanConfigs: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,

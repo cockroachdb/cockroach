@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -3134,6 +3135,13 @@ func TestDecommission(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
+				},
+			},
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 

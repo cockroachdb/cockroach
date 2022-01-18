@@ -40,6 +40,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/spanconfig",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",

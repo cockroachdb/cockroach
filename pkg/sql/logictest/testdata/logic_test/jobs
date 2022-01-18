@@ -24,10 +24,11 @@ SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'root'
 ----
-SCHEMA CHANGE  updating version for users table         root
-SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 54      root
-SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
+AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations          root
+SCHEMA CHANGE                    updating version for users table         root
+SCHEMA CHANGE                    updating version for role options table  root
+SCHEMA CHANGE                    updating privileges for database 54      root
+SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)        root
 
 user testuser
 
@@ -73,11 +74,12 @@ SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)        testuser
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser')
 ----
-SCHEMA CHANGE  updating version for users table         root
-SCHEMA CHANGE  updating version for role options table  root
-SCHEMA CHANGE  updating privileges for database 54      root
-SCHEMA CHANGE  CREATE INDEX ON test.public.t (x)        root
-SCHEMA CHANGE  CREATE INDEX ON test.public.u (x)        testuser
+AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations          root
+SCHEMA CHANGE                    updating version for users table         root
+SCHEMA CHANGE                    updating version for role options table  root
+SCHEMA CHANGE                    updating privileges for database 54      root
+SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)        root
+SCHEMA CHANGE                    CREATE INDEX ON test.public.u (x)        testuser
 
 statement ok
 CREATE USER testuser2
