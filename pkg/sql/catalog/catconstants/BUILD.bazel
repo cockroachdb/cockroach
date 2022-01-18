@@ -12,5 +12,6 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/settings",
     ],
 )

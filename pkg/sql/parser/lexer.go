@@ -112,7 +112,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 
 		case WITH:
 			switch nextID {
-			case TIME, ORDINALITY:
+			case TIME, ORDINALITY, BUCKET_COUNT:
 				lval.id = WITH_LA
 			}
 		case NULLS:
