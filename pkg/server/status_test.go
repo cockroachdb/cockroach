@@ -1478,6 +1478,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true} // TODO(irfansharif): #74919.
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: params,
 	})
