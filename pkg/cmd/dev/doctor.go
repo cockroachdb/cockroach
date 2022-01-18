@@ -82,10 +82,14 @@ Please perform the following steps:
 			passedStampTest = false
 		}
 	}
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
 	if !passedStampTest {
 		success = false
 		log.Printf(`Your machine is not configured to "stamp" your built executables.
-Please add one of the following to your ~/.bazelrc:`)
+Please add one of the following to your %s/.bazelrc.user:`, workspace)
 		if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
 			log.Printf("    build --config=devdarwinx86_64")
 		} else if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
