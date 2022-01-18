@@ -1,0 +1,29 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import { all } from "redux-saga/effects";
+
+import { createSelector } from "reselect";
+import { AdminUIState } from "src/redux/state";
+
+export const selectHasViewActivityRedactedRole = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  cachedData => {
+    if (cachedData.userSQLRoles.valid) {
+      const roles = cachedData.userSQLRoles.data?.roles;
+      return roles.indexOf("VIEWACTIVITYREDACTED") > -1;
+    }
+    return false;
+  },
+);
+
+export function* userSQLRolesSaga() {
+  yield all([]);
+}

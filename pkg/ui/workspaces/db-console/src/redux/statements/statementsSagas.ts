@@ -27,6 +27,8 @@ import {
   refreshStatementDiagnosticsRequests,
   invalidateStatements,
   refreshStatements,
+  invalidateUserSQLRoles,
+  refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
@@ -84,6 +86,8 @@ export function* setCombinedStatementsTimeScaleSaga(
   });
   yield put(invalidateStatements());
   yield put(refreshStatements(req) as any);
+  yield put(invalidateUserSQLRoles());
+  yield put(refreshUserSQLRoles() as any);
 }
 
 export function* statementsSaga() {
