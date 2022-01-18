@@ -136,11 +136,16 @@ func (r *Reconciler) Reconcile(
 	// pass every time the reconciliation job kicks us off.
 	_ = startTS
 
+	if fn := r.knobs.ReconcilerInitialInterceptor; fn != nil {
+		fn()
+	}
+
 	full := fullReconciler{
 		sqlTranslator: r.sqlTranslator,
 		kvAccessor:    r.kvAccessor,
 		codec:         r.codec,
 		tenID:         r.tenID,
+		knobs:         r.knobs,
 	}
 	latestStore, reconciledUpUntil, err := full.reconcile(ctx)
 	if err != nil {
@@ -190,6 +195,7 @@ type fullReconciler struct {
 
 	codec keys.SQLCodec
 	tenID roachpb.TenantID
+	knobs *spanconfig.TestingKnobs
 }
 
 // reconcile runs the full reconciliation process, returning:
@@ -275,6 +281,9 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		tenantSpan = roachpb.Span{
 			Key:    keys.EverythingSpan.Key,
 			EndKey: keys.TableDataMax,
+		}
+		if f.knobs.ConfigureScratchRange {
+			tenantSpan.EndKey = keys.ScratchRangeMax
 		}
 	} else {
 		// Secondary tenants govern everything prefixed by their tenant ID.
@@ -408,7 +417,9 @@ func (r *incrementalReconciler) reconcile(
 func (r *incrementalReconciler) filterForMissingTableIDs(
 	ctx context.Context, updates []spanconfig.DescriptorUpdate,
 ) (descpb.IDs, error) {
+	seen := make(map[descpb.ID]struct{})
 	var missingIDs descpb.IDs
+
 	if err := sql.DescsTxn(ctx, r.execCfg,
 		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, update := range updates {
@@ -433,7 +444,10 @@ func (r *incrementalReconciler) filterForMissingTableIDs(
 				}
 
 				if considerAsMissing {
-					missingIDs = append(missingIDs, update.ID) // accumulate the set of missing table IDs
+					if _, found := seen[update.ID]; !found {
+						seen[update.ID] = struct{}{}
+						missingIDs = append(missingIDs, update.ID) // accumulate the set of missing table IDs
+					}
 				}
 			}
 

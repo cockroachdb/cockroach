@@ -62,6 +62,14 @@ message DeprecateBaseEncryptionRegistryRequest {
 // DeprecateBaseEncryptionRegistryRequest.
 message DeprecateBaseEncryptionRegistryResponse{}
 
+// WaitForSpanConfigSubscriptionRequest waits until the target node is wholly
+// subscribed to the global span configurations state.
+message WaitForSpanConfigSubscriptionRequest{}
+
+// WaitForSpanConfigSubscriptionResponse is the response to a
+// WaitForSpanConfigSubscriptionRequest.
+message WaitForSpanConfigSubscriptionResponse{}
+
 service Migration {
    // ValidateTargetClusterVersion is used to verify that the target node is
    // running a binary that's able to support the specified cluster version.
@@ -90,4 +98,8 @@ service Migration {
    // DeprecateBaseRegistry is used to instruct the target node to stop
    // using the Base version monolithic encryption-at-rest registry.
    rpc DeprecateBaseEncryptionRegistry (DeprecateBaseEncryptionRegistryRequest) returns (DeprecateBaseEncryptionRegistryResponse) { }
+
+   // WaitForSpanConfigSubscription waits until the target node is wholly
+   // subscribed to the global span configurations state.
+   rpc WaitForSpanConfigSubscription (WaitForSpanConfigSubscriptionRequest) returns (WaitForSpanConfigSubscriptionResponse) { }
 }

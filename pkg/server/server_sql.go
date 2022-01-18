@@ -755,6 +755,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if telemetryLoggingKnobs := cfg.TestingKnobs.TelemetryLoggingKnobs; telemetryLoggingKnobs != nil {
 		execCfg.TelemetryLoggingTestingKnobs = telemetryLoggingKnobs.(*sql.TelemetryLoggingTestingKnobs)
 	}
+	if spanConfigKnobs := cfg.TestingKnobs.SpanConfig; spanConfigKnobs != nil {
+		execCfg.SpanConfigTestingKnobs = spanConfigKnobs.(*spanconfig.TestingKnobs)
+	}
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.AmbientCtx,
@@ -873,9 +876,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlTranslator *spanconfigsqltranslator.SQLTranslator
 		sqlWatcher    *spanconfigsqlwatcher.SQLWatcher
 	}{}
-	if !codec.ForSystemTenant() || cfg.SpanConfigsEnabled {
+	if !codec.ForSystemTenant() || !cfg.SpanConfigsDisabled {
 		// Instantiate a span config manager. If we're the host tenant we'll
-		// only do it if COCKROACH_EXPERIMENTAL_SPAN_CONFIGS is set.
+		// only do it unless COCKROACH_DISABLE_SPAN_CONFIGS is set.
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		spanConfig.sqlTranslator = spanconfigsqltranslator.New(execCfg, codec, spanConfigKnobs)
 		spanConfig.sqlWatcher = spanconfigsqlwatcher.New(

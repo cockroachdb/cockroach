@@ -646,8 +646,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		// tenant records.
 		kvAccessorForTenantRecords spanconfig.KVAccessor
 	}
-	if cfg.SpanConfigsEnabled {
-		storeCfg.SpanConfigsEnabled = true
+	storeCfg.SpanConfigsDisabled = cfg.SpanConfigsDisabled
+	if !cfg.SpanConfigsDisabled {
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		if spanConfigKnobs != nil && spanConfigKnobs.StoreKVSubscriberOverride != nil {
 			storeCfg.SpanConfigSubscriber = spanConfigKnobs.StoreKVSubscriberOverride
@@ -1797,7 +1797,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	if s.cfg.SpanConfigsEnabled && s.spanConfigSubscriber != nil {
+	if !s.cfg.SpanConfigsDisabled && s.spanConfigSubscriber != nil {
 		if err := s.spanConfigSubscriber.Start(ctx); err != nil {
 			return err
 		}

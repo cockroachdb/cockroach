@@ -165,8 +165,8 @@ import (
 // # cluster-opt: opt1 opt2
 //
 // The options are:
-// - enable-span-config: If specified, the span configs infrastructure will be
-//   enabled. This is equivalent to setting COCKROACH_EXPERIMENTAL_SPAN_CONFIGS.
+// - disable-span-config: If specified, the span configs infrastructure will be
+//   disabled.
 // - tracing-off: If specified, tracing defaults to being turned off. This is
 //   used to override the environment, which may ask for tracing to be on by
 //   default.
@@ -1877,14 +1877,15 @@ type clusterOpt interface {
 	apply(args *base.TestServerArgs)
 }
 
-// clusterOptSpanConfigs corresponds to the enable-span-configs directive.
-type clusterOptSpanConfigs struct{}
+// clusterOptDisableSpanConfigs corresponds to the disable-span-configs
+// directive.
+type clusterOptDisableSpanConfigs struct{}
 
-var _ clusterOpt = clusterOptSpanConfigs{}
+var _ clusterOpt = clusterOptDisableSpanConfigs{}
 
 // apply implements the clusterOpt interface.
-func (c clusterOptSpanConfigs) apply(args *base.TestServerArgs) {
-	args.EnableSpanConfigs = true
+func (c clusterOptDisableSpanConfigs) apply(args *base.TestServerArgs) {
+	args.DisableSpanConfigs = true
 }
 
 // clusterOptTracingOff corresponds to the tracing-off directive.
@@ -1933,8 +1934,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			}
 			for _, opt := range fields[2:] {
 				switch opt {
-				case "enable-span-configs":
-					res = append(res, clusterOptSpanConfigs{})
+				case "disable-span-configs":
+					res = append(res, clusterOptDisableSpanConfigs{})
 				case "tracing-off":
 					res = append(res, clusterOptTracingOff{})
 				default:

@@ -93,6 +93,14 @@ func (s *SQLTranslator) Translate(
 		}
 		entries = append(entries, pseudoTableEntries...)
 
+		scratchRangeEntry, err := s.maybeGenerateScratchRangeEntry(ctx, txn, ids)
+		if err != nil {
+			return err
+		}
+		if !scratchRangeEntry.Empty() {
+			entries = append(entries, scratchRangeEntry)
+		}
+
 		// For every unique leaf ID, generate span configurations.
 		for _, leafID := range leafIDs {
 			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol)
@@ -534,4 +542,33 @@ func (s *SQLTranslator) maybeGeneratePseudoTableEntries(
 	}
 
 	return nil, nil
+}
+
+func (s *SQLTranslator) maybeGenerateScratchRangeEntry(
+	ctx context.Context, txn *kv.Txn, ids descpb.IDs,
+) (roachpb.SpanConfigEntry, error) {
+	if !s.knobs.ConfigureScratchRange || !s.codec.ForSystemTenant() {
+		return roachpb.SpanConfigEntry{}, nil // nothing to do
+	}
+
+	for _, id := range ids {
+		if id != keys.RootNamespaceID {
+			continue // nothing to do
+		}
+
+		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.RootNamespaceID)
+		if err != nil {
+			return roachpb.SpanConfigEntry{}, err
+		}
+
+		return roachpb.SpanConfigEntry{
+			Span: roachpb.Span{
+				Key:    keys.ScratchRangeMin,
+				EndKey: keys.ScratchRangeMax,
+			},
+			Config: zone.AsSpanConfig(),
+		}, nil
+	}
+
+	return roachpb.SpanConfigEntry{}, nil
 }

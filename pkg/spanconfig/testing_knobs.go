@@ -37,7 +37,12 @@ type TestingKnobs struct {
 	// not.
 	ManagerAfterCheckedReconciliationJobExistsInterceptor func(exists bool)
 
-	// KVSubscriberPostRangefeedStartInterceptor is invoked after the rangefeed is started.
+	// JobDisablePersistingCheckpoints disables the span config reconciliation
+	// job from persisting checkpoints.
+	JobDisablePersistingCheckpoints bool
+
+	// KVSubscriberPostRangefeedStartInterceptor is invoked after the rangefeed
+	// is started.
 	KVSubscriberPostRangefeedStartInterceptor func()
 
 	// KVSubscriberPreExitInterceptor is invoked right before returning from
@@ -69,6 +74,14 @@ type TestingKnobs struct {
 	// descriptors appear as missing -- a convenient+faster alternative to
 	// waiting for the descriptor to actually get GC-ed in tests.
 	ExcludeDroppedDescriptorsFromLookup bool
+
+	// ConfigureScratchRange controls whether the scratch range (used in tests)
+	// applies the RANGE DEFAULT configuration.
+	ConfigureScratchRange bool
+
+	// ReconcilerInitialInterceptor, if set, is invoked at the very outset of
+	// the reconciliation process.
+	ReconcilerInitialInterceptor func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
