@@ -245,7 +245,9 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 
 		if m.Adding() {
 			if col := m.AsColumn(); col != nil {
-				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
+				// Its possible have a mix of columns that need a backfill and others
+				// that don't, so preserve the flag if its already been flipped.
+				needColumnBackfill = needColumnBackfill || catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
 				addedIndexes = append(addedIndexes, idx.GetID())
@@ -273,7 +275,9 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			}
 		} else if m.Dropped() {
 			if col := m.AsColumn(); col != nil {
-				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
+				// Its possible have a mix of columns that need a backfill and others
+				// that don't, so preserve the flag if its already been flipped.
+				needColumnBackfill = needColumnBackfill || catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
 				// no-op
 			} else if c := m.AsConstraint(); c != nil {
