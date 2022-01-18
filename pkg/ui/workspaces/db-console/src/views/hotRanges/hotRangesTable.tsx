@@ -52,7 +52,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       cell: (val: HotRange) => (
         <Link to={`/reports/range/${val.rangeId}`}>{val.rangeId}</Link>
       ),
-      sort: (val) => val.rangeId,
+      sort: val => val.rangeId,
     },
     {
       name: "qps",
@@ -61,8 +61,8 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           QPS
         </Tooltip>
       ),
-      cell: (val) => <>{val.queriesPerSecond}</>,
-      sort: (val) => val.queriesPerSecond,
+      cell: val => <>{val.queriesPerSecond}</>,
+      sort: val => val.queriesPerSecond,
     },
     {
       name: "nodes",
@@ -71,10 +71,10 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Nodes
         </Tooltip>
       ),
-      cell: (val) => (
+      cell: val => (
         <Link to={`/node/${val.nodeIds[0]}`}>{val.nodeIds.join(", ")}</Link>
       ),
-      sort: (val) => val.nodeIds[0],
+      sort: val => val.nodeIds[0],
     },
     {
       name: "leasholder",
@@ -83,8 +83,8 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Leaseholder
         </Tooltip>
       ),
-      cell: (val) => <>{val.leaseHolder}</>,
-      sort: (val) => val.leaseHolder,
+      cell: val => <>{val.leaseHolder}</>,
+      sort: val => val.leaseHolder,
     },
     {
       name: "database",
@@ -93,8 +93,8 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Database
         </Tooltip>
       ),
-      cell: (val) => <>{val.database}</>,
-      sort: (val) => val.database,
+      cell: val => <>{val.database}</>,
+      sort: val => val.database,
     },
     {
       name: "table",
@@ -103,12 +103,12 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Table
         </Tooltip>
       ),
-      cell: (val) => (
+      cell: val => (
         <Link to={`/database/${val.database}/table/${val.table}`}>
           {val.table}
         </Link>
       ),
-      sort: (val) => val.table,
+      sort: val => val.table,
     },
     {
       name: "index",
@@ -117,8 +117,8 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
           Index
         </Tooltip>
       ),
-      cell: (val) => <>{val.index}</>,
-      sort: (val) => val.index,
+      cell: val => <>{val.index}</>,
+      sort: val => val.index,
     },
   ];
 

@@ -17,7 +17,7 @@ import { HotRangesState } from "../../redux/hotRanges/hotRangesReducer";
 import { selectHotRanges } from "../../redux/hotRanges/hotRangesSelectors";
 import HotRangesTable from "./hotRangesTable";
 
-const HotRanges = () => {
+const HotRangesPage = () => {
   const dispatch = useDispatch();
   const hotRanges: HotRangesState = useSelector(selectHotRanges);
 
@@ -34,4 +34,4 @@ const HotRanges = () => {
   );
 };
 
-export default HotRanges;
+export default HotRangesPage;
