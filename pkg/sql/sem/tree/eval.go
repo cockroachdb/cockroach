@@ -3120,7 +3120,7 @@ type EvalDatabase interface {
 }
 
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.
-// Only one of DatabaseName, DatabaseOID, TableName, TableOID is filled.
+// Only one of { DatabaseName, DatabaseOID, TableName, TableOID, SequenceName, SequenceOID } is filled.
 type HasPrivilegeSpecifier struct {
 
 	// Database privilege
@@ -3136,6 +3136,10 @@ type HasPrivilegeSpecifier struct {
 	// Only one of ColumnName, ColumnAttNum is filled.
 	ColumnName   *Name
 	ColumnAttNum *uint32
+
+	// Sequence privilege
+	SequenceName *string
+	SequenceOID  *oid.Oid
 }
 
 // TypeResolver is an interface for resolving types and type OIDs.

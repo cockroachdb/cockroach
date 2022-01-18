@@ -413,6 +413,50 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 			return nil, err
 		}
 		return table, nil
+	} else if specifier.SequenceName != nil || specifier.SequenceOID != nil {
+		var sequence catalog.TableDescriptor
+		var err error
+		if specifier.SequenceName != nil {
+			var tn *tree.TableName
+			tn, err = parser.ParseQualifiedTableName(*specifier.SequenceName)
+			if err != nil {
+				return nil, err
+			}
+			if _, err = p.ResolveTableName(ctx, tn); err != nil {
+				return nil, err
+			}
+
+			if p.SessionData().Database != "" && p.SessionData().Database != string(tn.CatalogName) {
+				// Postgres does not allow cross-database references in these
+				// functions, so we don't either.
+				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+					"cross-database references are not implemented: %s", tn)
+			}
+			_, sequence, err = p.Descriptors().GetImmutableTableByName(
+				ctx, p.txn, tn, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					},
+				},
+			)
+		} else {
+			sequence, err = p.Descriptors().GetImmutableTableByID(
+				ctx, p.txn, descpb.ID(*specifier.SequenceOID),
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					},
+				},
+			)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !sequence.IsSequence() {
+			return nil, pgerror.Newf(pgcode.WrongObjectType,
+				"'%s' is not a sequence", sequence.GetName())
+		}
+		return sequence, nil
 	}
 	return nil, errors.AssertionFailedf("invalid HasPrivilegeSpecifier")
 }

@@ -451,46 +451,6 @@ func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string)
 	return string(tree.MustBeDString(r[0])), nil
 }
 
-// getTableNameForArg determines the qualified table name for the specified
-// argument, which should be either an unwrapped STRING or an OID. If the table
-// is not found, the returned pointer will be nil.
-func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName, error) {
-	switch t := arg.(type) {
-	case *tree.DString:
-		tn, err := parser.ParseQualifiedTableName(string(*t))
-		if err != nil {
-			return nil, err
-		}
-		if _, err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
-			return nil, err
-		}
-		if ctx.SessionData().Database != "" && ctx.SessionData().Database != string(tn.CatalogName) {
-			// Postgres does not allow cross-database references in these
-			// functions, so we don't either.
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"cross-database references are not implemented: %s", tn)
-		}
-		return tn, nil
-	case *tree.DOid:
-		r, err := ctx.Planner.QueryRowEx(ctx.Ctx(), "get-table-name-for-arg",
-			ctx.Txn,
-			sessiondata.NoSessionDataOverride,
-			`SELECT n.nspname, c.relname FROM pg_class c
-			JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-			WHERE c.oid = $1`, t)
-		if err != nil || r == nil {
-			return nil, err
-		}
-		db := tree.Name(ctx.SessionData().Database)
-		schema := tree.Name(tree.MustBeDString(r[0]))
-		table := tree.Name(tree.MustBeDString(r[1]))
-		tn := tree.MakeTableNameWithSchema(db, schema, table)
-		return &tn, nil
-	default:
-		return nil, errors.AssertionFailedf("unexpected arg type %T", t)
-	}
-}
-
 // privMap maps a privilege string to a Privilege.
 type privMap map[string]privilege.Privilege
 
@@ -1706,36 +1666,10 @@ SELECT description
 		argTypeOpts{{"sequence", strOrOidTypes}},
 		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
 			seqArg := tree.UnwrapDatum(ctx, args[0])
-			tn, err := getTableNameForArg(ctx, seqArg)
+			specifier, err := sequenceHasPrivilegeSpecifier(seqArg)
 			if err != nil {
 				return nil, err
 			}
-			pred := ""
-			retNull := false
-			if tn == nil {
-				// Postgres returns NULL if no matching table is found
-				// when given an OID.
-				retNull = true
-			} else {
-				// Verify that the table name is actually a sequence.
-				if r, err := ctx.Planner.QueryRowEx(
-					ctx.Ctx(), "has-sequence-privilege",
-					ctx.Txn,
-					sessiondata.NoSessionDataOverride,
-					`SELECT sequence_name FROM information_schema.sequences `+
-						`WHERE sequence_catalog = $1 AND sequence_schema = $2 AND sequence_name = $3`,
-					tn.CatalogName, tn.SchemaName, tn.ObjectName); err != nil {
-					return nil, err
-				} else if r == nil {
-					return nil, pgerror.Newf(pgcode.WrongObjectType,
-						"%s is not a sequence", seqArg)
-				}
-
-				pred = fmt.Sprintf(
-					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
-					tn.CatalogName, tn.SchemaName, tn.ObjectName)
-			}
-
 			privs, err := parsePrivilegeStr(args[1], privMap{
 				// Sequences and other table objects cannot be given a USAGE privilege,
 				// so we check for SELECT here instead. See privilege.TablePrivileges.
@@ -1749,12 +1683,9 @@ SELECT description
 			if err != nil {
 				return nil, err
 			}
-			if retNull {
-				return tree.DNull, nil
-			}
 			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				return evalPrivilegeCheck(ctx, "information_schema", "table_privileges",
-					user, pred, priv.Kind)
+				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
+				return handleSequenceHasPrivilegeError(specifier, ret, err)
 			})
 		},
 	),
@@ -2422,6 +2353,21 @@ func tableHasPrivilegeSpecifier(tableArg tree.Datum) (tree.HasPrivilegeSpecifier
 	return specifier, nil
 }
 
+func sequenceHasPrivilegeSpecifier(sequenceArg tree.Datum) (tree.HasPrivilegeSpecifier, error) {
+	var specifier tree.HasPrivilegeSpecifier
+	switch t := sequenceArg.(type) {
+	case *tree.DString:
+		s := string(*t)
+		specifier.SequenceName = &s
+	case *tree.DOid:
+		oid := oid.Oid(t.DInt)
+		specifier.SequenceOID = &oid
+	default:
+		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", sequenceArg)
+	}
+	return specifier, nil
+}
+
 // Note that we only verify the column exists for has_column_privilege.
 func columnHasPrivilegeSpecifier(
 	tableArg tree.Datum, colArg tree.Datum,
@@ -2462,6 +2408,19 @@ func handleTableHasPrivilegeError(
 	if err != nil {
 		// When a TableOID is specified and the relation is not found, we return NULL.
 		if specifier.TableOID != nil && sqlerrors.IsUndefinedRelationError(err) {
+			return tree.DNull, nil
+		}
+		return nil, err
+	}
+	return tree.MakeDBool(tree.DBool(ret)), nil
+}
+
+func handleSequenceHasPrivilegeError(
+	specifier tree.HasPrivilegeSpecifier, ret bool, err error,
+) (tree.Datum, error) {
+	if err != nil {
+		// When a SequenceOID is specified and the relation is not found, we return NULL.
+		if specifier.SequenceOID != nil && sqlerrors.IsUndefinedRelationError(err) {
 			return tree.DNull, nil
 		}
 		return nil, err
