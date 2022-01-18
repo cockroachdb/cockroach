@@ -1215,15 +1215,16 @@ func (rf *Fetcher) finalizeRow() error {
 	}
 
 	// Fill in any missing values with NULLs
-	for i := range table.cols {
+	for i, col := range table.cols {
 		if rf.valueColsFound == table.neededValueCols {
 			// Found all cols - done!
 			return nil
 		}
-		if table.neededCols.Contains(int(table.cols[i].GetID())) && table.row[i].IsUnset() {
+		if table.neededCols.Contains(int(col.GetID())) && table.row[i].IsUnset() {
 			// If the row was deleted, we'll be missing any non-primary key
-			// columns, including nullable ones, but this is expected.
-			if !table.cols[i].IsNullable() && !table.rowIsDeleted && !rf.IgnoreUnexpectedNulls {
+			// columns, including nullable ones, but this is expected. If the column
+			// is not yet active, we can also expect NULLs.
+			if !col.IsNullable() && !table.rowIsDeleted && !rf.IgnoreUnexpectedNulls && col.Public() {
 				var indexColValues []string
 				for _, idx := range table.indexColIdx {
 					if idx != -1 {
@@ -1234,7 +1235,7 @@ func (rf *Fetcher) finalizeRow() error {
 				}
 				return errors.AssertionFailedf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-					table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
+					table.desc.GetName(), col.GetName(), table.index.GetName(),
 					strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ","))
 			}
 			table.row[i] = rowenc.EncDatum{
