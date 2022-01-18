@@ -76,10 +76,7 @@ import {
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
-import {
-  flattenTreeAttributes,
-  planNodeAttributesToString,
-} from "../statementDetails";
+import { flattenTreeAttributes, planNodeToString } from "../statementDetails";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -148,6 +145,23 @@ function statementsRequestFromProps(
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
+}
+
+// filterBySearchQuery returns true if a search query matches the statement.
+function filterBySearchQuery(
+  statement: AggregateStatistics,
+  search: string,
+): boolean {
+  const label = statement.label.toLowerCase();
+  const tree = flattenTreeAttributes(
+    statement.stats.sensitive_info &&
+      statement.stats.sensitive_info.most_recent_plan_description,
+  );
+  const plan = planNodeToString(tree).toLowerCase();
+  const matchString = `${label}|${plan}`;
+  return search
+    .split(" ")
+    .every(val => matchString.includes(val.toLowerCase()));
 }
 
 export class StatementsPage extends React.Component<
@@ -413,29 +427,7 @@ export class StatementsPage extends React.Component<
       )
       .filter(statement => (filters.fullScan ? statement.fullScan : true))
       .filter(statement =>
-        search
-          ? search.split(" ").every(val =>
-              statement.label
-                .toLowerCase()
-                .concat(
-                  flattenTreeAttributes(
-                    statement.stats.sensitive_info &&
-                      statement.stats.sensitive_info
-                        .most_recent_plan_description,
-                  ).name.toLowerCase(),
-                  " ",
-                  planNodeAttributesToString(
-                    flattenTreeAttributes(
-                      statement.stats.sensitive_info &&
-                        statement.stats.sensitive_info
-                          .most_recent_plan_description,
-                    ).attrs,
-                  ).toLowerCase(),
-                  " ",
-                )
-                .includes(val.toLowerCase()),
-            )
-          : true,
+        search ? filterBySearchQuery(statement, search) : true,
       )
       .filter(
         statement =>
