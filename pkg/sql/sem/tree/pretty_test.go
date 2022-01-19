@@ -187,7 +187,7 @@ func TestPrettyVerify(t *testing.T) {
 }
 
 func BenchmarkPrettyData(b *testing.B) {
-	matches, err := filepath.Glob(testutils.TestDataPath(t, "pretty", "*.sql"))
+	matches, err := filepath.Glob(testutils.TestDataPath(b, "pretty", "*.sql"))
 	if err != nil {
 		b.Fatal(err)
 	}

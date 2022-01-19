@@ -65,8 +65,8 @@ import (
 func TestRestoreOldVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	const (
-		testdataBase                = "testdata/restore_old_versions"
+	testdataBase := testutils.TestDataPath(t, "restore_old_versions")
+	var (
 		exportDirsWithoutInterleave = testdataBase + "/exports-without-interleaved"
 		exportDirs                  = testdataBase + "/exports"
 		fkRevDirs                   = testdataBase + "/fk-rev-history"
@@ -668,7 +668,7 @@ func TestRestoreOldBackupMissingOfflineIndexes(t *testing.T) {
 	skip.UnderRace(t, "times out under race cause it starts up two test servers")
 	ctx := context.Background()
 
-	badBackups, err := filepath.Abs("testdata/restore_old_versions/inc_missing_addsst/v20.2.7")
+	badBackups, err := filepath.Abs(testutils.TestDataPath(t, "restore_old_versions", "inc_missing_addsst", "v20.2.7"))
 	require.NoError(t, err)
 	args := base.TestServerArgs{ExternalIODir: badBackups}
 	backupDirs := make([]string, 9)
@@ -741,10 +741,10 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
+	backupDir := testutils.TestDataPath(t, "restore_with_dropped_schema", "exports", "v20.2.7")
 	const (
-		dbName    = "foo"
-		backupDir = "testdata/restore_with_dropped_schema/exports/v20.2.7"
-		fromDir   = "nodelocal://0/"
+		dbName  = "foo"
+		fromDir = "nodelocal://0/"
 	)
 
 	args := base.TestServerArgs{ExternalIODir: backupDir}

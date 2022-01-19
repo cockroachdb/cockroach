@@ -58,8 +58,8 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 
 	skip.UnderRaceWithIssue(t, 56584)
 
-	const (
-		testdataBase = "testdata/restore_mid_schema_change"
+	var (
+		testdataBase = testutils.TestDataPath(t, "restore_mid_schema_change")
 		exportDirs   = testdataBase + "/exports"
 	)
 	for _, isClusterRestore := range []bool{true, false} {

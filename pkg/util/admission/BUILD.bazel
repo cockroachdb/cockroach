@@ -35,6 +35,7 @@ go_test(
     deps = [
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/syncutil",
