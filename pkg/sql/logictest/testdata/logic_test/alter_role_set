@@ -1,3 +1,5 @@
+# LogicTest: !fakedist-declarative-schema
+# Disabled until a PR for drop role sets gets merged with declarative.
 statement ok
 CREATE ROLE test_set_role;
 CREATE DATABASE test_set_db

@@ -107,4 +107,6 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 		DatabaseID: db.GetID(),
 		Comment:    scpb.PlaceHolderComment,
 	})
+	// TODO(fqazi): Handle removing database base role settings during DROP
+	// commands.
 }
