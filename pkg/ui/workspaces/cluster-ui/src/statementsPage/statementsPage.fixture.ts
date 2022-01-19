@@ -756,7 +756,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onActivateStatementDiagnostics: noop,
   onDiagnosticsModalOpen: noop,
   onSearchComplete: noop,
-  onDiagnosticsReportDownload: noop,
+  onSelectDiagnosticsReportDropdownOption: noop,
   onColumnsChange: noop,
   onSortingChange: noop,
   onFilterChange: noop,

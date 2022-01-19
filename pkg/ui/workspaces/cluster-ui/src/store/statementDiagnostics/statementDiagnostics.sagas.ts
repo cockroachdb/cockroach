@@ -17,12 +17,15 @@ import {
   takeLatest,
 } from "redux-saga/effects";
 import {
+  cancelStatementDiagnosticsReport,
   createStatementDiagnosticsReport,
   getStatementDiagnosticsReports,
 } from "src/api/statementDiagnosticsApi";
 import { actions } from "./statementDiagnostics.reducer";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 import { rootActions } from "../reducers";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+type CancelStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
 
 export function* createDiagnosticsReportSaga(
   action: ReturnType<typeof actions.createReport>,
@@ -35,6 +38,26 @@ export function* createDiagnosticsReportSaga(
     yield put(actions.request());
   } catch (e) {
     yield put(actions.createReportFailed(e));
+  }
+}
+
+export function* cancelDiagnosticsReportSaga(
+  action: ReturnType<typeof actions.cancelReport>,
+) {
+  try {
+    const response: CancelStatementDiagnosticsReportResponseMessage = yield call(
+      cancelStatementDiagnosticsReport,
+      action.payload,
+    );
+
+    if (response.error !== "") {
+      throw response.error;
+    }
+
+    yield put(actions.cancelReportCompleted());
+    yield put(actions.request());
+  } catch (e) {
+    yield put(actions.cancelReportFailed(e));
   }
 }
 
