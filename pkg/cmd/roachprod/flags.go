@@ -45,36 +45,26 @@ var (
 	listPattern           string
 	secure                = false
 	extraSSHOptions       = ""
-	nodeEnv               = []string{
-		// NOTE: The defaults are also copied in roachtest's invocation of roachprod
-		// (which overrides the default). On changes, consider updating that one
-		// too.
-
-		// RPC compressions costs around 5% on kv95, so we disable it. It might help
-		// when moving snapshots around, though.
-		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
-		// Get rid of an annoying popup in the UI.
-		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
-	}
-	tag               string
-	external          = false
-	pgurlCertsDir     string
-	adminurlOpen      = false
-	adminurlPath      = ""
-	adminurlIPs       = false
-	useTreeDist       = true
-	sig               = 9
-	waitFlag          = false
-	createVMOpts      = vm.DefaultCreateOpts()
-	startOpts         = roachprod.DefaultStartOpts()
-	stageOS           string
-	stageDir          string
-	logsDir           string
-	logsFilter        string
-	logsProgramFilter string
-	logsFrom          time.Time
-	logsTo            time.Time
-	logsInterval      time.Duration
+	nodeEnv               []string
+	tag                   string
+	external              = false
+	pgurlCertsDir         string
+	adminurlOpen          = false
+	adminurlPath          = ""
+	adminurlIPs           = false
+	useTreeDist           = true
+	sig                   = 9
+	waitFlag              = false
+	createVMOpts          = vm.DefaultCreateOpts()
+	startOpts             = roachprod.DefaultStartOpts()
+	stageOS               string
+	stageDir              string
+	logsDir               string
+	logsFilter            string
+	logsProgramFilter     string
+	logsFrom              time.Time
+	logsTo                time.Time
+	logsInterval          time.Duration
 
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
@@ -188,7 +178,7 @@ func initFlags() {
 	startCmd.Flags().StringArrayVarP(&startOpts.ExtraArgs,
 		"args", "a", nil, "node arguments")
 	startCmd.Flags().StringArrayVarP(&nodeEnv,
-		"env", "e", nodeEnv, "node environment variables")
+		"env", "e", config.DefaultEnvVars(), "node environment variables")
 	startCmd.Flags().BoolVar(&startOpts.EncryptedStores,
 		"encrypt", startOpts.EncryptedStores, "start nodes with encryption at rest turned on")
 	startCmd.Flags().BoolVar(&startOpts.SkipInit,
