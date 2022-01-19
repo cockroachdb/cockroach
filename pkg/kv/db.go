@@ -662,10 +662,9 @@ func (db *DB) AdminRelocateRange(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// AddSSTable links a file into the RocksDB log-structured merge-tree. Existing
-// data in the range is cleared.
+// AddSSTable links a file into the Pebble log-structured merge-tree.
 //
-// The disallowConflicts, disallowShadowingBelow, and writeAtBatchTs parameters
+// The disallowConflicts, disallowShadowingBelow parameters
 // require the MVCCAddSSTable version gate, as they are new in 22.1.
 func (db *DB) AddSSTable(
 	ctx context.Context,
@@ -677,12 +676,36 @@ func (db *DB) AddSSTable(
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
-	writeAtBatchTs bool,
 ) error {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
-		stats, ingestAsWrites, writeAtBatchTs)
+		stats, ingestAsWrites, false /* writeAtBatchTS */)
 	return getOneErr(db.Run(ctx, b), b)
+}
+
+// AddSSTableAtBatchTimestamp links a file into the Pebble log-structured
+// merge-tree.
+//
+// Should only be called after checking the MVCCAddSSTable version gate.
+func (db *DB) AddSSTableAtBatchTimestamp(
+	ctx context.Context,
+	begin, end interface{},
+	data []byte,
+	disallowConflicts bool,
+	disallowShadowing bool,
+	disallowShadowingBelow hlc.Timestamp,
+	stats *enginepb.MVCCStats,
+	ingestAsWrites bool,
+	batchTs hlc.Timestamp,
+) (hlc.Timestamp, error) {
+	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
+		stats, ingestAsWrites, true /* writeAtBatchTS */)
+	err := getOneErr(db.Run(ctx, b), b)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	return b.response.Timestamp, nil
 }
 
 // Migrate is used instruct all ranges overlapping with the provided keyspace to
