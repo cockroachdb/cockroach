@@ -2308,6 +2308,8 @@ func TypeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
+			// TODO(#75103): For UNION, CASE, and related expressions we should
+			// only allow types that can be implicitly cast to firstValidType.
 			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.Family() == types.UnknownFamily) {
 				return nil, nil, unexpectedTypeError(exprs[i], firstValidType, typ)
 			}

@@ -738,10 +738,15 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_regclass: {
 		// TODO(mgartner): Casts to INT2 should not be allowed.
-		oid.T_int2: {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
-		oid.T_int4: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_int8: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_oid:  {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int2:         {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
+		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_regnamespace: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regproc:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
@@ -751,10 +756,15 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_regnamespace: {
 		// TODO(mgartner): Casts to INT2 should not be allowed.
-		oid.T_int2: {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
-		oid.T_int4: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_int8: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_oid:  {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int2:         {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
+		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_regclass:     {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regproc:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
@@ -769,6 +779,10 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
 		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
 		oid.T_regprocedure: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_regclass:     {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regnamespace: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
@@ -778,11 +792,15 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_regprocedure: {
 		// TODO(mgartner): Casts to INT2 should not be allowed.
-		oid.T_int2:    {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
-		oid.T_int4:    {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_int8:    {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_oid:     {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_regproc: {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int2:         {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
+		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_regproc:      {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_regclass:     {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regnamespace: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
@@ -792,10 +810,15 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_regrole: {
 		// TODO(mgartner): Casts to INT2 should not be allowed.
-		oid.T_int2: {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
-		oid.T_int4: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_int8: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_oid:  {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int2:         {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
+		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_regclass:     {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regnamespace: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regproc:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regtype:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
@@ -805,10 +828,15 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 	},
 	oid.T_regtype: {
 		// TODO(mgartner): Casts to INT2 should not be allowed.
-		oid.T_int2: {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
-		oid.T_int4: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_int8: {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
-		oid.T_oid:  {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int2:         {maxContext: CastContextAssignment, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
+		oid.T_int4:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_int8:         {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_oid:          {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
+		oid.T_regclass:     {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regnamespace: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regproc:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regprocedure: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
+		oid.T_regrole:      {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityStable},
 		// Automatic I/O conversions to string types.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
