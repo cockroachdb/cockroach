@@ -394,12 +394,12 @@ func TestChangefeedFullTableName(t *testing.T) {
 			assertPayloads(t, foo, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
 		})
 	}
-	//TODO(zinger): Plumb this option through to all encoders so it works in sinkless mode
-	//t.Run(`sinkless`, sinklessTest(testFn))
+	// TODO(zinger): Plumb this option through to all encoders so it works in sinkless mode
+	// t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
-	//t.Run(`pubsub`, pubsubTest(testFn))
+	// t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestChangefeedMultiTable(t *testing.T) {
@@ -2417,7 +2417,7 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 	t.Run(`webhook`, webhookTest(testFn))
 	t.Run(`pubsub`, pubsubTest(testFn))
-	//will sometimes fail, non deterministic
+	// will sometimes fail, non deterministic
 }
 
 func TestChangefeedMonitoring(t *testing.T) {
@@ -4102,7 +4102,15 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	useSysCfgInKV := withKnobsFn(func(knobs *base.TestingKnobs) {
+		// TODO(irfansharif): This test is "skipped" under span configs;
+		// #75080.
+		if knobs.Store == nil {
+			knobs.Store = &kvserver.StoreTestingKnobs{}
+		}
+		knobs.Store.(*kvserver.StoreTestingKnobs).UseSystemConfigSpanForQueues = true
+	})
+	t.Run(`kafka`, kafkaTest(testFn, useSysCfgInKV))
 }
 
 func TestChangefeedHandlesDrainingNodes(t *testing.T) {
