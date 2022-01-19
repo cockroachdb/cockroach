@@ -63,6 +63,7 @@ go_test(
         ":opttester",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/testcat",
+        "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
