@@ -191,12 +191,12 @@ func getMysqlOutfileTestdata(t *testing.T) ([]simpleTestRow, []outfileDumpCfg) {
 	}
 
 	for i := range configs {
-		configs[i].filename = filepath.Join(`testdata`, `mysqlout`, configs[i].name, `simple.txt`)
+		configs[i].filename = testutils.TestDataPath(t, `mysqlout`, configs[i].name, `simple.txt`)
 	}
 
 	if rewriteMysqlTestData {
 		genMysqlTestdata(t, func() {
-			if err := os.RemoveAll(filepath.Join(`testdata`, `mysqlout`)); err != nil {
+			if err := os.RemoveAll(testutils.TestDataPath(t, `mysqlout`)); err != nil {
 				t.Fatal(err)
 			}
 			for _, cfg := range configs {

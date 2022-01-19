@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -192,7 +193,7 @@ func TestIntentDemuxWriter(t *testing.T) {
 	var w intentDemuxWriter
 	var scratch []byte
 	var err error
-	datadriven.RunTest(t, "testdata/intent_demux_writer",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "intent_demux_writer"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-writer":

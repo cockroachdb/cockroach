@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +52,7 @@ func TestServer(t *testing.T) {
 
 	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
 		require.Equal(t, expectedNodeID, req.NodeId)
-		b, err := ioutil.ReadFile("testdata/heap.profile")
+		b, err := ioutil.ReadFile(testutils.TestDataPath(t, "heap.profile"))
 		require.NoError(t, err)
 		return &serverpb.JSONResponse{Data: b}, nil
 	}

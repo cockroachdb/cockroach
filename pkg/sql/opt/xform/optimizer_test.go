@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -138,7 +139,7 @@ func TestCoster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
-		t, "testdata/coster/",
+		t, tu.TestDataPath(t, "coster", ""),
 		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|
 			memo.ExprFmtHideTypes,
 	)
@@ -152,7 +153,7 @@ func TestPhysicalProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
-		t, "testdata/physprops/",
+		t, tu.TestDataPath(t, "physprops", ""),
 		memo.ExprFmtHideConstraints|
 			memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideStats|
@@ -171,7 +172,7 @@ func TestRuleProps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
 		t,
-		"testdata/ruleprops/",
+		tu.TestDataPath(t, "ruleprops"),
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideQualifications|
 			memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
 	)
@@ -186,14 +187,14 @@ func TestRules(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
 		t,
-		"testdata/rules/",
+		tu.TestDataPath(t, "rules"),
 		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
 	)
 }
 
 var externalTestData = flag.String(
-	"d", "testdata/external/", "test files directory for TestExternal",
+	"d", "testdata/external", "test files directory for TestExternal",
 )
 
 // TestExternal contains test cases from external customers and external
@@ -223,7 +224,7 @@ func TestPlaceholderFastPath(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	runDataDrivenTest(
 		t,
-		"testdata/placeholder-fast-path",
+		tu.TestDataPath(t, "placeholder-fast-path"),
 		memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
 	)

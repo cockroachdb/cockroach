@@ -84,7 +84,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	datadriven.Walk(t, "testdata/concurrency_manager", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
 		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())

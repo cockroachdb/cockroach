@@ -55,6 +55,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":lang"],
     deps = [
+        "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
     ],

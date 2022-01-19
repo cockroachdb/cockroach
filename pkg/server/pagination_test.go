@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -48,7 +49,7 @@ func TestSimplePaginate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	datadriven.RunTest(t, "testdata/simple_paginate", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "simple_paginate"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "paginate":
 			var input interface{}
@@ -200,7 +201,7 @@ func TestPaginationState(t *testing.T) {
 	}
 
 	var state paginationState
-	datadriven.RunTest(t, "testdata/pagination_state", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "pagination_state"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "define":
 			state = paginationState{}

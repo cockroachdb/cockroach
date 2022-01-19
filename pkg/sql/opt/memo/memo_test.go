@@ -34,32 +34,32 @@ import (
 func TestMemo(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideStats
-	runDataDrivenTest(t, "testdata/memo", flags)
+	runDataDrivenTest(t, testutils.TestDataPath(t, "memo"), flags)
 }
 
 func TestFormat(t *testing.T) {
-	runDataDrivenTest(t, "testdata/format", memo.ExprFmtShowAll)
+	runDataDrivenTest(t, testutils.TestDataPath(t, "format"), memo.ExprFmtShowAll)
 }
 
 func TestLogicalProps(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideQualifications | memo.ExprFmtHideStats
-	runDataDrivenTest(t, "testdata/logprops/", flags)
+	runDataDrivenTest(t, testutils.TestDataPath(t, "logprops"), flags)
 }
 
 func TestStats(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideScalars
-	runDataDrivenTest(t, "testdata/stats/", flags)
+	runDataDrivenTest(t, testutils.TestDataPath(t, "stats"), flags)
 }
 
 func TestStatsQuality(t *testing.T) {
 	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
 		memo.ExprFmtHideScalars
-	runDataDrivenTest(t, "testdata/stats_quality/", flags)
+	runDataDrivenTest(t, testutils.TestDataPath(t, "stats_quality"), flags)
 }
 
 func TestCompositeSensitive(t *testing.T) {
-	datadriven.RunTest(t, "testdata/composite_sensitive", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "composite_sensitive"), func(t *testing.T, d *datadriven.TestData) string {
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
