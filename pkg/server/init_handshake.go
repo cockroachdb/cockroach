@@ -351,6 +351,7 @@ func (t *tlsInitHandshaker) getPeerCACert(
 	if err != nil {
 		return nodeHostnameAndCA{}, err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		return nodeHostnameAndCA{}, errors.Errorf("unexpected error returned from peer: HTTP %d", res.StatusCode)
@@ -436,8 +437,9 @@ func (t *tlsInitHandshaker) sendBundle(
 		case <-ticker.C:
 		}
 
-		_, err = client.Post(generateURLForClient(address, deliverBundleURL), "application/json; charset=utf-8", bytes.NewReader(body.Bytes()))
+		res, err := client.Post(generateURLForClient(address, deliverBundleURL), "application/json; charset=utf-8", bytes.NewReader(body.Bytes()))
 		if err == nil {
+			res.Body.Close()
 			break
 		}
 		lastError = err

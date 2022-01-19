@@ -465,9 +465,10 @@ func (s *TestDirectoryServer) startTenantLocked(
 	client := &http.Client{Transport: transport}
 	for {
 		time.Sleep(300 * time.Millisecond)
-		_, err := client.Get(fmt.Sprintf("https://%s/health", httpListener.Addr().String()))
+		resp, err := client.Get(fmt.Sprintf("https://%s/health", httpListener.Addr().String()))
 		waitTime := timeutil.Since(start)
 		if err == nil {
+			resp.Body.Close()
 			log.Infof(ctx, "tenant is healthy")
 			break
 		}
