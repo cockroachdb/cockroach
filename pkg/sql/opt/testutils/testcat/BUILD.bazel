@@ -58,6 +58,7 @@ go_test(
     deps = [
         ":testcat",
         "//pkg/sql/opt/testutils/opttester",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
