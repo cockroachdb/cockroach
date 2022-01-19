@@ -264,6 +264,10 @@ type TestingKnobs struct {
 
 	// StreamingTestingKnobs are backup and restore specific testing knobs.
 	StreamingTestingKnobs base.ModuleTestingKnobs
+
+	// IndexBackfillMergerTestingKnobs are the index backfill merger specific
+	// testing knobs.
+	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
