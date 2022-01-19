@@ -250,7 +250,7 @@ func changefeedPlanHook(
 				if err := changefeedbase.ValidateTable(targets, table); err != nil {
 					return err
 				}
-				for _, warning := range changefeedbase.WarningsForTable(targets, table) {
+				for _, warning := range changefeedbase.WarningsForTable(targets, table, opts) {
 					p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 				}
 			}
@@ -621,6 +621,18 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 				`unknown %s: %s, valid values are '%s' and '%s'`, opt, v,
 				changefeedbase.OptOnErrorPause,
 				changefeedbase.OptOnErrorFail)
+		}
+	}
+	{
+		const opt = changefeedbase.OptVirtualColumns
+		switch v := changefeedbase.VirtualColumnVisibility(details.Opts[opt]); v {
+		case ``, changefeedbase.OptVirtualColumnsOmitted:
+			details.Opts[opt] = string(changefeedbase.OptVirtualColumnsOmitted)
+		case changefeedbase.OptVirtualColumnsNull:
+			details.Opts[opt] = string(changefeedbase.OptVirtualColumnsNull)
+		default:
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`unknown %s: %s`, opt, v)
 		}
 	}
 	return details, nil

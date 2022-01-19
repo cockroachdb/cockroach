@@ -38,9 +38,9 @@ fi
 # * https://docs.bazel.build/versions/main/user-manual.html#workspace_status
 # * https://github.com/bazelbuild/rules_go/blob/master/go/core.rst#defines-and-stamping
 cat <<EOF
-STABLE_BUILD_GIT_COMMIT ${GIT_COMMIT-}
-STABLE_BUILD_GIT_TAG ${GIT_TAG-}
 STABLE_BUILD_GIT_BUILD_TYPE ${GIT_BUILD_TYPE-}
 STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
+BUILD_GIT_COMMIT ${GIT_COMMIT-}
+BUILD_GIT_TAG ${GIT_TAG-}
 BUILD_GIT_UTCTIME ${GIT_UTCTIME-}
 EOF
