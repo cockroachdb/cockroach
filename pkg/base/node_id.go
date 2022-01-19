@@ -231,6 +231,24 @@ func (c *SQLIDContainer) SetSQLInstanceID(ctx context.Context, sqlInstanceID SQL
 	return nil
 }
 
+// OptionalSQLInstanceID returns the NodeID and true, if the former is exposed.
+// Otherwise, returns zero and false.
+func (c *SQLIDContainer) OptionalSQLInstanceID() (SQLInstanceID, bool) {
+	if (*NodeIDContainer)(c).sqlInstance {
+		return 0, false
+	}
+	return c.SQLInstanceID(), true
+}
+
+// OptionalSQLInstanceIDErr is like OptionalNodeID, but returns an error (referring to
+// the optionally supplied GitHub issues) if the ID is not present.
+func (c *SQLIDContainer) OptionalSQLInstanceIDErr(issue int) (SQLInstanceID, error) {
+	if (*NodeIDContainer)(c).sqlInstance {
+		return 0, errorutil.UnsupportedWithMultiTenancy(issue)
+	}
+	return c.SQLInstanceID(), nil
+}
+
 // OptionalNodeID returns the NodeID and true, if the former is exposed.
 // Otherwise, returns zero and false.
 func (c *SQLIDContainer) OptionalNodeID() (roachpb.NodeID, bool) {

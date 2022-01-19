@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -30,20 +31,20 @@ import (
 func distStreamIngestionPlanSpecs(
 	streamAddress streamingccl.StreamAddress,
 	topology streamclient.Topology,
-	nodes []roachpb.NodeID,
+	sqlInstanceIDs []base.SQLInstanceID,
 	initialHighWater hlc.Timestamp,
 	jobID jobspb.JobID,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
-	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(nodes))
+	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(sqlInstanceIDs))
 
 	trackedSpans := make([]roachpb.Span, 0)
 	for i, partition := range topology {
 		// Round robin assign the stream partitions to nodes. Partitions 0 through
 		// len(nodes) - 1 creates the spec. Future partitions just add themselves to
 		// the partition addresses.
-		if i < len(nodes) {
+		if i < len(sqlInstanceIDs) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
 				JobID:              int64(jobID),
 				StartTime:          initialHighWater,
@@ -52,7 +53,7 @@ func distStreamIngestionPlanSpecs(
 			}
 			streamIngestionSpecs = append(streamIngestionSpecs, spec)
 		}
-		n := i % len(nodes)
+		n := i % len(sqlInstanceIDs)
 
 		streamIngestionSpecs[n].PartitionIds = append(streamIngestionSpecs[n].PartitionIds, partition.ID)
 		streamIngestionSpecs[n].PartitionSpecs = append(streamIngestionSpecs[n].PartitionSpecs,
@@ -80,7 +81,7 @@ func distStreamIngestionPlanSpecs(
 func distStreamIngest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	nodes []roachpb.NodeID,
+	sqlInstanceIDs []base.SQLInstanceID,
 	jobID jobspb.JobID,
 	planCtx *sql.PlanningCtx,
 	dsp *sql.DistSQLPlanner,
@@ -98,7 +99,7 @@ func distStreamIngest(
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
 	for i := range streamIngestionSpecs {
-		corePlacement[i].NodeID = nodes[i]
+		corePlacement[i].SQLInstanceID = sqlInstanceIDs[i]
 		corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[i]
 	}
 
@@ -111,7 +112,7 @@ func distStreamIngest(
 	)
 
 	execCfg := execCtx.ExecCfg()
-	gatewayNodeID, err := execCfg.NodeID.OptionalNodeIDErr(48274)
+	gatewayNodeID, err := execCfg.NodeID.OptionalSQLInstanceIDErr(48274)
 	if err != nil {
 		return err
 	}

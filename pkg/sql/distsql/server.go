@@ -106,9 +106,9 @@ func (ds *ServerImpl) Start() {
 	// Gossip the version info so that other nodes don't plan incompatible flows
 	// for us.
 	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
-		if nodeID, ok := ds.ServerConfig.NodeID.OptionalNodeID(); ok {
+		if sqlInstanceID, ok := ds.ServerConfig.NodeID.OptionalSQLInstanceID(); ok {
 			if err := g.AddInfoProto(
-				gossip.MakeDistSQLNodeVersionKey(nodeID),
+				gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 				&execinfrapb.DistSQLVersionGossipInfo{
 					Version:            execinfra.Version,
 					MinAcceptedVersion: execinfra.MinAcceptedVersion,
@@ -171,7 +171,7 @@ func (ds *ServerImpl) Drain(
 // setDraining changes the node's draining state through gossip to the provided
 // state.
 func (ds *ServerImpl) setDraining(drain bool) error {
-	nodeID, ok := ds.ServerConfig.NodeID.OptionalNodeID()
+	sqlInstanceID, ok := ds.ServerConfig.NodeID.OptionalSQLInstanceID()
 	if !ok {
 		// Ignore draining requests when running on behalf of a tenant.
 		// NB: intentionally swallow the error or the server will fatal.
@@ -180,7 +180,7 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 	}
 	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
 		return g.AddInfoProto(
-			gossip.MakeDistSQLDrainingKey(nodeID),
+			gossip.MakeDistSQLDrainingKey(sqlInstanceID),
 			&execinfrapb.DistSQLDrainingInfo{
 				Draining: drain,
 			},
@@ -288,7 +288,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
-		return kv.NewLeafTxn(ctx, ds.DB, req.Flow.Gateway, tis), nil
+		return kv.NewLeafTxn(ctx, ds.DB, roachpb.NodeID(req.Flow.Gateway), tis), nil
 	}
 
 	var evalCtx *tree.EvalContext
@@ -366,7 +366,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == roachpb.NodeID(ds.NodeID.SQLInstanceID()),
+		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we

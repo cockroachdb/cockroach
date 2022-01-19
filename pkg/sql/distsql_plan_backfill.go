@@ -68,7 +68,7 @@ func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 		ib.Spans = sp.Spans
 
 		proc := physicalplan.Processor{
-			Node: sp.Node,
+			SqlInstanceID: sp.SqlInstanceID,
 			Spec: execinfrapb.ProcessorSpec{
 				Core:        execinfrapb.ProcessorCoreUnion{Backfiller: ib},
 				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},

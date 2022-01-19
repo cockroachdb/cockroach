@@ -244,12 +244,12 @@ func getReplicationStreamSpec(
 		Partitions: make([]streampb.ReplicationStreamSpec_Partition, 0, len(spanPartitions)),
 	}
 	for _, sp := range spanPartitions {
-		nodeInfo, err := dsp.GetNodeInfo(sp.Node)
+		nodeInfo, err := dsp.GetSQLInstanceInfo(sp.SqlInstanceID)
 		if err != nil {
 			return nil, err
 		}
 		res.Partitions = append(res.Partitions, streampb.ReplicationStreamSpec_Partition{
-			NodeID:     sp.Node,
+			NodeID:     roachpb.NodeID(sp.SqlInstanceID),
 			SQLAddress: nodeInfo.SQLAddress,
 			Locality:   nodeInfo.Locality,
 			PartitionSpec: &streampb.StreamPartitionSpec{

@@ -23,14 +23,10 @@ import (
 )
 
 type processorStats struct {
-	// TODO(radu): this field redundant with stats.Component.SQLInstanceID.
-	nodeID roachpb.NodeID
-	stats  *execinfrapb.ComponentStats
+	stats *execinfrapb.ComponentStats
 }
 
 type streamStats struct {
-	// TODO(radu): this field redundant with stats.Component.SQLInstanceID.
-	originNodeID      roachpb.NodeID
 	destinationNodeID roachpb.NodeID
 	stats             *execinfrapb.ComponentStats
 }
@@ -64,7 +60,7 @@ type FlowsMetadata struct {
 
 // NewFlowsMetadata creates a FlowsMetadata for the given physical plan
 // information.
-func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMetadata {
+func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *FlowsMetadata {
 	a := &FlowsMetadata{
 		processorStats: make(map[execinfrapb.ProcessorID]*processorStats),
 		streamStats:    make(map[execinfrapb.StreamID]*streamStats),
@@ -72,25 +68,28 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 	}
 
 	// Annotate the maps with physical plan information.
-	for nodeID, flow := range flows {
+	for sqlInstanceID, flow := range flows {
 		if a.flowID.IsUnset() {
 			a.flowID = flow.FlowID
 		} else if buildutil.CrdbTestBuild && !a.flowID.Equal(flow.FlowID) {
 			panic(
 				errors.AssertionFailedf(
 					"expected the same FlowID to be used for all flows. UUID of first flow: %v, UUID of flow on node %s: %v",
-					a.flowID, nodeID, flow.FlowID),
+					a.flowID, sqlInstanceID, flow.FlowID),
 			)
 		}
-		a.flowStats[base.SQLInstanceID(nodeID)] = &flowStats{}
+		a.flowStats[sqlInstanceID] = &flowStats{}
 		for _, proc := range flow.Processors {
-			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &processorStats{nodeID: nodeID}
+			procID := execinfrapb.ProcessorID(proc.ProcessorID)
+			a.processorStats[procID] = &processorStats{stats: &execinfrapb.ComponentStats{}}
+			a.processorStats[procID].stats.Component.SQLInstanceID = sqlInstanceID
 			for _, output := range proc.Output {
 				for _, stream := range output.Streams {
 					a.streamStats[stream.StreamID] = &streamStats{
-						originNodeID:      nodeID,
-						destinationNodeID: stream.TargetNodeID,
+						destinationNodeID: roachpb.NodeID(stream.TargetNodeID),
+						stats:             &execinfrapb.ComponentStats{},
 					}
+					a.streamStats[stream.StreamID].stats.Component.SQLInstanceID = sqlInstanceID
 				}
 			}
 		}
@@ -230,7 +229,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats == nil {
 			continue
 		}
-		instanceID := base.SQLInstanceID(stats.nodeID)
+		instanceID := stats.stats.Component.SQLInstanceID
 		a.nodeLevelStats.KVBytesReadGroupedByNode[instanceID] += int64(stats.stats.KV.BytesRead.Value())
 		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.stats.KV.TuplesRead.Value())
 		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.stats.KV.KVTime.Value()
@@ -242,7 +241,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats == nil {
 			continue
 		}
-		originInstanceID := base.SQLInstanceID(stats.originNodeID)
+		originInstanceID := stats.stats.Component.SQLInstanceID
 
 		// Set networkBytesSentGroupedByNode.
 		bytes, err := getNetworkBytesFromComponentStats(stats.stats)

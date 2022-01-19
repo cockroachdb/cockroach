@@ -52,7 +52,7 @@ func StartDistChangefeed(
 	var spanPartitions []sql.SpanPartition
 	if details.SinkURI == `` {
 		// Sinkless feeds get one ChangeAggregator on the gateway.
-		spanPartitions = []sql.SpanPartition{{Node: dsp.GatewayID(), Spans: trackedSpans}}
+		spanPartitions = []sql.SpanPartition{{SqlInstanceID: dsp.GatewayID(), Spans: trackedSpans}}
 	} else {
 		// All other feeds get a ChangeAggregator local on the leaseholder.
 		var err error
@@ -86,7 +86,7 @@ func StartDistChangefeed(
 			UserProto:  execCtx.User().EncodeProto(),
 			JobID:      jobID,
 		}
-		corePlacement[i].NodeID = sp.Node
+		corePlacement[i].SQLInstanceID = sp.SqlInstanceID
 		corePlacement[i].Core.ChangeAggregator = spec
 	}
 

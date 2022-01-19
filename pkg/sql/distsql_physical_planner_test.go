@@ -855,16 +855,16 @@ func TestPartitionSpans(t *testing.T) {
 		testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 10; i++ {
-		nodeID := roachpb.NodeID(i)
+		sqlInstanceID := base.SQLInstanceID(i)
 		desc := &roachpb.NodeDescriptor{
-			NodeID:  nodeID,
+			NodeID:  roachpb.NodeID(sqlInstanceID),
 			Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
 		}
 		if err := mockGossip.SetNodeDescriptor(desc); err != nil {
 			t.Fatal(err)
 		}
 		if err := mockGossip.AddInfoProto(
-			gossip.MakeDistSQLNodeVersionKey(nodeID),
+			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 			&execinfrapb.DistSQLVersionGossipInfo{
 				MinAcceptedVersion: execinfra.MinAcceptedVersion,
 				Version:            execinfra.Version,
@@ -889,12 +889,12 @@ func TestPartitionSpans(t *testing.T) {
 
 			gw := gossip.MakeOptionalGossip(mockGossip)
 			dsp := DistSQLPlanner{
-				planVersion:   execinfra.Version,
-				st:            cluster.MakeTestingClusterSettings(),
-				gatewayNodeID: tsp.nodes[tc.gatewayNode-1].NodeID,
-				stopper:       stopper,
-				spanResolver:  tsp,
-				gossip:        gw,
+				planVersion:          execinfra.Version,
+				st:                   cluster.MakeTestingClusterSettings(),
+				gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[tc.gatewayNode-1].NodeID),
+				stopper:              stopper,
+				spanResolver:         tsp,
+				gossip:               gw,
 				nodeHealth: distSQLNodeHealth{
 					gossip: gw,
 					connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
@@ -905,7 +905,7 @@ func TestPartitionSpans(t *testing.T) {
 						}
 						return nil
 					},
-					isAvailable: func(nodeID roachpb.NodeID) bool {
+					isAvailable: func(base.SQLInstanceID) bool {
 						return true
 					},
 				},
@@ -926,14 +926,14 @@ func TestPartitionSpans(t *testing.T) {
 
 			resMap := make(map[int][][2]string)
 			for _, p := range partitions {
-				if _, ok := resMap[int(p.Node)]; ok {
+				if _, ok := resMap[int(p.SqlInstanceID)]; ok {
 					t.Fatalf("node %d shows up in multiple partitions", p)
 				}
 				var spans [][2]string
 				for _, s := range p.Spans {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
-				resMap[int(p.Node)] = spans
+				resMap[int(p.SqlInstanceID)] = spans
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {
@@ -965,21 +965,21 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 		planVersion execinfrapb.DistSQLVersion
 
 		// The versions accepted by each node.
-		nodeVersions map[roachpb.NodeID]execinfrapb.DistSQLVersionGossipInfo
+		nodeVersions map[base.SQLInstanceID]execinfrapb.DistSQLVersionGossipInfo
 
 		// nodesNotAdvertisingDistSQLVersion is the set of nodes for which gossip is
 		// not going to have information about the supported DistSQL version. This
 		// is to simulate CRDB 1.0 nodes which don't advertise this information.
-		nodesNotAdvertisingDistSQLVersion map[roachpb.NodeID]struct{}
+		nodesNotAdvertisingDistSQLVersion map[base.SQLInstanceID]struct{}
 
 		// expected result: a map of node to list of spans.
-		partitions map[roachpb.NodeID][][2]string
+		partitions map[base.SQLInstanceID][][2]string
 	}{
 		{
 			// In the first test, all nodes are compatible.
 			name:        "current_version",
 			planVersion: 2,
-			nodeVersions: map[roachpb.NodeID]execinfrapb.DistSQLVersionGossipInfo{
+			nodeVersions: map[base.SQLInstanceID]execinfrapb.DistSQLVersionGossipInfo{
 				1: {
 					MinAcceptedVersion: 1,
 					Version:            2,
@@ -989,7 +989,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 					Version:            2,
 				},
 			},
-			partitions: map[roachpb.NodeID][][2]string{
+			partitions: map[base.SQLInstanceID][][2]string{
 				1: {{"A", "B"}, {"C", "Z"}},
 				2: {{"B", "C"}},
 			},
@@ -1000,7 +1000,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// Remember that the gateway is node 2.
 			name:        "next_version",
 			planVersion: 3,
-			nodeVersions: map[roachpb.NodeID]execinfrapb.DistSQLVersionGossipInfo{
+			nodeVersions: map[base.SQLInstanceID]execinfrapb.DistSQLVersionGossipInfo{
 				1: {
 					MinAcceptedVersion: 1,
 					Version:            2,
@@ -1010,7 +1010,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 					Version:            3,
 				},
 			},
-			partitions: map[roachpb.NodeID][][2]string{
+			partitions: map[base.SQLInstanceID][][2]string{
 				2: {{"A", "Z"}},
 			},
 		},
@@ -1019,16 +1019,16 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// a crdb 1.0 node).
 			name:        "crdb_1.0",
 			planVersion: 3,
-			nodeVersions: map[roachpb.NodeID]execinfrapb.DistSQLVersionGossipInfo{
+			nodeVersions: map[base.SQLInstanceID]execinfrapb.DistSQLVersionGossipInfo{
 				2: {
 					MinAcceptedVersion: 3,
 					Version:            3,
 				},
 			},
-			nodesNotAdvertisingDistSQLVersion: map[roachpb.NodeID]struct{}{
+			nodesNotAdvertisingDistSQLVersion: map[base.SQLInstanceID]struct{}{
 				1: {},
 			},
-			partitions: map[roachpb.NodeID][][2]string{
+			partitions: map[base.SQLInstanceID][][2]string{
 				2: {{"A", "Z"}},
 			},
 		},
@@ -1049,18 +1049,18 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 			var nodeDescs []*roachpb.NodeDescriptor
 			for i := 1; i <= 2; i++ {
-				nodeID := roachpb.NodeID(i)
+				sqlInstanceID := base.SQLInstanceID(i)
 				desc := &roachpb.NodeDescriptor{
-					NodeID:  nodeID,
+					NodeID:  roachpb.NodeID(sqlInstanceID),
 					Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
 				}
 				if err := mockGossip.SetNodeDescriptor(desc); err != nil {
 					t.Fatal(err)
 				}
-				if _, ok := tc.nodesNotAdvertisingDistSQLVersion[nodeID]; !ok {
-					verInfo := tc.nodeVersions[nodeID]
+				if _, ok := tc.nodesNotAdvertisingDistSQLVersion[sqlInstanceID]; !ok {
+					verInfo := tc.nodeVersions[sqlInstanceID]
 					if err := mockGossip.AddInfoProto(
-						gossip.MakeDistSQLNodeVersionKey(nodeID),
+						gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 						&verInfo,
 						0, // ttl - no expiration
 					); err != nil {
@@ -1077,19 +1077,19 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 
 			gw := gossip.MakeOptionalGossip(mockGossip)
 			dsp := DistSQLPlanner{
-				planVersion:   tc.planVersion,
-				st:            cluster.MakeTestingClusterSettings(),
-				gatewayNodeID: tsp.nodes[gatewayNode-1].NodeID,
-				stopper:       stopper,
-				spanResolver:  tsp,
-				gossip:        gw,
+				planVersion:          tc.planVersion,
+				st:                   cluster.MakeTestingClusterSettings(),
+				gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
+				stopper:              stopper,
+				spanResolver:         tsp,
+				gossip:               gw,
 				nodeHealth: distSQLNodeHealth{
 					gossip: gw,
 					connHealth: func(roachpb.NodeID, rpc.ConnectionClass) error {
 						// All the nodes are healthy.
 						return nil
 					},
-					isAvailable: func(roachpb.NodeID) bool {
+					isAvailable: func(base.SQLInstanceID) bool {
 						return true
 					},
 				},
@@ -1103,16 +1103,16 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			resMap := make(map[roachpb.NodeID][][2]string)
+			resMap := make(map[base.SQLInstanceID][][2]string)
 			for _, p := range partitions {
-				if _, ok := resMap[p.Node]; ok {
+				if _, ok := resMap[p.SqlInstanceID]; ok {
 					t.Fatalf("node %d shows up in multiple partitions", p)
 				}
 				var spans [][2]string
 				for _, s := range p.Spans {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
-				resMap[p.Node] = spans
+				resMap[p.SqlInstanceID] = spans
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {
@@ -1142,9 +1142,9 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 2; i++ {
-		nodeID := roachpb.NodeID(i)
+		sqlInstanceID := base.SQLInstanceID(i)
 		desc := &roachpb.NodeDescriptor{
-			NodeID:  nodeID,
+			NodeID:  roachpb.NodeID(sqlInstanceID),
 			Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
 		}
 		if i == 2 {
@@ -1157,7 +1157,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		// the test comment - for such a node, the descriptor would be taken out of
 		// the gossip data, but other datums it advertised are left in place.
 		if err := mockGossip.AddInfoProto(
-			gossip.MakeDistSQLNodeVersionKey(nodeID),
+			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 			&execinfrapb.DistSQLVersionGossipInfo{
 				MinAcceptedVersion: execinfra.MinAcceptedVersion,
 				Version:            execinfra.Version,
@@ -1176,19 +1176,19 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 
 	gw := gossip.MakeOptionalGossip(mockGossip)
 	dsp := DistSQLPlanner{
-		planVersion:   execinfra.Version,
-		st:            cluster.MakeTestingClusterSettings(),
-		gatewayNodeID: tsp.nodes[gatewayNode-1].NodeID,
-		stopper:       stopper,
-		spanResolver:  tsp,
-		gossip:        gw,
+		planVersion:          execinfra.Version,
+		st:                   cluster.MakeTestingClusterSettings(),
+		gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
+		stopper:              stopper,
+		spanResolver:         tsp,
+		gossip:               gw,
 		nodeHealth: distSQLNodeHealth{
 			gossip: gw,
 			connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
 				_, err := mockGossip.GetNodeIDAddress(node)
 				return err
 			},
-			isAvailable: func(roachpb.NodeID) bool {
+			isAvailable: func(base.SQLInstanceID) bool {
 				return true
 			},
 		},
@@ -1202,20 +1202,20 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resMap := make(map[roachpb.NodeID][][2]string)
+	resMap := make(map[base.SQLInstanceID][][2]string)
 	for _, p := range partitions {
-		if _, ok := resMap[p.Node]; ok {
+		if _, ok := resMap[p.SqlInstanceID]; ok {
 			t.Fatalf("node %d shows up in multiple partitions", p)
 		}
 		var spans [][2]string
 		for _, s := range p.Spans {
 			spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 		}
-		resMap[p.Node] = spans
+		resMap[p.SqlInstanceID] = spans
 	}
 
 	expectedPartitions :=
-		map[roachpb.NodeID][][2]string{
+		map[base.SQLInstanceID][][2]string{
 			2: {{"A", "Z"}},
 		}
 	if !reflect.DeepEqual(resMap, expectedPartitions) {
@@ -1230,20 +1230,20 @@ func TestCheckNodeHealth(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	const nodeID = roachpb.NodeID(5)
+	const sqlInstanceID = base.SQLInstanceID(5)
 
-	mockGossip := gossip.NewTest(nodeID, nil /* rpcContext */, nil, /* grpcServer */
+	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID), nil /* rpcContext */, nil, /* grpcServer */
 		stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	desc := &roachpb.NodeDescriptor{
-		NodeID:  nodeID,
+		NodeID:  roachpb.NodeID(sqlInstanceID),
 		Address: util.UnresolvedAddr{NetworkField: "tcp", AddressField: "testaddr"},
 	}
 	if err := mockGossip.SetNodeDescriptor(desc); err != nil {
 		t.Fatal(err)
 	}
 	if err := mockGossip.AddInfoProto(
-		gossip.MakeDistSQLNodeVersionKey(nodeID),
+		gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
 		&execinfrapb.DistSQLVersionGossipInfo{
 			MinAcceptedVersion: execinfra.MinAcceptedVersion,
 			Version:            execinfra.Version,
@@ -1253,10 +1253,10 @@ func TestCheckNodeHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	notAvailable := func(roachpb.NodeID) bool {
+	notAvailable := func(base.SQLInstanceID) bool {
 		return false
 	}
-	available := func(roachpb.NodeID) bool {
+	available := func(base.SQLInstanceID) bool {
 		return true
 	}
 
@@ -1269,7 +1269,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	_ = connUnhealthy
 
 	livenessTests := []struct {
-		isAvailable func(roachpb.NodeID) bool
+		isAvailable func(id base.SQLInstanceID) bool
 		exp         string
 	}{
 		{available, ""},
@@ -1284,7 +1284,7 @@ func TestCheckNodeHealth(t *testing.T) {
 				connHealth:  connHealthy,
 				isAvailable: test.isAvailable,
 			}
-			if err := h.check(context.Background(), nodeID); !testutils.IsError(err, test.exp) {
+			if err := h.check(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})
@@ -1305,7 +1305,7 @@ func TestCheckNodeHealth(t *testing.T) {
 				connHealth:  test.connHealth,
 				isAvailable: available,
 			}
-			if err := h.check(context.Background(), nodeID); !testutils.IsError(err, test.exp) {
+			if err := h.check(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})
