@@ -1063,7 +1063,7 @@ COMMIT;
 
 // Add an index and check that it succeeds.
 func addIndexSchemaChange(
-	t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, maxValue int, numKeysPerRow int,
+	t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, maxValue int, numKeysPerRow int, waitFn func(),
 ) {
 	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
 		t.Fatal(err)
@@ -1096,6 +1096,10 @@ func addIndexSchemaChange(
 	}
 
 	ctx := context.Background()
+
+	if waitFn != nil {
+		waitFn()
+	}
 
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
@@ -1302,7 +1306,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2, nil)
 
 	currChunk = 0
 	seenSpan = roachpb.Span{}
@@ -1456,7 +1460,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2, nil)
 	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
 		t.Fatalf("expected %d backfills, but saw %d", 2, num)
 	}
