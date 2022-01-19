@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/go-sql-driver/mysql"
@@ -121,10 +122,10 @@ type testFiles struct {
 func getMysqldumpTestdata(t *testing.T) testFiles {
 	var files testFiles
 
-	files.simple = filepath.Join("testdata", "mysqldump", "simple.sql")
-	files.second = filepath.Join("testdata", "mysqldump", "second.sql")
-	files.everything = filepath.Join("testdata", "mysqldump", "everything.sql")
-	files.wholeDB = filepath.Join("testdata", "mysqldump", "db.sql")
+	files.simple = testutils.TestDataPath(t, "mysqldump", "simple.sql")
+	files.second = testutils.TestDataPath(t, "mysqldump", "second.sql")
+	files.everything = testutils.TestDataPath(t, "mysqldump", "everything.sql")
+	files.wholeDB = testutils.TestDataPath(t, "mysqldump", "db.sql")
 
 	if rewriteMysqlTestData {
 		genMysqlTestdata(t, func() {
