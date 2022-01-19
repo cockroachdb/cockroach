@@ -129,5 +129,27 @@ describe("DiagnosticsView", () => {
         .first();
       assert.isFalse(activateButtonComponent.exists());
     });
+
+    it("Cancel request button shows if diagnostics is requested and waiting query", () => {
+      const diagnosticsRequests: IStatementDiagnosticsReport[] = [
+        generateDiagnosticsRequest({ completed: false }),
+        generateDiagnosticsRequest(),
+      ];
+      wrapper = mount(
+        <TestStoreProvider>
+          <DiagnosticsView
+            activateDiagnosticsRef={activateDiagnosticsRef}
+            statementFingerprint={statementFingerprint}
+            hasData={true}
+            diagnosticsReports={diagnosticsRequests}
+            dismissAlertMessage={() => {}}
+          />
+        </TestStoreProvider>,
+      );
+      const cancelButtonComponent = wrapper
+        .findWhere(n => n.prop("children") === "Cancel request")
+        .first();
+      assert.isTrue(cancelButtonComponent.exists());
+    });
   });
 });

@@ -22,6 +22,12 @@ export const CREATE_STATEMENT_DIAGNOSTICS_FAILED =
   "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_FAILED";
 export const OPEN_STATEMENT_DIAGNOSTICS_MODAL =
   "cockroachui/statements/OPEN_STATEMENT_DIAGNOSTICS_MODAL";
+export const CANCEL_STATEMENT_DIAGNOSTICS_REPORT =
+  "cockroachui/statements/CANCEL_STATEMENT_DIAGNOSTICS_REPORT";
+export const CANCEL_STATEMENT_DIAGNOSTICS_COMPLETE =
+  "cockroachui/statements/CANCEL_STATEMENT_DIAGNOSTICS_COMPLETE";
+export const CANCEL_STATEMENT_DIAGNOSTICS_FAILED =
+  "cockroachui/statements/CANCEL_STATEMENT_DIAGNOSTICS_FAILED";
 
 export type DiagnosticsReportPayload = {
   statementFingerprint: string;
@@ -57,6 +63,33 @@ export function createStatementDiagnosticsReportCompleteAction(): Action {
 export function createStatementDiagnosticsReportFailedAction(): Action {
   return {
     type: CREATE_STATEMENT_DIAGNOSTICS_FAILED,
+  };
+}
+
+export type CancelStatementDiagnosticsReportPayload = {
+  requestID: Long;
+};
+
+export function cancelStatementDiagnosticsReportAction(
+  requestID: Long,
+): PayloadAction<CancelStatementDiagnosticsReportPayload> {
+  return {
+    type: CANCEL_STATEMENT_DIAGNOSTICS_REPORT,
+    payload: {
+      requestID,
+    },
+  };
+}
+
+export function cancelStatementDiagnosticsReportCompleteAction(): Action {
+  return {
+    type: CANCEL_STATEMENT_DIAGNOSTICS_COMPLETE,
+  };
+}
+
+export function cancelStatementDiagnosticsReportFailedAction(): Action {
+  return {
+    type: CANCEL_STATEMENT_DIAGNOSTICS_FAILED,
   };
 }
 

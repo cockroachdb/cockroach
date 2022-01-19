@@ -17,12 +17,15 @@ import {
   takeLatest,
 } from "redux-saga/effects";
 import {
+  cancelStatementDiagnosticsReport,
   createStatementDiagnosticsReport,
   getStatementDiagnosticsReports,
 } from "src/api/statementDiagnosticsApi";
 import { actions } from "./statementDiagnostics.reducer";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 import { rootActions } from "../reducers";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+type CancelStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
 
 export function* createDiagnosticsReportSaga(
   action: ReturnType<typeof actions.createReport>,
@@ -35,6 +38,32 @@ export function* createDiagnosticsReportSaga(
     yield put(actions.request());
   } catch (e) {
     yield put(actions.createReportFailed(e));
+  }
+}
+
+// TODO(#75559): We would like to alert on a resulting success/failure with this saga.
+// However, the alerting component used on CC console lives in the managed
+// service repo (Notification in notification.tsx) and cannot be used in a
+// cluster-ui saga. Issue has been reported to merge the AlertBanner and
+// Notification components from db-console & managed service respectively, to
+// have a single component in cluster-ui to be used by both repos.
+export function* cancelDiagnosticsReportSaga(
+  action: ReturnType<typeof actions.cancelReport>,
+) {
+  try {
+    const response: CancelStatementDiagnosticsReportResponseMessage = yield call(
+      cancelStatementDiagnosticsReport,
+      action.payload,
+    );
+
+    if (response.error !== "") {
+      throw response.error;
+    }
+
+    yield put(actions.cancelReportCompleted());
+    yield put(actions.request());
+  } catch (e) {
+    yield put(actions.cancelReportFailed(e));
   }
 }
 
@@ -68,6 +97,7 @@ export function* statementsDiagnosticsSagas(
     ),
     takeLatest(actions.request, requestStatementsDiagnosticsSaga),
     takeEvery(actions.createReport, createDiagnosticsReportSaga),
+    takeEvery(actions.cancelReport, cancelDiagnosticsReportSaga),
     takeLatest(actions.received, receivedStatementsDiagnosticsSaga, delayMs),
   ]);
 }

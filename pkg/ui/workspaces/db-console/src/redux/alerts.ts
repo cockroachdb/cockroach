@@ -365,6 +365,58 @@ export const createStatementDiagnosticsAlertSelector = createSelector(
   },
 );
 
+type CancelStatementDiagnosticsAlertPayload = {
+  show: boolean;
+  status?: "SUCCESS" | "FAILED";
+};
+
+export const cancelStatementDiagnosticsAlertLocalSetting = new LocalSetting<
+  AdminUIState,
+  CancelStatementDiagnosticsAlertPayload
+>("cancel_stmnt_diagnostics_alert", localSettingsSelector, { show: false });
+
+export const cancelStatementDiagnosticsAlertSelector = createSelector(
+  cancelStatementDiagnosticsAlertLocalSetting.selector,
+  (cancelStatementDiagnosticsAlert): Alert => {
+    if (
+      !cancelStatementDiagnosticsAlert ||
+      !cancelStatementDiagnosticsAlert.show
+    ) {
+      return undefined;
+    }
+    const { status } = cancelStatementDiagnosticsAlert;
+
+    if (status === "FAILED") {
+      return {
+        level: AlertLevel.CRITICAL,
+        title: "There was an error cancelling statement diagnostics",
+        text:
+          "Please try cancelling the statement diagnostic again. If the problem continues please reach out to customer support.",
+        showAsAlert: true,
+        dismiss: (dispatch: Dispatch<Action>) => {
+          dispatch(
+            cancelStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+          );
+          return Promise.resolve();
+        },
+      };
+    }
+    return {
+      level: AlertLevel.SUCCESS,
+      title: "Statement diagnostics were successfully cancelled",
+      showAsAlert: true,
+      autoClose: true,
+      closable: false,
+      dismiss: (dispatch: Dispatch<Action>) => {
+        dispatch(
+          cancelStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+        );
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
 type TerminateSessionAlertPayload = {
   show: boolean;
   status?: "SUCCESS" | "FAILED";
@@ -478,6 +530,7 @@ export const bannerAlertsSelector = createSelector(
   disconnectedAlertSelector,
   emailSubscriptionAlertSelector,
   createStatementDiagnosticsAlertSelector,
+  cancelStatementDiagnosticsAlertSelector,
   terminateSessionAlertSelector,
   terminateQueryAlertSelector,
   (...alerts: Alert[]): Alert[] => {
