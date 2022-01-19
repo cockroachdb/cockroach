@@ -756,6 +756,14 @@ func (j *Job) MakeSessionBoundInternalExecutor(
 	return j.registry.sessionBoundInternalExecutorFactory(ctx, sd)
 }
 
+func (j *Job) MarkIdle(isIdle bool) {
+	j.registry.MarkIdle(j, isIdle)
+}
+
+func (j *Job) IsIdle() bool {
+	return j.registry.IsJobIdle(j.ID())
+}
+
 func (j *Job) runInTxn(
 	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
 ) error {
