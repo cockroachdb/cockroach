@@ -127,6 +127,12 @@ func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc stri
 		panic(err)
 	}
 	locs := []string{}
+	// Account for the libraries to be in a bazel runfile path.
+	if bazel.BuiltWithBazel() {
+		if p, err := bazel.Runfile(path.Join("c-deps", "libgeos", "lib")); err == nil {
+			locs = append(locs, p)
+		}
+	}
 	if flagLibraryDirectoryValue != "" {
 		locs = append(locs, flagLibraryDirectoryValue)
 	}
@@ -137,12 +143,6 @@ func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc stri
 		),
 		findLibraryDirectoriesInParentingDirectories(cwd)...,
 	)
-	// Account for the libraries to be in a bazel runfile path.
-	if bazel.BuiltWithBazel() {
-		if p, err := bazel.Runfile(path.Join("c-deps", "libgeos", "lib")); err == nil {
-			locs = append(locs, p)
-		}
-	}
 	return locs
 }
 
