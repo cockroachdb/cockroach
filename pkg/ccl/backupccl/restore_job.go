@@ -2360,6 +2360,8 @@ func (r *restoreResumer) dropDescriptors(
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
 		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(codec))
+		b.Del(catalogkeys.NewPublicSchemaKey(db.GetID()).Key(codec))
+
 		deletedDBs[db.GetID()] = struct{}{}
 	}
 
