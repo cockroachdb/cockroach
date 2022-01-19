@@ -165,6 +165,12 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 		}
 	}
+	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
+		err := commentUpdater.DeleteDatabaseRoleSettings(dbRoleSetting.databaseID)
+		if err != nil {
+			return err
+		}
+	}
 	for _, id := range mvs.descriptorsToDelete.Ordered() {
 		if err := b.DeleteDescriptor(ctx, id); err != nil {
 			return err
@@ -264,18 +270,19 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 }
 
 type mutationVisitorState struct {
-	c                          Catalog
-	checkedOutDescriptors      nstree.Map
-	drainedNames               map[descpb.ID][]descpb.NameInfo
-	descriptorsToDelete        catalog.DescriptorIDSet
-	commentsToUpdate           []commentToUpdate
-	constraintCommentsToUpdate []constraintCommentToUpdate
-	dbGCJobs                   catalog.DescriptorIDSet
-	descriptorGCJobs           map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
-	indexGCJobs                map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
-	schemaChangerJob           *jobs.Record
-	schemaChangerJobUpdates    map[jobspb.JobID]schemaChangerJobUpdate
-	eventsByStatement          map[uint32][]eventPayload
+	c                            Catalog
+	checkedOutDescriptors        nstree.Map
+	drainedNames                 map[descpb.ID][]descpb.NameInfo
+	descriptorsToDelete          catalog.DescriptorIDSet
+	commentsToUpdate             []commentToUpdate
+	constraintCommentsToUpdate   []constraintCommentToUpdate
+	databaseRoleSettingsToDelete []*databaseRoleSettingToDelete
+	dbGCJobs                     catalog.DescriptorIDSet
+	descriptorGCJobs             map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
+	indexGCJobs                  map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
+	schemaChangerJob             *jobs.Record
+	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
+	eventsByStatement            map[uint32][]eventPayload
 }
 
 type constraintCommentToUpdate struct {
@@ -291,6 +298,10 @@ type commentToUpdate struct {
 	subID       int64
 	commentType keys.CommentType
 	comment     string
+}
+
+type databaseRoleSettingToDelete struct {
+	databaseID descpb.ID
 }
 
 type eventPayload struct {
@@ -380,6 +391,16 @@ func (mvs *mutationVisitorState) DeleteConstraintComment(
 			schemaName:     schema.GetName(),
 			constraintName: constraintName,
 			constraintType: constraintType,
+		})
+	return nil
+}
+
+func (mvs *mutationVisitorState) DeleteDatabaseRoleSettings(
+	ctx context.Context, db catalog.DatabaseDescriptor,
+) error {
+	mvs.databaseRoleSettingsToDelete = append(mvs.databaseRoleSettingsToDelete,
+		&databaseRoleSettingToDelete{
+			databaseID: db.GetID(),
 		})
 	return nil
 }

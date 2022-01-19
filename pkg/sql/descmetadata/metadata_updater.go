@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
@@ -35,7 +36,7 @@ type ConstraintOidBuilder interface {
 	UniqueWithoutIndexConstraintOid(
 		dbID descpb.ID, scName string, tableID descpb.ID, uc *descpb.UniqueWithoutIndexConstraint,
 	) *tree.DOid
-	//  UniqueConstraintOid generates a unique with index constraint OID.
+	// UniqueConstraintOid generates a unique with index constraint OID.
 	UniqueConstraintOid(
 		dbID descpb.ID, scName string, tableID descpb.ID, indexID descpb.IndexID,
 	) *tree.DOid
@@ -175,4 +176,23 @@ func (cu metadataUpdater) DeleteConstraintComment(
 		return nil
 	}
 	return cu.DeleteDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType)
+}
+
+// DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
+func (cu metadataUpdater) DeleteDatabaseRoleSettings(id descpb.ID) error {
+	_, err := cu.ie.ExecEx(context.Background(),
+		"delete-db-role-setting",
+		cu.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		fmt.Sprintf(
+			`DELETE FROM %s WHERE database_id = $1`,
+			sessioninit.DatabaseRoleSettingsTableName,
+		),
+		id,
+	)
+
+	// TODO(fqazi): The existing role setting code will update the version number
+	// of the table here, we need to execute the same logic. A later commit will
+	// this add this in before adoption.
+	return err
 }

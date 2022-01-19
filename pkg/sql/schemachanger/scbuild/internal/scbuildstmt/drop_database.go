@@ -80,4 +80,8 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 		DatabaseID: db.GetID(),
 		Comment:    scpb.PlaceHolderComment,
 	})
+	b.EnqueueDrop(&scpb.DatabaseRoleSetting{
+		DatabaseID: db.GetID(),
+		RoleName:   scpb.PlaceHolderRoleName,
+	})
 }

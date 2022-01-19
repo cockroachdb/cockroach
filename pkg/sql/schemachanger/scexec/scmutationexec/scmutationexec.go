@@ -90,6 +90,12 @@ type MutationVisitorStateUpdater interface {
 		constraintType scpb.ConstraintType,
 	) error
 
+	// DeleteDatabaseRoleSettings removes a database role setting
+	DeleteDatabaseRoleSettings(
+		ctx context.Context,
+		db catalog.DatabaseDescriptor,
+	) error
+
 	// AddNewGCJobForTable enqueues a GC job for the given table.
 	AddNewGCJobForTable(descriptor catalog.TableDescriptor)
 
@@ -1068,6 +1074,16 @@ func (m *visitor) RemoveConstraintComment(
 		return err
 	}
 	return m.s.DeleteConstraintComment(ctx, tbl.(catalog.TableDescriptor), op.ConstraintName, op.ConstraintType)
+}
+
+func (m *visitor) RemoveDatabaseRoleSetting(
+	ctx context.Context, op scop.RemoveDatabaseRoleSetting,
+) error {
+	db, err := m.cr.MustReadImmutableDescriptor(ctx, op.DatabaseID)
+	if err != nil {
+		return err
+	}
+	return m.s.DeleteDatabaseRoleSettings(ctx, db.(catalog.DatabaseDescriptor))
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)

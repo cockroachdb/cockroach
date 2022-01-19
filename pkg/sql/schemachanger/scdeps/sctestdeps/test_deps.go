@@ -833,8 +833,7 @@ func (s *TestState) EventLogger() scexec.EventLogger {
 	return s
 }
 
-// UpsertDescriptorComment updates a comment associated with an associated
-// schema object.
+// UpsertDescriptorComment implements scexec.DescriptorMetaDataUpdater.
 func (s *TestState) UpsertDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType, comment string,
 ) error {
@@ -843,7 +842,7 @@ func (s *TestState) UpsertDescriptorComment(
 	return nil
 }
 
-// DeleteDescriptorComment deletes a comment for a given descriptor.
+// DeleteDescriptorComment implements scexec.DescriptorMetaDataUpdater.
 func (s *TestState) DeleteDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType,
 ) error {
@@ -852,7 +851,7 @@ func (s *TestState) DeleteDescriptorComment(
 	return nil
 }
 
-//UpsertConstraintComment updates a comment associated with a constraint.
+//UpsertConstraintComment implements scexec.DescriptorMetaDataUpdater.
 func (s *TestState) UpsertConstraintComment(
 	desc catalog.TableDescriptor,
 	_ string,
@@ -865,7 +864,7 @@ func (s *TestState) UpsertConstraintComment(
 	return nil
 }
 
-//DeleteConstraintComment deletes a comment associated with a constraint.
+//DeleteConstraintComment implements scexec.DescriptorMetaDataUpdater.
 func (s *TestState) DeleteConstraintComment(
 	desc catalog.TableDescriptor,
 	schemaName string,
@@ -874,6 +873,12 @@ func (s *TestState) DeleteConstraintComment(
 ) error {
 	s.LogSideEffectf("delete comment for constraint on #%d, name: %s, type: %s",
 		desc.GetID(), constraintName, constraintType)
+	return nil
+}
+
+// DeleteDatabaseRoleSettings implements scexec.DescriptorMetaDataUpdater
+func (s *TestState) DeleteDatabaseRoleSettings(id descpb.ID) error {
+	s.LogSideEffectf("delete role settings for database on #%d", id)
 	return nil
 }
 

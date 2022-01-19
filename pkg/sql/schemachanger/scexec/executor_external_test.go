@@ -518,26 +518,28 @@ type noopMetadataUpdaterFactory struct {
 type noopMetadataUpdater struct {
 }
 
+// NewMetadataUpdater implements scexec.DescriptorMetadataUpdaterFactory
 func (noopMetadataUpdaterFactory) NewMetadataUpdater(
 	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
 ) scexec.DescriptorMetadataUpdater {
 	return &noopMetadataUpdater{}
 }
 
+// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) UpsertDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType, comment string,
 ) error {
 	return nil
 }
 
-// DeleteDescriptorComment deletes a comment for a given descriptor.
+// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) DeleteDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType,
 ) error {
 	return nil
 }
 
-//UpsertConstraintComment upsersts a comment associated with a constraint.
+//UpsertConstraintComment implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) UpsertConstraintComment(
 	desc catalog.TableDescriptor,
 	schemaName string,
@@ -548,13 +550,18 @@ func (noopMetadataUpdater) UpsertConstraintComment(
 	return nil
 }
 
-//DeleteConstraintComment deletes a comment associated with a constraint.
+//DeleteConstraintComment implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) DeleteConstraintComment(
 	desc catalog.TableDescriptor,
 	schemaName string,
 	constraintName string,
 	constraintType scpb.ConstraintType,
 ) error {
+	return nil
+}
+
+// DeleteDatabaseRoleSettings implements scexec.DescriptorMetadataUpdater
+func (noopMetadataUpdater) DeleteDatabaseRoleSettings(id descpb.ID) error {
 	return nil
 }
 

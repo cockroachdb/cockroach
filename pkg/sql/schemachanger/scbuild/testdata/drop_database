@@ -213,6 +213,10 @@ DROP DATABASE db1 CASCADE
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
     databaseId: 54
+- [[DatabaseRoleSetting:{DescID: 54, RoleName: TODO(fqazi) Roles are not currently fetched from database_role_settings}, ABSENT], PUBLIC]
+  details:
+    databaseId: 54
+    roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
 - [[DatabaseSchemaEntry:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC]
   details:
     databaseId: 54
