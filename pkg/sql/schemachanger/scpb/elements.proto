@@ -57,6 +57,7 @@ message ElementProto {
   IndexComment indexComment = 37 [(gogoproto.moretags) = "parent:\"Index\""];
   ColumnComment columnComment = 38 [(gogoproto.moretags) = "parent:\"Column\""];
   ConstraintComment constraintComment = 39  [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, ForeignKey, UniqueConstraint, CheckConstraint\""];
+  DatabaseRoleSetting database_role_setting = 40 [(gogoproto.moretags) = "parent:\"Database\""];
 }
 
 message Column {
@@ -405,4 +406,10 @@ message ConstraintComment {
   string constraint_name = 2;
   ConstraintType constraint_type = 3;
   string comment = 4;
+}
+
+message DatabaseRoleSetting {
+  option (gogoproto.equal) = true;
+  uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  string role_name = 2;
 }

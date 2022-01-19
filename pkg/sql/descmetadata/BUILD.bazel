@@ -40,6 +40,7 @@ go_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sessioninit",
         "//pkg/sql/sqlutil",
     ],
 )
