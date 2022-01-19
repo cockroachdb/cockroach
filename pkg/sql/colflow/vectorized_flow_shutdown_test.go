@@ -125,7 +125,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticNodeID,
+		hlc.NewClock(hlc.UnixNano, time.Nanosecond), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(t, err)
 	dialer := &execinfrapb.MockDialer{Addr: addr}
@@ -274,7 +274,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						outbox.Run(
 							outboxCtx,
 							dialer,
-							execinfra.StaticNodeID,
+							execinfra.StaticSQLInstanceID,
 							flowID,
 							execinfrapb.StreamID(id),
 							flowCtxCancel,

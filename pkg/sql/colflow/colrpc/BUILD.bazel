@@ -9,9 +9,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/colserde",
-        "//pkg/roachpb:with-mocks",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
@@ -46,10 +46,10 @@ go_test(
     ],
     embed = [":colrpc"],
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldatatestutils",
         "//pkg/col/colserde",
-        "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexectestutils",

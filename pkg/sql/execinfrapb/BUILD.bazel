@@ -71,6 +71,7 @@ go_test(
     ],
     embed = [":execinfrapb"],
     deps = [
+        "//pkg/base",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/settings/cluster",

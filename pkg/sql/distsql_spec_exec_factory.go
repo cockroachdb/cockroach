@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -35,10 +36,10 @@ type distSQLSpecExecFactory struct {
 	planner *planner
 	dsp     *DistSQLPlanner
 	// planCtx should not be used directly - getPlanCtx() should be used instead.
-	planCtx       *PlanningCtx
-	singleTenant  bool
-	planningMode  distSQLPlanningMode
-	gatewayNodeID roachpb.NodeID
+	planCtx              *PlanningCtx
+	singleTenant         bool
+	planningMode         distSQLPlanningMode
+	gatewaySQLInstanceID base.SQLInstanceID
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
@@ -59,11 +60,11 @@ const (
 
 func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exec.Factory {
 	e := &distSQLSpecExecFactory{
-		planner:       p,
-		dsp:           p.extendedEvalCtx.DistSQLPlanner,
-		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
-		planningMode:  planningMode,
-		gatewayNodeID: p.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
+		planner:              p,
+		dsp:                  p.extendedEvalCtx.DistSQLPlanner,
+		singleTenant:         p.execCfg.Codec.ForSystemTenant(),
+		planningMode:         planningMode,
+		gatewaySQLInstanceID: p.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID,
 	}
 	distribute := e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning
 	evalCtx := p.ExtendedEvalContext()

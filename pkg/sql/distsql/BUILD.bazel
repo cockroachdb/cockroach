@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/distsql",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/gossip",
         "//pkg/kv",
         "//pkg/roachpb:with-mocks",

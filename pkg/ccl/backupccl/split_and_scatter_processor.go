@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -291,7 +292,7 @@ func (ssp *splitAndScatterProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		// The routing datums informs the router which output stream should be used.
 		routingDatum, ok := ssp.routingDatumCache[scatteredEntry.node]
 		if !ok {
-			routingDatum, _ = routingDatumsForNode(scatteredEntry.node)
+			routingDatum, _ = routingDatumsForSQLInstance(base.SQLInstanceID(scatteredEntry.node))
 			ssp.routingDatumCache[scatteredEntry.node] = routingDatum
 		}
 
@@ -414,18 +415,20 @@ func runSplitAndScatter(
 	return g.Wait()
 }
 
-func routingDatumsForNode(nodeID roachpb.NodeID) (rowenc.EncDatum, rowenc.EncDatum) {
-	routingBytes := roachpb.Key(fmt.Sprintf("node%d", nodeID))
+func routingDatumsForSQLInstance(
+	sqlInstanceID base.SQLInstanceID,
+) (rowenc.EncDatum, rowenc.EncDatum) {
+	routingBytes := roachpb.Key(fmt.Sprintf("node%d", sqlInstanceID))
 	startDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
 	endDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
 	return startDatum, endDatum
 }
 
-// routingSpanForNode provides the mapping to be used during distsql planning
+// routingSpanForSQLInstance provides the mapping to be used during distsql planning
 // when setting up the output router.
-func routingSpanForNode(nodeID roachpb.NodeID) ([]byte, []byte, error) {
+func routingSpanForSQLInstance(sqlInstanceID base.SQLInstanceID) ([]byte, []byte, error) {
 	var alloc tree.DatumAlloc
-	startDatum, endDatum := routingDatumsForNode(nodeID)
+	startDatum, endDatum := routingDatumsForSQLInstance(sqlInstanceID)
 
 	startBytes, endBytes := make([]byte, 0), make([]byte, 0)
 	startBytes, err := startDatum.Encode(splitAndScatterOutputTypes[0], &alloc, descpb.DatumEncoding_ASCENDING_KEY, startBytes)
