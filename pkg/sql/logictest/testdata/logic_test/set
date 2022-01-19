@@ -660,6 +660,24 @@ SET LC_NUMERIC = 'en_US.UTF-8'
 statement error invalid value for parameter "lc_time": "en_US.UTF-8"
 SET LC_TIME = 'en_US.UTF-8'
 
+subtest check_function_bodies_test
+
+statement ok
+SET check_function_bodies = true
+
+query T
+SHOW check_function_bodies
+----
+on
+
+statement ok
+SET check_function_bodies = false
+
+query T
+SHOW check_function_bodies
+----
+off
+
 # Test custom session variables
 
 statement ok

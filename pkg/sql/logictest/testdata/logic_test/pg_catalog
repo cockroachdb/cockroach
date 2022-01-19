@@ -4032,6 +4032,7 @@ application_name                                      ·                   NULL 
 avoid_buffering                                       off                 NULL      NULL        NULL        string
 backslash_quote                                       safe_encoding       NULL      NULL        NULL        string
 bytea_output                                          hex                 NULL      NULL        NULL        string
+check_function_bodies                                 on                  NULL      NULL        NULL        string
 client_encoding                                       UTF8                NULL      NULL        NULL        string
 client_min_messages                                   notice              NULL      NULL        NULL        string
 database                                              test                NULL      NULL        NULL        string
@@ -4142,6 +4143,7 @@ application_name                                      ·                   NULL 
 avoid_buffering                                       off                 NULL  user     NULL      false               false
 backslash_quote                                       safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
 bytea_output                                          hex                 NULL  user     NULL      hex                 hex
+check_function_bodies                                 on                  NULL  user     NULL      on                  on
 client_encoding                                       UTF8                NULL  user     NULL      UTF8                UTF8
 client_min_messages                                   notice              NULL  user     NULL      notice              notice
 database                                              test                NULL  user     NULL      ·                   test
@@ -4246,6 +4248,7 @@ application_name                                      NULL    NULL     NULL     
 avoid_buffering                                       NULL    NULL     NULL     NULL        NULL
 backslash_quote                                       NULL    NULL     NULL     NULL        NULL
 bytea_output                                          NULL    NULL     NULL     NULL        NULL
+check_function_bodies                                 NULL    NULL     NULL     NULL        NULL
 client_encoding                                       NULL    NULL     NULL     NULL        NULL
 client_min_messages                                   NULL    NULL     NULL     NULL        NULL
 crdb_version                                          NULL    NULL     NULL     NULL        NULL
