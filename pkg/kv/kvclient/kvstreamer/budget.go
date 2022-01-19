@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // budget abstracts the memory budget that is provided to the Streamer by its
@@ -92,7 +93,10 @@ func (b *budget) consumeLocked(ctx context.Context, bytes int64, allowDebt bool)
 	// check whether we'll stay within the budget.
 	if !allowDebt && b.limitBytes > 5 {
 		if b.mu.acc.Used()+bytes > b.limitBytes {
-			return mon.MemoryResource.NewBudgetExceededError(bytes, b.mu.acc.Used(), b.limitBytes)
+			return errors.Wrap(
+				mon.MemoryResource.NewBudgetExceededError(bytes, b.mu.acc.Used(), b.limitBytes),
+				"streamer budget",
+			)
 		}
 	}
 	return b.mu.acc.Grow(ctx, bytes)
