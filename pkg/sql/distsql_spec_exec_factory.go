@@ -12,6 +12,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -190,12 +191,16 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
 	defer sb.Release()
 
-	// Note that initColsForScan and setting ResultColumns below are equivalent
-	// to what scan.initTable call does in execFactory.ConstructScan.
-	cols, err := initColsForScan(tabDesc, colCfg)
-	if err != nil {
-		return nil, err
+	cols := make([]catalog.Column, 0, params.NeededCols.Len())
+	allCols := tabDesc.AllColumns()
+	for ord, ok := params.NeededCols.Next(0); ok; ord, ok = params.NeededCols.Next(ord + 1) {
+		cols = append(cols, allCols[ord])
 	}
+	columnIDs := make([]descpb.ColumnID, len(cols))
+	for i := range cols {
+		columnIDs[i] = cols[i].GetID()
+	}
+
 	p.ResultColumns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
 
 	if params.IndexConstraint != nil && params.IndexConstraint.IsContradiction() {
@@ -206,6 +211,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	var spans roachpb.Spans
+	var err error
 	if params.InvertedConstraint != nil {
 		spans, err = sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	} else {
@@ -229,12 +235,11 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 
 	// Phase 2: perform the table reader planning. This phase is equivalent to
 	// what DistSQLPlanner.createTableReaders does.
-	colsToTableOrdinalMap := toTableOrdinals(cols, tabDesc)
 	trSpec := physicalplan.NewTableReaderSpec()
 	*trSpec = execinfrapb.TableReaderSpec{
-		Table:            *tabDesc.TableDesc(),
-		Reverse:          params.Reverse,
-		HasSystemColumns: scanContainsSystemColumns(&colCfg),
+		Table:     *tabDesc.TableDesc(),
+		Reverse:   params.Reverse,
+		ColumnIDs: columnIDs,
 	}
 	if vc := getInvertedColumn(colCfg.invertedColumnID, cols); vc != nil {
 		trSpec.InvertedColumn = vc.ColumnDesc()
@@ -270,17 +275,15 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		e.getPlanCtx(recommendation),
 		p,
 		&tableReaderPlanningInfo{
-			spec:                  trSpec,
-			post:                  post,
-			desc:                  tabDesc,
-			spans:                 spans,
-			reverse:               params.Reverse,
-			parallelize:           params.Parallelize,
-			estimatedRowCount:     uint64(params.EstimatedRowCount),
-			reqOrdering:           ReqOrdering(reqOrdering),
-			cols:                  cols,
-			colsToTableOrdinalMap: colsToTableOrdinalMap,
-			containsSystemColumns: trSpec.HasSystemColumns,
+			spec:              trSpec,
+			post:              post,
+			desc:              tabDesc,
+			spans:             spans,
+			reverse:           params.Reverse,
+			parallelize:       params.Parallelize,
+			estimatedRowCount: uint64(params.EstimatedRowCount),
+			reqOrdering:       ReqOrdering(reqOrdering),
+			cols:              cols,
 		},
 	)
 
