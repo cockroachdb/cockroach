@@ -70,6 +70,8 @@ const (
 	ConstraintType
 	// ConstraintOrdinal is the ordinal of the constraints
 	ConstraintOrdinal
+	// RoleName is the name of a roleset element.
+	RoleName
 )
 
 var t = reflect.TypeOf
@@ -242,6 +244,10 @@ var Schema = rel.MustSchema("screl",
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(Name, "ConstraintName"),
 		rel.EntityAttr(ConstraintType, "ConstraintType"),
+	),
+	rel.EntityMapping(t((*scpb.DatabaseRoleSetting)(nil)),
+		rel.EntityAttr(DescID, "DatabaseID"),
+		rel.EntityAttr(RoleName, "RoleName"),
 	),
 )
 

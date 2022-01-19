@@ -257,6 +257,9 @@ type DescriptorMetadataUpdater interface {
 
 	//DeleteConstraintComment deletes a comment associated with a constraint.
 	DeleteConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintName string, constraintType scpb.ConstraintType) error
+
+	// DeleteDatabaseRoleSettings deletes role settings associated with a database.
+	DeleteDatabaseRoleSettings(ctx context.Context, database catalog.DatabaseDescriptor) error
 }
 
 // DescriptorMetadataUpdaterFactory is used to construct a DescriptorMetadataUpdater for a given

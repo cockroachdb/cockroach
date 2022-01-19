@@ -816,7 +816,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	execCfg.DescMetadaUpdaterFactory = descmetadata.NewMetadataUpdaterFactory(
 		ieFactory,
-		sql.MakeConstraintOidBuilder)
+		sql.MakeConstraintOidBuilder,
+		collectionFactory,
+	)
 	execCfg.InternalExecutorFactory = ieFactory
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider

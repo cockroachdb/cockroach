@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -27,16 +28,19 @@ type MakeConstraintOidBuilderFn func() ConstraintOidBuilder
 type MetadataUpdaterFactory struct {
 	ieFactory                sqlutil.SessionBoundInternalExecutorFactory
 	makeConstraintOidBuilder MakeConstraintOidBuilderFn
+	collectionFactory        *descs.CollectionFactory
 }
 
 // NewMetadataUpdaterFactory creates a new comment updater factory.
 func NewMetadataUpdaterFactory(
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 	makeConstraintOidBuilder MakeConstraintOidBuilderFn,
+	collectionFactory *descs.CollectionFactory,
 ) scexec.DescriptorMetadataUpdaterFactory {
 	return MetadataUpdaterFactory{
 		ieFactory:                ieFactory,
 		makeConstraintOidBuilder: makeConstraintOidBuilder,
+		collectionFactory:        collectionFactory,
 	}
 }
 
@@ -47,8 +51,9 @@ func (cf MetadataUpdaterFactory) NewMetadataUpdater(
 	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
 ) scexec.DescriptorMetadataUpdater {
 	return metadataUpdater{
-		txn:        txn,
-		ie:         cf.ieFactory(ctx, sessionData),
-		oidBuilder: cf.makeConstraintOidBuilder(),
+		txn:               txn,
+		ie:                cf.ieFactory(ctx, sessionData),
+		oidBuilder:        cf.makeConstraintOidBuilder(),
+		collectionFactory: cf.collectionFactory,
 	}
 }
