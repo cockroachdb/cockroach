@@ -23,7 +23,7 @@ import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
 } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import {
   aggregatedTsAttr,
   aggregationIntervalAttr,
@@ -42,13 +42,19 @@ import {
   AggregateStatistics,
   util,
 } from "@cockroachlabs/cluster-ui";
-import { createStatementDiagnosticsReportAction } from "src/redux/statements";
+import {
+  cancelStatementDiagnosticsReportAction,
+  createStatementDiagnosticsReportAction,
+} from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
 import {
+  trackCancelDiagnosticsBundleAction,
   trackDownloadDiagnosticsBundleAction,
   trackStatementDetailsSubnavSelectionAction,
 } from "src/redux/analyticsActions";
+import * as protos from "src/js/protos";
+type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const { combineStatementStats, flattenStatementStats, statementKey } = util;
 type ExecutionStatistics = util.ExecutionStatistics;
@@ -245,6 +251,14 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
   createStatementDiagnosticsReport: createStatementDiagnosticsReportAction,
   onTabChanged: trackStatementDetailsSubnavSelectionAction,
   onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
+  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
+    return (dispatch: AppDispatch) => {
+      dispatch(cancelStatementDiagnosticsReportAction(report.id));
+      dispatch(
+        trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
+      );
+    };
+  },
   refreshNodes: refreshNodes,
   refreshNodesLiveness: refreshLiveness,
 };
