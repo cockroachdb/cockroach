@@ -1468,17 +1468,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 	now := txn.db.clock.NowAsClockTimestamp()
 	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp())
 	txn.resetDeadlineLocked()
-	return roachpb.NewTransactionRetryWithProtoRefreshError(
-		msg,
-		txn.mu.ID,
-		roachpb.MakeTransaction(
-			txn.debugNameLocked(),
-			nil, // baseKey
-			txn.mu.userPriority,
-			now.ToTimestamp(),
-			txn.db.clock.MaxOffset().Nanoseconds(),
-			int32(txn.db.ctx.NodeID.SQLInstanceID())),
-	)
+	return txn.mu.sender.PrepareRetryableError(ctx, msg)
 }
 
 // PrepareRetryableError returns a
