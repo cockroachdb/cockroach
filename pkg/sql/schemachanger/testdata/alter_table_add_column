@@ -10,6 +10,7 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY)
 test
 ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
 ----
+checking for feature: ALTER TABLE
 begin transaction #1
 # begin StatementPhase
 # end StatementPhase

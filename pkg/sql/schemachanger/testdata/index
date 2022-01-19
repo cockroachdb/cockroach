@@ -7,6 +7,7 @@ CREATE TABLE t (k INT PRIMARY KEY, v STRING NOT NULL);
 test
 CREATE INDEX idx1 ON t (v);
 ----
+checking for feature: CREATE INDEX
 begin transaction #1
 # begin StatementPhase
 # end StatementPhase
