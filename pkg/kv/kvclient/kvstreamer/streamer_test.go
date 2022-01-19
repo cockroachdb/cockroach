@@ -12,6 +12,7 @@ package kvstreamer
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
 
@@ -268,4 +270,69 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		reqs[1] = makeGetRequest(limitBytes/2 + 1)
 		require.Error(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
 	})
+}
+
+// TestStreamerCorrectlyDiscardsResponses verifies that the Streamer behaves
+// correctly in a scenario when partial results are returned, but the original
+// memory reservation was under-provisioned and the budget cannot be reconciled,
+// so the responses have to be discarded.
+func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a cluster with large --max-sql-memory parameter so that the
+	// Streamer isn't hitting the root budget exceeded error.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// The initial estimate for TargetBytes argument for each asynchronous
+	// request by the Streamer will be numRowsPerRange x initialAvgResponseSize,
+	// so we pick the blob size such that about half of rows are included in the
+	// partial responses.
+	const blobSize = 2 * initialAvgResponseSize
+	const numRows = 20
+	const numRowsPerRange = 4
+
+	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k))")
+	require.NoError(t, err)
+	for i := 0; i < numRows; i++ {
+		if i > 0 && i%numRowsPerRange == 0 {
+			// Create a new range for the next numRowsPerRange rows.
+			_, err = db.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", i))
+			require.NoError(t, err)
+		}
+		_, err = db.Exec(fmt.Sprintf("INSERT INTO t SELECT %d, 1, repeat('a', %d)", i, blobSize))
+		require.NoError(t, err)
+	}
+
+	// Populate the range cache.
+	_, err = db.Exec("SELECT count(*) from t")
+	require.NoError(t, err)
+
+	// Perform an index join to read the blobs.
+	query := "SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
+	// Use several different workmem limits to exercise somewhat different
+	// scenarios.
+	//
+	// All of these values allow for all initial requests to be issued
+	// asynchronously, but only for some of the responses to be "accepted" by
+	// the budget. This includes 4/3 factor since the vectorized ColIndexJoin
+	// gives 3/4 of the workmem limit to the Streamer.
+	for _, workmem := range []int{
+		3 * initialAvgResponseSize * numRows / 2,
+		7 * initialAvgResponseSize * numRows / 4,
+		2 * initialAvgResponseSize * numRows,
+	} {
+		t.Run(fmt.Sprintf("workmem=%s", humanize.Bytes(uint64(workmem))), func(t *testing.T) {
+			_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", workmem))
+			require.NoError(t, err)
+			row := db.QueryRow(query)
+			var sum int
+			require.NoError(t, row.Scan(&sum))
+			require.Equal(t, numRows*blobSize, sum)
+		})
+	}
 }
