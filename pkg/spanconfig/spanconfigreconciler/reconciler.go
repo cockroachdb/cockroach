@@ -357,14 +357,23 @@ func (r *incrementalReconciler) reconcile(
 ) error {
 	// Watch for incremental updates, applying KV as things change.
 	return r.sqlWatcher.WatchForSQLUpdates(ctx, startTS,
-		func(ctx context.Context, descriptorUpdates []spanconfig.DescriptorUpdate, checkpoint hlc.Timestamp) error {
-			if len(descriptorUpdates) == 0 {
+		func(ctx context.Context, sqlUpdates []spanconfig.SQLUpdate, checkpoint hlc.Timestamp) error {
+			if len(sqlUpdates) == 0 {
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
 			}
 
+			// Process the DescriptorUpdates and identify all descriptor IDs that
+			// require translation.
 			var allIDs descpb.IDs
-			for _, update := range descriptorUpdates {
-				allIDs = append(allIDs, update.ID)
+			for _, update := range sqlUpdates {
+				if update.IsDescriptorUpdate() {
+					allIDs = append(allIDs, update.GetDescriptorUpdate().ID)
+				} else if update.IsProtectedTimestampUpdate() {
+					// TODO(adityamaru): Set the bool that tells the translator to emit
+					// SystemSpanConfigs.
+				} else {
+					return errors.Newf("unexpected SQLUpdate type: %+v", update)
+				}
 			}
 
 			// TODO(irfansharif): Would it be easier to just have the translator
@@ -372,7 +381,7 @@ func (r *incrementalReconciler) reconcile(
 			// here, somewhat wastefully. An alternative would be to have a
 			// txn-scoped translator.
 
-			missingTableIDs, err := r.filterForMissingTableIDs(ctx, descriptorUpdates)
+			missingTableIDs, err := r.filterForMissingTableIDs(ctx, sqlUpdates)
 			if err != nil {
 				return err
 			}
@@ -415,7 +424,7 @@ func (r *incrementalReconciler) reconcile(
 // [1]: Or if the ExcludeDroppedDescriptorsFromLookup testing knob is used,
 //      this includes dropped descriptors.
 func (r *incrementalReconciler) filterForMissingTableIDs(
-	ctx context.Context, updates []spanconfig.DescriptorUpdate,
+	ctx context.Context, updates []spanconfig.SQLUpdate,
 ) (descpb.IDs, error) {
 	seen := make(map[descpb.ID]struct{})
 	var missingIDs descpb.IDs
@@ -423,11 +432,15 @@ func (r *incrementalReconciler) filterForMissingTableIDs(
 	if err := sql.DescsTxn(ctx, r.execCfg,
 		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, update := range updates {
-				if update.DescriptorType != catalog.Table {
+				if update.IsProtectedTimestampUpdate() {
+					continue // nothing to do
+				}
+				descriptorUpdate := update.GetDescriptorUpdate()
+				if descriptorUpdate.DescriptorType != catalog.Table {
 					continue // nothing to do
 				}
 
-				desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, update.ID, tree.CommonLookupFlags{
+				desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, descriptorUpdate.ID, tree.CommonLookupFlags{
 					Required:       true, // we want to error out for missing descriptors
 					IncludeDropped: true,
 					IncludeOffline: true,
@@ -444,9 +457,9 @@ func (r *incrementalReconciler) filterForMissingTableIDs(
 				}
 
 				if considerAsMissing {
-					if _, found := seen[update.ID]; !found {
-						seen[update.ID] = struct{}{}
-						missingIDs = append(missingIDs, update.ID) // accumulate the set of missing table IDs
+					if _, found := seen[descriptorUpdate.ID]; !found {
+						seen[descriptorUpdate.ID] = struct{}{}
+						missingIDs = append(missingIDs, descriptorUpdate.ID) // accumulate the set of missing table IDs
 					}
 				}
 			}

@@ -15,10 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // KVAccessor mediates access to KV span configurations pertaining to a given
@@ -126,6 +128,10 @@ func FullTranslate(
 	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
 }
 
+// SQLWatcherHandler is the signature of a handler that can be passed into
+// SQLWatcher.WatchForSQLUpdates as described below.
+type SQLWatcherHandler func(context.Context, []SQLUpdate, hlc.Timestamp) error
+
 // SQLWatcher watches for events on system.zones and system.descriptors.
 type SQLWatcher interface {
 	// WatchForSQLUpdates watches for updates to zones and descriptors starting
@@ -147,7 +153,7 @@ type SQLWatcher interface {
 	WatchForSQLUpdates(
 		ctx context.Context,
 		startTS hlc.Timestamp,
-		handler func(ctx context.Context, updates []DescriptorUpdate, checkpointTS hlc.Timestamp) error,
+		handler SQLWatcherHandler,
 	) error
 }
 
@@ -233,8 +239,62 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
+// SQLUpdate captures either a descriptor or a protected timestamp update.
+// It is the unit emitted by the SQLWatcher.
+type SQLUpdate struct {
+	descriptorUpdate         DescriptorUpdate
+	protectedTimestampUpdate ProtectedTimestampUpdate
+}
+
+// MakeDescriptorSQLUpdate returns a SQLUpdate that represents an update to a
+// descriptor.
+func MakeDescriptorSQLUpdate(id descpb.ID, descType catalog.DescriptorType) SQLUpdate {
+	return SQLUpdate{descriptorUpdate: DescriptorUpdate{
+		ID:             id,
+		DescriptorType: descType,
+	}}
+}
+
+// GetDescriptorUpdate returns a DescriptorUpdate.
+func (d *SQLUpdate) GetDescriptorUpdate() DescriptorUpdate {
+	return d.descriptorUpdate
+}
+
+// IsDescriptorUpdate returns true if the SQLUpdate represents an update to a
+// descriptor.
+func (d *SQLUpdate) IsDescriptorUpdate() bool {
+	return d.descriptorUpdate != DescriptorUpdate{}
+}
+
+// MakeProtectedTimestampSQLUpdate returns a SQLUpdate that represents an update
+// to a protected timestamp record.
+func MakeProtectedTimestampSQLUpdate(target ptpb.Target) (SQLUpdate, error) {
+	update := SQLUpdate{protectedTimestampUpdate: ProtectedTimestampUpdate{}}
+	switch target.GetUnion().(type) {
+	case *ptpb.Target_Cluster:
+		update.protectedTimestampUpdate.ClusterOrTenantsTarget = target
+	case *ptpb.Target_Tenants:
+		update.protectedTimestampUpdate.ClusterOrTenantsTarget = target
+	default:
+		return update, errors.AssertionFailedf("expected Cluster or Tenants target but got: %+v", target)
+	}
+	return update, nil
+}
+
+// GetProtectedTimestampUpdate returns the target of the updated protected
+// timestamp record.
+func (d *SQLUpdate) GetProtectedTimestampUpdate() ProtectedTimestampUpdate {
+	return d.protectedTimestampUpdate
+}
+
+// IsProtectedTimestampUpdate returns true if the SQLUpdate represents an update
+// to a protected timestamp record.
+func (d *SQLUpdate) IsProtectedTimestampUpdate() bool {
+	return d.protectedTimestampUpdate != ProtectedTimestampUpdate{}
+}
+
 // DescriptorUpdate captures the ID and the type of descriptor or zone that been
-// updated. It's the unit of what the SQLWatcher emits.
+// updated.
 type DescriptorUpdate struct {
 	// ID of the descriptor/zone that has been updated.
 	ID descpb.ID
@@ -242,6 +302,14 @@ type DescriptorUpdate struct {
 	// DescriptorType of the descriptor/zone that has been updated. Could be either
 	// the specific type or catalog.Any if no information is available.
 	DescriptorType catalog.DescriptorType
+}
+
+// ProtectedTimestampUpdate captures a protected timestamp record with a cluster
+// or tenant target that been updated.
+type ProtectedTimestampUpdate struct {
+	// ClusterOrTenantsTarget captures the cluster or tenants target of the
+	// protected timestamp record that has been updated.
+	ClusterOrTenantsTarget ptpb.Target
 }
 
 // Update captures a span and the corresponding config change. It's the unit of

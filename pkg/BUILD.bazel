@@ -35,6 +35,7 @@ ALL_TESTS = [
     "//pkg/ccl/spanconfigccl/spanconfigcomparedccl:spanconfigcomparedccl_test",
     "//pkg/ccl/spanconfigccl/spanconfigreconcilerccl:spanconfigreconcilerccl_test",
     "//pkg/ccl/spanconfigccl/spanconfigsqltranslatorccl:spanconfigsqltranslatorccl_test",
+    "//pkg/ccl/spanconfigccl/spanconfigsqlwatcherccl:spanconfigsqlwatcherccl_test",
     "//pkg/ccl/sqlproxyccl/denylist:denylist_test",
     "//pkg/ccl/sqlproxyccl/idle:idle_test",
     "//pkg/ccl/sqlproxyccl/tenant:tenant_test",

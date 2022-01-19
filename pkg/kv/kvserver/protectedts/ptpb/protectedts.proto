@@ -138,6 +138,7 @@ message State {
 // Target is the format of the message encoded in the target column of the
 // system.protectedts_records table.
 message Target {
+  option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
   message SchemaObjectsTarget {
     option (gogoproto.equal) = true;

@@ -11,6 +11,9 @@
 package ptpb
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
@@ -31,4 +34,30 @@ func MakeTenantsTarget(ids []roachpb.TenantID) *Target {
 // will protect the keyspace of all schema objects (database/table).
 func MakeSchemaObjectsTarget(ids descpb.IDs) *Target {
 	return &Target{&Target_SchemaObjects{SchemaObjects: &Target_SchemaObjectsTarget{IDs: ids}}}
+}
+
+// String implements the stringer interface.
+func (t Target) String() string {
+	s := strings.Builder{}
+	switch c := t.GetUnion().(type) {
+	case *Target_Cluster:
+		s.WriteString("ClusterTarget")
+	case *Target_Tenants:
+		s.WriteString("TenantsTarget:{")
+		tenIDStr := make([]string, len(c.Tenants.IDs))
+		for i, tenID := range c.Tenants.IDs {
+			tenIDStr[i] = tenID.String()
+		}
+		s.WriteString(strings.Join(tenIDStr, ","))
+		s.WriteString("}")
+	case *Target_SchemaObjects:
+		s.WriteString("SchemaObjectsTarget:{")
+		descIDStr := make([]string, len(c.SchemaObjects.IDs))
+		for i, descID := range c.SchemaObjects.IDs {
+			descIDStr[i] = strconv.Itoa(int(descID))
+		}
+		s.WriteString(strings.Join(descIDStr, ","))
+		s.WriteString("}")
+	}
+	return s.String()
 }

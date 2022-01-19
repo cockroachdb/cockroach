@@ -14,6 +14,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -31,22 +33,33 @@ func TestBuffer(t *testing.T) {
 			WallTime: int64(nanos),
 		}
 	}
-	makeEvent := func(descID int, timestamp hlc.Timestamp) event {
+	makePTSEvent := func(target ptpb.Target, timestamp hlc.Timestamp) event {
+		update, err := spanconfig.MakeProtectedTimestampSQLUpdate(target)
+		require.NoError(t, err)
 		return event{
-			update: spanconfig.DescriptorUpdate{
-				ID:             descpb.ID(descID),
-				DescriptorType: catalog.Any,
-			},
+			update:    update,
 			timestamp: timestamp,
 		}
 	}
-	makeUpdates := func(descIDs ...int) []spanconfig.DescriptorUpdate {
-		updates := make([]spanconfig.DescriptorUpdate, 0, len(descIDs))
+	makePTSUpdates := func(targets ...ptpb.Target) []spanconfig.SQLUpdate {
+		updates := make([]spanconfig.SQLUpdate, 0, len(targets))
+		for _, target := range targets {
+			update, err := spanconfig.MakeProtectedTimestampSQLUpdate(target)
+			require.NoError(t, err)
+			updates = append(updates, update)
+		}
+		return updates
+	}
+	makeDescriptorEvent := func(descID int, timestamp hlc.Timestamp) event {
+		return event{
+			update:    spanconfig.MakeDescriptorSQLUpdate(descpb.ID(descID), catalog.Any),
+			timestamp: timestamp,
+		}
+	}
+	makeDescriptorUpdates := func(descIDs ...int) []spanconfig.SQLUpdate {
+		updates := make([]spanconfig.SQLUpdate, 0, len(descIDs))
 		for _, descID := range descIDs {
-			updates = append(updates, spanconfig.DescriptorUpdate{
-				ID:             descpb.ID(descID),
-				DescriptorType: catalog.Any,
-			})
+			updates = append(updates, spanconfig.MakeDescriptorSQLUpdate(descpb.ID(descID), catalog.Any))
 		}
 		return updates
 	}
@@ -62,10 +75,13 @@ func TestBuffer(t *testing.T) {
 
 	// Add a few events without advancing any of the frontiers. We don't expect
 	// anything to be returned by the call to flush yet.
-	err = buffer.add(makeEvent(1, ts(10)))
+	err = buffer.add(makeDescriptorEvent(1, ts(10)))
 	require.NoError(t, err)
 
-	err = buffer.add(makeEvent(2, ts(11)))
+	err = buffer.add(makeDescriptorEvent(2, ts(11)))
+	require.NoError(t, err)
+
+	err = buffer.add(makePTSEvent(*ptpb.MakeClusterTarget(), ts(12)))
 	require.NoError(t, err)
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
@@ -80,30 +96,43 @@ func TestBuffer(t *testing.T) {
 	require.Equal(t, ts(1), combinedFrontierTS)
 	require.True(t, len(updates) == 0)
 
-	// Advance the descriptors frontier to a lower timestamp than the zones
-	// frontier above. Flush should now return the lower timestamp as the
-	// combinedFrontierTS. Furthermore, we only expect one id to be returned.
+	// Advance the descriptors and protected timestamp frontier to a lower
+	// timestamp than the zones frontier above. Flush should now return the lower
+	// timestamp as the combinedFrontierTS. Furthermore, we only expect one id to
+	// be returned.
 	buffer.advance(descriptorsRangefeed, ts(10))
+	require.NoError(t, err)
+	buffer.advance(protectedTimestampRangefeed, ts(10))
 	require.NoError(t, err)
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, ts(10), combinedFrontierTS)
-	require.Equal(t, makeUpdates(1), updates)
+	require.Equal(t, makeDescriptorUpdates(1), updates)
 
-	// Bump the descriptors frontier past the zones frontier. This should bump the
-	// combinedFrontierTS of the buffer to 11, resulting in flush returning the
-	// last ID in the buffer.
+	// Bump the descriptors and protected timestamp frontier past the zones
+	// frontier. This should bump the combinedFrontierTS of the buffer to 11,
+	// resulting in flush returning the last descriptor SQLUpdate in the buffer.
 	buffer.advance(descriptorsRangefeed, ts(20))
+	buffer.advance(protectedTimestampRangefeed, ts(20))
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
 	require.Equal(t, ts(11), combinedFrontierTS)
-	require.Equal(t, makeUpdates(2), updates)
+	require.Equal(t, makeDescriptorUpdates(2), updates)
+
+	// Bump the zones frontier to a timestamp past the last SQLUpdate. This should
+	// bump the combinedFrontierTS of the buffer to 13, resulting in flush
+	// returning the last, and only PTS SQLUpdate in the buffer.
+	buffer.advance(zonesRangefeed, ts(13))
+	updates, combinedFrontierTS, err = buffer.flush(ctx)
+	require.NoError(t, err)
+	require.Equal(t, ts(13), combinedFrontierTS)
+	require.Equal(t, makePTSUpdates(*ptpb.MakeClusterTarget()), updates)
 
 	// No updates are left in the buffer below the combined frontier (which hasn't
 	// changed from above).
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ts(11), combinedFrontierTS)
+	require.Equal(t, ts(13), combinedFrontierTS)
 	require.True(t, len(updates) == 0)
 
 	// Try regressing the zones frontier by advancing it to a timestamp below what
@@ -112,31 +141,54 @@ func TestBuffer(t *testing.T) {
 	buffer.advance(zonesRangefeed, ts(5))
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ts(11), combinedFrontierTS)
+	require.Equal(t, ts(13), combinedFrontierTS)
 	require.True(t, len(updates) == 0)
 
-	// Try adding an event at a TS below the combinedFrontierTS. This should no-op
+	// Try adding events at a TS below the combinedFrontierTS. This should no-op
 	// as well and the ID should not be returned when flushing.
-	err = buffer.add(makeEvent(1, ts(5)))
+	err = buffer.add(makeDescriptorEvent(1, ts(5)))
+	require.NoError(t, err)
+	err = buffer.add(makePTSEvent(*ptpb.MakeClusterTarget(), ts(5)))
 	require.NoError(t, err)
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ts(11), combinedFrontierTS)
+	require.Equal(t, ts(13), combinedFrontierTS)
 	require.True(t, len(updates) == 0)
 
-	// Lastly, ensure that flushing doesn't return duplicate IDs even when more
-	// than one updates have been added for a given ID.
-	err = buffer.add(makeEvent(1, ts(12)))
+	// Ensure that flushing doesn't return duplicate IDs even when more than one
+	// descriptor SQLUpdates have been added for a given ID.
+	err = buffer.add(makeDescriptorEvent(1, ts(14)))
 	require.NoError(t, err)
-	err = buffer.add(makeEvent(1, ts(13)))
+	err = buffer.add(makeDescriptorEvent(1, ts(15)))
 	require.NoError(t, err)
-	err = buffer.add(makeEvent(2, ts(14)))
+
+	// Interleave some PTS SQLUpdates to make sure they are de-duped correctly,
+	// and interact as expected with descriptor SQLUpdates.
+	err = buffer.add(makePTSEvent(*ptpb.MakeClusterTarget(), ts(16)))
 	require.NoError(t, err)
-	buffer.advance(zonesRangefeed, ts(14))
+	err = buffer.add(makePTSEvent(*ptpb.MakeTenantsTarget(
+		[]roachpb.TenantID{roachpb.MakeTenantID(1)}), ts(17)))
+	require.NoError(t, err)
+	err = buffer.add(makePTSEvent(*ptpb.MakeTenantsTarget(
+		[]roachpb.TenantID{roachpb.MakeTenantID(1)}), ts(18)))
+	require.NoError(t, err)
+	err = buffer.add(makePTSEvent(*ptpb.MakeClusterTarget(), ts(19)))
+	require.NoError(t, err)
+
+	err = buffer.add(makeDescriptorEvent(2, ts(20)))
+	require.NoError(t, err)
+
+	buffer.advance(zonesRangefeed, ts(20))
 	updates, combinedFrontierTS, err = buffer.flush(ctx)
 	require.NoError(t, err)
-	require.Equal(t, ts(14), combinedFrontierTS)
-	require.Equal(t, makeUpdates(1, 2), updates)
+	require.Equal(t, ts(20), combinedFrontierTS)
+	expectedUpdates := makeDescriptorUpdates(1, 2)
+	expectedUpdates = append(expectedUpdates,
+		makePTSUpdates(
+			*ptpb.MakeClusterTarget(),
+			*ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(1)}))...,
+	)
+	require.Equal(t, expectedUpdates, updates)
 }
 
 // TestBufferCombinesDescriptorTypes ensures that the descriptor type of the
@@ -159,26 +211,21 @@ func TestBufferCombinesDescriptorTypes(t *testing.T) {
 	}
 	buffer := newBuffer(10 /* limit */, ts(0))
 
-	makeEvent := func(descID int, descType catalog.DescriptorType, timestamp hlc.Timestamp) event {
+	makeDescriptorEvent := func(descID int, descType catalog.DescriptorType,
+		timestamp hlc.Timestamp) event {
 		return event{
-			update: spanconfig.DescriptorUpdate{
-				ID:             descpb.ID(descID),
-				DescriptorType: descType,
-			},
+			update:    spanconfig.MakeDescriptorSQLUpdate(descpb.ID(descID), descType),
 			timestamp: timestamp,
 		}
 	}
 	advanceRangefeeds := func(timestamp hlc.Timestamp) {
 		buffer.advance(descriptorsRangefeed, timestamp)
 		buffer.advance(zonesRangefeed, timestamp)
+		buffer.advance(protectedTimestampRangefeed, timestamp)
 	}
-	makeUpdates := func(descID int, descType catalog.DescriptorType) []spanconfig.DescriptorUpdate {
-		return []spanconfig.DescriptorUpdate{
-			{
-				ID:             descpb.ID(descID),
-				DescriptorType: descType,
-			},
-		}
+	makeDescriptorSQLUpdate := func(descID int,
+		descType catalog.DescriptorType) spanconfig.SQLUpdate {
+		return spanconfig.MakeDescriptorSQLUpdate(descpb.ID(descID), descType)
 	}
 
 	concreteDescriptorTypes := []catalog.DescriptorType{
@@ -194,13 +241,13 @@ func TestBufferCombinesDescriptorTypes(t *testing.T) {
 	// should all combine to the concrete descriptor type.
 	{
 		for _, descType := range concreteDescriptorTypes {
-			err := buffer.add(makeEvent(1, catalog.Any, ts(nanos)))
+			err := buffer.add(makeDescriptorEvent(1, catalog.Any, ts(nanos)))
 			require.NoError(t, err)
 			nanos++
-			err = buffer.add(makeEvent(1, descType, ts(nanos)))
+			err = buffer.add(makeDescriptorEvent(1, descType, ts(nanos)))
 			require.NoError(t, err)
 			nanos++
-			err = buffer.add(makeEvent(1, catalog.Any, ts(nanos)))
+			err = buffer.add(makeDescriptorEvent(1, catalog.Any, ts(nanos)))
 			require.NoError(t, err)
 			nanos++
 			advanceRangefeeds(ts(nanos))
@@ -208,7 +255,7 @@ func TestBufferCombinesDescriptorTypes(t *testing.T) {
 			updates, combinedFrontierTS, err := buffer.flush(ctx)
 			require.NoError(t, err)
 			require.Equal(t, ts(nanos), combinedFrontierTS)
-			require.Equal(t, updates, makeUpdates(1, descType))
+			require.Equal(t, []spanconfig.SQLUpdate{makeDescriptorSQLUpdate(1, descType)}, updates)
 		}
 	}
 
@@ -216,13 +263,13 @@ func TestBufferCombinesDescriptorTypes(t *testing.T) {
 	// other.
 	{
 		for _, descType := range append(concreteDescriptorTypes, catalog.Any) {
-			err := buffer.add(makeEvent(1, descType, ts(nanos)))
+			err := buffer.add(makeDescriptorEvent(1, descType, ts(nanos)))
 			require.NoError(t, err)
 			nanos++
-			err = buffer.add(makeEvent(1, descType, ts(nanos)))
+			err = buffer.add(makeDescriptorEvent(1, descType, ts(nanos)))
 			require.NoError(t, err)
 			nanos++
-			err = buffer.add(makeEvent(1, catalog.Any, ts(nanos)))
+			err = buffer.add(makeDescriptorEvent(1, catalog.Any, ts(nanos)))
 			require.NoError(t, err)
 			nanos++
 			advanceRangefeeds(ts(nanos))
@@ -230,7 +277,7 @@ func TestBufferCombinesDescriptorTypes(t *testing.T) {
 			updates, combinedFrontierTS, err := buffer.flush(ctx)
 			require.NoError(t, err)
 			require.Equal(t, ts(nanos), combinedFrontierTS)
-			require.Equal(t, updates, makeUpdates(1, descType))
+			require.Equal(t, []spanconfig.SQLUpdate{makeDescriptorSQLUpdate(1, descType)}, updates)
 		}
 	}
 }
