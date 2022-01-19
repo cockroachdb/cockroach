@@ -17,12 +17,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
@@ -474,7 +476,7 @@ func compareVersionedValueWrappers(
 
 // This test tests that the schema changer is able to merge entries from a
 // delete-preserving index into a regular index.
-func TestMergeProcess(t *testing.T) {
+func TestMergeProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -587,13 +589,19 @@ func TestMergeProcess(t *testing.T) {
 
 		codec := keys.SystemSQLCodec
 		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
-		lm := server.LeaseManager().(*lease.Manager)
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
-		jr := server.JobRegistry().(*jobs.Registry)
+		evalCtx := tree.EvalContext{Settings: settings}
+		flowCtx := execinfra.FlowCtx{Cfg: &execinfra.ServerConfig{DB: kvDB,
+			Settings: settings,
+			Codec:    codec,
+		},
+			EvalCtx: &evalCtx}
 
-		changer := sql.NewSchemaChangerForTesting(
-			tableDesc.GetID(), 1, execCfg.NodeID.SQLInstanceID(), kvDB, lm, jr, &execCfg, settings)
+		im, err := backfill.NewIndexBackfillMerger(&flowCtx, execinfrapb.IndexBackfillMergerSpec{}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// Here want to have different entries for the two indices, so we manipulate
 		// the index to DELETE_ONLY when we don't want to write to it, and
@@ -605,7 +613,7 @@ func TestMergeProcess(t *testing.T) {
 			}
 		}
 
-		err := mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
 		require.NoError(t, err)
 		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, setUseDeletePreservingEncoding(true), descpb.DescriptorMutation_DELETE_ONLY)
 		require.NoError(t, err)
@@ -657,13 +665,9 @@ func TestMergeProcess(t *testing.T) {
 			return nil
 		}))
 
-		if err := changer.Merge(context.Background(),
-			codec,
-			tableDesc,
-			srcIndex.GetID(),
-			dstIndex.GetID(),
-			tableDesc.IndexSpan(codec, srcIndex.GetID()),
-		); err != nil {
+		sp := tableDesc.IndexSpan(codec, srcIndex.GetID())
+		_, err = im.Merge(context.Background(), codec, tableDesc, srcIndex.GetID(), dstIndex.GetID(), sp.Key, sp.EndKey, 1000)
+		if err != nil {
 			t.Fatal(err)
 		}
 

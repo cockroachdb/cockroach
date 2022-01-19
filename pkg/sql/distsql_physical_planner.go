@@ -957,16 +957,43 @@ func (h *distSQLNodeHealth) check(ctx context.Context, sqlInstanceID base.SQLIns
 func (dsp *DistSQLPlanner) PartitionSpans(
 	planCtx *PlanningCtx, spans roachpb.Spans,
 ) ([]SpanPartition, error) {
+	sp, _, err := dsp.PartitionSpansWithUserData(planCtx, spans, nil)
+	return sp, err
+}
+
+// PartitionSpansWithUserData splits the spans according to owning nodes just
+// like PartitionSpans, but also allows the spans to be associated with
+// arbitrary data. The data is duplicated whenever a span is split so that the
+// splits of a span is always associated with the original span's data.
+func (dsp *DistSQLPlanner) PartitionSpansWithUserData(
+	planCtx *PlanningCtx, spans []roachpb.Span, userData []interface{},
+) ([]SpanPartition, [][]interface{}, error) {
 	if len(spans) == 0 {
 		panic("no spans")
 	}
 	ctx := planCtx.ctx
 	partitions := make([]SpanPartition, 0, 1)
+	var userDataByPartition [][]interface{}
+
+	getUserData := func(i int) (interface{}, error) {
+		if userData == nil {
+			return nil, nil
+		}
+
+		if i < 0 || i >= len(userData) {
+			return nil, errors.Errorf("cannot get userData with index %d", i)
+		}
+		return userData[i], nil
+	}
+
 	if planCtx.isLocal {
 		// If we're planning locally, map all spans to the local node.
-		partitions = append(partitions,
-			SpanPartition{dsp.gatewaySQLInstanceID, spans})
-		return partitions, nil
+		partitions = append(partitions, SpanPartition{dsp.gatewaySQLInstanceID, spans})
+
+		if userData != nil {
+			userDataByPartition = append(userDataByPartition, userData)
+		}
+		return partitions, userDataByPartition, nil
 	}
 	// nodeMap maps a SQLInstanceID to an index inside the partitions array.
 	nodeMap := make(map[base.SQLInstanceID]int)
@@ -974,6 +1001,11 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	for i := range spans {
 
 		span := spans[i]
+		data, err := getUserData(i)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		noEndKey := false
 		if len(span.EndKey) == 0 {
 			// If we see a span to partition that has no end key, it means that
@@ -992,7 +1024,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 		// rSpan is the span we are currently partitioning.
 		rSpan, err := keys.SpanAddr(span)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		var lastSQLInstanceID base.SQLInstanceID
@@ -1006,11 +1038,11 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 		// spans" using the end keys of these individual ranges.
 		for it.Seek(ctx, span, kvcoord.Ascending); ; it.Next(ctx) {
 			if !it.Valid() {
-				return nil, it.Error()
+				return nil, nil, it.Error()
 			}
 			replDesc, err := it.ReplicaInfo(ctx)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			desc := it.Desc()
 			if log.V(1) {
@@ -1051,9 +1083,16 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 					partitionIdx = len(partitions)
 					partitions = append(partitions, SpanPartition{SQLInstanceID: sqlInstanceID})
 					nodeMap[sqlInstanceID] = partitionIdx
+					if userData != nil {
+						userDataByPartition = append(userDataByPartition, make([]interface{}, 0, 1))
+					}
 				}
 			}
 			partition := &partitions[partitionIdx]
+			var userDataInPartition *[]interface{}
+			if userData != nil {
+				userDataInPartition = &userDataByPartition[partitionIdx]
+			}
 
 			if noEndKey {
 				// The original span had no EndKey, and we want to preserve it
@@ -1061,6 +1100,9 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 				partition.Spans = append(partition.Spans, roachpb.Span{
 					Key: lastKey.AsRawKey(),
 				})
+				if userDataInPartition != nil {
+					*userDataInPartition = append(*userDataInPartition, data)
+				}
 				break
 			}
 
@@ -1072,6 +1114,9 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 					Key:    lastKey.AsRawKey(),
 					EndKey: endKey.AsRawKey(),
 				})
+				if userDataInPartition != nil {
+					*userDataInPartition = append(*userDataInPartition, data)
+				}
 			}
 
 			if !endKey.Less(rSpan.EndKey) {
@@ -1083,7 +1128,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 			lastSQLInstanceID = sqlInstanceID
 		}
 	}
-	return partitions, nil
+	return partitions, userDataByPartition, nil
 }
 
 // nodeVersionIsCompatible decides whether a particular node's DistSQL version
