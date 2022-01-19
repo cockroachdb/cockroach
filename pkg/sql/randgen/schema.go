@@ -402,3 +402,60 @@ func TestingMakePrimaryIndexKeyForTenant(
 	}
 	return key, nil
 }
+
+// TestingMakeSecondaryIndexKey creates a key prefix that corresponds to
+// a secondary index; it is intended for tests.
+//
+// It is exported because it is used by tests outside of this package.
+//
+// The value types must match the secondary key columns,
+// supported types are: - Datum
+//  - bool (converts to DBool)
+//  - int (converts to DInt)
+//  - string (converts to DString)
+func TestingMakeSecondaryIndexKey(
+	desc catalog.TableDescriptor, index catalog.Index, codec keys.SQLCodec, vals ...interface{},
+) (roachpb.Key, error) {
+	if len(vals) > index.NumKeyColumns() {
+		return nil, errors.Errorf("got %d values, index %s has %d columns", len(vals), index.GetName(), index.NumKeyColumns())
+	}
+
+	datums := make([]tree.Datum, len(vals))
+	for i, v := range vals {
+		switch v := v.(type) {
+		case bool:
+			datums[i] = tree.MakeDBool(tree.DBool(v))
+		case int:
+			datums[i] = tree.NewDInt(tree.DInt(v))
+		case string:
+			datums[i] = tree.NewDString(v)
+		case tree.Datum:
+			datums[i] = v
+		default:
+			return nil, errors.Errorf("unexpected value type %T", v)
+		}
+		// Check that the value type matches.
+		colID := index.GetKeyColumnID(i)
+		col, _ := desc.FindColumnWithID(colID)
+		if col != nil && col.Public() {
+			colTyp := datums[i].ResolvedType()
+			if t := colTyp.Family(); t != col.GetType().Family() {
+				return nil, errors.Errorf("column %d of type %s, got value of type %s", i, col.GetType().Family(), t)
+			}
+		}
+	}
+	// Create the ColumnID to index in datums slice map needed by
+	// MakeIndexKeyPrefix.
+	var colIDToRowIndex catalog.TableColMap
+	for i := range vals {
+		colIDToRowIndex.Set(index.GetKeyColumnID(i), i)
+	}
+
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), index.GetID())
+	key, _, err := rowenc.EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
+
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
