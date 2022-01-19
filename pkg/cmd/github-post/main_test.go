@@ -13,11 +13,11 @@ package main
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -247,7 +247,7 @@ TestXXA - 1.00s
 				t.Fatal(err)
 			}
 
-			file, err := os.Open(filepath.Join("testdata", c.fileName))
+			file, err := os.Open(testutils.TestDataPath(t, c.fileName))
 			if err != nil {
 				t.Fatal(err)
 			}
