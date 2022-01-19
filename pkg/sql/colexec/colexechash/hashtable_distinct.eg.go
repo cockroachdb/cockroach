@@ -50,468 +50,288 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-											unique = cmpResult != 0
+									{
+										var cmpResult int
+
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-											unique = cmpResult != 0
+									{
+										var cmpResult int
+
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -533,404 +353,224 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -952,404 +592,224 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -1369,492 +829,312 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -1871,492 +1151,312 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -2375,492 +1475,312 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -2882,556 +1802,376 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -3453,460 +2193,280 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
-											unique = cmpResult != 0
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
+										unique = cmpResult != 0
 									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
 
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-									}
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
-											unique = cmpResult != 0
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
+										unique = cmpResult != 0
 									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
 
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-									}
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -3928,404 +2488,224 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -4347,452 +2727,272 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-											unique = cmpResult != 0
+									{
+										var cmpResult int
+
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-											unique = cmpResult != 0
+									{
+										var cmpResult int
+
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -4814,420 +3014,240 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 					if probeSel != nil {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									// The vector is probed against itself, so buildVec has the same
-									// selection vector as probeVec.
 									buildIdx = probeSel[keyID-1]
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
 									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
 
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-									}
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
 					} else {
 						if probeVec.MaybeHasNulls() {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						} else {
 							if buildVec.MaybeHasNulls() {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
+								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							} else {
-								var (
-									probeIdx, buildIdx       int
-									probeIsNull, buildIsNull bool
-								)
+								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									// keyID of 0 is reserved to represent the end of the next chain.
 									keyID := ht.ProbeScratch.GroupID[toCheck]
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = int(toCheck)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
 									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
 
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-									}
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								}
 							}
 						}
@@ -5255,122 +3275,89 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Bool()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-											unique = cmpResult != 0
+									{
+										var cmpResult int
+
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -5378,120 +3365,67 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											if !probeVal && buildVal {
-												cmpResult = -1
-											} else if probeVal && !buildVal {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-
-											unique = cmpResult != 0
+										if !probeVal && buildVal {
+											cmpResult = -1
+										} else if probeVal && !buildVal {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -5514,106 +3448,73 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Bytes()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -5621,104 +3522,51 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = bytes.Compare(probeVal, buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = bytes.Compare(probeVal, buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -5747,106 +3595,73 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Decimal()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -5854,104 +3669,51 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = tree.CompareDecimals(&probeVal, &buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -5972,128 +3734,95 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Int16()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -6101,126 +3830,73 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -6244,128 +3920,95 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Int32()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -6373,126 +4016,73 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -6518,128 +4108,95 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Int64()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -6647,126 +4204,73 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := int64(probeVal), int64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else {
-													cmpResult = 0
-												}
+											a, b := int64(probeVal), int64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else {
+												cmpResult = 0
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -6798,144 +4302,111 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Float64()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -6943,142 +4414,89 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
 
 										{
-											var cmpResult int
-
-											{
-												a, b := float64(probeVal), float64(buildVal)
-												if a < b {
-													cmpResult = -1
-												} else if a > b {
-													cmpResult = 1
-												} else if a == b {
+											a, b := float64(probeVal), float64(buildVal)
+											if a < b {
+												cmpResult = -1
+											} else if a > b {
+												cmpResult = 1
+											} else if a == b {
+												cmpResult = 0
+											} else if math.IsNaN(a) {
+												if math.IsNaN(b) {
 													cmpResult = 0
-												} else if math.IsNaN(a) {
-													if math.IsNaN(b) {
-														cmpResult = 0
-													} else {
-														cmpResult = -1
-													}
 												} else {
-													cmpResult = 1
+													cmpResult = -1
 												}
+											} else {
+												cmpResult = 1
 											}
-
-											unique = cmpResult != 0
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -7104,120 +4522,87 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Timestamp()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
-											unique = cmpResult != 0
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -7225,118 +4610,65 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
+										}
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										if probeVal.Before(buildVal) {
+											cmpResult = -1
+										} else if buildVal.Before(probeVal) {
+											cmpResult = 1
+										} else {
+											cmpResult = 0
 										}
+										unique = cmpResult != 0
 									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
 
-										{
-											var cmpResult int
-
-											if probeVal.Before(buildVal) {
-												cmpResult = -1
-											} else if buildVal.Before(probeVal) {
-												cmpResult = 1
-											} else {
-												cmpResult = 0
-											}
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-									}
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -7359,106 +4691,73 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Interval()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -7466,104 +4765,51 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
-											cmpResult = probeVal.Compare(buildVal)
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+									{
+										var cmpResult int
+										cmpResult = probeVal.Compare(buildVal)
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -7586,118 +4832,85 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.JSON()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
 											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-											unique = cmpResult != 0
+									{
+										var cmpResult int
+
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
+										}
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -7705,116 +4918,63 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
 
-										{
-											var cmpResult int
+									{
+										var cmpResult int
 
-											var err error
-											cmpResult, err = probeVal.Compare(buildVal)
-											if err != nil {
-												colexecerror.ExpectedError(err)
-											}
-
-											unique = cmpResult != 0
+										var err error
+										cmpResult, err = probeVal.Compare(buildVal)
+										if err != nil {
+											colexecerror.ExpectedError(err)
 										}
 
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										unique = cmpResult != 0
 									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -7837,110 +4997,77 @@ func (ht *HashTable) checkColForDistinctTuples(
 					buildKeys := buildVec.Datum()
 					if probeVec.MaybeHasNulls() {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											if !buildIsNull {
+												ht.ProbeScratch.differs[toCheck] = true
+											}
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									if buildIsNull {
+										ht.ProbeScratch.differs[toCheck] = true
+										continue
+									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							probeVecNulls := probeVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
-									probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
+									probeIsNull := probeVecNulls.NullAt(probeIdx)
 									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
+										if ht.allowNullEquality {
+											ht.ProbeScratch.differs[toCheck] = true
+										} else {
+											ht.ProbeScratch.distinct[toCheck] = true
 										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -7948,108 +5075,55 @@ func (ht *HashTable) checkColForDistinctTuples(
 						}
 					} else {
 						if buildVec.MaybeHasNulls() {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
+							buildVecNulls := buildVec.Nulls()
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									buildIsNull = buildVec.Nulls().NullAt(buildIdx)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
-									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
+									buildIsNull := buildVecNulls.NullAt(buildIdx)
+									if buildIsNull {
 										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
-
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
+										continue
 									}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
+									}
+
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
 							}
 						} else {
-							var (
-								probeIdx, buildIdx       int
-								probeIsNull, buildIsNull bool
-							)
+							var probeIdx, buildIdx int
 							for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-								// keyID of 0 is reserved to represent the end of the next chain.
 								keyID := ht.ProbeScratch.GroupID[toCheck]
 								if keyID != 0 {
-									// the build table key (calculated using keys[keyID - 1] = key) is
-									// compared to the corresponding probe table to determine if a match is
-									// found.
-
 									probeIdx = probeSel[toCheck]
 									buildIdx = int(keyID - 1)
-									if ht.allowNullEquality {
-										if probeIsNull && buildIsNull {
-											// Both values are NULLs, and since we're allowing null equality, we
-											// proceed to the next value to check.
-											continue
-										} else if probeIsNull {
-											// Only probing value is NULL, so it is different from the build value
-											// (which is non-NULL). We mark it as "different" and proceed to the
-											// next value to check. This behavior is special in case of allowing
-											// null equality because we don't want to reset the GroupID of the
-											// current probing tuple.
-											ht.ProbeScratch.differs[toCheck] = true
-											continue
-										}
+									probeVal := probeKeys.Get(probeIdx)
+									buildVal := buildKeys.Get(buildIdx)
+									var unique bool
+
+									{
+										var cmpResult int
+
+										cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
+
+										unique = cmpResult != 0
 									}
-									if probeIsNull {
-										ht.ProbeScratch.distinct[toCheck] = true
-									} else if buildIsNull {
-										ht.ProbeScratch.differs[toCheck] = true
-									} else {
-										probeVal := probeKeys.Get(probeIdx)
-										buildVal := buildKeys.Get(buildIdx)
-										var unique bool
 
-										{
-											var cmpResult int
-
-											cmpResult = coldataext.CompareDatum(probeVal, probeKeys, buildVal)
-
-											unique = cmpResult != 0
-										}
-
-										ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
-									}
+									ht.ProbeScratch.differs[toCheck] = ht.ProbeScratch.differs[toCheck] || unique
 								} else {
 									ht.ProbeScratch.distinct[toCheck] = true
 								}
@@ -8079,15 +5153,11 @@ func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 			continue
 		}
 		if !ht.ProbeScratch.differs[toCheck] {
-			// If the current key matches with the probe key, we want to update HeadID
-			// with the current key if it has not been set yet.
 			keyID := ht.ProbeScratch.GroupID[toCheck]
 			if ht.ProbeScratch.HeadID[toCheck] == 0 {
 				ht.ProbeScratch.HeadID[toCheck] = keyID
 			}
-		}
-		if ht.ProbeScratch.differs[toCheck] {
-			// Continue probing in this next chain for the probe key.
+		} else {
 			ht.ProbeScratch.differs[toCheck] = false
 			//gcassert:bce
 			toCheckSlice[nDiffers] = toCheck
@@ -8126,7 +5196,6 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 				if hasVisited := visited[HeadID-1]; !hasVisited {
 					sel[distinctCount] = sel[HeadID-1]
 					visited[HeadID-1] = true
-					// Compacting and deduplicating hash buffer.
 					//gcassert:bce
 					hashBuffer[distinctCount] = hashBuffer[i]
 					distinctCount++
@@ -8154,7 +5223,6 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 				if hasVisited := visited[HeadID-1]; !hasVisited {
 					sel[distinctCount] = int(HeadID - 1)
 					visited[HeadID-1] = true
-					// Compacting and deduplicating hash buffer.
 					//gcassert:bce
 					hashBuffer[distinctCount] = hashBuffer[i]
 					distinctCount++
@@ -8163,28 +5231,4 @@ func (ht *HashTable) updateSel(b coldata.Batch) {
 		}
 		b.SetLength(distinctCount)
 	}
-}
-
-// DistinctCheck determines if the current key in the GroupID bucket matches the
-// equality column key. If there is a match, then the key is removed from
-// ToCheck. If the bucket has reached the end, the key is rejected. The ToCheck
-// list is reconstructed to only hold the indices of the eqCol keys that have
-// not been found. The new length of ToCheck is returned by this function.
-func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
-	ht.checkCols(ht.Keys, nToCheck, probeSel)
-	// Select the indices that differ and put them into ToCheck.
-	nDiffers := uint64(0)
-	toCheckSlice := ht.ProbeScratch.ToCheck
-	_ = toCheckSlice[nToCheck-1]
-	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
-		//gcassert:bce
-		toCheck := toCheckSlice[toCheckPos]
-		if ht.ProbeScratch.differs[toCheck] {
-			ht.ProbeScratch.differs[toCheck] = false
-			//gcassert:bce
-			toCheckSlice[nDiffers] = toCheck
-			nDiffers++
-		}
-	}
-	return nDiffers
 }
