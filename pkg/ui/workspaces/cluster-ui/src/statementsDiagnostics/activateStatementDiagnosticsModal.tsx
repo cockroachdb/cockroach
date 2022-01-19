@@ -147,9 +147,11 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                       className={cx("diagnostic__input__min-latency-time")}
                       disabled={!conditional}
                       value={minExecLatency}
-                      onChange={e =>
-                        setMinExecLatency(parseInt(e.target.value))
-                      }
+                      onChange={e => {
+                        if (parseInt(e.target.value) > 0) {
+                          setMinExecLatency(parseInt(e.target.value));
+                        }
+                      }}
                       size="large"
                     />
                     <Select
@@ -179,7 +181,11 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                 className={cx("diagnostic__input__expires-after-time")}
                 disabled={!expires}
                 value={expiresAfter}
-                onChange={e => setExpiresAfter(parseInt(e.target.value))}
+                onChange={e => {
+                  if (parseInt(e.target.value) > 0) {
+                    setExpiresAfter(parseInt(e.target.value));
+                  }
+                }}
               />
               <div className={cx("diagnostic__checkbox-text")}>minutes</div>
             </div>

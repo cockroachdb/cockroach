@@ -102,7 +102,9 @@ export interface StatementsPageDispatchProps {
     columnTitle: string,
     ascending: boolean,
   ) => void;
-  onDiagnosticsReportDownload?: (report: IStatementDiagnosticsReport) => void;
+  onSelectDiagnosticsReportDropdownOption?: (
+    report: IStatementDiagnosticsReport,
+  ) => void;
   onFilterChange?: (value: Filters) => void;
   onStatementClick?: (statement: string) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
@@ -465,7 +467,7 @@ export class StatementsPage extends React.Component<
       statements,
       apps,
       databases,
-      onDiagnosticsReportDownload,
+      onSelectDiagnosticsReportDropdownOption,
       onStatementClick,
       resetSQLStats,
       columns: userSelectedColumnsToShow,
@@ -503,7 +505,7 @@ export class StatementsPage extends React.Component<
       isTenant,
       search,
       this.activateDiagnosticsRef,
-      onDiagnosticsReportDownload,
+      onSelectDiagnosticsReportDropdownOption,
       onStatementClick,
     )
       .filter(c => !(c.name === "regionNodes" && regions.length < 2))

@@ -11,16 +11,25 @@
 import { all, call, put, takeEvery, takeLatest } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 
-import { createStatementDiagnosticsReport } from "src/util/api";
+import {
+  cancelStatementDiagnosticsReport,
+  CancelStatementDiagnosticsReportResponseMessage,
+  createStatementDiagnosticsReport,
+} from "src/util/api";
 import {
   CREATE_STATEMENT_DIAGNOSTICS_REPORT,
   CreateStatementDiagnosticsReportPayload,
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
   SET_COMBINED_STATEMENTS_TIME_SCALE,
+  CANCEL_STATEMENT_DIAGNOSTICS_REPORT,
+  cancelStatementDiagnosticsReportCompleteAction,
+  cancelStatementDiagnosticsReportFailedAction,
+  CancelStatementDiagnosticsReportPayload,
 } from "./statementsActions";
 import { cockroach } from "src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+import CancelStatementDiagnosticsReportRequest = cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
 import CombinedStatementsRequest = cockroach.server.serverpb.StatementsRequest;
 import {
   invalidateStatementDiagnosticsRequests,
@@ -28,7 +37,10 @@ import {
   invalidateStatements,
   refreshStatements,
 } from "src/redux/apiReducers";
-import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import {
+  createStatementDiagnosticsAlertLocalSetting,
+  cancelStatementDiagnosticsAlertLocalSetting,
+} from "src/redux/alerts";
 import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
 import { TimeScale, toDateRange } from "@cockroachlabs/cluster-ui";
 import Long from "long";
@@ -53,6 +65,13 @@ export function* createDiagnosticsReportSaga(
     yield put(invalidateStatementDiagnosticsRequests());
     // PUT expects action with `type` field which isn't defined in `refresh` ThunkAction interface
     yield put(refreshStatementDiagnosticsRequests() as any);
+    // Stop showing the "cancel statement" alert if it is currently showing
+    // (i.e. accidental cancel, then immediate activate).
+    yield put(
+      cancelStatementDiagnosticsAlertLocalSetting.set({
+        show: false,
+      }),
+    );
     yield put(
       createStatementDiagnosticsAlertLocalSetting.set({
         show: true,
@@ -61,8 +80,71 @@ export function* createDiagnosticsReportSaga(
     );
   } catch (e) {
     yield put(createStatementDiagnosticsReportFailedAction());
+    // Stop showing the "cancel statement" alert if it is currently showing
+    // (i.e. accidental cancel, then immediate activate).
+    yield put(
+      cancelStatementDiagnosticsAlertLocalSetting.set({
+        show: false,
+      }),
+    );
     yield put(
       createStatementDiagnosticsAlertLocalSetting.set({
+        show: true,
+        status: "FAILED",
+      }),
+    );
+  }
+}
+
+export function* cancelDiagnosticsReportSaga(
+  action: PayloadAction<CancelStatementDiagnosticsReportPayload>,
+) {
+  const { requestID } = action.payload;
+  const cancelDiagnosticsReportRequest = new CancelStatementDiagnosticsReportRequest(
+    {
+      request_id: requestID,
+    },
+  );
+  try {
+    const response: CancelStatementDiagnosticsReportResponseMessage = yield call(
+      cancelStatementDiagnosticsReport,
+      cancelDiagnosticsReportRequest,
+    );
+
+    if (response.error !== "") {
+      throw response.error;
+    }
+
+    yield put(cancelStatementDiagnosticsReportCompleteAction());
+
+    yield put(invalidateStatementDiagnosticsRequests());
+    // PUT expects action with `type` field which isn't defined in `refresh` ThunkAction interface
+    yield put(refreshStatementDiagnosticsRequests() as any);
+
+    // Stop showing the "create statement" alert if it is currently showing
+    // (i.e. accidental activate, then immediate cancel).
+    yield put(
+      createStatementDiagnosticsAlertLocalSetting.set({
+        show: false,
+      }),
+    );
+    yield put(
+      cancelStatementDiagnosticsAlertLocalSetting.set({
+        show: true,
+        status: "SUCCESS",
+      }),
+    );
+  } catch (e) {
+    yield put(cancelStatementDiagnosticsReportFailedAction());
+    // Stop showing the "create statement" alert if it is currently showing
+    // (i.e. accidental activate, then immediate cancel).
+    yield put(
+      createStatementDiagnosticsAlertLocalSetting.set({
+        show: false,
+      }),
+    );
+    yield put(
+      cancelStatementDiagnosticsAlertLocalSetting.set({
         show: true,
         status: "FAILED",
       }),
@@ -89,6 +171,7 @@ export function* setCombinedStatementsTimeScaleSaga(
 export function* statementsSaga() {
   yield all([
     takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, createDiagnosticsReportSaga),
+    takeEvery(CANCEL_STATEMENT_DIAGNOSTICS_REPORT, cancelDiagnosticsReportSaga),
     takeLatest(
       SET_COMBINED_STATEMENTS_TIME_SCALE,
       setCombinedStatementsTimeScaleSaga,
