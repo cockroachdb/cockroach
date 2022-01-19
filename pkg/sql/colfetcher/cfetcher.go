@@ -370,7 +370,6 @@ func (rf *cFetcher) Init(
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	tableArgs *cFetcherTableArgs,
-	hasSystemColumns bool,
 ) error {
 	rf.kvFetcherMemAcc = kvFetcherMemAcc
 	table := newCTableInfo()
@@ -402,22 +401,16 @@ func (rf *cFetcher) Init(
 		table.neededValueColsByIdx.AddRange(0 /* start */, nCols-1)
 	}
 
-	if hasSystemColumns {
-		// System columns, if present, are at the end of colDescriptors.
-		nonSystemColOffset := nCols - len(colinfo.AllSystemColumnDescs)
-		if nonSystemColOffset < 0 {
-			nonSystemColOffset = 0
-		}
-		for idx := nonSystemColOffset; idx < nCols; idx++ {
-			colID := tableArgs.cols[idx].GetID()
-			// Set up extra metadata for system columns, if this is a system
-			// column.
+	// Check for system columns.
+	for idx, col := range tableArgs.cols {
+		if col.IsSystemColumn() {
+			// Set up extra metadata for system columns.
 			//
 			// Currently the system columns are present in neededValueColsByIdx,
 			// but we don't want to include them in that set because the
 			// handling of system columns is separate from the standard value
 			// decoding process.
-			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
+			switch colinfo.GetSystemColumnKindFromColumnID(col.GetID()) {
 			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
 				rf.mvccDecodeStrategy = row.MVCCDecodingRequired

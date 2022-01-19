@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -38,20 +37,26 @@ import (
 )
 
 type initFetcherArgs struct {
-	tableDesc       catalog.TableDescriptor
-	indexIdx        int
-	valNeededForCol util.FastIntSet
+	tableDesc catalog.TableDescriptor
+	indexIdx  int
+	columns   []int
 }
 
 func makeFetcherArgs(entry initFetcherArgs) FetcherTableArgs {
 	index := entry.tableDesc.ActiveIndexes()[entry.indexIdx]
+	columns := entry.tableDesc.PublicColumns()
+	if entry.columns != nil {
+		columns = make([]catalog.Column, len(entry.columns))
+		for i, ord := range entry.columns {
+			columns[i] = entry.tableDesc.PublicColumns()[ord]
+		}
+	}
+
 	return FetcherTableArgs{
 		Desc:             entry.tableDesc,
 		Index:            index,
-		ColIdxMap:        catalog.ColumnIDToOrdinalMap(entry.tableDesc.PublicColumns()),
 		IsSecondaryIndex: !index.Primary(),
-		Cols:             entry.tableDesc.PublicColumns(),
-		ValNeededForCol:  entry.valNeededForCol,
+		Columns:          columns,
 	}
 }
 
@@ -136,13 +141,9 @@ func TestNextRowSingle(t *testing.T) {
 		t.Run(tableName, func(t *testing.T) {
 			tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
-			var valNeededForCol util.FastIntSet
-			valNeededForCol.AddRange(0, table.nCols-1)
-
 			args := initFetcherArgs{
-				tableDesc:       tableDesc,
-				indexIdx:        0,
-				valNeededForCol: valNeededForCol,
+				tableDesc: tableDesc,
+				indexIdx:  0,
 			}
 
 			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /* memMon */)
@@ -247,13 +248,9 @@ func TestNextRowBatchLimiting(t *testing.T) {
 		t.Run(tableName, func(t *testing.T) {
 			tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
-			var valNeededForCol util.FastIntSet
-			valNeededForCol.AddRange(0, table.nCols-1)
-
 			args := initFetcherArgs{
-				tableDesc:       tableDesc,
-				indexIdx:        0,
-				valNeededForCol: valNeededForCol,
+				tableDesc: tableDesc,
+				indexIdx:  0,
 			}
 
 			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
@@ -337,13 +334,9 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 
 	tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
-	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, 1)
-
 	args := initFetcherArgs{
-		tableDesc:       tableDesc,
-		indexIdx:        0,
-		valNeededForCol: valNeededForCol,
+		tableDesc: tableDesc,
+		indexIdx:  0,
 	}
 
 	alloc := &tree.DatumAlloc{}
@@ -414,13 +407,9 @@ INDEX(c)
 
 	tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
-	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, table.nCols-1)
-
 	args := initFetcherArgs{
-		tableDesc:       tableDesc,
-		indexIdx:        0,
-		valNeededForCol: valNeededForCol,
+		tableDesc: tableDesc,
+		indexIdx:  0,
 	}
 
 	rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
@@ -592,14 +581,14 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		t.Run(tableName, func(t *testing.T) {
 			tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
-			var valNeededForCol util.FastIntSet
-			valNeededForCol.AddRange(0, table.nVals-1)
-
 			args := initFetcherArgs{
 				tableDesc: tableDesc,
 				// We scan from the first secondary index.
-				indexIdx:        1,
-				valNeededForCol: valNeededForCol,
+				indexIdx: 1,
+				columns:  []int{0, 1},
+			}
+			if table.nVals == 4 {
+				args.columns = []int{0, 1, 2, 3}
 			}
 
 			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
@@ -633,8 +622,8 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 				count++
 
-				if table.nCols != len(datums) {
-					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))
+				if len(args.columns) != len(datums) {
+					t.Fatalf("expected %d columns, got %d columns", len(args.columns), len(datums))
 				}
 
 				// Verify that the correct # of values are returned.
@@ -711,12 +700,9 @@ func TestRowFetcherReset(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(1)),
 	)
 	tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "foo")
-	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, 1)
 	args := initFetcherArgs{
-		tableDesc:       tableDesc,
-		indexIdx:        0,
-		valNeededForCol: valNeededForCol,
+		tableDesc: tableDesc,
+		indexIdx:  0,
 	}
 	da := tree.DatumAlloc{}
 	fetcher, err := initFetcher(args, false, &da, nil /*memMon*/)

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -59,14 +60,11 @@ func TestServer(t *testing.T) {
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	ts := execinfrapb.TableReaderSpec{
-		Table:    *td.TableDesc(),
-		IndexIdx: 0,
-		Reverse:  false,
-		Spans:    []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
-	}
-	post := execinfrapb.PostProcessSpec{
-		Projection:    true,
-		OutputColumns: []uint32{0, 1}, // a b
+		Table:     *td.TableDesc(),
+		IndexIdx:  0,
+		Reverse:   false,
+		Spans:     []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+		ColumnIDs: []descpb.ColumnID{1, 2}, // a b
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, s.NodeID())
@@ -79,7 +77,6 @@ func TestServer(t *testing.T) {
 	req.Flow = execinfrapb.FlowSpec{
 		Processors: []execinfrapb.ProcessorSpec{{
 			Core: execinfrapb.ProcessorCoreUnion{TableReader: &ts},
-			Post: post,
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},

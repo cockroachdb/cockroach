@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -128,18 +129,20 @@ func checkDistAggregationInfo(
 	info physicalplan.DistAggregationInfo,
 ) {
 	colTypes := make([]*types.T, len(colIndexes))
-	columns := make([]uint32, len(colIndexes))
+	columnIDs := make([]descpb.ColumnID, len(colIndexes))
 	colIdx := make([]uint32, len(colIndexes))
 	for i, idx := range colIndexes {
-		colTypes[i] = tableDesc.PublicColumns()[idx].GetType()
-		columns[i] = uint32(idx)
+		col := tableDesc.PublicColumns()[idx]
+		columnIDs[i] = col.GetID()
+		colTypes[i] = col.GetType()
 		colIdx[i] = uint32(i)
 	}
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
-			Table: *tableDesc.TableDesc(),
-			Spans: make([]roachpb.Span, 1),
+			Table:     *tableDesc.TableDesc(),
+			Spans:     make([]roachpb.Span, 1),
+			ColumnIDs: columnIDs,
 		}
 
 		var err error
@@ -152,15 +155,8 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 
-		// Copy the original columns because output columns will be modified by
-		// pkg/sql/colfetcher/cfetcher_setup.go#remapPostProcessSpec.
-		outputColumns := append([]uint32{}, columns...)
 		return execinfrapb.ProcessorSpec{
 			Core: execinfrapb.ProcessorCoreUnion{TableReader: &tr},
-			Post: execinfrapb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: outputColumns,
-			},
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				Streams: []execinfrapb.StreamEndpointSpec{

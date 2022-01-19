@@ -113,6 +113,7 @@ type joinReader struct {
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
 	// joinReader to wrap the fetcher with a stat collector when necessary.
 	fetcher            rowFetcher
+	lookedUpRow        rowenc.EncDatumRow
 	alloc              tree.DatumAlloc
 	rowAlloc           rowenc.EncDatumRowAlloc
 	shouldLimitBatches bool
@@ -319,7 +320,6 @@ func newJoinReader(
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
 	}
-	var err error
 	var isSecondary bool
 	indexIdx := int(spec.IndexIdx)
 	if indexIdx >= len(jr.desc.ActiveIndexes()) {
@@ -403,23 +403,23 @@ func newJoinReader(
 		}
 	}
 
-	var fetcher row.Fetcher
-	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+	fetcher, err := makeRowFetcherLegacy(
+		flowCtx, jr.desc, int(spec.IndexIdx), false, /* reverse */
 		rightCols, jr.EvalCtx.Mon, &jr.alloc, spec.LockingStrength,
 		spec.LockingWaitPolicy, spec.HasSystemColumns, nil, /* virtualColumn */
 	)
-
 	if err != nil {
 		return nil, err
 	}
 	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
 		jr.input = newInputStatCollector(jr.input)
-		jr.fetcher = newRowFetcherStatCollector(&fetcher)
+		jr.fetcher = newRowFetcherStatCollector(fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
 	} else {
-		jr.fetcher = &fetcher
+		jr.fetcher = fetcher
 	}
+
+	jr.lookedUpRow = make(rowenc.EncDatumRow, jr.colIdxMap.Len())
 
 	if !spec.LookupExpr.Empty() {
 		lookupExprTypes := make([]*types.T, 0, len(leftTypes)+len(columnTypes))
@@ -938,19 +938,19 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 
 		// Fetch the next row and tell the strategy to process it.
-		lookedUpRow, err := jr.fetcher.NextRow(jr.Ctx)
+		ok, err := jr.fetcher.NextRowInto(jr.Ctx, jr.lookedUpRow, jr.colIdxMap)
 		if err != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(err))
 			return jrStateUnknown, jr.DrainHelper()
 		}
-		if lookedUpRow == nil {
+		if !ok {
 			// Done with this input batch.
 			break
 		}
 		jr.rowsRead++
 		jr.curBatchRowsRead++
 
-		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx, lookedUpRow, key); err != nil {
+		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx, jr.lookedUpRow, key); err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, jr.DrainHelper()
 		} else if nextState != jrPerformingLookup {

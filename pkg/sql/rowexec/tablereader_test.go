@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -70,6 +71,7 @@ func TestTableReader(t *testing.T) {
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	cols := td.PublicColumns()
 
 	makeIndexSpan := func(start, end int) roachpb.Span {
 		var span roachpb.Span
@@ -87,22 +89,18 @@ func TestTableReader(t *testing.T) {
 	}{
 		{
 			spec: execinfrapb.TableReaderSpec{
-				Spans: []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
-			},
-			post: execinfrapb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1},
+				ColumnIDs: []descpb.ColumnID{cols[0].GetID(), cols[1].GetID()},
+				Spans:     []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 			},
 			expected: "[[0 1] [0 2] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8] [0 9] [1 0] [1 1] [1 2] [1 3] [1 4] [1 5] [1 6] [1 7] [1 8] [1 9]]",
 		},
 		{
 			spec: execinfrapb.TableReaderSpec{
-				Spans: []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+				ColumnIDs: []descpb.ColumnID{cols[3].GetID()},
+				Spans:     []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 			},
 			post: execinfrapb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{3}, // s
-				Limit:         4,
+				Limit: 4,
 			},
 			expected: "[['one'] ['two'] ['three'] ['four']]",
 		},
@@ -110,12 +108,9 @@ func TestTableReader(t *testing.T) {
 			spec: execinfrapb.TableReaderSpec{
 				IndexIdx:  1,
 				Reverse:   true,
+				ColumnIDs: []descpb.ColumnID{cols[0].GetID(), cols[1].GetID()},
 				Spans:     []roachpb.Span{makeIndexSpan(4, 6)},
 				LimitHint: 1,
-			},
-			post: execinfrapb.PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1},
 			},
 			expected: "[[1 5] [0 5] [1 4] [0 4]]",
 		},
@@ -238,15 +233,13 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		Txn:    kv.NewTxn(ctx, tc.Server(0).DB(), tc.Server(0).NodeID()),
 		NodeID: evalCtx.NodeID,
 	}
-	post := execinfrapb.PostProcessSpec{
-		Projection:    true,
-		OutputColumns: []uint32{0},
-	}
+	post := execinfrapb.PostProcessSpec{}
 
 	testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
 		spec := execinfrapb.TableReaderSpec{
-			Spans: []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
-			Table: *td.TableDesc(),
+			Spans:     []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+			Table:     *td.TableDesc(),
+			ColumnIDs: []descpb.ColumnID{td.PublicColumns()[0].GetID()},
 		}
 		var out execinfra.RowReceiver
 		var buf *distsqlutils.RowBuffer
@@ -347,13 +340,11 @@ func TestTableReaderDrain(t *testing.T) {
 		NodeID: evalCtx.NodeID,
 	}
 	spec := execinfrapb.TableReaderSpec{
-		Spans: []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
-		Table: *td.TableDesc(),
+		Spans:     []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+		Table:     *td.TableDesc(),
+		ColumnIDs: []descpb.ColumnID{td.PublicColumns()[0].GetID()},
 	}
-	post := execinfrapb.PostProcessSpec{
-		Projection:    true,
-		OutputColumns: []uint32{0},
-	}
+	post := execinfrapb.PostProcessSpec{}
 
 	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
 		return newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, out)
@@ -516,6 +507,10 @@ func BenchmarkTableReader(b *testing.B) {
 			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 			spec := execinfrapb.TableReaderSpec{
 				Table: *tableDesc.TableDesc(),
+				ColumnIDs: []descpb.ColumnID{
+					tableDesc.PublicColumns()[0].GetID(),
+					tableDesc.PublicColumns()[1].GetID(),
+				},
 				// Spans will be set below.
 			}
 			post := execinfrapb.PostProcessSpec{}

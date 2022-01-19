@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -213,13 +212,8 @@ func DecodeRowInfo(
 			colIDs = append(colIDs, index.GetStoredColumnID(i))
 		}
 	}
-	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, len(colIDs)-1)
-
-	var colIdxMap catalog.TableColMap
 	cols := make([]catalog.Column, len(colIDs))
 	for i, colID := range colIDs {
-		colIdxMap.Set(colID, i)
 		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, nil, err
@@ -230,10 +224,8 @@ func DecodeRowInfo(
 	tableArgs := FetcherTableArgs{
 		Desc:             tableDesc,
 		Index:            index,
-		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
-		Cols:             cols,
-		ValNeededForCol:  valNeededForCol,
+		Columns:          cols,
 	}
 	rf.IgnoreUnexpectedNulls = true
 	if err := rf.Init(
