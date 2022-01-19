@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -612,9 +611,9 @@ type diagramData struct {
 	Processors []diagramProcessor `json:"processors"`
 	Edges      []diagramEdge      `json:"edges"`
 
-	flags   DiagramFlags
-	flowID  FlowID
-	nodeIDs []roachpb.NodeID
+	flags          DiagramFlags
+	flowID         FlowID
+	sqlInstanceIDs []base.SQLInstanceID
 }
 
 var _ FlowDiagram = &diagramData{}
@@ -633,15 +632,15 @@ func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
 	statsMap := ExtractStatsFromSpans(spans, d.flags.MakeDeterministic)
 	for i := range d.Processors {
 		p := &d.Processors[i]
-		nodeID := d.nodeIDs[p.NodeIdx]
-		component := ProcessorComponentID(base.SQLInstanceID(nodeID), d.flowID, p.processorID)
+		sqlInstanceID := d.sqlInstanceIDs[p.NodeIdx]
+		component := ProcessorComponentID(sqlInstanceID, d.flowID, p.processorID)
 		if compStats := statsMap[component]; compStats != nil {
 			p.Core.Details = append(p.Core.Details, compStats.StatsForQueryPlan()...)
 		}
 	}
 	for i := range d.Edges {
-		originNodeID := d.nodeIDs[d.Processors[d.Edges[i].SourceProc].NodeIdx]
-		component := StreamComponentID(base.SQLInstanceID(originNodeID), d.flowID, d.Edges[i].streamID)
+		originSQLInstanceID := d.sqlInstanceIDs[d.Processors[d.Edges[i].SourceProc].NodeIdx]
+		component := StreamComponentID(originSQLInstanceID, d.flowID, d.Edges[i].streamID)
 		if compStats := statsMap[component]; compStats != nil {
 			d.Edges[i].Stats = compStats.StatsForQueryPlan()
 		}
@@ -649,18 +648,18 @@ func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
 }
 
 // generateDiagramData generates the diagram data, given a list of flows (one
-// per node). The nodeIDs list corresponds 1-1 to the flows list.
+// per node). The sqlInstanceIDs list corresponds 1-1 to the flows list.
 func generateDiagramData(
-	sql string, flows []FlowSpec, nodeIDs []roachpb.NodeID, flags DiagramFlags,
+	sql string, flows []FlowSpec, sqlInstanceIDs []base.SQLInstanceID, flags DiagramFlags,
 ) (FlowDiagram, error) {
 	d := &diagramData{
-		SQL:     sql,
-		nodeIDs: nodeIDs,
-		flags:   flags,
+		SQL:            sql,
+		sqlInstanceIDs: sqlInstanceIDs,
+		flags:          flags,
 	}
-	d.NodeNames = make([]string, len(nodeIDs))
+	d.NodeNames = make([]string, len(sqlInstanceIDs))
 	for i := range d.NodeNames {
-		d.NodeNames[i] = nodeIDs[i].String()
+		d.NodeNames[i] = sqlInstanceIDs[i].String()
 	}
 
 	if len(flows) > 0 {
@@ -789,31 +788,31 @@ func generateDiagramData(
 // one FlowSpec per node. The function assumes that StreamIDs are unique across
 // all flows.
 func GeneratePlanDiagram(
-	sql string, flows map[roachpb.NodeID]*FlowSpec, flags DiagramFlags,
+	sql string, flows map[base.SQLInstanceID]*FlowSpec, flags DiagramFlags,
 ) (FlowDiagram, error) {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
-	nodeIDs := make([]roachpb.NodeID, 0, len(flows))
+	sqlInstanceIDs := make([]base.SQLInstanceID, 0, len(flows))
 	for n := range flows {
-		nodeIDs = append(nodeIDs, n)
+		sqlInstanceIDs = append(sqlInstanceIDs, n)
 	}
-	sort.Slice(nodeIDs, func(i, j int) bool {
-		return nodeIDs[i] < nodeIDs[j]
+	sort.Slice(sqlInstanceIDs, func(i, j int) bool {
+		return sqlInstanceIDs[i] < sqlInstanceIDs[j]
 	})
 
-	flowSlice := make([]FlowSpec, len(nodeIDs))
-	for i, n := range nodeIDs {
+	flowSlice := make([]FlowSpec, len(sqlInstanceIDs))
+	for i, n := range sqlInstanceIDs {
 		flowSlice[i] = *flows[n]
 	}
 
-	return generateDiagramData(sql, flowSlice, nodeIDs, flags)
+	return generateDiagramData(sql, flowSlice, sqlInstanceIDs, flags)
 }
 
 // GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
 func GeneratePlanDiagramURL(
-	sql string, flows map[roachpb.NodeID]*FlowSpec, flags DiagramFlags,
+	sql string, flows map[base.SQLInstanceID]*FlowSpec, flags DiagramFlags,
 ) (string, url.URL, error) {
 	d, err := GeneratePlanDiagram(sql, flows, flags)
 	if err != nil {

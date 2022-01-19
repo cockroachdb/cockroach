@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -147,7 +147,7 @@ func (o *Outbox) close(ctx context.Context) {
 func (o *Outbox) Run(
 	ctx context.Context,
 	dialer execinfra.Dialer,
-	nodeID roachpb.NodeID,
+	sqlInstanceID base.SQLInstanceID,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
 	flowCtxCancel context.CancelFunc,
@@ -169,11 +169,11 @@ func (o *Outbox) Run(
 
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
-	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
+	log.VEventf(ctx, 2, "Outbox Dialing %s", sqlInstanceID)
 
 	var stream execinfrapb.DistSQL_FlowStreamClient
 	if err := func() error {
-		conn, err := execinfra.GetConnForOutbox(ctx, dialer, nodeID, connectionTimeout)
+		conn, err := execinfra.GetConnForOutbox(ctx, dialer, sqlInstanceID, connectionTimeout)
 		if err != nil {
 			log.Warningf(
 				ctx,
