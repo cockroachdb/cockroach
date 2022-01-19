@@ -24,6 +24,7 @@ go_test(
         "//pkg/cmd/reduce/reduce",
         "//pkg/security",
         "//pkg/server",
+        "//pkg/testutils",
         "//pkg/testutils/skip",
         "@com_github_jackc_pgx_v4//:pgx",
     ],

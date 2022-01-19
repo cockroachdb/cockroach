@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/jackc/pgx/v4"
 )
@@ -33,7 +34,7 @@ func TestReduceSQL(t *testing.T) {
 	skip.IgnoreLint(t, "unnecessary")
 	reducesql.LogUnknown = *printUnknown
 
-	reduce.Walk(t, "testdata", reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting,
+	reduce.Walk(t, testutils.TestDataPath(), reducesql.Pretty, isInterestingSQL, reduce.ModeInteresting,
 		nil /* chunkReducer */, reducesql.SQLPasses)
 }
 

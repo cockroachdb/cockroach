@@ -119,6 +119,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -130,7 +131,7 @@ import (
 
 // Test data files.
 const (
-	testdata            = "testdata" // testdata directory
+	testdata            = testutils.TestDataPath() // testdata directory
 	catalogPkg          = "catalog"
 	catconstantsPkg     = "catconstants"
 	constantsGo         = "constants.go"

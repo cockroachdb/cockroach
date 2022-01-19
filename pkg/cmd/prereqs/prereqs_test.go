@@ -73,7 +73,7 @@ bin/test:
 `
 
 func TestPrereqs(t *testing.T) {
-	gopath, err := filepath.Abs("testdata")
+	gopath, err := filepath.Abs(testutils.TestDataPath())
 	if err != nil {
 		t.Fatal(err)
 	}

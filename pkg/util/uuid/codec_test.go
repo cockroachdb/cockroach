@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
@@ -307,7 +308,7 @@ func TestSeedFuzzCorpus(t *testing.T) {
 	if !*seedFuzzCorpus {
 		skip.IgnoreLint(t, "seeding fuzz test corpus only on demand")
 	}
-	corpusDir := filepath.Join(".", "testdata", "corpus")
+	corpusDir := filepath.Join(".", testutils.TestDataPath(), "corpus")
 	writeSeedFile := func(name, data string) error {
 		path := filepath.Join(corpusDir, name)
 		return ioutil.WriteFile(path, []byte(data), os.ModePerm)

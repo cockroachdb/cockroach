@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,5 +39,5 @@ func TestReplicaUnavailableError(t *testing.T) {
 	}
 	rs := raft.Status{}
 	err := replicaUnavailableError(desc, desc.Replicas().AsProto()[0], lm, &rs)
-	echotest.Require(t, string(redact.Sprint(err)), filepath.Join("testdata", "replica_unavailable_error.txt"))
+	echotest.Require(t, string(redact.Sprint(err)), filepath.Join(testutils.TestDataPath(), "replica_unavailable_error.txt"))
 }

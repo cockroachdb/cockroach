@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -21,7 +22,7 @@ import (
 func TestFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			in := strings.NewReader(td.Input)
 			var out strings.Builder

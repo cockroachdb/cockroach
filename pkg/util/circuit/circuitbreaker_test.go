@@ -174,7 +174,7 @@ func TestBreaker(t *testing.T) {
 	}
 
 	datadriven.RunTest(t,
-		filepath.Join("testdata", t.Name()+".txt"),
+		filepath.Join(testutils.TestDataPath(), t.Name()+".txt"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			return allBuf.String()
 		})
@@ -228,7 +228,7 @@ func TestBreakerProbeIsReactive(t *testing.T) {
 	requireNumProbes(t, 2)
 
 	datadriven.RunTest(t,
-		filepath.Join("testdata", t.Name()+".txt"),
+		filepath.Join(testutils.TestDataPath(), t.Name()+".txt"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			return allBuf.String()
 		})

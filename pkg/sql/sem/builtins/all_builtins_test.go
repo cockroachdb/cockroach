@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,7 +56,7 @@ func TestOverloadsHaveVolatility(t *testing.T) {
 // ) TO '/tmp/pg_proc_provolatile_dump.csv' WITH CSV DELIMITER '|' HEADER;
 func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	csvPath := filepath.Join("testdata", "pg_proc_provolatile_dump.csv")
+	csvPath := filepath.Join(testutils.TestDataPath(), "pg_proc_provolatile_dump.csv")
 	f, err := os.Open(csvPath)
 	require.NoError(t, err)
 

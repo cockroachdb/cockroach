@@ -33,7 +33,7 @@ import (
 // TestParseDataDriven verifies that we can parse the supplied SQL and regenerate the SQL
 // string from the syntax tree.
 func TestParseDatadriven(t *testing.T) {
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":

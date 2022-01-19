@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/go-sql-driver/mysql"
@@ -121,10 +122,10 @@ type testFiles struct {
 func getMysqldumpTestdata(t *testing.T) testFiles {
 	var files testFiles
 
-	files.simple = filepath.Join(`testdata`, `mysqldump`, `simple.sql`)
-	files.second = filepath.Join(`testdata`, `mysqldump`, `second.sql`)
-	files.everything = filepath.Join(`testdata`, `mysqldump`, `everything.sql`)
-	files.wholeDB = filepath.Join(`testdata`, `mysqldump`, `db.sql`)
+	files.simple = filepath.Join(testutils.TestDataPath(), `mysqldump`, `simple.sql`)
+	files.second = filepath.Join(testutils.TestDataPath(), `mysqldump`, `second.sql`)
+	files.everything = filepath.Join(testutils.TestDataPath(), `mysqldump`, `everything.sql`)
+	files.wholeDB = filepath.Join(testutils.TestDataPath(), `mysqldump`, `db.sql`)
 
 	if rewriteMysqlTestData {
 		genMysqlTestdata(t, func() {
@@ -190,12 +191,12 @@ func getMysqlOutfileTestdata(t *testing.T) ([]simpleTestRow, []outfileDumpCfg) {
 	}
 
 	for i := range configs {
-		configs[i].filename = filepath.Join(`testdata`, `mysqlout`, configs[i].name, `simple.txt`)
+		configs[i].filename = filepath.Join(testutils.TestDataPath(), `mysqlout`, configs[i].name, `simple.txt`)
 	}
 
 	if rewriteMysqlTestData {
 		genMysqlTestdata(t, func() {
-			if err := os.RemoveAll(filepath.Join(`testdata`, `mysqlout`)); err != nil {
+			if err := os.RemoveAll(filepath.Join(testutils.TestDataPath(), `mysqlout`)); err != nil {
 				t.Fatal(err)
 			}
 			for _, cfg := range configs {

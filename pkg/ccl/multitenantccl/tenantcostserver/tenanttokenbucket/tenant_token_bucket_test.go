@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 	"gopkg.in/yaml.v2"
@@ -24,7 +25,7 @@ import (
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
 		var ts testState

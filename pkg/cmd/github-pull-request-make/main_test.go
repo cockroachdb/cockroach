@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/kr/pretty"
 )
@@ -77,7 +78,7 @@ func TestPkgsFromDiffHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	name := filepath.Join(wd, "testdata", strconv.Itoa(prNum)+".diff")
+	name := filepath.Join(wd, testutils.TestDataPath(), strconv.Itoa(prNum)+".diff")
 	if err := ioutil.WriteFile(name, []byte(diff), 0644); err != nil {
 		t.Fatal(err)
 	}

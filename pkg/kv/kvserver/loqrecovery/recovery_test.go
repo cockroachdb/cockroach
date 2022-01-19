@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ import (
 func TestQuorumRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(), func(t *testing.T, path string) {
 		env := quorumRecoveryEnv{}
 		defer env.cleanupStores()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

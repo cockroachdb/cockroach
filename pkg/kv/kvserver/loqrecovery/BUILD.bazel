@@ -41,6 +41,7 @@ go_test(
         "//pkg/roachpb:with-mocks",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/keysutil",
         "//pkg/util/leaktest",

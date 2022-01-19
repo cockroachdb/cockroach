@@ -32,6 +32,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":uuid"],
     deps = [
+        "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

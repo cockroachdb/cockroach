@@ -45,7 +45,7 @@ func TestEval(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	walk := func(t *testing.T, getExpr func(*testing.T, *datadriven.TestData) string) {
-		datadriven.Walk(t, filepath.Join("testdata", "eval"), func(t *testing.T, path string) {
+		datadriven.Walk(t, filepath.Join(testutils.TestDataPath(), "eval"), func(t *testing.T, path string) {
 			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 				if d.Cmd != "eval" {
 					t.Fatalf("unsupported command %s", d.Cmd)

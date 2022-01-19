@@ -8345,7 +8345,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	defer jobs.TestingSetProgressThresholds()()
 
-	baseDir := "testdata"
+	baseDir := testutils.TestDataPath()
 	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
@@ -8773,7 +8773,7 @@ func TestRestorePauseOnError(t *testing.T) {
 
 	defer jobs.TestingSetProgressThresholds()()
 
-	baseDir := "testdata"
+	baseDir := testutils.TestDataPath()
 	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,

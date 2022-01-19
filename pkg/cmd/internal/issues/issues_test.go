@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
 	"github.com/google/go-github/github"
@@ -210,7 +211,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 		sKeys = append(sKeys, k)
 	}
 	re := regexp.MustCompile(`^(.+?)-(` + strings.Join(sKeys, "|") + `)\.txt$`)
-	datadriven.Walk(t, filepath.Join("testdata", "post"), func(t *testing.T, path string) {
+	datadriven.Walk(t, filepath.Join(testutils.TestDataPath(), "post"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			basename := filepath.Base(path)
 			sl := re.FindStringSubmatch(basename)

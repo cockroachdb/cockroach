@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/errors"
@@ -1576,7 +1577,7 @@ func TestLint(t *testing.T) {
 		if bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t, "the errcheck tests are run during the bazel build")
 		}
-		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errcheck_excludes.txt"))
+		excludesPath, err := filepath.Abs(filepath.Join(testutils.TestDataPath(), "errcheck_excludes.txt"))
 		if err != nil {
 			t.Fatal(err)
 		}

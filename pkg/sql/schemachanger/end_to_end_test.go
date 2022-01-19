@@ -52,7 +52,7 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	datadriven.Walk(t, filepath.Join("testdata"), func(t *testing.T, path string) {
+	datadriven.Walk(t, filepath.Join(testutils.TestDataPath()), func(t *testing.T, path string) {
 		// Create a test cluster.
 		// Its purpose is to seed the test dependencies with interesting states.
 		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -204,7 +204,7 @@ func TestRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	datadriven.Walk(t, filepath.Join("testdata"), func(t *testing.T, path string) {
+	datadriven.Walk(t, filepath.Join(testutils.TestDataPath()), func(t *testing.T, path string) {
 		var setup []parser.Statement
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -113,7 +114,7 @@ const expectedParentID = 54
 const expectedSchemaID = 55
 
 func readFile(t *testing.T, name string) string {
-	body, err := ioutil.ReadFile(filepath.Join("testdata", "mysqldump", name))
+	body, err := ioutil.ReadFile(filepath.Join(testutils.TestDataPath(), "mysqldump", name))
 	if err != nil {
 		t.Fatal(err)
 	}

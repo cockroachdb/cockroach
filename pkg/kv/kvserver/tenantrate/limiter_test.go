@@ -65,7 +65,7 @@ func TestCloser(t *testing.T) {
 
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 		datadriven.RunTest(t, path, new(testState).run)
 	})

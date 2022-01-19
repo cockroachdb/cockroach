@@ -53,7 +53,7 @@ import (
 func TestBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(), func(t *testing.T, path string) {
 		catalog := testcat.New()
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

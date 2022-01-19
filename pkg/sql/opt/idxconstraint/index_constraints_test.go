@@ -57,7 +57,7 @@ import (
 func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(), func(t *testing.T, path string) {
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 

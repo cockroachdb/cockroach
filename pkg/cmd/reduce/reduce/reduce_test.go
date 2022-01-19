@@ -18,10 +18,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestReduceGo(t *testing.T) {
-	reduce.Walk(t, "testdata", nil /* filter */, isInterestingGo, reduce.ModeInteresting,
+	reduce.Walk(t, testutils.TestDataPath(), nil /* filter */, isInterestingGo, reduce.ModeInteresting,
 		nil /* chunkReducer */, goPasses)
 }
 
