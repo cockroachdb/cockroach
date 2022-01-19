@@ -67,7 +67,7 @@ var simplePostgresTestRows = func() []simpleTestRow {
 }()
 
 func getSimplePostgresDumpTestdata(t *testing.T) ([]simpleTestRow, string) {
-	dest := filepath.Join(`testdata`, `pgdump`, `simple.sql`)
+	dest := filepath.Join("testdata", "pgdump", "simple.sql")
 	if rewritePostgresTestData {
 		genSimplePostgresTestdata(t, func() { pgdump(t, dest, "simple") })
 	}
@@ -75,7 +75,7 @@ func getSimplePostgresDumpTestdata(t *testing.T) ([]simpleTestRow, string) {
 }
 
 func getSecondPostgresDumpTestdata(t *testing.T) (int, string) {
-	dest := filepath.Join(`testdata`, `pgdump`, `second.sql`)
+	dest := filepath.Join("testdata", "pgdump", "second.sql")
 	if rewritePostgresTestData {
 		genSecondPostgresTestdata(t, func() { pgdump(t, dest, "second") })
 	}
@@ -83,7 +83,7 @@ func getSecondPostgresDumpTestdata(t *testing.T) (int, string) {
 }
 
 func getMultiTablePostgresDumpTestdata(t *testing.T) string {
-	dest := filepath.Join(`testdata`, `pgdump`, `db.sql`)
+	dest := filepath.Join("testdata", "pgdump", "db.sql")
 	if rewritePostgresTestData {
 		genSequencePostgresTestdata(t, func() {
 			genSecondPostgresTestdata(t, func() {
@@ -119,12 +119,12 @@ func getPgCopyTestdata(t *testing.T) ([]simpleTestRow, []pgCopyDumpCfg) {
 	}
 
 	for i := range configs {
-		configs[i].filename = filepath.Join(`testdata`, `pgcopy`, configs[i].name, `test.txt`)
+		configs[i].filename = filepath.Join("testdata", `pgcopy`, configs[i].name, `test.txt`)
 	}
 
 	if rewritePostgresTestData {
 		genSimplePostgresTestdata(t, func() {
-			if err := os.RemoveAll(filepath.Join(`testdata`, `pgcopy`)); err != nil {
+			if err := os.RemoveAll(filepath.Join("testdata", `pgcopy`)); err != nil {
 				t.Fatal(err)
 			}
 			for _, cfg := range configs {
