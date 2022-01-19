@@ -693,6 +693,30 @@ func (ht *HashTable) CheckBuildForAggregation(
 	return nDiffers
 }
 
+// DistinctCheck determines if the current key in the GroupID bucket matches the
+// equality column key. If there is a match, then the key is removed from
+// ToCheck. If the bucket has reached the end, the key is rejected. The ToCheck
+// list is reconstructed to only hold the indices of the eqCol keys that have
+// not been found. The new length of ToCheck is returned by this function.
+func (ht *HashTable) DistinctCheck(nToCheck uint64, probeSel []int) uint64 {
+	ht.checkCols(ht.Keys, nToCheck, probeSel)
+	// Select the indices that differ and put them into ToCheck.
+	nDiffers := uint64(0)
+	toCheckSlice := ht.ProbeScratch.ToCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
+		if ht.ProbeScratch.differs[toCheck] {
+			ht.ProbeScratch.differs[toCheck] = false
+			//gcassert:bce
+			toCheckSlice[nDiffers] = toCheck
+			nDiffers++
+		}
+	}
+	return nDiffers
+}
+
 // Reset resets the HashTable for reuse.
 // NOTE: memory that already has been allocated for ht.Vals is *not* released.
 // However, resetting the length of ht.Vals to zero doesn't confuse the
