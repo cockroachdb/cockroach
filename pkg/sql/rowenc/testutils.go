@@ -1651,7 +1651,8 @@ func randComputedColumnTableDef(
 
 	default:
 		volatility, ok := tree.LookupCastVolatility(xTyp, types.String)
-		if ok && volatility <= tree.VolatilityImmutable {
+		if ok && volatility <= tree.VolatilityImmutable &&
+			!typeToStringCastHasIncorrectVolatility(xTyp) {
 			// We can cast to string; use lower(x::string)
 			newDef.Type = types.String
 			newDef.Computed.Expr = &tree.FuncExpr{
@@ -1682,6 +1683,28 @@ func randComputedColumnTableDef(
 	}
 
 	return newDef
+}
+
+// typeToStringCastHasIncorrectVolatility returns true for a given type if the
+// cast from it to STRING types has been given an incorrect volatility. For
+// example, REGCLASS->STRING casts are immutable when they should be stable (see
+// #74286 and #74553 for more details).
+//
+// Creating computed column expressions with such a cast can cause logical
+// correctness bugs and internal errors. The volatilities cannot be fixed
+// without causing backward incompatibility, so this function is used to prevent
+// sqlsmith and TLP from repetitively finding these known volatility bugs.
+func typeToStringCastHasIncorrectVolatility(t *types.T) bool {
+	switch t.Family() {
+	case types.DateFamily, types.EnumFamily, types.TimestampFamily,
+		types.IntervalFamily, types.TupleFamily:
+		return true
+	case types.OidFamily:
+		return t == types.RegClass || t == types.RegNamespace || t == types.RegProc ||
+			t == types.RegProcedure || t == types.RegType
+	default:
+		return false
+	}
 }
 
 // randIndexTableDefFromCols attempts to create an IndexTableDef with a random
