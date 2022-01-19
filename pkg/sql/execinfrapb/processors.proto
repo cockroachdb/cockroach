@@ -124,6 +124,8 @@ message ProcessorCoreUnion {
   optional StreamIngestionDataSpec streamIngestionData = 35;
   optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
   optional ExportSpec exporter = 37;
+  optional IndexBackfillMergerSpec indexBackfillMerger = 38;
+
   reserved 6, 12;
 }
 
@@ -154,4 +156,3 @@ message MetadataTestSenderSpec {
 message MetadataTestReceiverSpec {
   repeated string sender_ids = 1 [(gogoproto.customname) = "SenderIDs"];
 }
-

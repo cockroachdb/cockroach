@@ -136,11 +136,18 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	}
 	span := tableDesc.PrimaryIndexSpan(p.ExecCfg().Codec)
 	for i := len(tableDesc.ClusterVersion.Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
-		spanList = append(spanList,
-			jobspb.ResumeSpanList{
-				ResumeSpans: []roachpb.Span{span},
-			},
-		)
+		var resumeSpans []roachpb.Span
+		mut := tableDesc.Mutations[i]
+		if mut.GetIndex() != nil && mut.GetIndex().UseDeletePreservingEncoding {
+			// Resume spans for merging the delete preserving temporary indexes are
+			// the spans of the temporary indexes.
+			resumeSpans = []roachpb.Span{tableDesc.IndexSpan(p.ExecCfg().Codec, mut.GetIndex().ID)}
+		} else {
+			resumeSpans = []roachpb.Span{span}
+		}
+		spanList = append(spanList, jobspb.ResumeSpanList{
+			ResumeSpans: resumeSpans,
+		})
 	}
 
 	if !recordExists {

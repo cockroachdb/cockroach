@@ -21,20 +21,33 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func newPeriodicProgressFlusher(settings *cluster.Settings) scexec.PeriodicProgressFlusher {
-	clock := timeutil.DefaultTimeSource{}
-	getCheckpointInterval := func() time.Duration {
-		return backfill.IndexBackfillCheckpointInterval.Get(&settings.SV)
-	}
-	// fractionInterval is copied from the logic in existing backfill code.
-	// TODO(ajwerner): Add a cluster setting to control this.
-	const fractionInterval = 10 * time.Second
-	getFractionInterval := func() time.Duration { return fractionInterval }
+// NewPeriodicProgressFlusher returns a PeriodicProgressFlusher that
+// will flush at the given intervals.
+func NewPeriodicProgressFlusher(
+	checkpointIntervalFn func() time.Duration, fractionIntervalFn func() time.Duration,
+) scexec.PeriodicProgressFlusher {
 	return &periodicProgressFlusher{
-		clock:              clock,
-		checkpointInterval: getCheckpointInterval,
-		fractionInterval:   getFractionInterval,
+		clock:              timeutil.DefaultTimeSource{},
+		checkpointInterval: checkpointIntervalFn,
+		fractionInterval:   fractionIntervalFn,
 	}
+}
+
+func newPeriodicProgressFlusherForIndexBackfill(
+	settings *cluster.Settings,
+) scexec.PeriodicProgressFlusher {
+	return NewPeriodicProgressFlusher(
+		func() time.Duration {
+			return backfill.IndexBackfillCheckpointInterval.Get(&settings.SV)
+
+		},
+		func() time.Duration {
+			// fractionInterval is copied from the logic in existing backfill code.
+			// TODO(ajwerner): Add a cluster setting to control this.
+			const fractionInterval = 10 * time.Second
+			return fractionInterval
+		},
+	)
 }
 
 type periodicProgressFlusher struct {
