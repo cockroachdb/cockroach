@@ -3686,7 +3686,7 @@ Support status: [reserved](#support-status)
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| statement_fingerprint | [string](#cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest-string) |  |  | [reserved](#support-status) |
+| request_id | [int64](#cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest-int64) |  |  | [reserved](#support-status) |
 
 
 
