@@ -149,11 +149,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 func (s *ColBatchScan) GetBytesRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Note that if Init() was never called, s.rf.fetcher will remain nil, and
-	// GetBytesRead() will return 0. We are also holding the mutex, so a
-	// concurrent call to Init() will have to wait, and the fetcher will remain
-	// uninitialized until we return.
-	return s.rf.fetcher.GetBytesRead()
+	return s.rf.getBytesRead()
 }
 
 // GetRowsRead is part of the colexecop.KVReader interface.

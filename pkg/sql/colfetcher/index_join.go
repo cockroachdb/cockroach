@@ -96,6 +96,9 @@ type ColIndexJoin struct {
 		// rowsRead contains the number of total rows this ColIndexJoin has
 		// returned so far.
 		rowsRead int64
+		// bytesRead contains the number of bytes this ColIndexJoin has read so
+		// far.
+		bytesRead int64
 	}
 	// ResultTypes is the slice of resulting column types from this operator.
 	// It should be used rather than the slice of column types from the scanned
@@ -241,6 +244,9 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				// ColSpanAssembler to account for the spans slice since it
 				// still has the references to it.
 				s.spanAssembler.AccountForSpans()
+				s.mu.Lock()
+				s.mu.bytesRead += s.rf.resetBytesRead()
+				s.mu.Unlock()
 				s.state = indexJoinConstructingSpans
 				continue
 			}
@@ -398,11 +404,8 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 func (s *ColIndexJoin) GetBytesRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Note that if Init() was never called, s.rf.fetcher will remain nil, and
-	// GetBytesRead() will return 0. We are also holding the mutex, so a
-	// concurrent call to Init() will have to wait, and the fetcher will remain
-	// uninitialized until we return.
-	return s.rf.fetcher.GetBytesRead()
+	s.mu.bytesRead += s.rf.resetBytesRead()
+	return s.mu.bytesRead
 }
 
 // GetRowsRead is part of the colexecop.KVReader interface.

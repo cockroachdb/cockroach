@@ -131,6 +131,18 @@ func (f *KVFetcher) GetBytesRead() int64 {
 	return atomic.LoadInt64(&f.atomics.bytesRead)
 }
 
+// ResetBytesRead resets the number of bytes read by this fetcher and returns
+// the number before the reset. It is safe for concurrent use and is able to
+// handle a case of uninitialized fetcher.
+func (f *KVFetcher) ResetBytesRead() int64 {
+	if f == nil {
+		return 0
+	}
+	bytesRead := atomic.LoadInt64(&f.atomics.bytesRead)
+	atomic.StoreInt64(&f.atomics.bytesRead, 0)
+	return bytesRead
+}
+
 // MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
 // timestamps from returned KV's.
 type MVCCDecodingStrategy int
