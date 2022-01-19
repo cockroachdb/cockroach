@@ -256,6 +256,14 @@ type cFetcher struct {
 
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
+	// bytesRead stores the cumulative number of bytes read by this cFetcher
+	// throughout its whole existence (i.e. between its construction and
+	// Release()). It accumulates the bytes read statistic across StartScan* and
+	// Close methods.
+	//
+	// The field should not be accessed directly by the users of the cFetcher -
+	// getBytesRead() should be used instead.
+	bytesRead int64
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -1050,6 +1058,8 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateEmitLastBatch:
 			rf.machine.state[0] = stateFinished
 			rf.finalizeBatch()
+			// Close the fetcher eagerly so that its memory could be GCed.
+			rf.Close(ctx)
 			return rf.machine.batch, nil
 
 		case stateFinished:
@@ -1457,6 +1467,16 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	return rf.table.desc, true
 }
 
+// getBytesRead returns the number of bytes read by the cFetcher throughout its
+// existence so far. This number accumulates the bytes read statistic across
+// StartScan* and Close methods.
+func (rf *cFetcher) getBytesRead() int64 {
+	if rf.fetcher != nil {
+		rf.bytesRead += rf.fetcher.ResetBytesRead()
+	}
+	return rf.bytesRead
+}
+
 var cFetcherPool = sync.Pool{
 	New: func() interface{} {
 		return &cFetcher{}
@@ -1479,6 +1499,7 @@ func (rf *cFetcher) Release() {
 
 func (rf *cFetcher) Close(ctx context.Context) {
 	if rf != nil && rf.fetcher != nil {
+		rf.bytesRead += rf.fetcher.GetBytesRead()
 		rf.fetcher.Close(ctx)
 		rf.fetcher = nil
 	}
