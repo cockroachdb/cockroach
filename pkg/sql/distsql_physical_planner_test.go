@@ -732,12 +732,18 @@ func TestPartitionSpans(t *testing.T) {
 
 		gatewayNode int
 
-		// spans to be passed to PartitionSpans. If the second string is empty,
-		// the span is actually a point lookup.
+		// spans to be passed to PartitionSpansWithUserData. If the second string is
+		// empty, the span is actually a point lookup.
 		spans [][2]string
+
+		// user data to be passed to PartitionSpansWithUserData
+		userData []interface{}
 
 		// expected result: a map of node to list of spans.
 		partitions map[int][][2]string
+
+		// expected map of node to list of user data.
+		partitionedUserData map[int][]interface{}
 	}{
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
@@ -843,6 +849,45 @@ func TestPartitionSpans(t *testing.T) {
 				2: {{"C", "C2"}},
 			},
 		},
+
+		// Test that user data is partitioned along with the spans.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans:    [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			userData: []interface{}{"data1", "data2"},
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+			partitionedUserData: map[int][]interface{}{
+				1: {"data1", "data1"},
+				2: {"data1"},
+				3: {"data2"},
+			},
+		},
+
+		// Test that consecutive spans are not merged when partitioned on that same
+		// node.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 1}, {"C", 2}},
+			gatewayNode: 1,
+
+			spans:    [][2]string{{"A", "A1"}, {"A1", "B1"}, {"B1", "D"}},
+			userData: []interface{}{"data1", "data2", "data3"},
+
+			partitions: map[int][][2]string{
+				1: {{"A", "A1"}, {"A1", "B1"}, {"B1", "C"}},
+				2: {{"C", "D"}},
+			},
+			partitionedUserData: map[int][]interface{}{
+				1: {"data1", "data2", "data3"},
+				2: {"data3"},
+			},
+		},
 	}
 
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
@@ -917,13 +962,18 @@ func TestPartitionSpans(t *testing.T) {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
 			}
 
-			partitions, err := dsp.PartitionSpans(planCtx, spans)
+			partitions, userData, err := dsp.PartitionSpansWithUserData(planCtx, spans, tc.userData)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			resMap := make(map[int][][2]string)
-			for _, p := range partitions {
+			var userDataMap map[int][]interface{}
+			if userData != nil {
+				userDataMap = make(map[int][]interface{})
+			}
+
+			for i, p := range partitions {
 				if _, ok := resMap[int(p.SQLInstanceID)]; ok {
 					t.Fatalf("node %d shows up in multiple partitions", p)
 				}
@@ -932,10 +982,17 @@ func TestPartitionSpans(t *testing.T) {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
 				resMap[int(p.SQLInstanceID)] = spans
+				if userData != nil {
+					userDataMap[int(p.SQLInstanceID)] = userData[i]
+				}
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {
 				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+			}
+
+			if !reflect.DeepEqual(userDataMap, tc.partitionedUserData) {
+				t.Errorf("expected userData:\n %v\ngot:\n %v", tc.partitionedUserData, userDataMap)
 			}
 		})
 	}

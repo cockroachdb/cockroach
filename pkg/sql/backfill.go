@@ -2012,15 +2012,9 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 	}); err != nil {
 		return err
 	}
-	table := tabledesc.NewBuilder(&tbl.ClusterVersion).BuildImmutableTable()
-	for i, addIdx := range addingIndexes {
-		tempIdx := temporaryIndexes[i]
-		log.Infof(ctx, "merging from %d -> %d on %v", tempIdx, addIdx, table)
-		sourceSpan := table.IndexSpan(sc.execCfg.Codec, tempIdx)
-		err := sc.Merge(ctx, sc.execCfg.Codec, table, tempIdx, addIdx, sourceSpan)
-		if err != nil {
-			return err
-		}
+	tableDesc := tabledesc.NewBuilder(&tbl.ClusterVersion).BuildImmutableTable()
+	if err := sc.distIndexMerge(ctx, tableDesc, addingIndexes, temporaryIndexes); err != nil {
+		return err
 	}
 	return nil
 }
@@ -2606,4 +2600,102 @@ func indexTruncateInTxn(
 	}
 	// Remove index zone configs.
 	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc, []uint32{uint32(idx.GetID())})
+}
+
+func (sc *SchemaChanger) distIndexMerge(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	addedIndexes []descpb.IndexID,
+	temporaryIndexes []descpb.IndexID,
+) error {
+	// Gather the initial resume spans for the merge process.
+	progress, err := extractMergeProgress(sc.job, tableDesc, addedIndexes, temporaryIndexes)
+	if err != nil {
+		return err
+	}
+
+	log.VEventf(ctx, 2, "indexbackfill merge: initial resume spans %+v", progress.TodoSpans)
+	if progress.TodoSpans == nil {
+		return nil
+	}
+
+	// TODO(rui): these can be initialized along with other new schema changer dependencies.
+	planner := NewIndexBackfillerMergePlanner(sc.execCfg, sc.execCfg.InternalExecutorFactory)
+	tracker := NewIndexMergeTracker(progress)
+	periodicFlusher := newPeriodicProgressFlusher(sc.settings)
+
+	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+		if meta.BulkProcessorProgress != nil {
+
+			idxCompletedSpans := make(map[int32][]roachpb.Span)
+
+			for i, sp := range meta.BulkProcessorProgress.CompletedSpans {
+				spanIdx := meta.BulkProcessorProgress.CompletedSpanIdx[i]
+				idxCompletedSpans[spanIdx] = append(idxCompletedSpans[spanIdx], sp)
+			}
+			currentProgress := tracker.GetMergeProgress()
+
+			for idx, completedSpans := range idxCompletedSpans {
+				currentProgress.TodoSpans[idx] = roachpb.SubtractSpans(currentProgress.TodoSpans[idx], completedSpans)
+			}
+
+			tracker.SetMergeProgress(ctx, currentProgress)
+		}
+		return nil
+	}
+
+	stop := periodicFlusher.StartPeriodicUpdates(ctx, tracker, sc.job)
+	defer func() { _ = stop() }()
+
+	run, err := planner.plan(ctx, tableDesc, progress.TodoSpans, progress.AddedIndexes,
+		progress.TemporaryIndexes, metaFn)
+	if err != nil {
+		return err
+	}
+
+	if err := run(ctx); err != nil {
+		return err
+	}
+
+	if err := stop(); err != nil {
+		return err
+	}
+
+	if err := tracker.FlushCheckpoint(ctx, sc.job); err != nil {
+		return err
+	}
+
+	return tracker.FlushFractionCompleted(ctx)
+}
+
+func extractMergeProgress(
+	job *jobs.Job, tableDesc catalog.TableDescriptor, addedIndexes, temporaryIndexes []descpb.IndexID,
+) (*MergeProgress, error) {
+	resumeSpanList := job.Details().(jobspb.SchemaChangeDetails).ResumeSpanList
+	progress := MergeProgress{}
+	progress.TemporaryIndexes = temporaryIndexes
+	progress.AddedIndexes = addedIndexes
+
+	const noIdx = -1
+	findMutIdx := func(id descpb.IndexID) int {
+		for mutIdx, mut := range tableDesc.AllMutations() {
+			if mut.AsIndex() != nil && mut.AsIndex().GetID() == id {
+				return mutIdx
+			}
+		}
+
+		return noIdx
+	}
+
+	for _, tempIdx := range temporaryIndexes {
+		mutIdx := findMutIdx(tempIdx)
+		if mutIdx == noIdx {
+			return nil, errors.AssertionFailedf("no corresponding mutation for temporary index %d", tempIdx)
+		}
+
+		progress.TodoSpans = append(progress.TodoSpans, resumeSpanList[mutIdx].ResumeSpans)
+		progress.MutationIdx = append(progress.MutationIdx, mutIdx)
+	}
+
+	return &progress, nil
 }
