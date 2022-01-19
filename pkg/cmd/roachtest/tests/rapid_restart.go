@@ -82,6 +82,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 			url := base + `/_status/vars`
 			resp, err := httpClient.Get(ctx, url)
 			if err == nil {
+				resp.Body.Close()
 				if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusOK {
 					t.Fatalf("unexpected status code from %s: %d", url, resp.StatusCode)
 				}

@@ -616,7 +616,10 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		t.Fatalf("could not create request: %v", err)
 	}
 
-	_, err = httpClient.Do(req)
+	resp, err = httpClient.Do(req)
+	if err == nil {
+		resp.Body.Close()
+	}
 	if expected := "certificate signed by unknown authority"; !testutils.IsError(err, expected) {
 		t.Fatalf("Expected error %q, got %v", expected, err)
 	}
