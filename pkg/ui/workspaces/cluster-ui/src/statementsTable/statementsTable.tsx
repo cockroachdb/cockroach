@@ -270,7 +270,9 @@ export function makeStatementsColumns(
   isTenant: boolean,
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
-  onDiagnosticsDownload?: (report: IStatementDiagnosticsReport) => void,
+  onSelectDiagnosticsReportDropdownOption?: (
+    report: IStatementDiagnosticsReport,
+  ) => void,
   onStatementClick?: (statement: string) => void,
 ): ColumnDescriptor<AggregateStatistics>[] {
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
@@ -291,7 +293,7 @@ export function makeStatementsColumns(
       title: statisticsTableTitles.diagnostics(statType),
       cell: StatementTableCell.diagnostics(
         activateDiagnosticsRef,
-        onDiagnosticsDownload,
+        onSelectDiagnosticsReportDropdownOption,
       ),
       sort: stmt => {
         if (stmt.diagnosticsReports?.length > 0) {

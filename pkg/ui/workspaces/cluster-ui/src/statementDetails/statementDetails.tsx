@@ -72,6 +72,7 @@ import {
   ActivateStatementDiagnosticsModal,
 } from "../statementsDiagnostics";
 type IDuration = google.protobuf.IDuration;
+type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const { TabPane } = Tabs;
 
@@ -149,6 +150,7 @@ export interface StatementDetailsDispatchProps {
   onTabChanged?: (tabName: string) => void;
   onDiagnosticsModalOpen?: (statementFingerprint: string) => void;
   onDiagnosticBundleDownload?: (statementFingerprint?: string) => void;
+  onDiagnosticCancelRequest?: (report: IStatementDiagnosticsReport) => void;
   onSortingChange?: (
     name: string,
     columnTitle: string,
@@ -459,6 +461,7 @@ export class StatementDetails extends React.Component<
       diagnosticsReports,
       dismissStatementDiagnosticsAlertMessage,
       onDiagnosticBundleDownload,
+      onDiagnosticCancelRequest,
       nodeRegions,
       isTenant,
     } = this.props;
@@ -824,6 +827,7 @@ export class StatementDetails extends React.Component<
               hasData={hasDiagnosticReports}
               statementFingerprint={statement}
               onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
+              onDiagnosticCancelRequestClick={onDiagnosticCancelRequest}
               showDiagnosticsViewLink={
                 this.props.uiConfig.showStatementDiagnosticsLink
               }
