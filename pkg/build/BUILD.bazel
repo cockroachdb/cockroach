@@ -15,9 +15,9 @@ go_library(
     visibility = ["//visibility:public"],
     x_defs = {
         "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple": "{STABLE_BUILD_TARGET_TRIPLE}",
-        "github.com/cockroachdb/cockroach/pkg/build.rev": "{STABLE_BUILD_GIT_COMMIT}",
-        "github.com/cockroachdb/cockroach/pkg/build.tag": "{STABLE_BUILD_GIT_TAG}",
         "github.com/cockroachdb/cockroach/pkg/build.typ": "{STABLE_BUILD_GIT_BUILD_TYPE}",
+        "github.com/cockroachdb/cockroach/pkg/build.rev": "{BUILD_GIT_COMMIT}",
+        "github.com/cockroachdb/cockroach/pkg/build.tag": "{BUILD_GIT_TAG}",
         "github.com/cockroachdb/cockroach/pkg/build.utcTime": "{BUILD_GIT_UTCTIME}",
     },
     deps = [

@@ -27,6 +27,10 @@ type SchemaChangeEventClass string
 // change event which is a member of the changefeed's schema change events.
 type SchemaChangePolicy string
 
+// VirtualColumnVisibility defines the behaviour of how the changefeed will
+// include virtual columns in an event
+type VirtualColumnVisibility string
+
 // Constants for the options.
 const (
 	OptAvroSchemaPrefix         = `avro_schema_prefix`
@@ -50,6 +54,10 @@ const (
 	OptWebhookClientTimeout     = `webhook_client_timeout`
 	OptOnError                  = `on_error`
 	OptMetricsScope             = `metrics_label`
+	OptVirtualColumns           = `virtual_columns`
+
+	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
+	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
 
 	// OptSchemaChangeEventClassColumnChange corresponds to all schema change
 	// events which add or remove any column.
@@ -170,6 +178,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
 	OptOnError:                  sql.KVStringOptRequireValue,
 	OptMetricsScope:             sql.KVStringOptRequireValue,
+	OptVirtualColumns:           sql.KVStringOptRequireValue,
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -189,7 +198,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEnvelope,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
 	OptInitialScan, OptNoInitialScan,
-	OptMinCheckpointFrequency, OptMetricsScope)
+	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns)
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil
