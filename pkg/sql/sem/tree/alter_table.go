@@ -655,6 +655,24 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Schema)
 }
 
+// AlterTableSetEphemeralData represents an ALTER TABLE SET [NOT] EPHEMERAL DATA
+// command.
+type AlterTableSetEphemeralData struct {
+	Name            *UnresolvedObjectName
+	IsEphemeralData bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetEphemeralData) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TABLE ")
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" SET ")
+	if !node.IsEphemeralData {
+		ctx.WriteString("NOT ")
+	}
+	ctx.WriteString("EPHEMERAL DATA")
+}
+
 // TelemetryCounter returns the telemetry counter to increment
 // when this command is used.
 func (node *AlterTableSetSchema) TelemetryCounter() telemetry.Counter {

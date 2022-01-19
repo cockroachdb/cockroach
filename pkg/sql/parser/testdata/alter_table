@@ -593,6 +593,24 @@ ALTER TABLE IF EXISTS a SET SCHEMA s -- fully parenthesized
 ALTER TABLE IF EXISTS a SET SCHEMA s -- literals removed
 ALTER TABLE IF EXISTS _ SET SCHEMA _ -- identifiers removed
 
+
+parse
+ALTER TABLE a SET EPHEMERAL DATA
+----
+ALTER TABLE a SET EPHEMERAL DATA
+ALTER TABLE a SET EPHEMERAL DATA -- fully parenthesized
+ALTER TABLE a SET EPHEMERAL DATA -- literals removed
+ALTER TABLE _ SET EPHEMERAL DATA -- identifiers removed
+
+
+parse
+ALTER TABLE a SET NOT EPHEMERAL DATA
+----
+ALTER TABLE a SET NOT EPHEMERAL DATA
+ALTER TABLE a SET NOT EPHEMERAL DATA -- fully parenthesized
+ALTER TABLE a SET NOT EPHEMERAL DATA -- literals removed
+ALTER TABLE _ SET NOT EPHEMERAL DATA -- identifiers removed
+
 parse
 ALTER TABLE a OWNER TO foo
 ----

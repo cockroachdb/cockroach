@@ -17,6 +17,7 @@ go_library(
         "alter_table.go",
         "alter_table_locality.go",
         "alter_table_owner.go",
+        "alter_table_set_ephemeral_data.go",
         "alter_table_set_schema.go",
         "alter_type.go",
         "analyze_expr.go",

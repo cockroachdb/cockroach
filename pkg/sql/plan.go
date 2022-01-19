@@ -153,6 +153,7 @@ var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &alterTableOwnerNode{}
 var _ planNode = &alterTableSetSchemaNode{}
+var _ planNode = &alterTableSetEphemeralDataNode{}
 var _ planNode = &alterTypeNode{}
 var _ planNode = &bufferNode{}
 var _ planNode = &cancelQueriesNode{}

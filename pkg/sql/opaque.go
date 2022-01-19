@@ -102,6 +102,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterTableOwner(ctx, n)
 	case *tree.AlterTableSetSchema:
 		return p.AlterTableSetSchema(ctx, n)
+	case *tree.AlterTableSetEphemeralData:
+		return p.AlterTableSetEphemeralData(ctx, n)
 	case *tree.AlterType:
 		return p.AlterType(ctx, n)
 	case *tree.AlterRole:
