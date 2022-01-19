@@ -231,6 +231,9 @@ func (r *ResumingReader) Read(p []byte) (int, error) {
 			}
 			log.Errorf(r.Ctx, "Retry IO: error %s", lastErr)
 			lastErr = nil
+			if r.Reader != nil {
+				r.Reader.Close()
+			}
 			r.Reader = nil
 		}
 	}
