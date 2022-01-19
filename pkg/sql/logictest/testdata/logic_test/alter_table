@@ -2106,3 +2106,29 @@ ALTER TABLE colsource ADD COLUMN customer_id UUID  REFERENCES colref(id), ADD CO
 
 statement ok
 COMMIT
+
+# Fixes issue 75154 when dropping and re-creating a constraint in a transaction
+# we incorrectly detected the primary index as being used, even if its dropped
+# inside the transaction. The primary index will still exist, but will be
+# disabled via the drop constraint.
+subtest drop-and-add-constraint-primary-index
+
+statement ok
+BEGIN;
+create table const_tbl (a int, b int, constraint "bob" primary key (a, b));
+alter table const_tbl drop constraint "bob";
+alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
+COMMIT;
+
+statement ok
+BEGIN;
+alter table const_tbl drop constraint "bob";
+-- Note: Primary key must be restored first before any other command will
+-- be allowed.
+alter table const_tbl add constraint "steve" primary key (a, b); -- this statement
+
+statement error pq: relation \"const_tbl\" \(150\): unimplemented: cannot perform other schema changes in the same transaction as a primary key change.*
+alter table const_tbl add constraint "bob" CHECK (a > 100);
+
+statement ok
+rollback

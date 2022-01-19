@@ -1610,11 +1610,19 @@ func validateConstraintNameIsNotUsed(
 				name == tree.Name(defaultPKName) {
 				return false, nil
 			}
+			// If there is no active primary key, then adding one with the exact
+			// same name is allowed.
+			if !tableDesc.HasPrimaryKey() &&
+				tableDesc.PrimaryIndex.Name == name.String() {
+				return false, nil
+			}
 		}
 		if name == "" {
 			return false, nil
 		}
 		idx, _ := tableDesc.FindIndexWithName(string(name))
+		// If an index is found and its disabled, then we know it will be dropped
+		// later on.
 		if idx == nil {
 			return false, nil
 		}
@@ -1639,8 +1647,23 @@ func validateConstraintNameIsNotUsed(
 		// Unexpected error: table descriptor should be valid at this point.
 		return false, errors.WithAssertionFailure(err)
 	}
-	if _, isInUse := info[name.String()]; !isInUse {
+	constraintInfo, isInUse := info[name.String()]
+	if !isInUse {
 		return false, nil
+	}
+	// If the primary index is being replaced, then the name can be reused for
+	// another constraint.
+	if isInUse &&
+		constraintInfo.Index != nil &&
+		constraintInfo.Index.ID == tableDesc.PrimaryIndex.ID {
+		for _, mut := range tableDesc.GetMutations() {
+			if primaryKeySwap := mut.GetPrimaryKeySwap(); primaryKeySwap != nil &&
+				primaryKeySwap.OldPrimaryIndexId == tableDesc.PrimaryIndex.ID &&
+				primaryKeySwap.NewPrimaryIndexName != name.String() {
+				return false, nil
+			}
+		}
+
 	}
 	if hasIfNotExists {
 		return true, nil
