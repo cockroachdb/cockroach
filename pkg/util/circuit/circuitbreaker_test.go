@@ -32,20 +32,58 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testLogBridge(t *testing.T) (*redact.StringBuilder, *EventLogger) {
+type testBridge struct {
+	*EventLogger
+	trip, probeLaunched, probeDone, reset int
+}
+
+func (tb *testBridge) OnTrip(breaker *Breaker, prev, cur error) {
+	if prev == nil {
+		tb.trip++
+	}
+	tb.EventLogger.OnTrip(breaker, prev, cur)
+}
+
+func (tb *testBridge) OnProbeLaunched(breaker *Breaker) {
+	tb.probeLaunched++
+	tb.EventLogger.OnProbeLaunched(breaker)
+}
+
+func (tb *testBridge) OnProbeDone(breaker *Breaker) {
+	tb.probeDone++
+	tb.EventLogger.OnProbeDone(breaker)
+}
+
+func (tb *testBridge) OnReset(breaker *Breaker) {
+	tb.reset++
+	tb.EventLogger.OnReset(breaker)
+}
+
+// RequireNumTrippedEqualsNumResets verifies that the number of trip events
+// equals the number of reset events. This is an invariant that should hold
+// while all breakers are healthy.
+func (tb *testBridge) RequireNumTrippedEqualsNumResets(t *testing.T) {
+	t.Helper()
+	require.Equal(t, tb.reset, tb.trip, "got %d resets, but %d trips (%d probes launched)", tb.reset, tb.trip, tb.probeLaunched)
+}
+
+func testLogBridge(t *testing.T) (*redact.StringBuilder, *testBridge) {
 	var mu syncutil.Mutex
 	var allBuf redact.StringBuilder
-	return &allBuf, &EventLogger{Log: func(buf redact.StringBuilder) {
+	el := &EventLogger{Log: func(buf redact.StringBuilder) {
 		mu.Lock()
 		defer mu.Unlock()
 		allBuf.Printf("%s\n", buf)
 		t.Log(buf)
 	}}
+	tlb := &testBridge{EventLogger: el}
+	return &allBuf, tlb
 }
 
 func TestBreaker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	allBuf, eh := testLogBridge(t)
+	defer eh.RequireNumTrippedEqualsNumResets(t)
 	var report func(err error)
 	var done func()
 	br := NewBreaker(Options{
@@ -186,6 +224,7 @@ func TestBreakerProbeIsReactive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	allBuf, eh := testLogBridge(t)
+	defer eh.RequireNumTrippedEqualsNumResets(t)
 	var numProbes int32 // atomic
 	br := NewBreaker(Options{
 		Name: "mybreaker",
@@ -232,6 +271,7 @@ func TestBreakerProbeIsReactive(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			return allBuf.String()
 		})
+	br.Reset()
 }
 
 func TestBreakerRealistic(t *testing.T) {
@@ -252,6 +292,7 @@ func TestBreakerRealistic(t *testing.T) {
 	}
 	const backoff = 1 * time.Millisecond
 	_, eh := testLogBridge(t)
+	defer eh.RequireNumTrippedEqualsNumResets(t)
 	br := NewBreaker(Options{
 		Name:         "testbreaker",
 		EventHandler: eh,
