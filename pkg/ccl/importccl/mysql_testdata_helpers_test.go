@@ -121,10 +121,10 @@ type testFiles struct {
 func getMysqldumpTestdata(t *testing.T) testFiles {
 	var files testFiles
 
-	files.simple = filepath.Join(`testdata`, `mysqldump`, `simple.sql`)
-	files.second = filepath.Join(`testdata`, `mysqldump`, `second.sql`)
-	files.everything = filepath.Join(`testdata`, `mysqldump`, `everything.sql`)
-	files.wholeDB = filepath.Join(`testdata`, `mysqldump`, `db.sql`)
+	files.simple = filepath.Join("testdata", "mysqldump", "simple.sql")
+	files.second = filepath.Join("testdata", "mysqldump", "second.sql")
+	files.everything = filepath.Join("testdata", "mysqldump", "everything.sql")
+	files.wholeDB = filepath.Join("testdata", "mysqldump", "db.sql")
 
 	if rewriteMysqlTestData {
 		genMysqlTestdata(t, func() {
