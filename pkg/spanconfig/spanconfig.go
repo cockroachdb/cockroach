@@ -140,6 +140,10 @@ func FullTranslate(
 	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
 }
 
+// SQLWatcherHandler is the signature of a handler that can be passed into
+// SQLWatcher.WatchForSQLUpdates as described below.
+type SQLWatcherHandler func(context.Context, []SQLUpdate, hlc.Timestamp) error
+
 // SQLWatcher watches for events on system.zones and system.descriptors.
 type SQLWatcher interface {
 	// WatchForSQLUpdates watches for updates to zones and descriptors starting
@@ -161,7 +165,7 @@ type SQLWatcher interface {
 	WatchForSQLUpdates(
 		ctx context.Context,
 		startTS hlc.Timestamp,
-		handler func(ctx context.Context, updates []DescriptorUpdate, checkpointTS hlc.Timestamp) error,
+		handler SQLWatcherHandler,
 	) error
 }
 
@@ -247,15 +251,87 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
+// SQLUpdate captures either a descriptor or a protected timestamp update.
+// It is the unit emitted by the SQLWatcher.
+type SQLUpdate struct {
+	descriptorUpdate         DescriptorUpdate
+	protectedTimestampUpdate ProtectedTimestampUpdate
+}
+
+// MakeDescriptorSQLUpdate returns a SQLUpdate that represents an update to a
+// descriptor.
+func MakeDescriptorSQLUpdate(id descpb.ID, descType catalog.DescriptorType) SQLUpdate {
+	return SQLUpdate{descriptorUpdate: DescriptorUpdate{
+		ID:   id,
+		Type: descType,
+	}}
+}
+
+// GetDescriptorUpdate returns a DescriptorUpdate.
+func (d *SQLUpdate) GetDescriptorUpdate() DescriptorUpdate {
+	return d.descriptorUpdate
+}
+
+// IsDescriptorUpdate returns true if the SQLUpdate represents an update to a
+// descriptor.
+func (d *SQLUpdate) IsDescriptorUpdate() bool {
+	return d.descriptorUpdate != DescriptorUpdate{}
+}
+
+// MakeTenantProtectedTimestampSQLUpdate returns a SQLUpdate that represents an update
+// to a protected timestamp record with a tenant target.
+func MakeTenantProtectedTimestampSQLUpdate(tenantID roachpb.TenantID) SQLUpdate {
+	return SQLUpdate{protectedTimestampUpdate: ProtectedTimestampUpdate{TenantTarget: tenantID}}
+}
+
+// MakeClusterProtectedTimestampSQLUpdate returns a SQLUpdate that represents an update
+// to a protected timestamp record with a cluster target.
+func MakeClusterProtectedTimestampSQLUpdate() SQLUpdate {
+	return SQLUpdate{protectedTimestampUpdate: ProtectedTimestampUpdate{ClusterTarget: true}}
+}
+
+// GetProtectedTimestampUpdate returns the target of the updated protected
+// timestamp record.
+func (d *SQLUpdate) GetProtectedTimestampUpdate() ProtectedTimestampUpdate {
+	return d.protectedTimestampUpdate
+}
+
+// IsProtectedTimestampUpdate returns true if the SQLUpdate represents an update
+// to a protected timestamp record.
+func (d *SQLUpdate) IsProtectedTimestampUpdate() bool {
+	return d.protectedTimestampUpdate != ProtectedTimestampUpdate{}
+}
+
 // DescriptorUpdate captures the ID and the type of descriptor or zone that been
-// updated. It's the unit of what the SQLWatcher emits.
+// updated.
 type DescriptorUpdate struct {
 	// ID of the descriptor/zone that has been updated.
 	ID descpb.ID
 
-	// DescriptorType of the descriptor/zone that has been updated. Could be either
+	// Type of the descriptor/zone that has been updated. Could be either
 	// the specific type or catalog.Any if no information is available.
-	DescriptorType catalog.DescriptorType
+	Type catalog.DescriptorType
+}
+
+// ProtectedTimestampUpdate captures a protected timestamp record with a cluster
+// or tenant target that been updated.
+type ProtectedTimestampUpdate struct {
+	// ClusterTarget is set if the pts record targets a cluster.
+	ClusterTarget bool
+	// TenantsTarget is set if the pts record targets a tenant.
+	TenantTarget roachpb.TenantID
+}
+
+// IsClusterUpdate returns true if the ProtectedTimestampUpdate has a cluster
+// target.
+func (p *ProtectedTimestampUpdate) IsClusterUpdate() bool {
+	return p.ClusterTarget
+}
+
+// IsTenantsUpdate returns true if the ProtectedTimestampUpdate has a tenants
+// target.
+func (p *ProtectedTimestampUpdate) IsTenantsUpdate() bool {
+	return !p.ClusterTarget
 }
 
 // Update captures a span and the corresponding config change. It's the unit of

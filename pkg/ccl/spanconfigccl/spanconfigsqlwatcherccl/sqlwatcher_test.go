@@ -1,14 +1,12 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package spanconfigsqlwatcher_test
+package spanconfigsqlwatcherccl
 
 import (
 	"context"
@@ -18,9 +16,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -42,8 +45,9 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		stmt        string
-		expectedIDs descpb.IDs
+		stmt               string
+		expectedIDs        descpb.IDs
+		expectedPTSUpdates []spanconfig.ProtectedTimestampUpdate
 	}{
 		{
 			stmt:        "CREATE TABLE t()",
@@ -101,15 +105,46 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 			// One ID each for the enum and the array type.
 			expectedIDs: descpb.IDs{66, 67},
 		},
+		// Test that pts updates are seen.
+		{
+			stmt:        "BACKUP TABLE t,t2 INTO 'nodelocal://1/foo'",
+			expectedIDs: descpb.IDs{54, 55},
+		},
+		{
+			stmt:        "BACKUP DATABASE d INTO 'nodelocal://1/foo'",
+			expectedIDs: descpb.IDs{56},
+		},
+		{
+			stmt:        "BACKUP TABLE d.* INTO 'nodelocal://1/foo'",
+			expectedIDs: descpb.IDs{56},
+		},
+		{
+			stmt: "BACKUP INTO 'nodelocal://1/foo'",
+			expectedPTSUpdates: []spanconfig.ProtectedTimestampUpdate{{ClusterTarget: true,
+				TenantTarget: roachpb.TenantID{}}},
+		},
+		{
+			stmt: `
+SELECT crdb_internal.create_tenant(2); 
+BACKUP TENANT 2 INTO 'nodelocal://1/foo'`,
+			expectedPTSUpdates: []spanconfig.ProtectedTimestampUpdate{{ClusterTarget: false,
+				TenantTarget: roachpb.TenantID{2}}},
+		},
 	}
 
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			ExternalIODir: dir,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
+				ProtectedTS: &protectedts.TestingKnobs{
+					EnableProtectedTimestampForMultiTenant: true,
+				},
 			},
 		},
 	})
@@ -134,10 +169,12 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 
 	var mu struct {
 		syncutil.Mutex
-		receivedIDs    map[descpb.ID]struct{}
-		lastCheckpoint hlc.Timestamp
+		receivedIDs     map[descpb.ID]struct{}
+		receivedTargets map[spanconfig.ProtectedTimestampUpdate]struct{}
+		lastCheckpoint  hlc.Timestamp
 	}
 	mu.receivedIDs = make(map[descpb.ID]struct{})
+	mu.receivedTargets = make(map[spanconfig.ProtectedTimestampUpdate]struct{})
 
 	var wg sync.WaitGroup
 	watcherStartTS := ts.Clock().Now()
@@ -148,7 +185,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		defer wg.Done()
 
 		_ = sqlWatcher.WatchForSQLUpdates(watcherCtx, watcherStartTS,
-			func(ctx context.Context, updates []spanconfig.DescriptorUpdate, checkpointTS hlc.Timestamp) error {
+			func(ctx context.Context, updates []spanconfig.SQLUpdate, checkpointTS hlc.Timestamp) error {
 				mu.Lock()
 				defer mu.Unlock()
 
@@ -156,7 +193,12 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 				mu.lastCheckpoint = checkpointTS
 
 				for _, update := range updates {
-					mu.receivedIDs[update.ID] = struct{}{}
+					if update.IsDescriptorUpdate() {
+						mu.receivedIDs[update.GetDescriptorUpdate().ID] = struct{}{}
+					} else if update.IsProtectedTimestampUpdate() {
+						ptsUpdate := update.GetProtectedTimestampUpdate()
+						mu.receivedTargets[ptsUpdate] = struct{}{}
+					}
 				}
 				return nil
 			})
@@ -179,11 +221,17 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		// Rangefeed events aren't guaranteed to be in any particular order for
 		// different keys.
 		mu.Lock()
+		require.Equal(t, len(tc.expectedPTSUpdates), len(mu.receivedTargets))
 		require.Equal(t, len(tc.expectedIDs), len(mu.receivedIDs))
 		for _, id := range tc.expectedIDs {
 			_, seen := mu.receivedIDs[id]
 			require.True(t, seen)
 			delete(mu.receivedIDs, id)
+		}
+		for _, ptsUpdate := range tc.expectedPTSUpdates {
+			_, seen := mu.receivedTargets[ptsUpdate]
+			require.True(t, seen)
+			delete(mu.receivedTargets, ptsUpdate)
 		}
 		mu.Unlock()
 	}
@@ -244,11 +292,11 @@ func TestSQLWatcherMultiple(t *testing.T) {
 
 		receivedIDs := make(map[descpb.ID]struct{})
 		err := sqlWatcher.WatchForSQLUpdates(ctx, beforeStmtTS,
-			func(_ context.Context, updates []spanconfig.DescriptorUpdate, checkpointTS hlc.Timestamp) error {
+			func(_ context.Context, updates []spanconfig.SQLUpdate, checkpointTS hlc.Timestamp) error {
 				onCheckpoint(checkpointTS)
 
 				for _, update := range updates {
-					receivedIDs[update.ID] = struct{}{}
+					receivedIDs[update.GetDescriptorUpdate().ID] = struct{}{}
 				}
 				return nil
 			})
@@ -363,10 +411,11 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 	startTS := ts.Clock().Now()
 	tdb.Exec(t, "CREATE TABLE t()")
 
-	err := sqlWatcher.WatchForSQLUpdates(ctx, startTS, func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error {
-		t.Fatal("handler should never run")
-		return nil
-	})
+	err := sqlWatcher.WatchForSQLUpdates(ctx, startTS,
+		func(context.Context, []spanconfig.SQLUpdate, hlc.Timestamp) error {
+			t.Fatal("handler should never run")
+			return nil
+		})
 	require.Error(t, err)
 	require.True(t, testutils.IsError(err, "boom"))
 }
@@ -431,10 +480,11 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 	// Wrap the call to WatchForSQLUpdates in a SucceedsSoon to ensure it
 	// evaluates within 45 seconds.
 	testutils.SucceedsSoon(t, func() error {
-		err := sqlWatcher.WatchForSQLUpdates(ctx, startTS, func(context.Context, []spanconfig.DescriptorUpdate, hlc.Timestamp) error {
-			atomic.AddInt32(&numCalled, 1)
-			return errors.New("handler error")
-		})
+		err := sqlWatcher.WatchForSQLUpdates(ctx, startTS,
+			func(context.Context, []spanconfig.SQLUpdate, hlc.Timestamp) error {
+				atomic.AddInt32(&numCalled, 1)
+				return errors.New("handler error")
+			})
 		require.Error(t, err)
 		require.True(t, testutils.IsError(err, "handler error"))
 		return nil
@@ -498,11 +548,11 @@ func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
 
 		receivedIDs := make(map[descpb.ID]struct{})
 		err := sqlWatcher.WatchForSQLUpdates(ctx, beforeStmtTS,
-			func(_ context.Context, updates []spanconfig.DescriptorUpdate, checkpointTS hlc.Timestamp) error {
+			func(_ context.Context, updates []spanconfig.SQLUpdate, checkpointTS hlc.Timestamp) error {
 				onCheckpoint(checkpointTS)
 
 				for _, update := range updates {
-					receivedIDs[update.ID] = struct{}{}
+					receivedIDs[update.GetDescriptorUpdate().ID] = struct{}{}
 				}
 				return nil
 			})
