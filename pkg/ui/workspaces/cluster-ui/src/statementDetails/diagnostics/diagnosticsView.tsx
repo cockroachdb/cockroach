@@ -14,6 +14,7 @@ import moment from "moment";
 import classnames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Button, Icon } from "@cockroachlabs/ui-components";
+import { Button as CancelButton } from "src/button";
 import { Text, TextTypes } from "src/text";
 import { Table, ColumnsConfig } from "src/table";
 import { SummaryCard } from "src/summaryCard";
@@ -43,6 +44,9 @@ export interface DiagnosticsViewStateProps {
 export interface DiagnosticsViewDispatchProps {
   dismissAlertMessage: () => void;
   onDownloadDiagnosticBundleClick?: (statementFingerprint: string) => void;
+  onDiagnosticCancelRequestClick?: (
+    report: IStatementDiagnosticsReport,
+  ) => void;
   onSortingChange?: (
     name: string,
     columnTitle: string,
@@ -145,7 +149,11 @@ export class DiagnosticsView extends React.Component<
       title: "",
       sorter: false,
       width: "160px",
-      render: ((onDownloadDiagnosticBundleClick: (s: string) => void) => {
+      render: (() => {
+        const {
+          onDownloadDiagnosticBundleClick,
+          onDiagnosticCancelRequestClick,
+        } = this.props;
         return (_text: string, record: IStatementDiagnosticsReport) => {
           if (record.completed) {
             return (
@@ -175,9 +183,24 @@ export class DiagnosticsView extends React.Component<
               </div>
             );
           }
-          return null;
+          return (
+            <div
+              className={cx("crl-statements-diagnostics-view__actions-column")}
+            >
+              <CancelButton
+                size="small"
+                type="secondary"
+                onClick={() =>
+                  onDiagnosticCancelRequestClick &&
+                  onDiagnosticCancelRequestClick(record)
+                }
+              >
+                Cancel request
+              </CancelButton>
+            </div>
+          );
         };
-      })(this.props.onDownloadDiagnosticBundleClick),
+      })(),
     },
   ];
 

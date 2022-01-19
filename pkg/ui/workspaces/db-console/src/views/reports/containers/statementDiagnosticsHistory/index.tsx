@@ -47,6 +47,8 @@ import {
   SortSetting,
   ColumnDescriptor,
 } from "@cockroachlabs/cluster-ui";
+import { cancelStatementDiagnosticsReportAction } from "src/redux/statements";
+import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
   MapDispatchToProps;
@@ -164,7 +166,19 @@ class StatementDiagnosticsHistoryView extends React.Component<
             </div>
           );
         }
-        return null;
+        return (
+          <div className="crl-statements-diagnostics-view__actions-column cell--show-on-hover nodes-table__link">
+            <Button
+              size="small"
+              type="secondary"
+              onClick={() => {
+                this.props.onDiagnosticCancelRequest(record);
+              }}
+            >
+              Cancel request
+            </Button>
+          </div>
+        );
       },
     },
   ];
@@ -266,6 +280,7 @@ interface MapStateToProps {
 }
 
 interface MapDispatchToProps {
+  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => void;
   refresh: () => void;
 }
 
@@ -277,6 +292,10 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
 });
 
 const mapDispatchToProps = (dispatch: AppDispatch): MapDispatchToProps => ({
+  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
+    dispatch(cancelStatementDiagnosticsReportAction(report.id));
+    dispatch(trackCancelDiagnosticsBundleAction(report.statement_fingerprint));
+  },
   refresh: () => {
     dispatch(invalidateStatementDiagnosticsRequests());
     dispatch(refreshStatementDiagnosticsRequests());

@@ -41,9 +41,13 @@ import { actions as nodeLivenessActions } from "../store/liveness";
 import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 type IDuration = google.protobuf.IDuration;
+type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const CreateStatementDiagnosticsReportRequest =
   cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+
+const CancelStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -123,6 +127,22 @@ const mapDispatchToProps = (
         action: "Downloaded",
       }),
     ),
+  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
+    dispatch(
+      statementDiagnosticsActions.cancelReport(
+        new CancelStatementDiagnosticsReportRequest({
+          request_id: report.id,
+        }),
+      ),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Statement Diagnostics Clicked",
+        page: "Statement Details",
+        action: "Cancelled",
+      }),
+    );
+  },
   onSortingChange: (tableName, columnName) =>
     dispatch(
       analyticsActions.track({

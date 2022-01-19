@@ -13,9 +13,13 @@ import { fetchData } from "src/api";
 
 const STATEMENT_DIAGNOSTICS_PATH = "/_status/stmtdiagreports";
 const CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH = "/_status/stmtdiagreports";
+const CANCEL_STATEMENT_DIAGNOSTICS_REPORT_PATH =
+  "/_status/stmtdiagreports/cancel";
 
 type CreateStatementDiagnosticsReportRequestMessage = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
 type CreateStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
+type CancelStatementDiagnosticsReportRequestMessage = cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
+type CancelStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
 
 export function getStatementDiagnosticsReports(): Promise<
   cockroach.server.serverpb.StatementDiagnosticsReportsResponse
@@ -33,6 +37,17 @@ export function createStatementDiagnosticsReport(
     cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse,
     CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH,
     cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest,
+    req,
+  );
+}
+
+export function cancelStatementDiagnosticsReport(
+  req: CancelStatementDiagnosticsReportRequestMessage,
+): Promise<CancelStatementDiagnosticsReportResponseMessage> {
+  return fetchData(
+    cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse,
+    CANCEL_STATEMENT_DIAGNOSTICS_REPORT_PATH,
+    cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest,
     req,
   );
 }

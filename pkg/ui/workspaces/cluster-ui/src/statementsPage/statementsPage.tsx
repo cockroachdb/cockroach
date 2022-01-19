@@ -104,7 +104,9 @@ export interface StatementsPageDispatchProps {
     columnTitle: string,
     ascending: boolean,
   ) => void;
-  onDiagnosticsReportDownload?: (report: IStatementDiagnosticsReport) => void;
+  onSelectDiagnosticsReportDropdownOption?: (
+    report: IStatementDiagnosticsReport,
+  ) => void;
   onFilterChange?: (value: Filters) => void;
   onStatementClick?: (statement: string) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
@@ -484,7 +486,7 @@ export class StatementsPage extends React.Component<
     const { pagination, filters, activeFilters } = this.state;
     const {
       statements,
-      onDiagnosticsReportDownload,
+      onSelectDiagnosticsReportDropdownOption,
       onStatementClick,
       columns: userSelectedColumnsToShow,
       onColumnsChange,
@@ -515,7 +517,7 @@ export class StatementsPage extends React.Component<
       hasViewActivityRedactedRole,
       search,
       this.activateDiagnosticsRef,
-      onDiagnosticsReportDownload,
+      onSelectDiagnosticsReportDropdownOption,
       onStatementClick,
     )
       .filter(c => !(c.name === "regionNodes" && regions.length < 2))

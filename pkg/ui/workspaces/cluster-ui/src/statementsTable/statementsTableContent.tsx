@@ -33,7 +33,7 @@ import {
 } from "src/util";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Download } from "@cockroachlabs/icons";
+import { EllipsisVertical } from "@cockroachlabs/icons";
 import { getBasePath } from "../api";
 
 export type NodeNames = { [nodeId: string]: string };
@@ -61,16 +61,20 @@ export const StatementTableCell = {
   ),
   diagnostics: (
     activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>,
-    onDiagnosticsDownload: (report: IStatementDiagnosticsReport) => void = noop,
+    onSelectDiagnosticsReportDropdownOption: (
+      report: IStatementDiagnosticsReport,
+    ) => void = noop,
   ) => (stmt: AggregateStatistics): React.ReactElement => {
     /*
      * Diagnostics cell might display different components depending
      * on following states:
      * - show `Activate` link only if no completed or waiting reports available;
-     * - show `WAITING` badge only if report requested for the first time;
-     * - show `WAITING` badge and dropdown with download links if report is currently
-     * requested and previous reports are available for download;
-     * - show `Activate` link and dropdown with download links if there is completed
+     * - show `WAITING` badge and ellipsis button with option for diagnostics
+     * cancellation if report requested for the first time;
+     * - show `WAITING` badge and ellipsis button with options for diagnostics
+     * cancellation and download links if a report is currently requested and previous
+     * completed reports are available for download;
+     * - show `Activate` link and ellipsis button with download links if there are completed
      * reports only;
      * */
     const hasDiagnosticReports = !!stmt.diagnosticsReports;
@@ -95,30 +99,52 @@ export const StatementTableCell = {
         ) : (
           <DiagnosticStatusBadge status="WAITING" />
         )}
-        {hasCompletedDiagnosticsReports && (
+        {(!canActivateDiagnosticReport || hasCompletedDiagnosticsReports) && (
           <Dropdown<IStatementDiagnosticsReport>
             items={stmt.diagnosticsReports
-              .filter(dr => dr.completed)
-              .map(dr => ({
-                name: (
-                  <a
-                    className={cx("download-diagnostics-link")}
-                    href={`${getBasePath()}/_admin/v1/stmtbundle/${
-                      dr.statement_diagnostics_id
-                    }`}
-                  >
-                    {`${TimestampToMoment(dr.requested_at).format(
-                      "ll [at] LT [diagnostic]",
-                    )}`}
-                  </a>
-                ),
-                value: dr,
-              }))}
-            onChange={onDiagnosticsDownload}
+              // Sort diagnostic reports from incomplete to complete. Incomplete reports are cancellable.
+              .sort(function(a, b) {
+                if (a.completed === b.completed) {
+                  return 0;
+                }
+                return a.completed ? 1 : -1;
+              })
+              .map(dr => {
+                // If diagnostic report is not complete (i.e. waiting) create an option to cancel it.
+                if (!dr.completed) {
+                  return {
+                    name: (
+                      <div className={cx("diagnostic-report-dropdown-option")}>
+                        {`Cancel current diagnostic request`}
+                      </div>
+                    ),
+                    value: dr,
+                  };
+                }
+                // Diagnostic report is complete, create an option to download.
+                else {
+                  return {
+                    name: (
+                      <a
+                        className={cx("diagnostic-report-dropdown-option")}
+                        href={`${getBasePath()}/_admin/v1/stmtbundle/${
+                          dr.statement_diagnostics_id
+                        }`}
+                      >
+                        {`Download Z${TimestampToMoment(dr.requested_at).format(
+                          "ll [at] LT [diagnostic]",
+                        )}`}
+                      </a>
+                    ),
+                    value: dr,
+                  };
+                }
+              })}
+            onChange={onSelectDiagnosticsReportDropdownOption}
             menuPosition="right"
             customToggleButtonOptions={{
               size: "small",
-              icon: <Download />,
+              icon: <EllipsisVertical />,
               textAlign: "center",
             }}
             className={cx("activate-diagnostic-dropdown")}
