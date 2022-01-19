@@ -115,6 +115,7 @@ type SSTBatcher struct {
 	// Tracking for if we have "filled" a range in case we want to split/scatter.
 	flushedToCurrentRange int64
 	lastFlushKey          []byte
+	maxWriteTS            hlc.Timestamp
 
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
@@ -285,7 +286,14 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 
 // Flush sends the current batch, if any.
 func (b *SSTBatcher) Flush(ctx context.Context) error {
-	return b.doFlush(ctx, manualFlush, nil)
+	if err := b.doFlush(ctx, manualFlush, nil); err != nil {
+		return err
+	}
+	if !b.maxWriteTS.IsEmpty() {
+		log.VEventf(ctx, 1, "waiting until max write time %s", b.maxWriteTS)
+		return b.db.Clock().SleepUntil(ctx, b.maxWriteTS)
+	}
+	return nil
 }
 
 func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Key) error {
@@ -355,11 +363,12 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	}
 
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowingBelow, b.ms, b.settings, b.batchTS, b.writeAtBatchTS)
+	writeTS, files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowingBelow, b.ms, b.settings, b.batchTS, b.writeAtBatchTS)
 	if err != nil {
 		return err
 	}
 	b.flushCounts.sendWait += timeutil.Since(beforeSend)
+	b.maxWriteTS.Forward(writeTS)
 
 	b.flushCounts.files += files
 	if b.flushKey != nil {
@@ -426,9 +435,23 @@ type SSTSender interface {
 		stats *enginepb.MVCCStats,
 		ingestAsWrites bool,
 		batchTs hlc.Timestamp,
-		writeAtBatchTs bool,
 	) error
+
+	AddSSTableAtBatchTimestamp(
+		ctx context.Context,
+		begin, end interface{},
+		data []byte,
+		disallowConflicts bool,
+		disallowShadowing bool,
+		disallowShadowingBelow hlc.Timestamp,
+		stats *enginepb.MVCCStats,
+		ingestAsWrites bool,
+		batchTs hlc.Timestamp,
+	) (hlc.Timestamp, error)
+
 	SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error
+
+	Clock() *hlc.Clock
 }
 
 type sstSpan struct {
@@ -451,12 +474,14 @@ func AddSSTable(
 	settings *cluster.Settings,
 	batchTs hlc.Timestamp,
 	writeAtBatchTs bool,
-) (int, error) {
+) (hlc.Timestamp, int, error) {
 	var files int
+	var maxTs hlc.Timestamp
+
 	now := timeutil.Now()
 	iter, err := storage.NewMemSSTIterator(sstBytes, true)
 	if err != nil {
-		return 0, err
+		return hlc.Timestamp{}, 0, err
 	}
 	defer iter.Close()
 
@@ -464,7 +489,7 @@ func AddSSTable(
 	if (ms == enginepb.MVCCStats{}) {
 		stats, err = storage.ComputeStatsForRange(iter, start, end, now.UnixNano())
 		if err != nil {
-			return 0, errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
+			return hlc.Timestamp{}, 0, errors.Wrapf(err, "computing stats for SST [%s, %s)", start, end)
 		}
 	} else {
 		stats = ms
@@ -495,10 +520,22 @@ func AddSSTable(
 					log.VEventf(ctx, 2, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
 					ingestAsWriteBatch = true
 				}
-				// This will fail if the range has split but we'll check for that below.
-				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, false, /* disallowConflicts */
-					!item.disallowShadowingBelow.IsEmpty(), item.disallowShadowingBelow, &item.stats,
-					ingestAsWriteBatch, batchTs, writeAtBatchTs)
+
+				if writeAtBatchTs {
+					var writeTs hlc.Timestamp
+					// This will fail if the range has split but we'll check for that below.
+					writeTs, err = db.AddSSTableAtBatchTimestamp(ctx, item.start, item.end, item.sstBytes, false, /* disallowConflicts */
+						!item.disallowShadowingBelow.IsEmpty(), item.disallowShadowingBelow, &item.stats,
+						ingestAsWriteBatch, batchTs)
+					if err == nil {
+						maxTs.Forward(writeTs)
+					}
+				} else {
+					// This will fail if the range has split but we'll check for that below.
+					err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, false, /* disallowConflicts */
+						!item.disallowShadowingBelow.IsEmpty(), item.disallowShadowingBelow, &item.stats,
+						ingestAsWriteBatch, batchTs)
+				}
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil
@@ -539,7 +576,7 @@ func AddSSTable(
 			}
 			return errors.Wrapf(err, "addsstable [%s,%s)", item.start, item.end)
 		}(); err != nil {
-			return files, err
+			return maxTs, files, err
 		}
 		files++
 		// explicitly deallocate SST. This will not deallocate the
@@ -547,7 +584,7 @@ func AddSSTable(
 		item.sstBytes = nil
 	}
 	log.VEventf(ctx, 3, "AddSSTable [%v, %v) added %d files and took %v", start, end, files, timeutil.Since(now))
-	return files, nil
+	return maxTs, files, nil
 }
 
 // createSplitSSTable is a helper for splitting up SSTs. The iterator
