@@ -107,6 +107,7 @@ func TestLargeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 75180, "failure when run under latest go version")
 	skip.UnderStress(t, "the test inserts large blobs, and the machine can be overloaded when under stress")
 
 	rng, _ := randutil.NewTestRand()
