@@ -16,7 +16,8 @@ import { getHotRangesAction } from "../../redux/hotRanges/hotRangesActions";
 import { HotRangesState } from "../../redux/hotRanges/hotRangesReducer";
 import { selectHotRanges } from "../../redux/hotRanges/hotRangesSelectors";
 import HotRangesTable from "./hotRangesTable";
-import NotFound from "../app/components/errorMessage/notFound";
+import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
+import { Loading } from "@cockroachlabs/cluster-ui";
 
 const HotRangesPage = () => {
   const dispatch = useDispatch();
@@ -30,8 +31,18 @@ const HotRangesPage = () => {
     <div className="section">
       <Helmet title="Hot Ranges" />
       <h1 className="base-heading">Hot ranges</h1>
-      {hotRanges.error && <NotFound />}
-      {hotRanges.data && <HotRangesTable hotRangesList={hotRanges.data} />}
+      <ErrorBoundary>
+        <Loading
+          loading={hotRanges.loading}
+          error={hotRanges.error}
+          render={() => (
+            <HotRangesTable
+              hotRangesList={hotRanges.data}
+              lastUpdate={hotRanges.lastUpdate}
+            />
+          )}
+        />
+      </ErrorBoundary>
     </div>
   );
 };

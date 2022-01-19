@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip } from "antd";
-import moment from "moment";
 import { cockroach } from "src/js/protos";
 import {
   ColumnDescriptor,
@@ -18,9 +17,10 @@ const cx = classNames.bind(styles);
 type HotRange = cockroach.server.serverpb.HotRangesResponseV2.HotRange;
 interface HotRangesTableProps {
   hotRangesList: HotRange[];
+  lastUpdate: string;
 }
 
-const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
+const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
   const [pagination, setPagination] = useState({
     pageSize: PAGE_SIZE,
     current: 1,
@@ -29,15 +29,6 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
     ascending: true,
     columnTitle: null,
   });
-  const getCurrentDateTime = () => {
-    const nowUtc = moment.utc();
-    return (
-      nowUtc.format("MMM DD, YYYY") +
-      " at " +
-      nowUtc.format("h:mm A") +
-      " (UTC)"
-    );
-  };
 
   if (hotRangesList.length === 0) {
     return <div>No hot ranges</div>;
@@ -113,16 +104,16 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
       ),
       sort: (val: HotRange) => val.table_name,
     },
-    // {
-    //   name: "index",
-    //   title: (
-    //     <Tooltip placement="bottom" title="Index">
-    //       Index
-    //     </Tooltip>
-    //   ),
-    //   cell: (val: HotRange) => <>{val.index}</>,
-    //   sort: (val: HotRange) => val.index,
-    // },
+    {
+      name: "index",
+      title: (
+        <Tooltip placement="bottom" title="Index">
+          Index
+        </Tooltip>
+      ),
+      cell: (val: HotRange) => <>{val.index_name}</>,
+      sort: (val: HotRange) => val.index_name,
+    },
   ];
 
   return (
@@ -137,7 +128,7 @@ const HotRangesTable = ({ hotRangesList }: HotRangesTableProps) => {
             pageName="hot ranges"
           />
         </h4>
-        <div>Last update: {getCurrentDateTime()}</div>
+        <div>Last update: {lastUpdate}</div>
       </div>
       <SortedTable
         data={hotRangesList}
