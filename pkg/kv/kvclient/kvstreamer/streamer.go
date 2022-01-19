@@ -738,7 +738,7 @@ type workerCoordinator struct {
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
-// call until Cancel) and routes the single-range batches for asynchronous
+// call until Close) and routes the single-range batches for asynchronous
 // execution. This function is dividing up the Streamer's budget for each of
 // those batches and won't start executing the batches if the available budget
 // is insufficient. The function exits when an error is encountered by one of
@@ -1040,92 +1040,18 @@ func (w *workerCoordinator) performRequestAsync(
 				return
 			}
 
-			var resumeReq singleRangeBatch
-			// We will reuse the slices for the resume spans, if any.
-			resumeReq.reqs = req.reqs[:0]
-			resumeReq.positions = req.positions[:0]
-			var results []Result
-			var numCompleteGetResponses int
-			// memoryFootprintBytes tracks the total memory footprint of
-			// non-empty responses. This will be equal to the sum of memory
-			// tokens created for all Results.
-			var memoryFootprintBytes int64
-			var hasNonEmptyScanResponse bool
-			for i, resp := range br.Responses {
-				enqueueKey := req.positions[i]
-				if w.s.enqueueKeys != nil {
-					enqueueKey = w.s.enqueueKeys[req.positions[i]]
-				}
-				reply := resp.GetInner()
-				origReq := req.reqs[i]
-				// Unset the original request so that we lose the reference to
-				// the span.
-				req.reqs[i] = roachpb.RequestUnion{}
-				switch origRequest := origReq.GetInner().(type) {
-				case *roachpb.GetRequest:
-					get := reply.(*roachpb.GetResponse)
-					if get.ResumeSpan != nil {
-						// This Get wasn't completed - update the original
-						// request according to the ResumeSpan and include it
-						// into the batch again.
-						origRequest.SetSpan(*get.ResumeSpan)
-						resumeReq.reqs = append(resumeReq.reqs, origReq)
-						resumeReq.positions = append(resumeReq.positions, req.positions[i])
-					} else {
-						// This Get was completed.
-						toRelease := int64(get.Size())
-						result := Result{
-							GetResp: get,
-							// This currently only works because all requests
-							// are unique.
-							EnqueueKeysSatisfied: []int{enqueueKey},
-							position:             req.positions[i],
-						}
-						result.memoryTok.streamer = w.s
-						result.memoryTok.toRelease = toRelease
-						memoryFootprintBytes += toRelease
-						results = append(results, result)
-						numCompleteGetResponses++
-					}
-
-				case *roachpb.ScanRequest:
-					scan := reply.(*roachpb.ScanResponse)
-					resumeSpan := scan.ResumeSpan
-					if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
-						toRelease := int64(scan.Size())
-						result := Result{
-							// This currently only works because all requests
-							// are unique.
-							EnqueueKeysSatisfied: []int{enqueueKey},
-							position:             req.positions[i],
-						}
-						result.memoryTok.streamer = w.s
-						result.memoryTok.toRelease = toRelease
-						result.ScanResp.ScanResponse = scan
-						// Complete field will be set below.
-						memoryFootprintBytes += toRelease
-						results = append(results, result)
-						hasNonEmptyScanResponse = true
-					}
-					if resumeSpan != nil {
-						// This Scan wasn't completed - update the original
-						// request according to the resumeSpan and include it
-						// into the batch again.
-						origRequest.SetSpan(*resumeSpan)
-						resumeReq.reqs = append(resumeReq.reqs, origReq)
-						resumeReq.positions = append(resumeReq.positions, req.positions[i])
-					}
-				}
-			}
+			// First, we have to reconcile the memory budget. We do it
+			// separately from processing the results because we want to know
+			// how many Gets and Scans need to be allocated for the ResumeSpans,
+			// if any are present. At the moment, due to limitations of the KV
+			// layer (#75452) we cannot reuse original requests because the KV
+			// doesn't allow mutability.
+			memoryFootprintBytes, resumeReqsMemUsage, numIncompleteGets, numIncompleteScans := calculateFootprint(req, br)
 
 			// Now adjust the budget based on the actual memory footprint of
 			// non-empty responses as well as resume spans, if any.
 			respOverestimate := targetBytes - memoryFootprintBytes
-			var reqsMemUsage int64
-			if len(resumeReq.reqs) > 0 {
-				reqsMemUsage = requestsMemUsage(resumeReq.reqs)
-			}
-			reqOveraccounted := req.reqsReservedBytes - reqsMemUsage
+			reqOveraccounted := req.reqsReservedBytes - resumeReqsMemUsage
 			overaccountedTotal := respOverestimate + reqOveraccounted
 			if overaccountedTotal >= 0 {
 				w.s.budget.release(ctx, overaccountedTotal)
@@ -1169,8 +1095,6 @@ func (w *workerCoordinator) performRequestAsync(
 					return
 				}
 			}
-			// Update the resume request accordingly.
-			resumeReq.reqsReservedBytes = reqsMemUsage
 
 			// Do admission control after we've finalized the memory accounting.
 			if br != nil && w.responseAdmissionQ != nil {
@@ -1185,24 +1109,197 @@ func (w *workerCoordinator) performRequestAsync(
 				}
 			}
 
-			// If we have any results, finalize them.
-			if len(results) > 0 {
-				w.finalizeSingleRangeResults(
-					results, memoryFootprintBytes, hasNonEmptyScanResponse,
-					numCompleteGetResponses,
-				)
-			}
-
-			// If we have any incomplete requests, add them back into the work
-			// pool.
-			if len(resumeReq.reqs) > 0 {
-				w.addRequest(resumeReq)
-			}
+			// Finally, process the results and add the ResumeSpans to be
+			// processed as well.
+			w.processSingleRangeResults(
+				req, br, memoryFootprintBytes, resumeReqsMemUsage,
+				numIncompleteGets, numIncompleteScans,
+			)
 		}); err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
 		w.asyncRequestCleanup()
 		w.s.setError(err)
+	}
+}
+
+// calculateFootprint calculates the memory footprint of the batch response as
+// well as of the requests that will have to be created for the ResumeSpans.
+// - memoryFootprintBytes tracks the total memory footprint of non-empty
+// responses. This will be equal to the sum of memory tokens created for all
+// Results.
+// - resumeReqsMemUsage tracks the memory usage of the requests for the
+// ResumeSpans.
+//
+// The calculation of the memory footprint must be the same as in
+// processSingleRangeResults.
+func calculateFootprint(
+	req singleRangeBatch, br *roachpb.BatchResponse,
+) (
+	memoryFootprintBytes int64,
+	resumeReqsMemUsage int64,
+	numIncompleteGets, numIncompleteScans int,
+) {
+	// Note that we cannot use Size() methods that are automatically generated
+	// by the protobuf library because they account for things differently from
+	// how the memory usage is accounted for by the KV layer for the purposes of
+	// tracking TargetBytes limit.
+
+	// getRequestScratch and scanRequestScratch are used to calculate
+	// the size of requests when we set the ResumeSpans on them.
+	var getRequestScratch roachpb.GetRequest
+	var scanRequestScratch roachpb.ScanRequest
+	for i, resp := range br.Responses {
+		reply := resp.GetInner()
+		switch req.reqs[i].GetInner().(type) {
+		case *roachpb.GetRequest:
+			get := reply.(*roachpb.GetResponse)
+			if get.ResumeSpan != nil {
+				// This Get wasn't completed.
+				getRequestScratch.SetSpan(*get.ResumeSpan)
+				resumeReqsMemUsage += int64(getRequestScratch.Size())
+				numIncompleteGets++
+			} else {
+				// This Get was completed.
+				memoryFootprintBytes += getResponseSize(get)
+			}
+		case *roachpb.ScanRequest:
+			scan := reply.(*roachpb.ScanResponse)
+			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
+				memoryFootprintBytes += scanResponseSize(scan)
+			}
+			if scan.ResumeSpan != nil {
+				// This Scan wasn't completed.
+				scanRequestScratch.SetSpan(*scan.ResumeSpan)
+				resumeReqsMemUsage += int64(scanRequestScratch.Size())
+				numIncompleteScans++
+			}
+		}
+	}
+	// This addendum is the first step of requestsMemUsage() and we've already
+	// added the size of each resume request above.
+	resumeReqsMemUsage += requestUnionOverhead * int64(numIncompleteGets+numIncompleteScans)
+	return memoryFootprintBytes, resumeReqsMemUsage, numIncompleteGets, numIncompleteScans
+}
+
+// processSingleRangeResults creates a Result for each non-empty response found
+// in the BatchResponse. The ResumeSpans, if found, are added into a new
+// singleRangeBatch request that is added to be picked up by the mainLoop of the
+// worker coordinator. This method assumes that req is no longer needed by the
+// caller, so req.positions is reused for the ResumeSpans.
+//
+// It also assumes that the budget has already been reconciled with the
+// reservations for Results that will be created. The calculation of the memory
+// footprint must be the same as in calculateFootprint.
+func (w *workerCoordinator) processSingleRangeResults(
+	req singleRangeBatch,
+	br *roachpb.BatchResponse,
+	memoryFootprintBytes int64,
+	resumeReqsMemUsage int64,
+	numIncompleteGets, numIncompleteScans int,
+) {
+	numIncompleteRequests := numIncompleteGets + numIncompleteScans
+	var resumeReq singleRangeBatch
+	// We have to allocate the new slice for requests, but we can reuse the
+	// positions slice.
+	resumeReq.reqs = make([]roachpb.RequestUnion, numIncompleteRequests)
+	// numIncompleteRequests will never exceed the number of requests in req.
+	resumeReq.positions = req.positions[:numIncompleteRequests]
+	// We've already reconciled the budget with the actual reservation for the
+	// requests with the ResumeSpans.
+	resumeReq.reqsReservedBytes = resumeReqsMemUsage
+	gets := make([]struct {
+		req   roachpb.GetRequest
+		union roachpb.RequestUnion_Get
+	}, numIncompleteGets)
+	scans := make([]struct {
+		req   roachpb.ScanRequest
+		union roachpb.RequestUnion_Scan
+	}, numIncompleteScans)
+	var results []Result
+	var numCompleteGetResponses int
+	var hasNonEmptyScanResponse bool
+	var resumeReqIdx int
+	for i, resp := range br.Responses {
+		enqueueKey := req.positions[i]
+		if w.s.enqueueKeys != nil {
+			enqueueKey = w.s.enqueueKeys[req.positions[i]]
+		}
+		reply := resp.GetInner()
+		switch origRequest := req.reqs[i].GetInner().(type) {
+		case *roachpb.GetRequest:
+			get := reply.(*roachpb.GetResponse)
+			if get.ResumeSpan != nil {
+				// This Get wasn't completed - update the original
+				// request according to the ResumeSpan and include it
+				// into the batch again.
+				newGet := gets[0]
+				gets = gets[1:]
+				newGet.req.SetSpan(*get.ResumeSpan)
+				newGet.req.KeyLocking = origRequest.KeyLocking
+				newGet.union.Get = &newGet.req
+				resumeReq.reqs[resumeReqIdx].Value = &newGet.union
+				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				resumeReqIdx++
+			} else {
+				// This Get was completed.
+				result := Result{
+					GetResp: get,
+					// This currently only works because all requests
+					// are unique.
+					EnqueueKeysSatisfied: []int{enqueueKey},
+					position:             req.positions[i],
+				}
+				result.memoryTok.streamer = w.s
+				result.memoryTok.toRelease = getResponseSize(get)
+				results = append(results, result)
+				numCompleteGetResponses++
+			}
+
+		case *roachpb.ScanRequest:
+			scan := reply.(*roachpb.ScanResponse)
+			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
+				result := Result{
+					// This currently only works because all requests
+					// are unique.
+					EnqueueKeysSatisfied: []int{enqueueKey},
+					position:             req.positions[i],
+				}
+				result.memoryTok.streamer = w.s
+				result.memoryTok.toRelease = scanResponseSize(scan)
+				result.ScanResp.ScanResponse = scan
+				// Complete field will be set below.
+				results = append(results, result)
+				hasNonEmptyScanResponse = true
+			}
+			if scan.ResumeSpan != nil {
+				// This Scan wasn't completed - update the original
+				// request according to the ResumeSpan and include it
+				// into the batch again.
+				newScan := scans[0]
+				scans = scans[1:]
+				newScan.req.SetSpan(*scan.ResumeSpan)
+				newScan.req.KeyLocking = origRequest.KeyLocking
+				newScan.union.Scan = &newScan.req
+				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
+				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				resumeReqIdx++
+			}
+		}
+	}
+
+	// If we have any results, finalize them.
+	if len(results) > 0 {
+		w.finalizeSingleRangeResults(
+			results, memoryFootprintBytes, hasNonEmptyScanResponse,
+			numCompleteGetResponses,
+		)
+	}
+
+	// If we have any incomplete requests, add them back into the work
+	// pool.
+	if len(resumeReq.reqs) > 0 {
+		w.addRequest(resumeReq)
 	}
 }
 
@@ -1270,13 +1367,31 @@ func init() {
 	zeroIntSlice = make([]int, 1<<10)
 }
 
-const requestUnionSliceOverhead = int64(unsafe.Sizeof([]roachpb.RequestUnion{}))
+const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
 
 func requestsMemUsage(reqs []roachpb.RequestUnion) int64 {
-	memUsage := requestUnionSliceOverhead
-	// Slice up to the capacity to account for everything.
-	for _, r := range reqs[:cap(reqs)] {
+	// RequestUnion.Size() ignores the overhead of RequestUnion object, so we'll
+	// account for it separately first.
+	memUsage := requestUnionOverhead * int64(cap(reqs))
+	// No need to account for elements past len(reqs) because those must be
+	// unset and we have already accounted for RequestUnion object above.
+	for _, r := range reqs {
 		memUsage += int64(r.Size())
 	}
 	return memUsage
+}
+
+// getResponseSize calculates the size of the GetResponse similar to how it is
+// accounted for TargetBytes parameter by the KV layer.
+func getResponseSize(get *roachpb.GetResponse) int64 {
+	if get.Value == nil {
+		return 0
+	}
+	return int64(len(get.Value.RawBytes))
+}
+
+// scanResponseSize calculates the size of the ScanResponse similar to how it is
+// accounted for TargetBytes parameter by the KV layer.
+func scanResponseSize(scan *roachpb.ScanResponse) int64 {
+	return scan.NumBytes
 }
