@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -85,6 +84,8 @@ type invertedJoiner struct {
 	// fetcher wraps the row.Fetcher used to perform scans. This enables the
 	// invertedJoiner to wrap the fetcher with a stat collector when necessary.
 	fetcher rowFetcher
+	row     rowenc.EncDatumRow
+
 	// rowsRead is the total number of rows that the fetcher read from disk.
 	rowsRead int64
 	alloc    tree.DatumAlloc
@@ -303,7 +304,6 @@ func newInvertedJoiner(
 		ij.batchedExprEval.filterer = ij.datumsToInvertedExpr
 	}
 
-	var fetcher row.Fetcher
 	// In general we need all the columns in the index to compute the set
 	// expression. There may be InvertedJoinerSpec.InvertedExpr that are known
 	// to generate only set union expressions, which together with LEFT_SEMI and
@@ -318,10 +318,8 @@ func newInvertedJoiner(
 		}
 		allIndexCols.Add(ij.colIdxMap.GetDefault(col.GetID()))
 	}
-	// We use ScanVisibilityPublic since inverted joins are not used for mutations,
-	// and so do not need to see in-progress schema changes.
-	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
+	fetcher, err := makeRowFetcherLegacy(
+		flowCtx, ij.desc, int(spec.IndexIdx), false, /* reverse */
 		allIndexCols, flowCtx.EvalCtx.Mon, &ij.alloc,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
 		false /* withSystemColumns */, nil, /* virtualColumn */
@@ -329,13 +327,14 @@ func newInvertedJoiner(
 	if err != nil {
 		return nil, err
 	}
+	ij.row = make(rowenc.EncDatumRow, len(ij.desc.PublicColumns()))
 
 	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
 		ij.input = newInputStatCollector(ij.input)
-		ij.fetcher = newRowFetcherStatCollector(&fetcher)
+		ij.fetcher = newRowFetcherStatCollector(fetcher)
 		ij.ExecStatsForTrace = ij.execStatsForTrace
 	} else {
-		ij.fetcher = &fetcher
+		ij.fetcher = fetcher
 	}
 
 	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), ij.desc, ij.index)
@@ -524,15 +523,16 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 	// Read the entire set of rows that are part of the scan.
 	for {
 		// Fetch the next row and copy it into the row container.
-		scannedRow, err := ij.fetcher.NextRow(ij.Ctx)
+		ok, err := ij.fetcher.NextRowInto(ij.Ctx, ij.row, ij.colIdxMap)
 		if err != nil {
 			ij.MoveToDraining(scrub.UnwrapScrubError(err))
 			return ijStateUnknown, ij.DrainHelper()
 		}
-		if scannedRow == nil {
+		if !ok {
 			// Done with this input batch.
 			break
 		}
+		scannedRow := ij.row
 		ij.rowsRead++
 
 		// NB: Inverted columns are custom encoded in a manner that does not

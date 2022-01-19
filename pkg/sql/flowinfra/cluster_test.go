@@ -104,21 +104,24 @@ func TestClusterFlow(t *testing.T) {
 		leafInputState := txn.GetLeafTxnInputState(ctx)
 
 		tr1 := execinfrapb.TableReaderSpec{
-			Table:    *desc.TableDesc(),
-			IndexIdx: 1,
-			Spans:    []roachpb.Span{makeIndexSpan(0, 8)},
+			Table:     *desc.TableDesc(),
+			IndexIdx:  1,
+			Spans:     []roachpb.Span{makeIndexSpan(0, 8)},
+			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		tr2 := execinfrapb.TableReaderSpec{
-			Table:    *desc.TableDesc(),
-			IndexIdx: 1,
-			Spans:    []roachpb.Span{makeIndexSpan(8, 12)},
+			Table:     *desc.TableDesc(),
+			IndexIdx:  1,
+			Spans:     []roachpb.Span{makeIndexSpan(8, 12)},
+			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		tr3 := execinfrapb.TableReaderSpec{
-			Table:    *desc.TableDesc(),
-			IndexIdx: 1,
-			Spans:    []roachpb.Span{makeIndexSpan(12, 100)},
+			Table:     *desc.TableDesc(),
+			IndexIdx:  1,
+			Spans:     []roachpb.Span{makeIndexSpan(12, 100)},
+			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -131,10 +134,6 @@ func TestClusterFlow(t *testing.T) {
 				Processors: []execinfrapb.ProcessorSpec{{
 					ProcessorID: 1,
 					Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr1},
-					Post: execinfrapb.PostProcessSpec{
-						Projection:    true,
-						OutputColumns: []uint32{0, 1},
-					},
 					Output: []execinfrapb.OutputRouterSpec{{
 						Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 						Streams: []execinfrapb.StreamEndpointSpec{
@@ -154,10 +153,6 @@ func TestClusterFlow(t *testing.T) {
 				Processors: []execinfrapb.ProcessorSpec{{
 					ProcessorID: 2,
 					Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr2},
-					Post: execinfrapb.PostProcessSpec{
-						Projection:    true,
-						OutputColumns: []uint32{0, 1},
-					},
 					Output: []execinfrapb.OutputRouterSpec{{
 						Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 						Streams: []execinfrapb.StreamEndpointSpec{
@@ -178,10 +173,6 @@ func TestClusterFlow(t *testing.T) {
 					{
 						ProcessorID: 3,
 						Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr3},
-						Post: execinfrapb.PostProcessSpec{
-							Projection:    true,
-							OutputColumns: []uint32{0, 1},
-						},
 						Output: []execinfrapb.OutputRouterSpec{{
 							Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 							Streams: []execinfrapb.StreamEndpointSpec{

@@ -447,7 +447,7 @@ func NewColIndexJoin(
 
 	table := flowCtx.TableDescriptor(&spec.Table)
 	index := table.ActiveIndexes()[spec.IndexIdx]
-	tableArgs, neededColumns, err := populateTableArgs(
+	tableArgs, neededColumns, err := populateTableArgsLegacy(
 		ctx, flowCtx, table, index, nil, /* invertedCol */
 		spec.HasSystemColumns, post, helper,
 	)
@@ -491,7 +491,7 @@ func NewColIndexJoin(
 		flowCtx.TraceKV,
 	}
 	if err = fetcher.Init(
-		flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns,
+		flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs,
 	); err != nil {
 		fetcher.Release()
 		return nil, err
