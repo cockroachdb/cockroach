@@ -1401,6 +1401,16 @@ message ResetIndexUsageStatsRequest {
 message ResetIndexUsageStatsResponse {
 }
 
+// UserSQLRolesRequest requests a list of roles of the logged in SQL user.
+message UserSQLRolesRequest {
+}
+
+// UserSQLRolesResponse returns a list of roles for the logged SQL user.
+message UserSQLRolesResponse {
+  // roles is a list of roles for the SQL user.
+  repeated string roles = 1;
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -1777,6 +1787,12 @@ service Status {
   rpc TableIndexStats(TableIndexStatsRequest) returns (TableIndexStatsResponse) {
     option (google.api.http) = {
       get: "/_status/databases/{database}/tables/{table}/indexstats"
+    };
+  }
+
+  rpc UserSQLRoles(UserSQLRolesRequest) returns (UserSQLRolesResponse) {
+    option (google.api.http) = {
+      get: "/_status/sqlroles"
     };
   }
 }
