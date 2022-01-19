@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -999,7 +1000,7 @@ func avroFormat(t *testing.T, format roachpb.AvroOptions_Format) roachpb.IOFileF
 
 	if format != roachpb.AvroOptions_OCF {
 		// Need to load schema for record specific inputs.
-		bytes, err := ioutil.ReadFile("testdata/avro/simple-schema.json")
+		bytes, err := ioutil.ReadFile(testutils.TestDataPath(t, "avro", "simple-schema.json"))
 		require.NoError(t, err)
 		avro.SchemaJSON = string(bytes)
 		avro.RecordSeparator = '\n'

@@ -555,8 +555,8 @@ func TestShowUpgradedForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const (
-		testdataBase = "testdata/restore_old_versions"
+	var (
+		testdataBase = testutils.TestDataPath(t, "restore_old_versions")
 		fkRevDirs    = testdataBase + "/fk-rev-history"
 	)
 

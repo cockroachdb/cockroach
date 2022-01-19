@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -104,7 +105,7 @@ func TestGranterBasic(t *testing.T) {
 	}
 	settings := cluster.MakeTestingClusterSettings()
 	KVSlotAdjusterOverloadThreshold.Override(context.Background(), &settings.SV, 1)
-	datadriven.RunTest(t, "testdata/granter", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "granter"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init-grant-coordinator":
 			var opts Options
@@ -336,7 +337,7 @@ func TestIOLoadListener(t *testing.T) {
 	var ioll *ioLoadListener
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	datadriven.RunTest(t, "testdata/io_load_listener",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "io_load_listener"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "set-state":
