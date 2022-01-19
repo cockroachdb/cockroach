@@ -138,7 +138,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 			require.NoError(b, kvDB.AddSSTable(ctx, t.span.Key, t.span.EndKey, t.sstData,
 				false /* disallowConflicts */, true, /* disallowShadowing */
 				hlc.Timestamp{} /* disallowShadowingBelow */, nil, /* stats */
-				false /*ingestAsWrites */, hlc.Timestamp{}, false, /* writeAtBatchTS */
+				false /*ingestAsWrites */, hlc.Timestamp{},
 			))
 		}
 		b.StopTimer()
