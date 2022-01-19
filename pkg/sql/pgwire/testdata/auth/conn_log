@@ -7,6 +7,7 @@ CREATE USER usernopw;
 ALTER USER root WITH PASSWORD 'secureabc';
 CREATE USER trusted;
 CREATE USER usernologin WITH NOLOGIN PASSWORD '123';
+CREATE USER usernosqllogin WITH NOSQLLOGIN PASSWORD '123';
 CREATE USER userexpired WITH PASSWORD '123' VALID UNTIL '2000-01-01'
 
 ----
@@ -236,7 +237,7 @@ authlog 5
 
 subtest end
 
-subtest conn_unix/nologin_expired_password
+subtest conn_unix/nologin_nosqllogin_expired_password
 
 connect_unix user=usernologin password=123
 ----
@@ -251,6 +252,19 @@ authlog 4
 76 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 
+connect_unix user=usernosqllogin password=123
+----
+ERROR: usernosqllogin does not have login privilege (SQLSTATE 28000)
+
+authlog 4
+.*client_connection_end
+----
+78 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"usernosqllogin","Timestamp":"XXX","Transport":"local"}
+79 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":3,"RemoteAddress":"XXX","SystemIdentity":"usernosqllogin","Timestamp":"XXX","Transport":"local","User":"usernosqllogin"}
+80 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+81 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+
 connect_unix user=userexpired password=123
 ----
 ERROR: password is expired (SQLSTATE 28000)
@@ -258,12 +272,12 @@ ERROR: password is expired (SQLSTATE 28000)
 authlog 6
 .*client_connection_end
 ----
-77 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
-78 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local"}
-79 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":7,"RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
-80 {"Detail":"password is expired","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
-81 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
-82 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+82 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+83 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local"}
+84 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":7,"RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
+85 {"Detail":"password is expired","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
+86 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+87 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 subtest end
 

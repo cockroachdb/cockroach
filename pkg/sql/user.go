@@ -76,7 +76,8 @@ func GetUserSessionInitInfo(
 	databaseName string,
 ) (
 	exists bool,
-	canLogin bool,
+	canLoginSQL bool,
+	canLoginDBConsole bool,
 	isSuperuser bool,
 	validUntil *tree.DTimestamp,
 	defaultSettings []sessioninit.SettingsCacheEntry,
@@ -120,7 +121,7 @@ func GetUserSessionInitInfo(
 
 		// Root user cannot have password expiry and must have login.
 		// It also never has default settings applied to it.
-		return true, true, true, nil, nil, rootFn, nil
+		return true, true, true, true, nil, nil, rootFn, nil
 	}
 
 	var authInfo sessioninit.AuthInfo
@@ -163,7 +164,8 @@ func GetUserSessionInitInfo(
 	}
 
 	return authInfo.UserExists,
-		authInfo.CanLogin,
+		authInfo.CanLoginSQL,
+		authInfo.CanLoginDBConsole,
 		isSuperuser,
 		authInfo.ValidUntil,
 		settingsEntries,
@@ -247,7 +249,7 @@ func retrieveAuthInfo(
 
 	// Use fully qualified table name to avoid looking up "".system.role_options.
 	const getLoginDependencies = `SELECT option, value FROM system.public.role_options ` +
-		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL')`
+		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN')`
 
 	roleOptsIt, err := ie.QueryIteratorEx(
 		ctx, "get-login-dependencies", txn,
@@ -264,14 +266,19 @@ func retrieveAuthInfo(
 
 	// To support users created before 20.1, allow all USERS/ROLES to login
 	// if NOLOGIN is not found.
-	aInfo.CanLogin = true
+	aInfo.CanLoginSQL = true
+	aInfo.CanLoginDBConsole = true
 	var ok bool
 	for ok, err = roleOptsIt.Next(ctx); ok; ok, err = roleOptsIt.Next(ctx) {
 		row := roleOptsIt.Cur()
 		option := string(tree.MustBeDString(row[0]))
 
 		if option == "NOLOGIN" {
-			aInfo.CanLogin = false
+			aInfo.CanLoginSQL = false
+			aInfo.CanLoginDBConsole = false
+		}
+		if option == "NOSQLLOGIN" {
+			aInfo.CanLoginSQL = false
 		}
 
 		if option == "VALID UNTIL" {

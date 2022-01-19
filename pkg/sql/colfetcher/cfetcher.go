@@ -1379,7 +1379,7 @@ func (rf *cFetcher) fillNulls() error {
 		if table.compositeIndexColOrdinals.Contains(i) {
 			continue
 		}
-		if !table.cols[i].IsNullable() {
+		if !table.cols[i].IsNullable() && table.cols[i].Public() {
 			var indexColValues strings.Builder
 			rf.writeDecodedCols(&indexColValues, table.indexColOrdinals, ',')
 			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
