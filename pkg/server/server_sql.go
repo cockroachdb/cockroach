@@ -605,7 +605,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodeID:    cfg.nodeIDContainer,
 	}
 
-	var isAvailable func(roachpb.NodeID) bool
+	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
 	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional(47900)
 	if hasNodeLiveness {
 		// TODO(erikgrinaker): We may want to use IsAvailableNotDraining instead, to
@@ -613,11 +613,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// that are being drained/decommissioned. However, these nodes can still be
 		// leaseholders, and preventing processor scheduling on them can cause a
 		// performance cliff for e.g. table reads that then hit the network.
-		isAvailable = nodeLiveness.IsAvailable
+		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
+			return nodeLiveness.IsAvailable(roachpb.NodeID(sqlInstanceID))
+		}
 	} else {
 		// We're on a SQL tenant, so this is the only node DistSQL will ever
 		// schedule on - always returning true is fine.
-		isAvailable = func(roachpb.NodeID) bool {
+		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
 			return true
 		}
 	}
@@ -670,7 +672,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			ctx,
 			execinfra.Version,
 			cfg.Settings,
-			roachpb.NodeID(cfg.nodeIDContainer.SQLInstanceID()),
+			cfg.nodeIDContainer.SQLInstanceID(),
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
@@ -1040,7 +1042,7 @@ func (s *SQLServer) initInstanceID(ctx context.Context) error {
 		return err
 	}
 	s.sqlLivenessSessionID = sessionID
-	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(instanceID)})
+	s.execCfg.DistSQLPlanner.SetSQLInstanceInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(instanceID)})
 	return nil
 }
 

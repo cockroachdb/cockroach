@@ -14,7 +14,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,7 +60,7 @@ func TestMergeResultTypesForSetOp(t *testing.T) {
 			}
 		}
 	}
-	infra := physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), roachpb.NodeID(1))
+	infra := physicalplan.MakePhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
 	var leftPlan, rightPlan PhysicalPlan
 	leftPlan.PhysicalInfrastructure = &infra
 	rightPlan.PhysicalInfrastructure = &infra

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -44,7 +44,7 @@ func compareDiagrams(t *testing.T, result string, expected string) {
 func TestPlanDiagramIndexJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	flows := make(map[roachpb.NodeID]*FlowSpec)
+	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
 	desc := &descpb.TableDescriptor{
 		Name:    "Table",
@@ -174,7 +174,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 func TestPlanDiagramJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	flows := make(map[roachpb.NodeID]*FlowSpec)
+	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
 	descA := &descpb.TableDescriptor{Name: "TableA"}
 	descB := &descpb.TableDescriptor{Name: "TableB"}

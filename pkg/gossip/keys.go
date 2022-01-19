@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -172,14 +173,14 @@ func StoreIDFromKey(storeKey string) (roachpb.StoreID, error) {
 }
 
 // MakeDistSQLNodeVersionKey returns the gossip key for the given store.
-func MakeDistSQLNodeVersionKey(nodeID roachpb.NodeID) string {
-	return MakeKey(KeyDistSQLNodeVersionKeyPrefix, nodeID.String())
+func MakeDistSQLNodeVersionKey(instanceID base.SQLInstanceID) string {
+	return MakeKey(KeyDistSQLNodeVersionKeyPrefix, instanceID.String())
 }
 
 // MakeDistSQLDrainingKey returns the gossip key for the given node's distsql
 // draining state.
-func MakeDistSQLDrainingKey(nodeID roachpb.NodeID) string {
-	return MakeKey(KeyDistSQLDrainingPrefix, nodeID.String())
+func MakeDistSQLDrainingKey(instanceID base.SQLInstanceID) string {
+	return MakeKey(KeyDistSQLDrainingPrefix, instanceID.String())
 }
 
 // removePrefixFromKey removes the key prefix and separator and returns what's

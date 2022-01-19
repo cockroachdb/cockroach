@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -108,7 +109,7 @@ func (ds *ServerImpl) Start() {
 	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
 		if nodeID, ok := ds.ServerConfig.NodeID.OptionalNodeID(); ok {
 			if err := g.AddInfoProto(
-				gossip.MakeDistSQLNodeVersionKey(nodeID),
+				gossip.MakeDistSQLNodeVersionKey(base.SQLInstanceID(nodeID)),
 				&execinfrapb.DistSQLVersionGossipInfo{
 					Version:            execinfra.Version,
 					MinAcceptedVersion: execinfra.MinAcceptedVersion,
@@ -180,7 +181,7 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 	}
 	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
 		return g.AddInfoProto(
-			gossip.MakeDistSQLDrainingKey(nodeID),
+			gossip.MakeDistSQLDrainingKey(base.SQLInstanceID(nodeID)),
 			&execinfrapb.DistSQLDrainingInfo{
 				Draining: drain,
 			},
@@ -288,7 +289,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
-		return kv.NewLeafTxn(ctx, ds.DB, req.Flow.Gateway, tis), nil
+		return kv.NewLeafTxn(ctx, ds.DB, roachpb.NodeID(req.Flow.Gateway), tis), nil
 	}
 
 	var evalCtx *tree.EvalContext
@@ -366,7 +367,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == roachpb.NodeID(ds.NodeID.SQLInstanceID()),
+		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we

@@ -404,7 +404,7 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 	flowCtx *execinfra.FlowCtx,
 	statsCollectors []colexecop.VectorizedStatsCollector,
-	originNodeID roachpb.NodeID,
+	originSQLInstanceID base.SQLInstanceID,
 ) func() []*execinfrapb.ComponentStats {
 	if !s.recordingStats {
 		return nil
@@ -424,7 +424,7 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 			// whole flow from parent monitors. These stats are added to a
 			// flow-level span.
 			result = append(result, &execinfrapb.ComponentStats{
-				Component: execinfrapb.FlowComponentID(base.SQLInstanceID(originNodeID), flowCtx.ID),
+				Component: execinfrapb.FlowComponentID(originSQLInstanceID, flowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
@@ -828,7 +828,7 @@ func (s *vectorizedFlowCreator) setupInput(
 
 			// Retrieve the latency from the origin node (the one that has the
 			// outbox).
-			latency, err := s.nodeDialer.Latency(inputStream.OriginNodeID)
+			latency, err := s.nodeDialer.Latency(roachpb.NodeID(inputStream.OriginNodeID))
 			if err != nil {
 				// If an error occurred, latency's nil value of 0 is used. If latency is
 				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE
@@ -864,7 +864,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				// Note: we can't use flowCtx.StreamComponentID because the stream does
 				// not originate from this node (we are the target node).
 				compID := execinfrapb.StreamComponentID(
-					base.SQLInstanceID(inputStream.OriginNodeID), flowCtx.ID, inputStream.StreamID,
+					inputStream.OriginNodeID, flowCtx.ID, inputStream.StreamID,
 				)
 				s.wrapWithNetworkVectorizedStatsCollector(&opWithMetaInfo, inbox, compID, latency)
 			}

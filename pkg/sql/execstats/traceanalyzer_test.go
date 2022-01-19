@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -59,11 +58,11 @@ func TestTraceAnalyzer(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					TestingSaveFlows: func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error {
+					TestingSaveFlows: func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execinfra.OpChains) error {
 						if stmt != testStmt {
-							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error { return nil }
+							return func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execinfra.OpChains) error { return nil }
 						}
-						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, _ execinfra.OpChains) error {
+						return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execinfra.OpChains) error {
 							flowsMetadata := execstats.NewFlowsMetadata(flows)
 							analyzer := execstats.NewTraceAnalyzer(flowsMetadata)
 							analyzerChan <- analyzer

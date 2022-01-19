@@ -46,10 +46,10 @@ func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Cont
 // StartMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.
 func StartMockDistSQLServer(
-	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, nodeID roachpb.NodeID,
+	ctx context.Context, clock *hlc.Clock, stopper *stop.Stopper, sqlInstanceID base.SQLInstanceID,
 ) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
 	rpcContext := newInsecureRPCContext(ctx, stopper)
-	rpcContext.NodeID.Set(context.TODO(), nodeID)
+	rpcContext.NodeID.Set(context.TODO(), roachpb.NodeID(sqlInstanceID))
 	server := rpc.NewServer(rpcContext)
 	mock := newMockDistSQLServer()
 	RegisterDistSQLServer(server, mock)

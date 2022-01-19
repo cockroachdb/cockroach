@@ -14,7 +14,7 @@ import (
 	"context"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 )
 
@@ -22,25 +22,25 @@ import (
 // map for all nodes. It returns all nodes that can be used for planning.
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
-) (*PlanningCtx, []roachpb.NodeID, error) {
+) (*PlanningCtx, []base.SQLInstanceID, error) {
 	distribute := evalCtx.Codec.ForSystemTenant()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, distribute)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
-		return planCtx, []roachpb.NodeID{dsp.gatewayNodeID}, nil //nolint:returnerrcheck
+		return planCtx, []base.SQLInstanceID{dsp.gatewaySQLInstanceID}, nil //nolint:returnerrcheck
 	}
 	resp, err := ss.ListNodesInternal(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return nil, nil, err
 	}
 	// Because we're not going through the normal pathways, we have to set up the
-	// planCtx.NodeStatuses map ourselves. CheckNodeHealthAndVersion() will
+	// planCtx.NodeStatuses map ourselves. CheckInstanceHealthAndVersion() will
 	// populate it.
 	for _, node := range resp.Nodes {
-		_ /* NodeStatus */ = dsp.CheckNodeHealthAndVersion(planCtx, node.Desc.NodeID)
+		_ /* NodeStatus */ = dsp.CheckInstanceHealthAndVersion(planCtx, base.SQLInstanceID(node.Desc.NodeID))
 	}
-	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeStatuses))
+	nodes := make([]base.SQLInstanceID, 0, len(planCtx.NodeStatuses))
 	for nodeID, status := range planCtx.NodeStatuses {
 		if status == NodeOK {
 			nodes = append(nodes, nodeID)

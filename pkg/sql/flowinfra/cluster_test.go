@@ -138,7 +138,7 @@ func TestClusterFlow(t *testing.T) {
 					Output: []execinfrapb.OutputRouterSpec{{
 						Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 						Streams: []execinfrapb.StreamEndpointSpec{
-							{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 0, TargetNodeID: tc.Server(2).NodeID()},
+							{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 0, TargetNodeID: base.SQLInstanceID(tc.Server(2).NodeID())},
 						},
 					}},
 					ResultTypes: types.TwoIntCols,
@@ -161,7 +161,7 @@ func TestClusterFlow(t *testing.T) {
 					Output: []execinfrapb.OutputRouterSpec{{
 						Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 						Streams: []execinfrapb.StreamEndpointSpec{
-							{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 1, TargetNodeID: tc.Server(2).NodeID()},
+							{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 1, TargetNodeID: base.SQLInstanceID(tc.Server(2).NodeID())},
 						},
 					}},
 					ResultTypes: types.TwoIntCols,
@@ -724,7 +724,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 									Output: []execinfrapb.OutputRouterSpec{{
 										Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 										Streams: []execinfrapb.StreamEndpointSpec{
-											{Type: streamType(i), StreamID: execinfrapb.StreamID(i), TargetNodeID: tc.Server(0).NodeID()},
+											{Type: streamType(i), StreamID: execinfrapb.StreamID(i), TargetNodeID: base.SQLInstanceID(tc.Server(0).NodeID())},
 										},
 									}},
 									ResultTypes: types.ThreeIntCols,
