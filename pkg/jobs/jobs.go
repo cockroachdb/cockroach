@@ -756,6 +756,12 @@ func (j *Job) MakeSessionBoundInternalExecutor(
 	return j.registry.sessionBoundInternalExecutorFactory(ctx, sd)
 }
 
+// MarkIdle marks the job as Idle.  Idleness should not be toggled frequently
+// (no more than ~twice a minute) as the action is logged.
+func (j *Job) MarkIdle(isIdle bool) {
+	j.registry.MarkIdle(j, isIdle)
+}
+
 func (j *Job) runInTxn(
 	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
 ) error {
