@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -69,7 +69,7 @@ import (
 func TestCastsMatchPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	csvPath := filepath.Join("testdata", "pg_cast_dump.csv")
+	csvPath := testutils.TestDataPath(t, "pg_cast_dump.csv")
 	f, err := os.Open(csvPath)
 	require.NoError(t, err)
 
