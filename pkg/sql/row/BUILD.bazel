@@ -59,7 +59,6 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/metric",
         "//pkg/util/mon",
-        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/unique",
         "//pkg/util/uuid",
