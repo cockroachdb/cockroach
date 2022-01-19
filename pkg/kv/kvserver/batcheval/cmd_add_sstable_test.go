@@ -803,7 +803,6 @@ func runTestDBAddSSTable(
 ) {
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	const ingestAsWrites, ingestAsSST = true, false
-	const writeAtSST = false
 	const allowConflicts = false
 	const allowShadowing = false
 	var allowShadowingBelow hlc.Timestamp
@@ -815,13 +814,13 @@ func runTestDBAddSSTable(
 
 		// Key is before the range in the request span.
 		err := db.AddSSTable(
-			ctx, "d", "e", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, writeAtSST)
+			ctx, "d", "e", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
 		// Key is after the range in the request span.
 		err = db.AddSSTable(
-			ctx, "a", "b", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, writeAtSST)
+			ctx, "a", "b", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
@@ -829,7 +828,7 @@ func runTestDBAddSSTable(
 		ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 		defer getRecAndFinish()
 		require.NoError(t, db.AddSSTable(
-			ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, writeAtSST))
+			ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
 		trace := getRecAndFinish().String()
 		require.Contains(t, trace, "evaluating AddSSTable")
 		require.Contains(t, trace, "sideloadable proposal detected")
@@ -855,7 +854,7 @@ func runTestDBAddSSTable(
 	{
 		sst, start, end := makeSST(t, []mvccKV{{"bb", 1, "2"}})
 		require.NoError(t, db.AddSSTable(
-			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, writeAtSST))
+			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
 		r, err := db.Get(ctx, "bb")
 		require.NoError(t, err)
 		require.Equal(t, []byte("1"), r.ValueBytes())
@@ -878,7 +877,7 @@ func runTestDBAddSSTable(
 			defer getRecAndFinish()
 
 			require.NoError(t, db.AddSSTable(
-				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, writeAtSST))
+				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
 			trace := getRecAndFinish().String()
 			require.Contains(t, trace, "evaluating AddSSTable")
 			require.Contains(t, trace, "sideloadable proposal detected")
@@ -914,7 +913,7 @@ func runTestDBAddSSTable(
 			defer getRecAndFinish()
 
 			require.NoError(t, db.AddSSTable(
-				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsWrites, noTS, writeAtSST))
+				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsWrites, noTS))
 			trace := getRecAndFinish().String()
 			require.Contains(t, trace, "evaluating AddSSTable")
 			require.Contains(t, trace, "via regular write batch")
@@ -945,7 +944,7 @@ func runTestDBAddSSTable(
 		require.NoError(t, w.Finish())
 
 		err := db.AddSSTable(
-			ctx, "b", "c", sstFile.Data(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, writeAtSST)
+			ctx, "b", "c", sstFile.Data(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid checksum")
 	}
