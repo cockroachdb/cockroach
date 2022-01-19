@@ -249,8 +249,17 @@ func GetResumeSpans(
 		return nil, nil, 0, errors.AssertionFailedf(
 			"expected SchemaChangeDetails job type, got %T", job.Details())
 	}
+
+	spanList := details.ResumeSpanList[mutationIdx].ResumeSpans
+	prefix := codec.TenantPrefix()
+	for i := range spanList {
+		spanList[i], err = keys.RewriteSpanToTenantPrefix(spanList[i], prefix)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+	}
 	// Return the resume spans from the job using the mutation idx.
-	return details.ResumeSpanList[mutationIdx].ResumeSpans, job, mutationIdx, nil
+	return spanList, job, mutationIdx, nil
 }
 
 // SetResumeSpansInJob adds a list of resume spans into a job details field.

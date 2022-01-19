@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -122,6 +123,16 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	var spanList []jobspb.ResumeSpanList
 	if recordExists {
 		spanList = record.Details.(jobspb.SchemaChangeDetails).ResumeSpanList
+		prefix := p.ExecCfg().Codec.TenantPrefix()
+		for i := range spanList {
+			for j := range spanList[i].ResumeSpans {
+				sp, err := keys.RewriteSpanToTenantPrefix(spanList[i].ResumeSpans[j], prefix)
+				if err != nil {
+					return err
+				}
+				spanList[i].ResumeSpans[j] = sp
+			}
+		}
 	}
 	span := tableDesc.PrimaryIndexSpan(p.ExecCfg().Codec)
 	for i := len(tableDesc.ClusterVersion.Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
