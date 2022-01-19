@@ -119,14 +119,16 @@ var (
 	// Allocation pool for gzipResponseWriters.
 	gzipResponseWriterPool sync.Pool
 
-	forwardClockJumpCheckEnabled = settings.RegisterBoolSetting(
+	defaultForwardClockJumpCheckEnabled = envutil.EnvOrDefaultBool("COCKROACH_FORWARD_CLOCK_JUMP_CHECK_ENABLED", true)
+	forwardClockJumpCheckEnabled        = settings.RegisterBoolSetting(
 		settings.TenantWritable,
 		"server.clock.forward_jump_check_enabled",
 		"if enabled, forward clock jumps > max_offset/2 will cause a panic",
-		false,
+		defaultForwardClockJumpCheckEnabled,
 	).WithPublic()
 
-	persistHLCUpperBoundInterval = settings.RegisterDurationSetting(
+	defaultClockPersistUpperBoundInterval = envutil.EnvOrDefaultDuration("COCKROACH_CLOCK_PERSIST_UPPER_BOUND_INTERVAL", 5*time.Second)
+	persistHLCUpperBoundInterval          = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.clock.persist_upper_bound_interval",
 		"the interval between persisting the wall time upper bound of the clock. The clock "+
@@ -135,7 +137,7 @@ var (
 			"wall time to catch-up till this persisted timestamp. This guarantees monotonic wall "+
 			"time across server restarts. Not setting this or setting a value of 0 disables this "+
 			"feature.",
-		0,
+		defaultClockPersistUpperBoundInterval,
 	).WithPublic()
 )
 
