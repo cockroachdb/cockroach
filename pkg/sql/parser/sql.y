@@ -778,7 +778,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
+%token <str> EPHEMERAL ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
@@ -918,6 +918,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> alter_relocate_stmt
 %type <tree.Statement> alter_zone_table_stmt
 %type <tree.Statement> alter_table_set_schema_stmt
+%type <tree.Statement> alter_table_set_ephemeral_data_stmt
 %type <tree.Statement> alter_table_locality_stmt
 %type <tree.Statement> alter_table_owner_stmt
 
@@ -1587,6 +1588,7 @@ alter_table_stmt:
 | alter_zone_table_stmt
 | alter_rename_table_stmt
 | alter_table_set_schema_stmt
+| alter_table_set_ephemeral_data_stmt
 | alter_table_locality_stmt
 | alter_table_owner_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
@@ -8099,6 +8101,20 @@ alter_table_set_schema_stmt:
     }
   }
 
+alter_table_set_ephemeral_data_stmt:
+  ALTER TABLE relation_expr SET EPHEMERAL DATA
+  {
+    $$.val = &tree.AlterTableSetEphemeralData{
+      Name: $3.unresolvedObjectName(), IsEphemeralData: true,
+    }
+  }
+| ALTER TABLE relation_expr SET NOT EPHEMERAL DATA
+  {
+    $$.val = &tree.AlterTableSetEphemeralData{
+      Name: $3.unresolvedObjectName(),
+    }
+  }
+
 alter_table_locality_stmt:
   ALTER TABLE relation_expr SET locality
   {
@@ -13371,6 +13387,7 @@ unreserved_keyword:
 | DOMAIN
 | DOUBLE
 | DROP
+| EPHEMERAL
 | ENCODING
 | ENCRYPTED
 | ENCRYPTION_PASSPHRASE

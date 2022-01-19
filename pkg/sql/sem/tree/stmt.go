@@ -308,6 +308,17 @@ func (*AlterTableSetSchema) StatementTag() string { return "ALTER TABLE SET SCHE
 func (*AlterTableSetSchema) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterTableSetEphemeralData) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterTableSetEphemeralData) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTableSetEphemeralData) StatementTag() string { return "ALTER TABLE SET EPHEMERAL DATA" }
+
+func (*AlterTableSetEphemeralData) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterSchema) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1672,6 +1683,7 @@ func (n *AlterTableSetVisible) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
 func (n *AlterTableOwner) String() string                { return AsString(n) }
 func (n *AlterTableSetSchema) String() string            { return AsString(n) }
+func (n *AlterTableSetEphemeralData) String() string     { return AsString(n) }
 func (n *AlterType) String() string                      { return AsString(n) }
 func (n *AlterRole) String() string                      { return AsString(n) }
 func (n *AlterRoleSet) String() string                   { return AsString(n) }
