@@ -347,6 +347,7 @@ func (r *Registry) addAdoptedJob(
 	r.mu.adoptedJobs[jobID] = &adoptedJob{
 		sid:    sessionID,
 		cancel: cancel,
+		isIdle: false,
 	}
 	return false
 }
