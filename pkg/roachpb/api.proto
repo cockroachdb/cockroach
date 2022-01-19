@@ -1572,9 +1572,9 @@ message AdminVerifyProtectedTimestampResponse {
 }
 
 // AddSSTableRequest contains arguments to the AddSSTable method, which links an
-// SST file into the Pebble log-structured merge-tree. The SST should only
-// contain committed versioned values with non-zero MVCC timestamps (no intents
-// or inline values) and no tombstones, but this is only fully enforced when
+// SST file into the Pebble log-structured merge-tree. The SST must only contain
+// committed versioned values with non-zero MVCC timestamps (no intents or
+// inline values) and no tombstones, but this is only fully enforced when
 // WriteAtRequestTimestamp is enabled, for performance. It cannot be used in a
 // transaction, cannot be split across ranges, and must be alone in a batch.
 // 
@@ -1632,6 +1632,16 @@ message AddSSTableRequest {
   // 
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   bool write_at_request_timestamp = 6;
+
+  // SSTTimestamp is a promise from the client that all MVCC timestamps in the
+  // SST equal the provided timestamp, and that there are no inline values,
+  // intents, or tombstones. When used together with WriteAtRequestTimestamp,
+  // this can avoid an SST rewrite (and the associated overhead) if the SST
+  // timestamp equals the request timestamp (i.e. if it was provided by the
+  // client and the request was not pushed due to e.g. the closed timestamp or
+  // contention).
+  util.hlc.Timestamp sst_timestamp = 9
+    [(gogoproto.customname) = "SSTTimestamp", (gogoproto.nullable) = false];
 
   // DisallowConflicts will check for MVCC conflicts with existing keys, i.e.
   // scan for existing keys with a timestamp at or above the SST key and

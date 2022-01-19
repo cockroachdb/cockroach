@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -56,8 +57,15 @@ func EvalAddSSTable(
 	// If requested, rewrite the SST's MVCC timestamps to the request timestamp.
 	// This ensures the writes comply with the timestamp cache and closed
 	// timestamp, i.e. by not writing to timestamps that have already been
-	// observed or closed.
-	if args.WriteAtRequestTimestamp {
+	// observed or closed. If the race detector is enabled, also assert that
+	// the provided SST only contains the expected timestamps.
+	if util.RaceEnabled && !args.SSTTimestamp.IsEmpty() {
+		if err := assertSSTTimestamp(sst, args.SSTTimestamp); err != nil {
+			return result.Result{}, err
+		}
+	}
+	if args.WriteAtRequestTimestamp &&
+		(args.SSTTimestamp.IsEmpty() || h.Timestamp != args.SSTTimestamp) {
 		sst, err = storage.UpdateSSTTimestamps(sst, h.Timestamp)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
@@ -259,4 +267,30 @@ func EvalAddSSTable(
 			},
 		},
 	}, nil
+}
+
+func assertSSTTimestamp(sst []byte, ts hlc.Timestamp) error {
+	iter, err := storage.NewMemSSTIterator(sst, true)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+	for {
+		ok, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+
+		key := iter.UnsafeKey()
+		if key.Timestamp != ts {
+			return errors.AssertionFailedf("incorrect timestamp %s for SST key %s (expected %s)",
+				key.Timestamp, key.Key, ts)
+		}
+		iter.Next()
+	}
 }
