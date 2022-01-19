@@ -66,6 +66,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p,
 		p,
 		p,
+		p,
 		p.SessionData(),
 		p.ExecCfg().Settings,
 		scs.stmts,

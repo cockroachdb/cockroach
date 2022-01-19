@@ -10,6 +10,7 @@ CREATE SCHEMA db.sc;
 test
 DROP SCHEMA db.sc;
 ----
+checking for feature: DROP SCHEMA
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
@@ -61,6 +62,7 @@ CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 test
 DROP TABLE db.sc.t;
 ----
+checking for feature: DROP TABLE
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 6 MutationType ops
@@ -117,6 +119,7 @@ commit transaction #2
 test
 DROP SCHEMA db.sc CASCADE;
 ----
+checking for feature: DROP SCHEMA
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
@@ -176,6 +179,7 @@ commit transaction #2
 test
 DROP DATABASE db CASCADE;
 ----
+checking for feature: DROP DATABASE
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
@@ -259,6 +263,7 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 test
 DROP DATABASE db1 CASCADE
 ----
+checking for feature: DROP DATABASE
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 36 MutationType ops

@@ -12,6 +12,7 @@ package scbuildstmt
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -73,6 +74,18 @@ func init() {
 	}
 }
 
+// statementToFeatureName takes a statement and converts it to a valid feature
+// name.
+func statementToFeatureName(n tree.Statement) string {
+	statementTag := n.StatementTag()
+	statementInfo := strings.Split(statementTag, " ")
+	// Only grab the first two words (i.e. ALTER TABLE, etc..).
+	if len(statementInfo) >= 2 {
+		return statementInfo[0] + " " + statementInfo[1]
+	}
+	return statementInfo[0]
+}
+
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
 func Process(b BuildCtx, n tree.Statement) {
@@ -91,5 +104,10 @@ func Process(b BuildCtx, n tree.Statement) {
 	// Next invoke the callback function, with the concrete types.
 	fn := reflect.ValueOf(info.fn)
 	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}
+	// Check if the feature flag for it is enabled.
+	err := b.CheckFeature(b, statementToFeatureName(n))
+	if err != nil {
+		panic(err)
+	}
 	fn.Call(in)
 }

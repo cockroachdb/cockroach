@@ -11,6 +11,7 @@
 package sctestdeps
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -118,5 +119,16 @@ func (s *TestState) FormatAstAsRedactableString(
 
 // AstFormatter dummy formatter for AST nodes.
 func (s *TestState) AstFormatter() scbuild.AstFormatter {
+	return s
+}
+
+// CheckFeature implements scbuild.SchemaFeatureCheck
+func (s *TestState) CheckFeature(_ context.Context, featureName string) error {
+	s.LogSideEffectf("checking for feature: %s", featureName)
+	return nil
+}
+
+// FeatureChecker implements scbuild.Dependencies
+func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
 	return s
 }

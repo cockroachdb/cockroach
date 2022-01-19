@@ -43,3 +43,8 @@ func checkSchemaChangeEnabled(
 	}
 	return nil
 }
+
+// CheckFeature checks if a schema change feature is allowed.
+func (p *planner) CheckFeature(ctx context.Context, schemaFeatureName string) error {
+	return checkSchemaChangeEnabled(ctx, p.ExecCfg(), schemaFeatureName)
+}
