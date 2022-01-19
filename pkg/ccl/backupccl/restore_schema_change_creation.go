@@ -168,7 +168,7 @@ func createSchemaChangeJobsFromMutations(
 ) error {
 	mutationJobs := make([]descpb.TableDescriptor_MutationJob, 0, len(tableDesc.Mutations))
 	seenMutations := make(map[descpb.MutationID]bool)
-	for _, mutation := range tableDesc.Mutations {
+	for idx, mutation := range tableDesc.Mutations {
 		if seenMutations[mutation.MutationID] {
 			// We've already seen a mutation with this ID, so a job that handles all
 			// mutations with this ID has already been created.
@@ -182,7 +182,12 @@ func createSchemaChangeJobsFromMutations(
 		}
 		spanList := make([]jobspb.ResumeSpanList, mutationCount)
 		for i := range spanList {
-			spanList[i] = jobspb.ResumeSpanList{ResumeSpans: []roachpb.Span{tableDesc.PrimaryIndexSpan(codec)}}
+			mut := tableDesc.Mutations[idx+i]
+			if idx := mut.GetIndex(); idx != nil && idx.UseDeletePreservingEncoding {
+				spanList[i] = jobspb.ResumeSpanList{ResumeSpans: []roachpb.Span{tableDesc.IndexSpan(codec, idx.ID)}}
+			} else {
+				spanList[i] = jobspb.ResumeSpanList{ResumeSpans: []roachpb.Span{tableDesc.PrimaryIndexSpan(codec)}}
+			}
 		}
 		jobRecord := jobs.Record{
 			// We indicate that this schema change was triggered by a RESTORE since
