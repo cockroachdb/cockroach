@@ -66,20 +66,20 @@ func ingest(
 	evalCtx := execCtx.ExtendedEvalContext()
 	dsp := execCtx.DistSQLPlanner()
 
-	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
 		return err
 	}
 
 	// Construct stream ingestion processor specs.
 	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-		streamAddress, topology, nodes, initialHighWater, jobID)
+		streamAddress, topology, sqlInstanceIDs, initialHighWater, jobID)
 	if err != nil {
 		return err
 	}
 
 	// Plan and run the DistSQL flow.
-	return distStreamIngest(ctx, execCtx, nodes, jobID, planCtx, dsp, streamIngestionSpecs,
+	return distStreamIngest(ctx, execCtx, sqlInstanceIDs, jobID, planCtx, dsp, streamIngestionSpecs,
 		streamIngestionFrontierSpec)
 }
 

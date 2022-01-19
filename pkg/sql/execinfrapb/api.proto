@@ -41,14 +41,14 @@ message SetupFlowRequest {
   // Version of distsqlrun protocol; a server accepts a certain range of
   // versions, up to its own version. See server.go for more details.
   optional uint32 version = 5 [(gogoproto.nullable) = false,
-                               (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "DistSQLVersion"];
 
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 
   optional EvalContext eval_context = 6 [(gogoproto.nullable) = false];
 
   optional bool trace_kv = 8 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "TraceKV"];
+    (gogoproto.customname) = "TraceKV"];
 
   // CollectStats specifies whether stats collection should be enabled for this
   // flow. Note that some form of tracing must be enabled for these stats to be
@@ -59,18 +59,18 @@ message SetupFlowRequest {
   // StatementSQL is the SQL statement for which this flow is executing. It
   // is populated on a best effort basis.
   optional string statement_sql = 10 [(gogoproto.nullable) = false,
-                                      (gogoproto.customname) = "StatementSQL"];
+    (gogoproto.customname) = "StatementSQL"];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
 // computation consisting of processors and streams.
 message FlowSpec {
   optional bytes flow_id = 1 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "FlowID",
-                              (gogoproto.customtype) = "FlowID"];
-  // The NodeID of the gateway that planned this Flow. Used for debugging.
+    (gogoproto.customname) = "FlowID",
+    (gogoproto.customtype) = "FlowID"];
+  // The SQLInstanceID of the gateway that planned this Flow. Used for debugging.
   optional int32 gateway = 3 [(gogoproto.nullable) = false,
-                              (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
 
   repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];
 }
@@ -127,9 +127,9 @@ message ConsumerHandshake {
 
   // The server's DistSQL version range.
   optional uint32 version = 3 [(gogoproto.nullable) = false,
-                               (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "DistSQLVersion"];
   optional uint32 min_accepted_version = 4 [(gogoproto.nullable) = false,
-                                            (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "DistSQLVersion"];
 }
 
 // CancelDeadFlowsRequest is a request to cancel some flows that have been
@@ -142,8 +142,8 @@ message CancelDeadFlowsRequest {
   // in the queue (i.e. it has already completed or is currently running), such
   // flow is ignored.
   repeated bytes flow_ids = 1 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "FlowIDs",
-                              (gogoproto.customtype) = "FlowID"];
+    (gogoproto.customname) = "FlowIDs",
+    (gogoproto.customtype) = "FlowID"];
 }
 
 service DistSQL {

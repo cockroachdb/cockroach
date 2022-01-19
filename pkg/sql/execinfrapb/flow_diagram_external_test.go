@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -56,7 +56,7 @@ func TestPlanDiagramTableReaderWrapColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	flows := make(map[roachpb.NodeID]*execinfrapb.FlowSpec)
+	flows := make(map[base.SQLInstanceID]*execinfrapb.FlowSpec)
 
 	tr := execinfrapb.TableReaderSpec{
 		Table:     *desc.TableDesc(),

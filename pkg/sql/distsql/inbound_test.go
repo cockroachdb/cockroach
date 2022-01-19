@@ -39,10 +39,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// staticAddressResolver maps execinfra.StaticNodeID to the given address.
+// staticAddressResolver maps execinfra.StaticSQLInstanceID to the given address.
 func staticAddressResolver(addr net.Addr) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
-		if nodeID == execinfra.StaticNodeID {
+		if nodeID == roachpb.NodeID(execinfra.StaticSQLInstanceID) {
 			return addr, nil
 		}
 		return nil, errors.Errorf("node %d not found", nodeID)
@@ -98,7 +98,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	}
 
 	streamID := execinfrapb.StreamID(1)
-	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
+	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 	outbox.Init(types.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no

@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -63,24 +64,24 @@ const clientRejectedMsg string = "client rejected when attempting to run DistSQL
 
 // runnerRequest is the request that is sent (via a channel) to a worker.
 type runnerRequest struct {
-	ctx        context.Context
-	nodeDialer *nodedialer.Dialer
-	flowReq    *execinfrapb.SetupFlowRequest
-	nodeID     roachpb.NodeID
-	resultChan chan<- runnerResult
+	ctx           context.Context
+	nodeDialer    *nodedialer.Dialer
+	flowReq       *execinfrapb.SetupFlowRequest
+	sqlInstanceID base.SQLInstanceID
+	resultChan    chan<- runnerResult
 }
 
 // runnerResult is returned by a worker (via a channel) for each received
 // request.
 type runnerResult struct {
-	nodeID roachpb.NodeID
+	nodeID base.SQLInstanceID
 	err    error
 }
 
 func (req runnerRequest) run() {
-	res := runnerResult{nodeID: req.nodeID}
+	res := runnerResult{nodeID: req.sqlInstanceID}
 
-	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID, rpc.DefaultClass)
+	conn, err := req.nodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
 	if err != nil {
 		res.err = err
 	} else {
@@ -147,7 +148,7 @@ func (dsp *DistSQLPlanner) initCancelingWorkers(initCtx context.Context) {
 						continue
 					}
 					log.VEventf(parentCtx, 2, "worker %d is canceling at most %d flows on node %d", workerID, len(req.FlowIDs), nodeID)
-					conn, err := dsp.nodeDialer.Dial(parentCtx, nodeID, rpc.DefaultClass)
+					conn, err := dsp.nodeDialer.Dial(parentCtx, roachpb.NodeID(nodeID), rpc.DefaultClass)
 					if err != nil {
 						// We failed to dial the node, so we give up given that
 						// our cancellation is best effort. It is possible that
@@ -170,8 +171,8 @@ func (dsp *DistSQLPlanner) initCancelingWorkers(initCtx context.Context) {
 }
 
 type deadFlowsOnNode struct {
-	ids    []execinfrapb.FlowID
-	nodeID roachpb.NodeID
+	ids           []execinfrapb.FlowID
+	sqlInstanceID base.SQLInstanceID
 }
 
 // cancelFlowsCoordinator is responsible for batching up the requests to cancel
@@ -193,34 +194,36 @@ type cancelFlowsCoordinator struct {
 // concurrent usage.
 func (c *cancelFlowsCoordinator) getFlowsToCancel() (
 	*execinfrapb.CancelDeadFlowsRequest,
-	roachpb.NodeID,
+	base.SQLInstanceID,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.deadFlowsByNode.Len() == 0 {
-		return nil, roachpb.NodeID(0)
+		return nil, base.SQLInstanceID(0)
 	}
 	deadFlows := c.mu.deadFlowsByNode.GetFirst().(*deadFlowsOnNode)
 	c.mu.deadFlowsByNode.RemoveFirst()
 	req := &execinfrapb.CancelDeadFlowsRequest{
 		FlowIDs: deadFlows.ids,
 	}
-	return req, deadFlows.nodeID
+	return req, deadFlows.sqlInstanceID
 }
 
 // addFlowsToCancel adds all remote flows from flows map to be canceled via
 // CancelDeadFlows RPC. Safe for concurrent usage.
-func (c *cancelFlowsCoordinator) addFlowsToCancel(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) {
+func (c *cancelFlowsCoordinator) addFlowsToCancel(
+	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
+) {
 	c.mu.Lock()
-	for nodeID, f := range flows {
-		if nodeID != f.Gateway {
+	for sqlInstanceID, f := range flows {
+		if sqlInstanceID != f.Gateway {
 			// c.mu.deadFlowsByNode.Len() is at most the number of nodes in the
 			// cluster, so a linear search for the node ID should be
 			// sufficiently fast.
 			found := false
 			for j := 0; j < c.mu.deadFlowsByNode.Len(); j++ {
 				deadFlows := c.mu.deadFlowsByNode.Get(j).(*deadFlowsOnNode)
-				if nodeID == deadFlows.nodeID {
+				if sqlInstanceID == deadFlows.sqlInstanceID {
 					deadFlows.ids = append(deadFlows.ids, f.FlowID)
 					found = true
 					break
@@ -228,8 +231,8 @@ func (c *cancelFlowsCoordinator) addFlowsToCancel(flows map[roachpb.NodeID]*exec
 			}
 			if !found {
 				c.mu.deadFlowsByNode.AddLast(&deadFlowsOnNode{
-					ids:    []execinfrapb.FlowID{f.FlowID},
-					nodeID: nodeID,
+					ids:           []execinfrapb.FlowID{f.FlowID},
+					sqlInstanceID: sqlInstanceID,
 				})
 			}
 		}
@@ -267,13 +270,13 @@ func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	leafInputState *roachpb.LeafTxnInputState,
-	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
+	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	collectStats bool,
 	statementSQL string,
 ) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
-	thisNodeID := dsp.gatewayNodeID
+	thisNodeID := dsp.gatewaySQLInstanceID
 	_, ok := flows[thisNodeID]
 	if !ok {
 		return nil, nil, nil, errors.AssertionFailedf("missing gateway flow")
@@ -332,11 +335,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 		req := setupReq
 		req.Flow = *flowSpec
 		runReq := runnerRequest{
-			ctx:        ctx,
-			nodeDialer: dsp.nodeDialer,
-			flowReq:    &req,
-			nodeID:     nodeID,
-			resultChan: resultChan,
+			ctx:           ctx,
+			nodeDialer:    dsp.nodeDialer,
+			flowReq:       &req,
+			sqlInstanceID: nodeID,
+			resultChan:    resultChan,
 		}
 
 		// Send out a request to the workers; if no worker is available, run
@@ -410,7 +413,7 @@ func (dsp *DistSQLPlanner) Run(
 			physicalplan.ReleaseFlowSpec(flowSpec)
 		}
 	}()
-	if _, ok := flows[dsp.gatewayNodeID]; !ok {
+	if _, ok := flows[dsp.gatewaySQLInstanceID]; !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
 		return func() {}
 	}
