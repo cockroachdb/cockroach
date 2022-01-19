@@ -169,6 +169,7 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/echotest",
+        "//pkg/testutils/skip",
         "//pkg/testutils/zerofields",
         "//pkg/util",
         "//pkg/util/bitarray",
