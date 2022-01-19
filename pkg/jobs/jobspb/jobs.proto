@@ -760,6 +760,7 @@ message ResolvedSpan {
   BoundaryType boundary_type = 4 ;
 }
 
+
 message ResolvedSpans {
   repeated ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
 }
