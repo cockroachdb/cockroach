@@ -2171,3 +2171,52 @@ NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
 
 statement error parameter "autovacuum_enabled" requires a Boolean value
 ALTER TABLE storage_param_table SET (autovacuum_enabled='11')
+
+# Fixes issue 75154 when dropping and re-creating a constraint in a transaction
+# we incorrectly detected the primary index as being used, even if its dropped
+# inside the transaction. The primary index will still exist, but will be
+# disabled via the drop constraint.
+subtest drop-and-add-constraint-primary-index
+
+statement ok
+BEGIN;
+create table const_tbl (a int, b int, constraint "bob" primary key (a, b));
+alter table const_tbl drop constraint "bob";
+alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
+COMMIT;
+
+statement error relation \"const_tbl\" \(150\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction.*
+BEGIN;
+alter table const_tbl drop constraint "bob";
+alter table const_tbl add constraint "bob" primary key (a, b); -- this statement
+alter table const_tbl drop constraint "bob";
+COMMIT;
+
+statement ok
+BEGIN;
+alter table const_tbl drop constraint "bob";
+-- Note: Primary key must be restored first before any other command will
+-- be allowed.
+alter table const_tbl add constraint "steve" primary key (a, b); -- this statement
+
+statement error pq: relation \"const_tbl\" \(150\): unimplemented: cannot perform other schema changes in the same transaction as a primary key change.*
+alter table const_tbl add constraint "bob" CHECK (a > 100);
+
+statement ok
+rollback
+
+statement ok
+alter table const_tbl add constraint "steve" CHECK (a > 100);
+
+statement ok
+BEGIN;
+alter table const_tbl drop constraint "steve";
+alter table const_tbl add constraint "steve" CHECK (a > 100);
+COMMIT;
+
+statement error  pq: duplicate constraint name: "steve"
+BEGIN;
+alter table const_tbl drop constraint "steve";
+alter table const_tbl add constraint "steve" CHECK (a > 100);
+alter table const_tbl add constraint "steve" CHECK (a > 100);
+COMMIT;
