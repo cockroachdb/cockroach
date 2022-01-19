@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -139,7 +140,7 @@ func registerSequelize(r registry.Registry) {
 
 		t.Status("running Sequelize test suite")
 		rawResults, err := c.RunWithBuffer(ctx, t.L(), node,
-			`cd /mnt/data1/sequelize/ && npm test`,
+			fmt.Sprintf(`cd /mnt/data1/sequelize/ && npm test --crdb_version=%s`, version),
 		)
 		rawResultsStr := string(rawResults)
 		t.L().Printf("Test Results: %s", rawResultsStr)
