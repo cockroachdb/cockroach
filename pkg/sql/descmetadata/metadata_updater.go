@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
@@ -35,7 +37,7 @@ type ConstraintOidBuilder interface {
 	UniqueWithoutIndexConstraintOid(
 		dbID descpb.ID, scName string, tableID descpb.ID, uc *descpb.UniqueWithoutIndexConstraint,
 	) *tree.DOid
-	//  UniqueConstraintOid generates a unique with index constraint OID.
+	// UniqueConstraintOid generates a unique with index constraint OID.
 	UniqueConstraintOid(
 		dbID descpb.ID, scName string, tableID descpb.ID, indexID descpb.IndexID,
 	) *tree.DOid
@@ -52,18 +54,19 @@ type ConstraintOidBuilder interface {
 // metadataUpdater which implements scexec.DescriptorMetadataUpdater that is used to update
 // metaadata such as comments on different schema objects.
 type metadataUpdater struct {
-	txn        *kv.Txn
-	ie         sqlutil.InternalExecutor
-	oidBuilder ConstraintOidBuilder
+	txn               *kv.Txn
+	ie                sqlutil.InternalExecutor
+	oidBuilder        ConstraintOidBuilder
+	collectionFactory *descs.CollectionFactory
 }
 
 // UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (cu metadataUpdater) UpsertDescriptorComment(
+func (mu metadataUpdater) UpsertDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType, comment string,
 ) error {
-	_, err := cu.ie.ExecEx(context.Background(),
+	_, err := mu.ie.ExecEx(context.Background(),
 		fmt.Sprintf("upsert-%s-comment", commentType),
-		cu.txn,
+		mu.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 		commentType,
@@ -75,12 +78,12 @@ func (cu metadataUpdater) UpsertDescriptorComment(
 }
 
 // DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (cu metadataUpdater) DeleteDescriptorComment(
+func (mu metadataUpdater) DeleteDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType,
 ) error {
-	_, err := cu.ie.ExecEx(context.Background(),
+	_, err := mu.ie.ExecEx(context.Background(),
 		fmt.Sprintf("delete-%s-comment", commentType),
-		cu.txn,
+		mu.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"DELETE FROM system.comments WHERE object_id = $1 AND sub_id = $2 AND "+
 			"type = $3;",
@@ -91,7 +94,7 @@ func (cu metadataUpdater) DeleteDescriptorComment(
 	return err
 }
 
-func (cu metadataUpdater) oidFromConstraint(
+func (mu metadataUpdater) oidFromConstraint(
 	desc catalog.TableDescriptor,
 	schemaName string,
 	constraintName string,
@@ -101,7 +104,7 @@ func (cu metadataUpdater) oidFromConstraint(
 	case scpb.ConstraintType_FK:
 		for _, fk := range desc.AllActiveAndInactiveForeignKeys() {
 			if fk.Name == constraintName {
-				return cu.oidBuilder.ForeignKeyConstraintOid(
+				return mu.oidBuilder.ForeignKeyConstraintOid(
 					desc.GetParentID(),
 					schemaName,
 					desc.GetID(),
@@ -112,7 +115,7 @@ func (cu metadataUpdater) oidFromConstraint(
 	case scpb.ConstraintType_PrimaryKey:
 		for _, idx := range desc.AllIndexes() {
 			if idx.GetName() == constraintName {
-				cu.oidBuilder.UniqueConstraintOid(
+				mu.oidBuilder.UniqueConstraintOid(
 					desc.GetParentID(),
 					schemaName,
 					desc.GetID(),
@@ -123,7 +126,7 @@ func (cu metadataUpdater) oidFromConstraint(
 	case scpb.ConstraintType_UniqueWithoutIndex:
 		for _, unique := range desc.GetUniqueWithoutIndexConstraints() {
 			if unique.GetName() == constraintName {
-				return cu.oidBuilder.UniqueWithoutIndexConstraintOid(
+				return mu.oidBuilder.UniqueWithoutIndexConstraintOid(
 					desc.GetParentID(),
 					schemaName,
 					desc.GetID(),
@@ -134,7 +137,7 @@ func (cu metadataUpdater) oidFromConstraint(
 	case scpb.ConstraintType_Check:
 		for _, check := range desc.GetChecks() {
 			if check.Name == constraintName {
-				return cu.oidBuilder.CheckConstraintOid(
+				return mu.oidBuilder.CheckConstraintOid(
 					desc.GetParentID(),
 					schemaName,
 					desc.GetID(),
@@ -147,32 +150,72 @@ func (cu metadataUpdater) oidFromConstraint(
 }
 
 // UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (cu metadataUpdater) UpsertConstraintComment(
+func (mu metadataUpdater) UpsertConstraintComment(
 	desc catalog.TableDescriptor,
 	schemaName string,
 	constraintName string,
 	constraintType scpb.ConstraintType,
 	comment string,
 ) error {
-	oid := cu.oidFromConstraint(desc, schemaName, constraintName, constraintType)
+	oid := mu.oidFromConstraint(desc, schemaName, constraintName, constraintType)
 	// Constraint was not found.
 	if oid == nil {
 		return nil
 	}
-	return cu.UpsertDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType, comment)
+	return mu.UpsertDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType, comment)
 }
 
 // DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (cu metadataUpdater) DeleteConstraintComment(
+func (mu metadataUpdater) DeleteConstraintComment(
 	desc catalog.TableDescriptor,
 	schemaName string,
 	constraintName string,
 	constraintType scpb.ConstraintType,
 ) error {
-	oid := cu.oidFromConstraint(desc, schemaName, constraintName, constraintType)
+	oid := mu.oidFromConstraint(desc, schemaName, constraintName, constraintType)
 	// Constraint was not found.
 	if oid == nil {
 		return nil
 	}
-	return cu.DeleteDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType)
+	return mu.DeleteDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType)
+}
+
+// DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
+func (mu metadataUpdater) DeleteDatabaseRoleSettings(
+	ctx context.Context, database catalog.DatabaseDescriptor,
+) error {
+	_, err := mu.ie.ExecEx(context.Background(),
+		"delete-db-role-setting",
+		mu.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		fmt.Sprintf(
+			`DELETE FROM %s WHERE database_id = $1`,
+			sessioninit.DatabaseRoleSettingsTableName,
+		),
+		database.GetID(),
+	)
+	if err != nil {
+		return err
+	}
+	// Bump the table version for the role settings table when we modify it.
+	return mu.collectionFactory.Txn(ctx,
+		mu.ie,
+		mu.txn.DB(),
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			desc, err := descriptors.GetMutableTableByID(
+				ctx,
+				txn,
+				keys.DatabaseRoleSettingsTableID,
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required:       true,
+						RequireMutable: true,
+					},
+				})
+			if err != nil {
+				return err
+			}
+			desc.MaybeIncrementVersion()
+			return descriptors.WriteDesc(ctx, false, desc, txn)
+		})
 }

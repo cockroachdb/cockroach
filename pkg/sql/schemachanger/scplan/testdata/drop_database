@@ -49,7 +49,7 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 ops
 DROP DATABASE db1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 36 MutationType ops
+StatementPhase stage 1 of 1 with 37 MutationType ops
   transitions:
     [[Sequence:{DescID: 57}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[TableComment:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
@@ -95,6 +95,7 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     [[SchemaComment:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
     [[Database:{DescID: 54}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[DatabaseComment:{DescID: 54}, ABSENT], PUBLIC] -> ABSENT
+    [[DatabaseRoleSetting:{DescID: 54, RoleName: TODO(fqazi) Roles are not currently fetched from database_role_settings}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 57
@@ -179,6 +180,8 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 54
     *scop.RemoveDatabaseComment
+      DatabaseID: 54
+    *scop.RemoveDatabaseRoleSetting
       DatabaseID: 54
 PreCommitPhase stage 1 of 1 with 56 MutationType ops
   transitions:

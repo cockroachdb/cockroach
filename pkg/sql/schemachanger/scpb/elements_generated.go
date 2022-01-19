@@ -510,3 +510,16 @@ func ForEachConstraintComment(
 		}
 	})
 }
+
+func (e DatabaseRoleSetting) element() {}
+
+// ForEachDatabaseRoleSetting iterates over nodes of type DatabaseRoleSetting.
+func ForEachDatabaseRoleSetting(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *DatabaseRoleSetting),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*DatabaseRoleSetting); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
