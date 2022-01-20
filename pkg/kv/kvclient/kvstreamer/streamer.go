@@ -901,7 +901,7 @@ func (w *workerCoordinator) performRequestAsync(
 			var ba roachpb.BatchRequest
 			ba.Header.WaitPolicy = w.lockWaitPolicy
 			ba.Header.TargetBytes = targetBytes
-			ba.Header.TargetBytesAllowEmpty = !headOfLine
+			ba.Header.AllowEmpty = !headOfLine
 			// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
 			// applicable (#67885).
 			ba.AdmissionHeader = w.requestAdmissionHeader

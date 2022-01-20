@@ -7,6 +7,12 @@ with ts=1,0
   put      k=aa v=val-aa
   put      k=c v=val-c
   put      k=e v=val-e
+  put      k=/row1/0 v=r1a
+  put      k=/row1/1 v=r1b
+  put      k=/row1/4 v=r1e # column family 2-3 omitted (e.g. if all NULLs)
+  put      k=/row2   v=r2a
+  put      k=/row3   v=r3a
+  put      k=/row3/1 v=r3b
 del        k=aa ts=2,0
 ----
 >> at end:
@@ -15,6 +21,12 @@ data: "aa"/2.000000000,0 -> /<empty>
 data: "aa"/1.000000000,0 -> /BYTES/val-aa
 data: "c"/1.000000000,0 -> /BYTES/val-c
 data: "e"/1.000000000,0 -> /BYTES/val-e
+data: /Table/1/1/"row1"/0/1.000000000,0 -> /BYTES/r1a
+data: /Table/1/1/"row1"/1/1/1.000000000,0 -> /BYTES/r1b
+data: /Table/1/1/"row1"/4/1/1.000000000,0 -> /BYTES/r1e
+data: /Table/1/1/"row2"/0/1.000000000,0 -> /BYTES/r2a
+data: /Table/1/1/"row3"/0/1.000000000,0 -> /BYTES/r3a
+data: /Table/1/1/"row3"/1/1/1.000000000,0 -> /BYTES/r3b
 
 # Limit 1 works.
 run ok
@@ -135,6 +147,12 @@ meta: "m"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,
 data: "m"/11.000000000,0 -> /BYTES/c
 meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "n"/11.000000000,0 -> /BYTES/c
+data: /Table/1/1/"row1"/0/1.000000000,0 -> /BYTES/r1a
+data: /Table/1/1/"row1"/1/1/1.000000000,0 -> /BYTES/r1b
+data: /Table/1/1/"row1"/4/1/1.000000000,0 -> /BYTES/r1e
+data: /Table/1/1/"row2"/0/1.000000000,0 -> /BYTES/r2a
+data: /Table/1/1/"row3"/0/1.000000000,0 -> /BYTES/r3a
+data: /Table/1/1/"row3"/1/1/1.000000000,0 -> /BYTES/r3b
 
 run ok
 with t=A ts=11,0 max=3
@@ -155,6 +173,12 @@ data: "k"/11.000000000,0 -> /BYTES/c
 data: "l"/11.000000000,0 -> /BYTES/c
 data: "m"/11.000000000,0 -> /BYTES/c
 data: "n"/11.000000000,0 -> /BYTES/c
+data: /Table/1/1/"row1"/0/1.000000000,0 -> /BYTES/r1a
+data: /Table/1/1/"row1"/1/1/1.000000000,0 -> /BYTES/r1b
+data: /Table/1/1/"row1"/4/1/1.000000000,0 -> /BYTES/r1e
+data: /Table/1/1/"row2"/0/1.000000000,0 -> /BYTES/r2a
+data: /Table/1/1/"row3"/0/1.000000000,0 -> /BYTES/r3a
+data: /Table/1/1/"row3"/1/1/1.000000000,0 -> /BYTES/r3b
 
 # Same case as above, except with a committed value at the key after MaxKeys.
 
@@ -197,3 +221,117 @@ meta: "m"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=12.000000000,
 data: "m"/12.000000000,0 -> /BYTES/c
 data: "m"/11.000000000,0 -> /BYTES/c
 data: "n"/11.000000000,0 -> /BYTES/c
+data: /Table/1/1/"row1"/0/1.000000000,0 -> /BYTES/r1a
+data: /Table/1/1/"row1"/1/1/1.000000000,0 -> /BYTES/r1b
+data: /Table/1/1/"row1"/4/1/1.000000000,0 -> /BYTES/r1e
+data: /Table/1/1/"row2"/0/1.000000000,0 -> /BYTES/r2a
+data: /Table/1/1/"row3"/0/1.000000000,0 -> /BYTES/r3a
+data: /Table/1/1/"row3"/1/1/1.000000000,0 -> /BYTES/r3b
+
+# Whole SQL rows.
+run ok
+with ts=12,0
+  scan k=/ end=/z max=2
+  scan k=/ end=/z max=2 wholeRows
+  scan k=/ end=/z max=2 wholeRows allowEmpty
+----
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @1.000000000,0
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @1.000000000,0
+scan: resume span [/Table/1/1/"row1"/4/1,/Table/1/1/"z"/0) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @1.000000000,0
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @1.000000000,0
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @1.000000000,0
+scan: resume span [/Table/1/1/"row2"/0,/Table/1/1/"z"/0) RESUME_KEY_LIMIT nextBytes=0
+scan: resume span [/Table/1/1/"row1"/0,/Table/1/1/"z"/0) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+
+run ok
+with ts=12,0
+  scan k=/ end=/z max=1 wholeRows allowEmpty
+  scan k=/ end=/z max=2 wholeRows allowEmpty
+  scan k=/ end=/z max=3 wholeRows allowEmpty
+  scan k=/ end=/z max=4 wholeRows allowEmpty
+  scan k=/ end=/z max=5 wholeRows allowEmpty
+  scan k=/ end=/z max=6 wholeRows allowEmpty
+----
+scan: resume span [/Table/1/1/"row1"/0,/Table/1/1/"z"/0) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+scan: resume span [/Table/1/1/"row1"/0,/Table/1/1/"z"/0) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @1.000000000,0
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @1.000000000,0
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @1.000000000,0
+scan: resume span [/Table/1/1/"row2"/0,/Table/1/1/"z"/0) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @1.000000000,0
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @1.000000000,0
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @1.000000000,0
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @1.000000000,0
+scan: resume span [/Table/1/1/"row3"/0,/Table/1/1/"z"/0) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @1.000000000,0
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @1.000000000,0
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @1.000000000,0
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @1.000000000,0
+scan: resume span [/Table/1/1/"row3"/0,/Table/1/1/"z"/0) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @1.000000000,0
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @1.000000000,0
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @1.000000000,0
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @1.000000000,0
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @1.000000000,0
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @1.000000000,0
+
+# Whole SQL rows in reverse.
+run ok
+with ts=12,0
+  scan k=/ end=/z max=1 reverse
+  scan k=/ end=/z max=1 reverse wholeRows
+  scan k=/ end=/z max=1 reverse wholeRows allowEmpty
+----
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @1.000000000,0
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row3"/0/NULL) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @1.000000000,0
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @1.000000000,0
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row2"/0/NULL) RESUME_KEY_LIMIT nextBytes=0
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row3"/1/1/NULL) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+
+run ok
+with ts=12,0
+  scan k=/ end=/z max=1 reverse wholeRows allowEmpty
+  scan k=/ end=/z max=2 reverse wholeRows allowEmpty
+  scan k=/ end=/z max=3 reverse wholeRows allowEmpty
+  scan k=/ end=/z max=4 reverse wholeRows allowEmpty
+  scan k=/ end=/z max=5 reverse wholeRows allowEmpty
+  scan k=/ end=/z max=6 reverse wholeRows allowEmpty
+----
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row3"/1/1/NULL) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/""/0-/Table/1/1/"z"/0 -> <no data>
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @1.000000000,0
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @1.000000000,0
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row2"/0/NULL) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @1.000000000,0
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @1.000000000,0
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @1.000000000,0
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row1"/4/1/NULL) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @1.000000000,0
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @1.000000000,0
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @1.000000000,0
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row1"/4/1/NULL) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @1.000000000,0
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @1.000000000,0
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @1.000000000,0
+scan: resume span [/Table/1/1/""/0,/Table/1/1/"row1"/4/1/NULL) RESUME_KEY_LIMIT nextBytes=0
+scan: /Table/1/1/"row3"/1/1 -> /BYTES/r3b @1.000000000,0
+scan: /Table/1/1/"row3"/0 -> /BYTES/r3a @1.000000000,0
+scan: /Table/1/1/"row2"/0 -> /BYTES/r2a @1.000000000,0
+scan: /Table/1/1/"row1"/4/1 -> /BYTES/r1e @1.000000000,0
+scan: /Table/1/1/"row1"/1/1 -> /BYTES/r1b @1.000000000,0
+scan: /Table/1/1/"row1"/0 -> /BYTES/r1a @1.000000000,0
+
+# WholeRows on non-SQL row data.
+run ok
+with ts=10,0
+  scan k=a end=z max=3 wholeRows
+----
+scan: "a" -> /BYTES/val-a @1.000000000,0
+scan: "c" -> /BYTES/val-c @1.000000000,0
+scan: "e" -> /BYTES/val-e @1.000000000,0
