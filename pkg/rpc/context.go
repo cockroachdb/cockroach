@@ -1193,7 +1193,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	dialerFunc := dialer.dial
 	if rpcCtx.Knobs.ArtificialLatencyMap != nil {
 		latency := rpcCtx.Knobs.ArtificialLatencyMap[target]
-		log.VEventf(dialCtx, 1, "connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
+		log.VEventf(dialCtx, 1, "connecting with simulated latency %dms",
 			latency)
 		dialer := artificialLatencyDialer{
 			dialerFunc: dialerFunc,
@@ -1208,7 +1208,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	// behavior and redialChan will never be closed).
 	dialOpts = append(dialOpts, rpcCtx.testingDialOpts...)
 
-	log.Health.Infof(dialCtx, "dialing n%v: %s (%v)", remoteNodeID, target, class)
+	log.Health.Infof(dialCtx, "dialing")
 	conn, err := grpc.DialContext(dialCtx, target, dialOpts...)
 	if err != nil && rpcCtx.masterCtx.Err() != nil {
 		// If the node is draining, discard the error (which is likely gRPC's version
@@ -1299,6 +1299,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		var redialChan <-chan struct{}
 		conn.grpcConn, redialChan, conn.dialErr = rpcCtx.grpcDialRaw(dialCtx, target, remoteNodeID, class)
 		if conn.dialErr == nil {
+			dialCtx = logtags.AddTag(dialCtx, "heartbeat", nil)
 			if err := rpcCtx.Stopper.RunAsyncTask(
 				dialCtx, "rpc.Context: grpc heartbeat", func(dialCtx context.Context) {
 					err := rpcCtx.runHeartbeat(dialCtx, conn, target, redialChan)
