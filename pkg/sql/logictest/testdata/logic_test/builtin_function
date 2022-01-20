@@ -3140,14 +3140,21 @@ onlyif config 3node-tenant
 statement error cannot create token for root user
 select crdb_internal.create_session_revival_token()
 
+statement ok
+CREATE USER childuser;
+GRANT testuser TO childuser
+
 user testuser
 
 statement ok
 CREATE TABLE token_payload(algorithm STRING, "expiresAt" TIMESTAMPTZ, "issuedAt" TIMESTAMPTZ, "user" STRING)
 
-# create_session_revival_token requires tenant-signing certs, so only work
-# in 3node-tenant. The token can't be tested for validity here, but we can
-# verify that the information in the token makes sense.
+# Make sure the token is generated for testuser, not childuser.
+statement ok
+SET ROLE childuser
+
+# create_session_revival_token requires tenant-signing certs, so it only works
+# in 3node-tenant.
 onlyif config 3node-tenant
 query TTBBBB
 WITH
