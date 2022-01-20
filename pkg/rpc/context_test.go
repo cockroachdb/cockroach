@@ -1893,7 +1893,9 @@ func TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat(t *testin
 	require.NoError(t, c.dialErr)
 	// It is possible that the redial chan being closed is not seen on the first
 	// pass through the loop.
-	err = rpcCtx.runHeartbeat(c, "", redialChan)
+	// NB: we use rpcCtx.masterCtx and not just ctx because we need
+	// this to be cancelled when the RPC context is closed.
+	err = rpcCtx.runHeartbeat(rpcCtx.masterCtx, c, "", redialChan)
 	require.EqualError(t, err, grpcutil.ErrCannotReuseClientConn.Error())
 	// Even when the runHeartbeat returns, we could have heartbeated successfully.
 	// If we did not, then we expect the `not yet heartbeated` error.
