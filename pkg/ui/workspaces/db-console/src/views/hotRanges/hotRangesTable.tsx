@@ -53,7 +53,7 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
           QPS
         </Tooltip>
       ),
-      cell: (val: HotRange) => <>{val.qps}</>,
+      cell: (val: HotRange) => <>{Math.round(val.qps * 100) / 100}</>,
       sort: (val: HotRange) => val.qps,
     },
     {
