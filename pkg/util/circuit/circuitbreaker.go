@@ -138,7 +138,12 @@ func (b *Breaker) Reset() {
 	b.Opts().EventHandler.OnReset(b)
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.mu.errAndCh = b.newErrAndCh()
+	// Avoid replacing errAndCh if it wasn't tripped. Otherwise,
+	// clients waiting on it would never get cancelled even if the
+	// breaker did trip in the future.
+	if wasTripped := b.mu.errAndCh.err != nil; wasTripped {
+		b.mu.errAndCh = b.newErrAndCh()
+	}
 }
 
 // String returns the Breaker's name.
@@ -168,9 +173,20 @@ func (b *Breaker) Reconfigure(opts Options) {
 
 func (b *Breaker) maybeTriggerProbe() {
 	b.mu.Lock()
-	if b.mu.probing {
+	if b.mu.probing || b.mu.errAndCh.err == nil {
 		b.mu.Unlock()
-		// A probe is already running.
+		// A probe is already running or the breaker is not currently tripped. The
+		// latter case can occur since maybeTriggerProbe is invoked from
+		// errAndCh.Err(), where the `errAndCh` might be old. (Recall that errAndCh
+		// is passed out to the client and provides a stable view of the breaker
+		// state, while the current state may already be different). For example,
+		// in the below code, a probe would be triggered an hour after the breaker
+		// tripped:
+		//
+		//   sig := br.Signal()
+		//   <-sig.C():
+		//   time.Sleep(time.Hour)
+		//   _ = sig.Err() // maybeTriggerProbe()
 		return
 	}
 	b.mu.probing = true
