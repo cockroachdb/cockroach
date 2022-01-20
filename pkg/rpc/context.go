@@ -1282,11 +1282,11 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		conn.grpcConn, redialChan, conn.dialErr = rpcCtx.grpcDialRaw(dialCtx, target, remoteNodeID, class)
 		if conn.dialErr == nil {
 			if err := rpcCtx.Stopper.RunAsyncTask(
-				dialCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
-					err := rpcCtx.runHeartbeat(conn, target, redialChan)
+				dialCtx, "rpc.Context: grpc heartbeat", func(dialCtx context.Context) {
+					err := rpcCtx.runHeartbeat(dialCtx, conn, target, redialChan)
 					if err != nil && !grpcutil.IsClosedConnection(err) &&
 						!grpcutil.IsConnectionRejected(err) {
-						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %v", target, err)
+						log.Health.Errorf(dialCtx, "removing connection to %s due to error: %v", target, err)
 					}
 					rpcCtx.removeConn(conn, thisConnKeys...)
 				}); err != nil {
@@ -1322,8 +1322,11 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // the node.
 var ErrNoConnection = errors.New("no connection found")
 
+// runHeartbeat runs the heartbeat loop for the given RPC connection.
+// The dialCtx passed as argument must be derived from rpcCtx.masterCtx, so
+// that it respects the same cancellation policy.
 func (rpcCtx *Context) runHeartbeat(
-	conn *Connection, target string, redialChan <-chan struct{},
+	dialCtx context.Context, conn *Connection, target string, redialChan <-chan struct{},
 ) (retErr error) {
 	rpcCtx.metrics.HeartbeatLoopsStarted.Inc(1)
 	// setInitialHeartbeatDone is idempotent and is critical to notify Connect
@@ -1371,7 +1374,7 @@ func (rpcCtx *Context) runHeartbeat(
 			heartbeatTimer.Read = true
 		}
 
-		if err := rpcCtx.Stopper.RunTaskWithErr(rpcCtx.masterCtx, "rpc heartbeat", func(goCtx context.Context) error {
+		if err := rpcCtx.Stopper.RunTaskWithErr(dialCtx, "rpc heartbeat", func(dialCtx context.Context) error {
 			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
 			clusterID := rpcCtx.ClusterID.Get()
 			request := &PingRequest{
@@ -1390,7 +1393,7 @@ func (rpcCtx *Context) runHeartbeat(
 
 			var response *PingResponse
 			sendTime := rpcCtx.Clock.PhysicalTime()
-			ping := func(goCtx context.Context) error {
+			ping := func(dialCtx context.Context) error {
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
 				if err := interceptor(request); err != nil {
@@ -1398,14 +1401,14 @@ func (rpcCtx *Context) runHeartbeat(
 					return err
 				}
 				var err error
-				response, err = heartbeatClient.Ping(goCtx, request)
+				response, err = heartbeatClient.Ping(dialCtx, request)
 				return err
 			}
 			var err error
 			if rpcCtx.heartbeatTimeout > 0 {
-				err = contextutil.RunWithTimeout(goCtx, "rpc heartbeat", rpcCtx.heartbeatTimeout, ping)
+				err = contextutil.RunWithTimeout(dialCtx, "rpc heartbeat", rpcCtx.heartbeatTimeout, ping)
 			} else {
-				err = ping(goCtx)
+				err = ping(dialCtx)
 			}
 
 			if grpcutil.IsConnectionRejected(err) {
@@ -1431,7 +1434,7 @@ func (rpcCtx *Context) runHeartbeat(
 
 			if err == nil {
 				err = errors.Wrap(
-					checkVersion(goCtx, rpcCtx.Settings, response.ServerVersion),
+					checkVersion(dialCtx, rpcCtx.Settings, response.ServerVersion),
 					"version compatibility check failed on ping response")
 				if err != nil {
 					returnErr = true
@@ -1459,7 +1462,7 @@ func (rpcCtx *Context) runHeartbeat(
 					remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
 					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 				}
-				rpcCtx.RemoteClocks.UpdateOffset(rpcCtx.masterCtx, target, request.Offset, pingDuration)
+				rpcCtx.RemoteClocks.UpdateOffset(dialCtx, target, request.Offset, pingDuration)
 
 				if cb := rpcCtx.HeartbeatCB; cb != nil {
 					cb()
