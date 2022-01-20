@@ -181,8 +181,8 @@ func (s *Store) HandleDelegatedSnapshot(
 		return stream.Send(
 			&kvserverpb.DelegateSnapshotResponse{
 				SnapResponse: &kvserverpb.SnapshotResponse{
-					Status:  kvserverpb.SnapshotResponse_ERROR,
-					Message: err.Error(),
+					Status:            kvserverpb.SnapshotResponse_ERROR,
+					DeprecatedMessage: err.Error(),
 				},
 				CollectedSpans: sp.GetConfiguredRecording(),
 			},
@@ -191,8 +191,8 @@ func (s *Store) HandleDelegatedSnapshot(
 
 	resp := &kvserverpb.DelegateSnapshotResponse{
 		SnapResponse: &kvserverpb.SnapshotResponse{
-			Status:  kvserverpb.SnapshotResponse_APPLIED,
-			Message: "Snapshot successfully applied by recipient",
+			Status:            kvserverpb.SnapshotResponse_APPLIED,
+			DeprecatedMessage: "Snapshot successfully applied by recipient",
 		},
 		CollectedSpans: sp.GetConfiguredRecording(),
 	}
