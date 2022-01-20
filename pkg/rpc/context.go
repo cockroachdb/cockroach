@@ -1139,11 +1139,14 @@ type delayingHeader struct {
 // This method implies a DefaultClass ConnectionClass for the returned
 // ClientConn.
 func (rpcCtx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{}, error) {
-	return rpcCtx.grpcDialRaw(target, 0, DefaultClass)
+	return rpcCtx.grpcDialRaw(rpcCtx.masterCtx, target, 0, DefaultClass)
 }
 
+// grpcDialRaw connects to the remote node.
+// The dialCtx passed as argument must be derived from rpcCtx.masterCtx, so
+// that it respects the same cancellation policy.
 func (rpcCtx *Context) grpcDialRaw(
-	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+	dialCtx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) (*grpc.ClientConn, <-chan struct{}, error) {
 	dialOpts, err := rpcCtx.grpcDialOptions(target, class)
 	if err != nil {
@@ -1174,7 +1177,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	dialerFunc := dialer.dial
 	if rpcCtx.Knobs.ArtificialLatencyMap != nil {
 		latency := rpcCtx.Knobs.ArtificialLatencyMap[target]
-		log.VEventf(rpcCtx.masterCtx, 1, "connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
+		log.VEventf(dialCtx, 1, "connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
 			latency)
 		dialer := artificialLatencyDialer{
 			dialerFunc: dialerFunc,
@@ -1189,8 +1192,8 @@ func (rpcCtx *Context) grpcDialRaw(
 	// behavior and redialChan will never be closed).
 	dialOpts = append(dialOpts, rpcCtx.testingDialOpts...)
 
-	log.Health.Infof(rpcCtx.masterCtx, "dialing n%v: %s (%v)", remoteNodeID, target, class)
-	conn, err := grpc.DialContext(rpcCtx.masterCtx, target, dialOpts...)
+	log.Health.Infof(dialCtx, "dialing n%v: %s (%v)", remoteNodeID, target, class)
+	conn, err := grpc.DialContext(dialCtx, target, dialOpts...)
 	if err != nil && rpcCtx.masterCtx.Err() != nil {
 		// If the node is draining, discard the error (which is likely gRPC's version
 		// of context.Canceled) and return errDialRejected which instructs callers not
@@ -1273,7 +1276,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		// Either we kick off the heartbeat loop (and clean up when it's done),
 		// or we clean up the connKey entries immediately.
 		var redialChan <-chan struct{}
-		conn.grpcConn, redialChan, conn.dialErr = rpcCtx.grpcDialRaw(target, remoteNodeID, class)
+		conn.grpcConn, redialChan, conn.dialErr = rpcCtx.grpcDialRaw(rpcCtx.masterCtx, target, remoteNodeID, class)
 		if conn.dialErr == nil {
 			if err := rpcCtx.Stopper.RunAsyncTask(
 				rpcCtx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
