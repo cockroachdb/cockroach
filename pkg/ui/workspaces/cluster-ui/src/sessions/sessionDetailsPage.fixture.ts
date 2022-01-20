@@ -51,7 +51,6 @@ const sessionDetailsPropsBase: SessionDetailsProps = {
   refreshNodesLiveness: () => {},
   uiConfig: {
     showGatewayNodeLink: true,
-    showTerminateActions: true,
   },
 };
 

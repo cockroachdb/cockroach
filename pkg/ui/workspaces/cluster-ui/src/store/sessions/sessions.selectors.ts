@@ -32,11 +32,6 @@ export const selectSession = createSelector(
   },
 );
 
-export const selectSessionsUiConfig = createSelector(
-  (state: AppState) => state.adminUI.uiConfig.pages.sessions,
-  sessionsUiConfig => sessionsUiConfig,
-);
-
 export const selectSessionDetailsUiConfig = createSelector(
   (state: AppState) => state.adminUI.uiConfig.pages.sessionDetails,
   statementDetailsUiConfig => statementDetailsUiConfig,

@@ -16,10 +16,7 @@ import { SessionsState } from "src/store/sessions";
 import { createSelector } from "reselect";
 import { SessionsPage } from "./index";
 
-import {
-  actions as sessionsActions,
-  selectSessionsUiConfig,
-} from "src/store/sessions";
+import { actions as sessionsActions } from "src/store/sessions";
 import { actions as localStorageActions } from "src/store/localStorage";
 import {
   actions as terminateQueryActions,
@@ -50,7 +47,6 @@ export const SessionsPageConnected = withRouter(
     (state: AppState, props: RouteComponentProps) => ({
       sessions: selectSessions(state),
       sessionsError: state.adminUI.sessions.lastError,
-      uiConfig: selectSessionsUiConfig(state),
       sortSetting: selectSortSetting(state),
     }),
     (dispatch: Dispatch) => ({
