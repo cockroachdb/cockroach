@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -184,6 +185,102 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	// Maybe add some storing columns.
 	res, _ := IndexStoringMutator(rng, []tree.Statement{ret})
 	return res[0].(*tree.CreateTable)
+}
+
+func parseCreateStatement(createStmtSQL string) (*tree.CreateTable, error) {
+	var p parser.Parser
+	stmts, err := p.Parse(createStmtSQL)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, fmt.Errorf("parsed CreateStatement string yielded more than one parsed statment")
+	}
+
+	tableStmt, ok := stmts[0].AST.(*tree.CreateTable)
+	if !ok {
+		return nil, fmt.Errorf("AST could not be cast to *tree.CreateTable")
+	}
+	return tableStmt, nil
+}
+
+// PopulateRandTable populates the provided table with `numrows` rows of random data.
+func PopulateRandTable(rng *rand.Rand, db *gosql.DB, tableName string, numRows int) error {
+	var ignored, createStmtSQL string
+	res := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", tableName))
+	err := res.Scan(&ignored, &createStmtSQL)
+	if err != nil {
+		return errors.Wrapf(err, "table does not exist in db")
+	}
+	createStmt, err := parseCreateStatement(createStmtSQL)
+	if err != nil {
+		return errors.Wrapf(err, "unable to parse table's create statment")
+	}
+
+	defs := createStmt.Defs
+	colTypes := make([]*types.T, 0)
+	nullable := make([]bool, 0)
+	var colNameBuilder strings.Builder
+	comma := ""
+	for _, def := range defs {
+		if col, ok := def.(*tree.ColumnTableDef); ok {
+			if !col.Computed.Computed {
+				colTypes = append(colTypes, col.Type.(*types.T))
+				if col.Nullable.Nullability == tree.Null {
+					nullable = append(nullable, true)
+				} else {
+					nullable = append(nullable, false)
+				}
+				colNameBuilder.WriteString(comma)
+				colNameBuilder.WriteString(col.Name.String())
+				comma = ", "
+			}
+		}
+	}
+	// TODO (Butler): deal with user defined types
+	var (
+		success int
+		fail    int
+	)
+	maxTries := numRows * 100
+	for success < numRows {
+		var valBuilder strings.Builder
+		valBuilder.WriteString("(")
+		comma := ""
+		for j := 0; j < len(colTypes); j++ {
+			valBuilder.WriteString(comma)
+			var d tree.Datum
+			if rand.Intn(6)%3 == 0 {
+				d = randInterestingDatum(rng, colTypes[j])
+			}
+			if colTypes[j].Family() == types.OidFamily {
+				d = tree.NewDOid(tree.DInt(rand.Intn(2)))
+			}
+			if d == nil {
+				d = RandDatum(rng, colTypes[j], nullable[j])
+			}
+			valBuilder.WriteString(tree.AsStringWithFlags(d, tree.FmtParsable))
+			comma = ", "
+		}
+		valBuilder.WriteString(")")
+		insertStmt := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s;",
+			tableName,
+			colNameBuilder.String(),
+			valBuilder.String())
+		_, err := db.Exec(insertStmt)
+		if err != nil {
+			// Inserting into an arbitrary table can be finicky, so allow some room for error!
+			fail++
+			if fail > maxTries {
+				// This could mean PopulateRandTable or RandDatum couldn't handle this table's schema.
+				// consider filing a bug. schema:
+				return fmt.Errorf(`could not populate table schema \n \t %s \n with %d insert attempts`, createStmt.String(), maxTries)
+			}
+		} else {
+			success++
+		}
+	}
+	return nil
 }
 
 // GenerateRandInterestingTable takes a gosql.DB connection and creates
