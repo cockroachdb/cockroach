@@ -23,6 +23,9 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for system.namespace... writing output: debug/system.namespace.txt... done
 [cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done
 [cluster] retrieving SQL data for system.settings... writing output: debug/system.settings.txt... done
+[cluster] retrieving SQL data for system.replication_stats... writing output: debug/system.replication_stats.txt... done
+[cluster] retrieving SQL data for system.replication_critical_localities... writing output: debug/system.replication_critical_localities.txt... done
+[cluster] retrieving SQL data for system.replication_constraint_stats... writing output: debug/system.replication_constraint_stats.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_schema_statements... writing output: debug/crdb_internal.create_schema_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/crdb_internal.create_type_statements.txt... done
