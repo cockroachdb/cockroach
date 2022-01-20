@@ -159,7 +159,7 @@ type SQLServer struct {
 
 	// set to true when the server has started accepting client conns.
 	// Used by health checks.
-	acceptingClients syncutil.AtomicBool
+	isHealthcheckReady syncutil.AtomicBool
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are

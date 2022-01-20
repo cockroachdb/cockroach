@@ -2593,7 +2593,7 @@ func (s *SQLServer) startServeSQL(
 		}
 	}
 
-	s.acceptingClients.Set(true)
+	s.isHealthcheckReady.Set(true)
 
 	return nil
 }
