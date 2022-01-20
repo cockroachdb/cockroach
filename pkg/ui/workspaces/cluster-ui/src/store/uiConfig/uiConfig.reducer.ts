@@ -20,12 +20,12 @@ export type UIConfigState = {
     statementDetails: {
       showStatementDiagnosticsLink: boolean;
     };
-    sessions: {
-      showTerminateActions: boolean;
+    sessions?: {
+      showTerminateActions?: boolean;
     };
     sessionDetails: {
       showGatewayNodeLink: boolean;
-      showTerminateActions: boolean;
+      showTerminateActions?: boolean;
     };
   };
 };
