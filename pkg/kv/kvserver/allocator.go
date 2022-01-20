@@ -185,6 +185,15 @@ const (
 	nonVoterTarget
 )
 
+type replicaStatus int
+
+const (
+	_ replicaStatus = iota
+	alive
+	dead
+	decommissioning
+)
+
 // AddChangeType returns the roachpb.ReplicaChangeType corresponding to the
 // given targetReplicaType.
 //
