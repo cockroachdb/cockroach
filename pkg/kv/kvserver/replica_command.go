@@ -2507,17 +2507,7 @@ func (r *Replica) sendSnapshot(
 		newBatchFn,
 		sent,
 	); err != nil {
-		if errors.Is(err, errMalformedSnapshot) {
-			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())
-			if dir, err := r.store.checkpoint(ctx, tag); err != nil {
-				log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
-			} else {
-				log.Warningf(ctx, "created checkpoint %s", dir)
-			}
-
-			log.Fatal(ctx, "malformed snapshot generated")
-		}
-		return errors.Mark(err, errMarkSnapshotError)
+		return err
 	}
 	return nil
 }
