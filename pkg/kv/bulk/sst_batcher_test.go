@@ -13,9 +13,7 @@ package bulk_test
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"reflect"
-	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -26,58 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/stretchr/testify/require"
 )
-
-func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValue {
-	prefix := keys.SystemSQLCodec.IndexPrefix(100, 1)
-	kvs := make([]storage.MVCCKeyValue, numKeys)
-	r, _ := randutil.NewTestRand()
-
-	var k int
-	for i := 0; i < numKeys; {
-		k += 1 + rand.Intn(100)
-		key := encoding.EncodeVarintAscending(append([]byte{}, prefix...), int64(k))
-		buf := make([]byte, valueSize)
-		randutil.ReadTestdataBytes(r, buf)
-		revisions := 1 + r.Intn(maxRevisions)
-
-		ts := int64(maxRevisions * 100)
-		for j := 0; j < revisions && i < numKeys; j++ {
-			ts -= 1 + r.Int63n(99)
-			kvs[i].Key.Key = key
-			kvs[i].Key.Timestamp.WallTime = ts
-			kvs[i].Key.Timestamp.Logical = r.Int31()
-			kvs[i].Value = roachpb.MakeValueFromString(string(buf)).RawBytes
-			i++
-		}
-	}
-	return kvs
-}
-
-func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue) []byte {
-	memFile := &storage.MemFile{}
-	w := storage.MakeIngestionSSTWriter(memFile)
-	defer w.Close()
-
-	for i := range kvs {
-		if err := w.Put(kvs[i].Key, kvs[i].Value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	require.NoError(t, w.Finish())
-	return memFile.Data()
-}
 
 func TestAddBatched(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -251,99 +203,5 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				t.Fatalf("got      %+v\nexpected %+v", got, expected)
 			}
 		})
-	}
-}
-
-type mockSender func(span roachpb.Span) error
-
-func (m mockSender) AddSSTable(
-	ctx context.Context,
-	begin, end interface{},
-	data []byte,
-	disallowConflicts bool,
-	disallowShadowing bool,
-	disallowShadowingBelow hlc.Timestamp,
-	_ *enginepb.MVCCStats,
-	ingestAsWrites bool,
-	batchTS hlc.Timestamp,
-	writeAtBatchTS bool,
-) error {
-	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
-}
-
-func (m mockSender) SplitAndScatter(ctx context.Context, _ roachpb.Key, _ hlc.Timestamp) error {
-	return nil
-}
-
-// TestAddBigSpanningSSTWithSplits tests a situation where a large
-// spanning SST is being ingested over a span with a lot of splits.
-func TestAddBigSpanningSSTWithSplits(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	skip.UnderShort(t, "this test needs to do a larger SST to see the quadratic mem usage on retries kick in.")
-
-	const numKeys, valueSize, splitEvery = 500, 5000, 1
-
-	// Make some KVs and grab [start,end). Generate one extra for exclusive `end`.
-	kvs := makeIntTableKVs(numKeys+1, valueSize, 1)
-	start, end := kvs[0].Key.Key, kvs[numKeys].Key.Key
-	kvs = kvs[:numKeys]
-
-	// Create a large SST.
-	sst := makePebbleSST(t, kvs)
-
-	var splits []roachpb.Key
-	for i := range kvs {
-		if i%splitEvery == 0 {
-			splits = append(splits, kvs[i].Key.Key)
-		}
-	}
-
-	// Keep track of the memory.
-	getMem := func() uint64 {
-		var stats runtime.MemStats
-		runtime.ReadMemStats(&stats)
-		return stats.HeapInuse
-	}
-	var early, late uint64
-	var totalAdditionAttempts int
-	mock := mockSender(func(span roachpb.Span) error {
-		totalAdditionAttempts++
-		for i := range splits {
-			if span.ContainsKey(splits[i]) && !span.Key.Equal(splits[i]) {
-				earlySplit := numKeys / 100
-				if i == earlySplit {
-					early = getMem()
-				} else if i == len(splits)-earlySplit {
-					late = getMem()
-				}
-				return roachpb.NewRangeKeyMismatchError(
-					ctx, span.Key, span.EndKey,
-					&roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])}, nil /* lease */)
-			}
-		}
-		return nil
-	})
-
-	const kb = 1 << 10
-
-	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
-	if _, err := bulk.AddSSTable(
-		ctx, mock,
-		start, end,
-		sst,
-		hlc.Timestamp{},
-		enginepb.MVCCStats{},
-		cluster.MakeTestingClusterSettings(),
-		hlc.Timestamp{},
-		false,
-	); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("Adding took %d total attempts", totalAdditionAttempts)
-	if late > early*8 {
-		t.Fatalf("Mem usage grew from %dkb before grew to %dkb later (%.2fx)",
-			early/kb, late/kb, float64(late)/float64(early))
 	}
 }
