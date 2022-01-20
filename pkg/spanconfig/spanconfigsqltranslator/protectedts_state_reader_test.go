@@ -64,14 +64,12 @@ func TestProtectedTimestampStateReader(t *testing.T) {
 	protectTenants(state, ts(5), []roachpb.TenantID{roachpb.MakeTenantID(2)})
 	protectTenants(state, ts(6), []roachpb.TenantID{roachpb.MakeTenantID(2)})
 
-	ptsStateReader, err := newProtectedTimestampStateReader(context.Background(), *state)
-	require.NoError(t, err)
-
-	clusterTimestamps := ptsStateReader.GetProtectedTimestampsForCluster()
+	ptsStateReader := newProtectedTimestampStateReader(context.Background(), *state)
+	clusterTimestamps := ptsStateReader.GetProtectionPoliciesForCluster()
 	require.Len(t, clusterTimestamps, 1)
-	require.Equal(t, []hlc.Timestamp{ts(3)}, clusterTimestamps)
+	require.Equal(t, []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(3)}}, clusterTimestamps)
 
-	tenantTimestamps := ptsStateReader.GetProtectedTimestampsForTenants()
+	tenantTimestamps := ptsStateReader.GetProtectionPoliciesForTenants()
 	sort.Slice(tenantTimestamps, func(i, j int) bool {
 		return tenantTimestamps[i].tenantID.ToUint64() < tenantTimestamps[j].tenantID.ToUint64()
 	})
@@ -79,22 +77,24 @@ func TestProtectedTimestampStateReader(t *testing.T) {
 	require.Equal(t, []tenantProtectedTimestamps{
 		{
 			tenantID:    roachpb.MakeTenantID(1),
-			protections: []hlc.Timestamp{ts(4)},
+			protections: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(4)}},
 		},
 		{
-			tenantID:    roachpb.MakeTenantID(2),
-			protections: []hlc.Timestamp{ts(5), ts(6)},
+			tenantID: roachpb.MakeTenantID(2),
+			protections: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(5)},
+				{ProtectedTimestamp: ts(6)}},
 		},
 	}, tenantTimestamps)
 
-	tableTimestamps := ptsStateReader.GetProtectedTimestampsForSchemaObject(56)
+	tableTimestamps := ptsStateReader.GetProtectionPoliciesForSchemaObject(56)
 	sort.Slice(tableTimestamps, func(i, j int) bool {
-		return tableTimestamps[i].Less(tableTimestamps[j])
+		return tableTimestamps[i].ProtectedTimestamp.Less(tableTimestamps[j].ProtectedTimestamp)
 	})
 	require.Len(t, tableTimestamps, 2)
-	require.Equal(t, []hlc.Timestamp{ts(1), ts(2)}, tableTimestamps)
+	require.Equal(t, []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(1)},
+		{ProtectedTimestamp: ts(2)}}, tableTimestamps)
 
-	tableTimestamps2 := ptsStateReader.GetProtectedTimestampsForSchemaObject(57)
+	tableTimestamps2 := ptsStateReader.GetProtectionPoliciesForSchemaObject(57)
 	require.Len(t, tableTimestamps2, 1)
-	require.Equal(t, []hlc.Timestamp{ts(2)}, tableTimestamps2)
+	require.Equal(t, []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(2)}}, tableTimestamps2)
 }

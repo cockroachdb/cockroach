@@ -15,11 +15,15 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -236,6 +240,18 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 	if !reflect.DeepEqual(conf.LeasePreferences, defaultConf.LeasePreferences) {
 		diffs = append(diffs, fmt.Sprintf("lease_preferences=%v", conf.VoterConstraints))
 	}
+	if !reflect.DeepEqual(conf.GCPolicy.ProtectionPolicies, defaultConf.GCPolicy.ProtectionPolicies) {
+		sort.Slice(conf.GCPolicy.ProtectionPolicies, func(i, j int) bool {
+			lhs := conf.GCPolicy.ProtectionPolicies[i].ProtectedTimestamp
+			rhs := conf.GCPolicy.ProtectionPolicies[j].ProtectedTimestamp
+			return lhs.Less(rhs)
+		})
+		timestamps := make([]string, 0, len(conf.GCPolicy.ProtectionPolicies))
+		for _, pts := range conf.GCPolicy.ProtectionPolicies {
+			timestamps = append(timestamps, strconv.Itoa(int(pts.ProtectedTimestamp.WallTime)))
+		}
+		diffs = append(diffs, fmt.Sprintf("pts=[%s]", strings.Join(timestamps, " ")))
+	}
 
 	return strings.Join(diffs, " ")
 }
@@ -323,4 +339,44 @@ func GetSplitPoints(ctx context.Context, t *testing.T, reader spanconfig.StoreRe
 	}
 
 	return splitPoints
+}
+
+// ParseProtectionTarget returns a ptpb.Target based on the input. This target
+// could either refer to a Cluster, list of Tenants or SchemaObjects.
+func ParseProtectionTarget(t *testing.T, input string) *ptpb.Target {
+	line := strings.Split(input, "\n")
+	if len(line) != 1 {
+		t.Fatal("only one target must be specified per protectedts operation")
+	}
+	target := line[0]
+
+	const clusterPrefix, tenantPrefix, schemaObjectPrefix = "cluster", "tenants", "descs"
+	switch {
+	case strings.HasPrefix(target, clusterPrefix):
+		return ptpb.MakeClusterTarget()
+	case strings.HasPrefix(target, tenantPrefix):
+		target = strings.TrimPrefix(target, target[:len(tenantPrefix)+1])
+		tenantIDs := strings.Split(target, ",")
+		ids := make([]roachpb.TenantID, 0, len(tenantIDs))
+		for _, tenID := range tenantIDs {
+			id, err := strconv.Atoi(tenID)
+			require.NoError(t, err)
+			ids = append(ids, roachpb.MakeTenantID(uint64(id)))
+		}
+		return ptpb.MakeTenantsTarget(ids)
+	case strings.HasPrefix(target, schemaObjectPrefix):
+		target = strings.TrimPrefix(target, target[:len(schemaObjectPrefix)+1])
+		schemaObjectIDs := strings.Split(target, ",")
+		ids := make([]descpb.ID, 0, len(schemaObjectIDs))
+		for _, tenID := range schemaObjectIDs {
+			id, err := strconv.Atoi(tenID)
+			require.NoError(t, err)
+			ids = append(ids, descpb.ID(id))
+		}
+		return ptpb.MakeSchemaObjectsTarget(ids)
+	default:
+		t.Fatalf("malformed line %q, expected to find prefix %q, %q or %q", target, tenantPrefix,
+			schemaObjectPrefix, clusterPrefix)
+	}
+	return nil
 }
