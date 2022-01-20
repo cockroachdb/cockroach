@@ -349,7 +349,9 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 	return Recording{res}
 }
 
-// recordFinishedChildren adds `children` to the receiver's recording.
+// recordFinishedChildren adds children to s' recording.
+//
+// s takes ownership of children; the caller is not allowed to use them anymore.
 func (s *crdbSpan) recordFinishedChildren(children []tracingpb.RecordedSpan) {
 	if len(children) == 0 {
 		return
@@ -360,6 +362,7 @@ func (s *crdbSpan) recordFinishedChildren(children []tracingpb.RecordedSpan) {
 	s.recordFinishedChildrenLocked(children)
 }
 
+// s takes ownership of children; the caller is not allowed to use them anymore.
 func (s *crdbSpan) recordFinishedChildrenLocked(children []tracingpb.RecordedSpan) {
 	if len(children) == 0 {
 		return
@@ -375,9 +378,10 @@ func (s *crdbSpan) recordFinishedChildrenLocked(children []tracingpb.RecordedSpa
 
 		s.mu.recording.finishedChildren = append(s.mu.recording.finishedChildren, children...)
 	} else {
-		for _, c := range children {
-			for _, e := range c.StructuredRecords {
-				s.recordInternalLocked(&e, &s.mu.recording.structured)
+		for ci := range children {
+			child := &children[ci]
+			for i := range child.StructuredRecords {
+				s.recordInternalLocked(&child.StructuredRecords[i], &s.mu.recording.structured)
 			}
 		}
 	}
