@@ -13,6 +13,7 @@ package logictest
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -28,7 +29,7 @@ import (
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t, "times out and/or hangs")
-	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/[^.]*")
+	RunLogicTest(t, TestServerArgs{}, testutils.TestDataPath(t, "logic_test", "[^.]*"))
 }
 
 // TestSqlLiteLogic runs the supported SqlLite logic tests. See the comments

@@ -1124,8 +1124,8 @@ openssl genrsa -out testdata/testserver.key 2048
 openssl req -new -x509 -sha256 -key testdata/testserver.key -out testdata/testserver.crt \
   -days 3650 -config testdata/testserver_config.cnf
 `
-	opts.ListenKey = "testdata/testserver.key"
-	opts.ListenCert = "testdata/testserver.crt"
+	opts.ListenKey = testutils.TestDataPath(t, "testserver.key")
+	opts.ListenCert = testutils.TestDataPath(t, "testserver.crt")
 
 	return newProxyServer(ctx, t, stopper, opts)
 }

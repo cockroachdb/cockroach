@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	_ "github.com/lib/pq"
@@ -67,7 +68,7 @@ var simplePostgresTestRows = func() []simpleTestRow {
 }()
 
 func getSimplePostgresDumpTestdata(t *testing.T) ([]simpleTestRow, string) {
-	dest := filepath.Join(`testdata`, `pgdump`, `simple.sql`)
+	dest := testutils.TestDataPath(t, "pgdump", "simple.sql")
 	if rewritePostgresTestData {
 		genSimplePostgresTestdata(t, func() { pgdump(t, dest, "simple") })
 	}
@@ -75,7 +76,7 @@ func getSimplePostgresDumpTestdata(t *testing.T) ([]simpleTestRow, string) {
 }
 
 func getSecondPostgresDumpTestdata(t *testing.T) (int, string) {
-	dest := filepath.Join(`testdata`, `pgdump`, `second.sql`)
+	dest := testutils.TestDataPath(t, "pgdump", "second.sql")
 	if rewritePostgresTestData {
 		genSecondPostgresTestdata(t, func() { pgdump(t, dest, "second") })
 	}
@@ -83,7 +84,7 @@ func getSecondPostgresDumpTestdata(t *testing.T) (int, string) {
 }
 
 func getMultiTablePostgresDumpTestdata(t *testing.T) string {
-	dest := filepath.Join(`testdata`, `pgdump`, `db.sql`)
+	dest := testutils.TestDataPath(t, "pgdump", "db.sql")
 	if rewritePostgresTestData {
 		genSequencePostgresTestdata(t, func() {
 			genSecondPostgresTestdata(t, func() {
@@ -119,12 +120,12 @@ func getPgCopyTestdata(t *testing.T) ([]simpleTestRow, []pgCopyDumpCfg) {
 	}
 
 	for i := range configs {
-		configs[i].filename = filepath.Join(`testdata`, `pgcopy`, configs[i].name, `test.txt`)
+		configs[i].filename = testutils.TestDataPath(t, `pgcopy`, configs[i].name, `test.txt`)
 	}
 
 	if rewritePostgresTestData {
 		genSimplePostgresTestdata(t, func() {
-			if err := os.RemoveAll(filepath.Join(`testdata`, `pgcopy`)); err != nil {
+			if err := os.RemoveAll(testutils.TestDataPath(t, `pgcopy`)); err != nil {
 				t.Fatal(err)
 			}
 			for _, cfg := range configs {

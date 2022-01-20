@@ -165,7 +165,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		httpScheme = "https://"
 	}
 
-	datadriven.Walk(t, "testdata/auth", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "auth"), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)

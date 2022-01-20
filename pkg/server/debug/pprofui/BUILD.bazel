@@ -34,6 +34,7 @@ go_test(
     deps = [
         "//pkg/build/bazel",
         "//pkg/server/serverpb",
+        "//pkg/testutils",
         "@com_github_stretchr_testify//require",
     ],
 )

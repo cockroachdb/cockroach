@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -138,7 +139,7 @@ func TestWorkQueueBasic(t *testing.T) {
 	var tg *testGranter
 	var wrkMap workMap
 	var buf builderWithMu
-	datadriven.RunTest(t, "testdata/work_queue",
+	datadriven.RunTest(t, testutils.TestDataPath(t, "work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":

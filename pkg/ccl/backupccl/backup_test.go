@@ -271,7 +271,7 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 	defer httpServerCleanup()
 
 	ctx := context.Background()
-	datadriven.Walk(t, "testdata/backup-restore/", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "backup-restore", ""), func(t *testing.T, path string) {
 		var lastCreatedServer string
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(ctx)
