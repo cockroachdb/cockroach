@@ -100,21 +100,6 @@ func serializeOptions(gen workload.Generator) string {
 		if flags.Meta != nil && flags.Meta[f.Name].RuntimeOnly {
 			return
 		}
-		// Only care about some of the options for naming.
-		// Keeping options, such as regions (which is an array), results in some issues
-		// with URL encoded paths (i.e. we think the name should be regions=%5B%5D, but providers
-		// interpret it as regions=[].).  Regardless, keeping *all* options is just too much.
-		// So, keep only some of the options, and ignore others.
-		// TODO: Would be nice to support name override.
-		switch f.Name {
-		case "version", "warehouses", "fks", "families", "seed":
-			if len(f.Value.String()) == 0 {
-				return
-			}
-		default:
-			return
-		}
-
 		if buf.Len() > 0 {
 			buf.WriteString(`,`)
 		}
