@@ -2031,6 +2031,42 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestFormatImpl", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			// We prohibit usage of NodeFormatter.FormatImpl outside of the expected
+			// usages by FmtCtx.
+			`\.(FormatImpl)\(`,
+			"--",
+			"sql/sem/tree/",
+			":!sql/sem/tree/format.go",
+			":!sql/sem/tree/hide_constants.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use ctx.Format(n)", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	// RoachVet is expensive memory-wise and thus should not run with t.Parallel().
 	// RoachVet includes all of the passes of `go vet` plus first-party additions.
 	// See pkg/cmd/roachvet.
