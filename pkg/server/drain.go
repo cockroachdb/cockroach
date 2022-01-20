@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -44,6 +45,15 @@ var (
 			"of the shutdown process "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
+		0*time.Second,
+	).WithPublic()
+
+	connectionWait = settings.RegisterDurationSetting(
+		settings.TenantReadOnly,
+		"server.shutdown.connection_wait",
+		"the amount of time a server waits users to close all SQL connections "+
+			"before proceeding with the rest of the shutdown process. It must be set "+
+			"with a non-negative value",
 		0*time.Second,
 	).WithPublic()
 )
@@ -246,12 +256,46 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 	// Wait for drainUnreadyWait. This will fail load balancer checks and
 	// delay draining so that client traffic can move off this node.
 	// Note delay only happens on first call to drain.
+
+	// Log the number of connections in cockroach.log every 3 seconds.
+	go func() {
+		for {
+			s.sqlServer.pgServer.LogActiveConns(ctx)
+			time.Sleep(3 * time.Second)
+		}
+	}()
+
 	if shouldDelayDraining {
+		drainWaitLogMessage := fmt.Sprintf("drain wait starts, timeout after %s",
+			drainWait.Get(&s.st.SV),
+		)
+		log.Ops.Info(ctx, drainWaitLogMessage)
+
 		s.drainSleepFn(drainWait.Get(&s.st.SV))
+
+		// Disallow new connections up to the connectionWait timeout. Or early exit
+		// if all existing connections are closed.
+		connectionMaxWait := connectionWait.Get(&s.st.SV)
+		if connectionMaxWait < 0 {
+			return errors.Wrapf(fmt.Errorf("server.shutdown.connection_wait must be set with non-negative duration"), "%s")
+		}
+		// TODO(janexing): maybe print a more informative log, such as
+		// "connection wait starts, no new SQL connections allowed, early exit to
+		// lease transfer phase once all SQL connections are closed."
+		connectionWaitLogMessage := fmt.Sprintf("connection wait starts, timeout after %s",
+			connectionMaxWait,
+		)
+		log.Ops.Info(ctx, connectionWaitLogMessage)
+
+		s.sqlServer.pgServer.DrainConnections(ctx, connectionMaxWait)
 	}
 
-	// Disable incoming SQL clients up to the queryWait timeout.
 	queryMaxWait := queryWait.Get(&s.st.SV)
+	if queryMaxWait < 0 {
+		return errors.Wrapf(fmt.Errorf("server.shutdown.queryMaxWait must be set with non-negative duration"), "%s")
+	}
+
+	// Disable incoming SQL queries up to the queryWait timeout.
 	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
 		return err
 	}

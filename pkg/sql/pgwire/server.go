@@ -186,7 +186,15 @@ type Server struct {
 		// cancel the associated connection. The corresponding key is a channel
 		// that is closed when the connection is done.
 		connCancelMap cancelChanMap
-		draining      bool
+		// TODO (janexing) draining is only set true when draining wait is ended,
+		// and connection wait is started. Should be renamed more informatively.
+		draining bool
+		// queryDraining is set true when the draining process enters the query wait
+		// period, during which any connections without query in flight will be
+		// closed, and remaining connections will be closed as soon as their
+		// queries finish. After query wait, all connections will be closed
+		// regardless any queries in flight.
+		queryDraining bool
 	}
 
 	auth struct {
@@ -363,6 +371,12 @@ func (s *Server) IsDraining() bool {
 	return s.mu.draining
 }
 
+func (s *Server) IsQueryDraining() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.queryDraining
+}
+
 // Metrics returns the set of metrics structs.
 func (s *Server) Metrics() (res []interface{}) {
 	return []interface{}{
@@ -404,6 +418,7 @@ func (s *Server) Drain(
 func (s *Server) Undrain() {
 	s.mu.Lock()
 	s.setDrainingLocked(false)
+	s.SetQueryDrainingLocked(false)
 	s.mu.Unlock()
 }
 
@@ -415,6 +430,62 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 	}
 	s.mu.draining = drain
 	return true
+}
+
+// LogActiveConns logs the number of active connections.
+func (s *Server) LogActiveConns(ctx context.Context) {
+	log.Ops.Info(ctx, fmt.Sprintf("number of active connections: %d\n", len(s.mu.connCancelMap)))
+}
+
+// SetQueryDrainingLocked set the server's queryDraining state and returns
+// the state changed (i.e. drain != s.mu.queryDraining). s.mu must be locked.
+func (s *Server) SetQueryDrainingLocked(drain bool) bool {
+	if s.mu.queryDraining == drain {
+		return false
+	}
+	s.mu.queryDraining = drain
+	return true
+}
+
+// DisallowNewSQLConn disallow new connections to the server.
+func (s *Server) DisallowNewSQLConn() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.setDrainingLocked(true)
+}
+
+// GetConnCancelMap returns the connCancelMap of the server. s.mu must be locked.
+// This is a helper function to the connectionWait process, which listen to the
+// status of all connections, and early exits if there remains no connections.
+func (s *Server) GetConnCancelMap() cancelChanMap {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.connCancelMap
+}
+
+// DrainConnections waits the users to close all SQL connections before the
+// connectionWait timeout.
+// During the connectionWait period, no new SQL connections are allowed, and as
+// soon as all existing SQL connections are closed, we do an early exit.
+func (s *Server) DrainConnections(ctx context.Context, connectionWait time.Duration) {
+	s.DisallowNewSQLConn()
+
+	timer := time.NewTimer(connectionWait)
+	for {
+		select {
+		// connection wait times out.
+		case <-timer.C:
+			return
+		default:
+			if len(s.GetConnCancelMap()) == 0 {
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			}
+		}
+	}
+	return
 }
 
 // drainImpl drains the SQL clients.
@@ -448,10 +519,6 @@ func (s *Server) drainImpl(
 	connCancelMap := func() cancelChanMap {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if !s.setDrainingLocked(true) {
-			// We are already draining.
-			return nil
-		}
 		connCancelMap := make(cancelChanMap)
 		for done, cancel := range s.mu.connCancelMap {
 			connCancelMap[done] = cancel
@@ -461,10 +528,19 @@ func (s *Server) drainImpl(
 	if len(connCancelMap) == 0 {
 		return nil
 	}
+
+	queryWaitLogMessage := fmt.Sprintf("query wait starts, timeout after %s",
+		queryWait,
+	)
+	log.Ops.Info(ctx, queryWaitLogMessage)
+
 	if reporter != nil {
 		// Report progress to the Drain RPC.
 		reporter(len(connCancelMap), "SQL clients")
 	}
+
+	// Mark the server enters the query wait process.
+	s.SetQueryDrainingLocked(true)
 
 	// Spin off a goroutine that waits for all connections to signal that they
 	// are done and reports it on allConnsDone. The main goroutine signals this
@@ -486,6 +562,7 @@ func (s *Server) drainImpl(
 	// Wait for all connections to finish up to drainWait.
 	select {
 	case <-time.After(queryWait):
+		fmt.Println("query wait ended at ", time.Now().Format(pgTimeFormat))
 		log.Ops.Warningf(ctx, "canceling all sessions after waiting %s", queryWait)
 	case <-allConnsDone:
 	}

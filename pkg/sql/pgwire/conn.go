@@ -166,7 +166,7 @@ func (s *Server) serveConn(
 	}
 
 	// Do the reading of commands from the network.
-	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
+	c.serveImpl(ctx, s.IsQueryDraining, s.SQLServer, reserved, authOpt)
 }
 
 // alwaysLogAuthActivity makes it possible to unconditionally enable
