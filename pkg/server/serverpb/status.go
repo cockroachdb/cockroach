@@ -33,6 +33,7 @@ type SQLStatusServer interface {
 	Profile(ctx context.Context, request *ProfileRequest) (*JSONResponse, error)
 	IndexUsageStatistics(context.Context, *IndexUsageStatisticsRequest) (*IndexUsageStatisticsResponse, error)
 	ResetIndexUsageStats(context.Context, *ResetIndexUsageStatsRequest) (*ResetIndexUsageStatsResponse, error)
+	UserSQLRoles(ctx context.Context, request *UserSQLRolesRequest) (*UserSQLRolesResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
