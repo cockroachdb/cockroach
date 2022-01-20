@@ -859,7 +859,7 @@ func (s *TestState) DeleteConstraintComment(
 
 // DeleteDatabaseRoleSettings implements scexec.DescriptorMetaDataUpdater
 func (s *TestState) DeleteDatabaseRoleSettings(
-	ctx context.Context, database catalog.DatabaseDescriptor,
+	_ context.Context, database catalog.DatabaseDescriptor,
 ) error {
 	s.LogSideEffectf("delete role settings for database on #%d", database.GetID())
 	return nil
