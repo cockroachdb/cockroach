@@ -93,7 +93,7 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	return r.sendWithRangeID(ctx, r.RangeID, &ba)
+	return r.sendWithoutRangeID(ctx, &ba)
 }
 
 // checkCircuitBreaker takes a cancelable context and its cancel function. The
@@ -163,6 +163,15 @@ func maybeAdjustWithBreakerError(pErr *roachpb.Error, brErr error) *roachpb.Erro
 	return pErr
 }
 
+// sendWithoutRangeID used to be called sendWithRangeID, accepted a `_forStacks
+// roachpb.RangeID` argument, and had the description below. Ever since Go
+// switched to the register-based calling convention though, this stopped
+// working, giving essentially random numbers in the goroutine dumps that were
+// misleading. It has thus been "disarmed" until Go produces useful values
+// again.
+//
+// See (internal): https://cockroachlabs.slack.com/archives/G01G8LK77DK/p1641478596004700
+//
 // sendWithRangeID takes an unused rangeID argument so that the range
 // ID will be accessible in stack traces (both in panics and when
 // sampling goroutines from a live server). This line is subject to
@@ -174,8 +183,8 @@ func maybeAdjustWithBreakerError(pErr *roachpb.Error, brErr error) *roachpb.Erro
 // within the portion printed in the stack trace):
 //
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
-func (r *Replica) sendWithRangeID(
-	ctx context.Context, _forStacks roachpb.RangeID, ba *roachpb.BatchRequest,
+func (r *Replica) sendWithoutRangeID(
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (_ *roachpb.BatchResponse, rErr *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
