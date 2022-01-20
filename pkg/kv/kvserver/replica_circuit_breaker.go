@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -61,12 +62,141 @@ type replicaCircuitBreaker struct {
 	stopper *stop.Stopper
 	r       replicaInCircuitBreaker
 	st      *cluster.Settings
+	cancels CancelStorage
 	wrapped *circuit.Breaker
+
+	versionIsActive int32 // atomic
+}
+
+// Register takes a cancelable context and its cancel function, and registers
+// them with the circuit breaker. If the breaker is already tripped, its error
+// is returned immediately and the caller should not continue processing the
+// request. Otherwise, the cancel function is invoked when the breaker trips.
+// The caller is provided with a token and signaller for use in a call to
+// Unregister upon request completion. That method also takes the error (if any)
+// resulting from the request to ensure that in the case of a tripped breaker,
+// the error reflects this fact.
+func (br *replicaCircuitBreaker) Register(
+	ctx context.Context, cancel func(),
+) (_token interface{}, _ signaller, _ error) {
+	brSig := br.Signal()
+
+	if brSig.C() == nil {
+		// Circuit breakers are disabled, so don't do any work registering the
+		// context. Unregister will know that we didn't since it checks the
+		// same brSig.
+		return ctx, brSig, nil
+	}
+
+	// TODO(tbg): we may want to exclude more requests from this check, or allow
+	// requests to exclude themselves from the check (via their header). This
+	// latter mechanism could also replace isCircuitBreakerProbe.
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
+
+	// NB: it might be tempting to check the breaker error first to avoid the call
+	// to Set below if the breaker is tripped at this point. However, the ordering
+	// here, subtly, is required to avoid situations in which the cancel is still
+	// in the map despite the probe having shut down (in which case cancel will
+	// not be invoked until the probe is next triggered, which maybe "never").
+	//
+	// To see this, consider the case in which the breaker is initially not
+	// tripped when we check, but then trips immediately and has the probe fail
+	// (and terminate). Since the probe is in charge of cancelling all tracked
+	// requests, we must ensure that this probe sees our request. Adding the
+	// request prior to calling Signal() means that if we see an untripped
+	// breaker, no probe is running - consequently should the breaker then trip,
+	// it will observe our cancel, thus avoiding a leak. If we observe a tripped
+	// breaker, we also need to remove our own cancel, as the probe may already
+	// have passed the point at which it iterates through the cancels prior to us
+	// inserting it. The cancel may be invoked twice, but that's ok.
+	//
+	// See TestReplicaCircuitBreaker_NoCancelRace.
+	tok := br.cancels.Set(ctx, cancel)
+	if err := brSig.Err(); err != nil {
+		br.cancels.Del(tok)
+		cancel()
+		return nil, nil, err
+	}
+
+	return tok, brSig, nil
+}
+
+// Unregister releases a tracked cancel function upon request completion.
+// The error resulting from the request is passed in to allow decorating
+// it in case the breaker tripped while the request was in-flight.
+//
+// See Register.
+func (br *replicaCircuitBreaker) Unregister(
+	tok interface{}, sig signaller, pErr *roachpb.Error,
+) *roachpb.Error {
+	brErr := sig.Err()
+	if sig.C() == nil {
+		// Breakers were disabled and we never put the cancel in the registry.
+		return pErr
+	}
+
+	br.cancels.Del(tok)
+
+	if pErr == nil {
+		return nil
+	}
+
+	err := pErr.GoError()
+	if ae := (&roachpb.AmbiguousResultError{}); errors.As(err, &ae) {
+		// The breaker tripped while a command was inflight, so we have to
+		// propagate an ambiguous result. We don't want to replace it, but there
+		// is a way to stash an Error in it so we use that.
+		//
+		// TODO(tbg): could also wrap it; there is no other write to WrappedErr
+		// in the codebase and it might be better to remove it. Nested *Errors
+		// are not a good idea.
+		wrappedErr := brErr
+		if ae.WrappedErr != nil {
+			wrappedErr = errors.Wrapf(brErr, "%v", ae.WrappedErr)
+		}
+		ae.WrappedErr = roachpb.NewError(wrappedErr)
+		return roachpb.NewError(ae)
+	} else if le := (&roachpb.NotLeaseHolderError{}); errors.As(err, &le) {
+		// When a lease acquisition triggered by this request is short-circuited
+		// by the breaker, it will return an opaque NotLeaseholderError, which we
+		// replace with the breaker's error.
+		return roachpb.NewError(errors.CombineErrors(brErr, le))
+	}
+	return pErr
+}
+
+func (br *replicaCircuitBreaker) visitCancels(f func(context.Context)) {
+	br.cancels.Visit(func(ctx context.Context, _ func()) (remove bool) {
+		f(ctx)
+		return false // keep
+	})
+}
+
+func (br *replicaCircuitBreaker) cancelAllTrackedContexts() {
+	br.cancels.Visit(func(ctx context.Context, cancel func()) (remove bool) {
+		cancel()
+		return true // remove
+	})
+}
+
+func (br *replicaCircuitBreaker) canEnable() bool {
+	b := atomic.LoadInt32(&br.versionIsActive) == 1
+	if b {
+		return true // fast path
+	}
+	// IsActive is mildly expensive since it has to unmarshal
+	// a protobuf.
+	if br.st.Version.IsActive(context.Background(), clusterversion.ProbeRequest) {
+		atomic.StoreInt32(&br.versionIsActive, 1)
+		return true
+	}
+	return false // slow path
 }
 
 func (br *replicaCircuitBreaker) enabled() bool {
-	return replicaCircuitBreakerSlowReplicationThreshold.Get(&br.st.SV) > 0 &&
-		br.st.Version.IsActive(context.Background(), clusterversion.ProbeRequest)
+	return replicaCircuitBreakerSlowReplicationThreshold.Get(&br.st.SV) > 0 && br.canEnable()
 }
 
 func (br *replicaCircuitBreaker) newError() error {
@@ -108,6 +238,7 @@ func newReplicaCircuitBreaker(
 	stopper *stop.Stopper,
 	ambientCtx log.AmbientContext,
 	r replicaInCircuitBreaker,
+	s CancelStorage,
 	onTrip func(),
 	onReset func(),
 ) *replicaCircuitBreaker {
@@ -117,7 +248,8 @@ func newReplicaCircuitBreaker(
 		r:       r,
 		st:      cs,
 	}
-
+	br.cancels = s
+	br.cancels.Reset()
 	br.wrapped = circuit.NewBreaker(circuit.Options{
 		Name:       "breaker", // log bridge has ctx tags
 		AsyncProbe: br.asyncProbe,
@@ -173,6 +305,13 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 			return
 		}
 
+		// First, tell all current requests to fail fast. Note that clients insert
+		// first, then check the breaker (and remove themselves if breaker already
+		// tripped then). This prevents any cancels from sneaking in after the probe
+		// gets past this point, which could otherwise leave cancels hanging until
+		// "something" triggers the next probe (which may be never if no more traffic
+		// arrives at the Replica). See Register.
+		br.cancelAllTrackedContexts()
 		err := sendProbe(ctx, br.r)
 		report(err)
 	}); err != nil {

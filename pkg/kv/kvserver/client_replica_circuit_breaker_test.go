@@ -540,6 +540,11 @@ func (*circuitBreakerTest) sendViaRepl(repl *kvserver.Replica, req roachpb.Reque
 	ba.Timestamp = repl.Clock().Now()
 	ba.Add(req)
 	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration)
+	// Tag the breaker with the request. Once Send returns, we'll check that it's
+	// no longer tracked by the breaker. This gives good coverage that we're not
+	// going to leak memory.
+	ctx = context.WithValue(ctx, req, struct{}{})
+
 	defer cancel()
 	_, pErr := repl.Send(ctx, ba)
 	// If our context got canceled, return an opaque error regardless of presence or
@@ -548,6 +553,20 @@ func (*circuitBreakerTest) sendViaRepl(repl *kvserver.Replica, req roachpb.Reque
 	if err := ctx.Err(); err != nil {
 		pErr = roachpb.NewErrorf("timed out waiting for batch response: %v", pErr)
 	}
+	{
+		var err error
+		repl.VisitBreakerContexts(func(ctx context.Context) {
+			if err == nil && ctx.Value(req) != nil {
+				err = errors.Errorf(
+					"request %s returned but context still tracked in breaker", req,
+				)
+			}
+		})
+		if err != nil {
+			pErr = roachpb.NewErrorf("%s; after %v", err, pErr)
+		}
+	}
+
 	return pErr.GoError()
 }
 
