@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
@@ -239,7 +240,71 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 			}
 		})
 	}
+}
 
+// TestDeletePreservingIndexEncodingWithEmptyValues tests
+func TestDeletePreservingIndexEncodingWithEmptyValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.Background())
+	setupSQL := `
+CREATE DATABASE t;
+CREATE TABLE t.test (
+        x INT PRIMARY KEY, y INT NOT NULL, z INT, a INT,
+        FAMILY (x), FAMILY (y), FAMILY (a), FAMILY (z)
+);
+CREATE UNIQUE INDEX test_index_to_mutate ON t.test (y) STORING (z, a);
+`
+	_, err := sqlDB.Exec(setupSQL)
+	require.NoError(t, err)
+	codec := server.ExecutorConfig().(sql.ExecutorConfig).Codec
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", "test")
+	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", func(idx *descpb.IndexDescriptor) error {
+		// Here, we make this index look like the temporary
+		// index for a new primary index during the
+		// MVCC-compatible index backfilling process.
+		idx.UseDeletePreservingEncoding = true
+		idx.EncodingType = descpb.PrimaryIndexEncoding
+		idx.StoreColumnNames = []string{"x", "z", "a"}
+		idx.StoreColumnIDs = []catid.ColumnID{0x1, 0x3, 0x4}
+		idx.KeySuffixColumnIDs = nil
+		return nil
+	})
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (1, 1, 1, 1); DELETE FROM t.test WHERE x = 1;`)
+	require.NoError(t, err)
+}
+
+func mutateIndexByName(
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	tableDesc *tabledesc.Mutable,
+	index string,
+	fn func(*descpb.IndexDescriptor) error,
+) error {
+	idx, err := tableDesc.FindIndexWithName(index)
+	if err != nil {
+		return err
+	}
+	idxCopy := *idx.IndexDesc()
+	if err := fn(&idxCopy); err != nil {
+		return err
+	}
+
+	tableDesc.RemovePublicNonPrimaryIndex(idx.Ordinal())
+	m := descpb.DescriptorMutation{}
+	m.Descriptor_ = &descpb.DescriptorMutation_Index{Index: &idxCopy}
+	m.Direction = descpb.DescriptorMutation_ADD
+	m.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+	tableDesc.Mutations = append(tableDesc.Mutations, m)
+	tableDesc.Version++
+	return kvDB.Put(
+		context.Background(),
+		catalogkeys.MakeDescMetadataKey(codec, tableDesc.ID),
+		tableDesc.DescriptorProto(),
+	)
 }
 
 type WrappedVersionedValues struct {
