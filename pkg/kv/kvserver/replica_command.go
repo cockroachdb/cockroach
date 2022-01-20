@@ -2610,7 +2610,7 @@ func (r *Replica) sendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
-	err = contextutil.RunWithTimeout(
+	return contextutil.RunWithTimeout(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			return r.store.cfg.Transport.SendSnapshot(
 				ctx,
@@ -2621,20 +2621,6 @@ func (r *Replica) sendSnapshot(
 				sent,
 			)
 		})
-	if err != nil {
-		if errors.Is(err, errMalformedSnapshot) {
-			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())
-			if dir, err := r.store.checkpoint(ctx, tag); err != nil {
-				log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
-			} else {
-				log.Warningf(ctx, "created checkpoint %s", dir)
-			}
-
-			log.Fatal(ctx, "malformed snapshot generated")
-		}
-		return errors.Mark(err, errMarkSnapshotError)
-	}
-	return nil
 }
 
 // replicasCollocated is used in AdminMerge to ensure that the ranges are
