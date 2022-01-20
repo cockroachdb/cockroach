@@ -11,6 +11,8 @@
 package util
 
 import (
+	"bytes"
+	"encoding/xml"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -74,4 +76,86 @@ func TestOutputsOfGenrule(t *testing.T) {
 	out, err = OutputsOfGenrule("//docs/generated/sql", xmlQueryOutput)
 	require.NoError(t, err)
 	require.Equal(t, out, expected)
+}
+
+func TestMergeXml(t *testing.T) {
+	const xml1 = `<testsuites>
+	<testsuite errors="0" failures="1" skipped="0" tests="17" time="0.029" name="github.com/cockroachdb/cockroach/pkg/cmd/dev">
+		<testcase classname="dev" name="TestDataDriven" time="0.010"></testcase>
+		<testcase classname="dev" name="TestDataDriven/bench.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/build.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/builder.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/generate.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/lint.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/logic.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/bench.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/build.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/builder.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/generate.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/lint.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/logic.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/test.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/test.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestSetupPath" time="0.000">
+			<failure message="Failed" type="">FAILED :(</failure>
+		</testcase>
+	</testsuite>
+</testsuites>`
+	const xml2 = `<testsuites>
+	<testsuite errors="0" failures="1" skipped="0" tests="17" time="0.029" name="github.com/cockroachdb/cockroach/pkg/cmd/dev">
+		<testcase classname="dev" name="TestDataDriven" time="0.010"></testcase>
+		<testcase classname="dev" name="TestDataDriven/bench.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/build.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/builder.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/generate.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/lint.txt" time="0.000">
+			<failure message="Failed" type="">ALSO FAILED :(</failure>
+		</testcase>
+		<testcase classname="dev" name="TestDataDriven/logic.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/bench.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/build.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/builder.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/generate.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/lint.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/logic.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/recording/test.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestDataDriven/test.txt" time="0.000"></testcase>
+		<testcase classname="dev" name="TestSetupPath" time="0.000"></testcase>
+	</testsuite>
+</testsuites>`
+	const expected = `<testsuites>
+	<testsuite errors="0" failures="1" skipped="0" tests="17" time="0.029" name="github.com/cockroachdb/cockroach/pkg/cmd/dev">
+		<testcase name="TestDataDriven" time="0.010"></testcase>
+		<testcase name="TestDataDriven/bench.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/build.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/builder.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/generate.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/lint.txt" time="0.000">
+			<failure message="Failed" type="">ALSO FAILED :(</failure>
+		</testcase>
+		<testcase name="TestDataDriven/logic.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/recording" time="0.000"></testcase>
+		<testcase name="TestDataDriven/recording/bench.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/recording/build.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/recording/builder.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/recording/generate.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/recording/lint.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/recording/logic.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/recording/test.txt" time="0.000"></testcase>
+		<testcase name="TestDataDriven/test.txt" time="0.000"></testcase>
+		<testcase name="TestSetupPath" time="0.000">
+			<failure message="Failed" type="">FAILED :(</failure>
+		</testcase>
+	</testsuite>
+</testsuites>
+`
+
+	var suite1, suite2 TestSuites
+	require.NoError(t, xml.Unmarshal([]byte(xml1), &suite1))
+	require.NoError(t, xml.Unmarshal([]byte(xml2), &suite2))
+	var buf bytes.Buffer
+	require.NoError(t, MergeTestXMLs([]TestSuites{suite1, suite2}, &buf))
+	require.Equal(t, expected, buf.String())
 }
