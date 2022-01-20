@@ -21,6 +21,7 @@ import (
 	"honnef.co/go/tools/simple"
 	"honnef.co/go/tools/staticcheck"
 	"honnef.co/go/tools/stylecheck"
+	"honnef.co/go/tools/unused"
 )
 
 const (
@@ -43,12 +44,12 @@ import (
 var Analyzer *analysis.Analyzer
 
 func init() {
-	for _, analyzer := range {{ .CheckType }}.Analyzers {
+{{ if eq .CheckType "unused" }}	Analyzer = {{ .CheckType }}.Analyzer.Analyzer{{ else }}	for _, analyzer := range {{ .CheckType }}.Analyzers {
 		if analyzer.Analyzer.Name == "{{ .Check }}" {
 			Analyzer = analyzer.Analyzer
 			break
 		}
-	}
+	}{{ end }}
 	util.MungeAnalyzer(Analyzer)
 }
 `
@@ -89,6 +90,7 @@ func main() {
 		{Analyzers: staticcheck.Analyzers, CheckType: "staticcheck"},
 		{Analyzers: stylecheck.Analyzers, CheckType: "stylecheck"},
 		{Analyzers: simple.Analyzers, CheckType: "simple"},
+		{Analyzers: []*lint.Analyzer{unused.Analyzer}, CheckType: "unused"},
 	} {
 		for _, v := range check.Analyzers {
 			analyzer := v.Analyzer

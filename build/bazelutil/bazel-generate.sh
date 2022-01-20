@@ -42,7 +42,7 @@ files_unchanged_from_upstream () {
 # be blocked by the existence of a file before the bazel command is
 # invoked. For now, this is left as an exercise for the user.
 
-if files_unchanged_from_upstream go.mod go.sum DEPS.bzl; then
+if files_unchanged_from_upstream go.mod go.sum DEPS.bzl $(find ./pkg/cmd/generate-staticcheck -name BUILD.bazel -or -name '*.go'); then
   echo "Skipping //pkg/cmd/mirror (relevant files are unchanged from upstream)."
   echo "Skipping //pkg/cmd/generate-staticcheck (relevant files are unchanged from upstream)."
 else
