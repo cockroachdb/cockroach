@@ -8,32 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package roachpb_test
 
-import (
-	"context"
-	"fmt"
-	"path/filepath"
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
-)
-
-func TestReplicaUnavailableError(t *testing.T) {
-	ctx := context.Background()
-	skip.UnderBazelWithIssue(t, 75108, "flaky test")
-	var _ = (*ReplicaUnavailableError)(nil)
-	rDesc := ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3}
-	var set ReplicaSet
-	set.AddReplica(rDesc)
-	desc := NewRangeDescriptor(123, RKeyMin, RKeyMax, set)
-
-	var err error = NewReplicaUnavailableError(desc, rDesc)
-	err = errors.DecodeError(ctx, errors.EncodeError(ctx, err))
-
-	s := fmt.Sprintf("%s\n%s", err, redact.Sprint(err))
-	echotest.Require(t, s, filepath.Join("testdata", "replica_unavailable_error.txt"))
-}
+// See TestReplicaUnavailableError in string_test.go; it needed to be moved there
+// for obscure reasons explained in:
+//
+// https://github.com/cockroachdb/cockroach/issues/75108
