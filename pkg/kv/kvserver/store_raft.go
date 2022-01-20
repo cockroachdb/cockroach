@@ -74,8 +74,9 @@ func (s *Store) HandleSnapshot(
 
 		if s.IsDraining() {
 			return stream.Send(&SnapshotResponse{
-				Status:  SnapshotResponse_ERROR,
-				Message: storeDrainingMsg,
+				Status:       SnapshotResponse_ERROR,
+				Message:      storeDrainingMsg,
+				EncodedError: errors.EncodeError(ctx, errors.Errorf("%s", storeDrainingMsg)),
 			})
 		}
 
