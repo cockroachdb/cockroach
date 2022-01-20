@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	raft "go.etcd.io/etcd/raft/v3"
@@ -299,7 +298,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	stopper.AddCloser(eng)
 
 	seed := randutil.NewPseudoSeed()
-	//const seed = -1666367124291055473
+	// const seed = -1666367124291055473
 	t.Logf("seed is %d", seed)
 	rng := rand.New(rand.NewSource(seed))
 
@@ -1275,69 +1274,6 @@ func TestStoreReplicasByKey(t *testing.T) {
 	if store.LookupReplica(roachpb.RKeyMax) != nil {
 		t.Errorf("expected roachpb.KeyMax to not have an associated replica")
 	}
-}
-
-// TestStoreSetRangesMaxBytes creates a set of ranges via splitting
-// and then sets the config zone to a custom max bytes value to
-// verify the ranges' max bytes are updated appropriately.
-func TestStoreSetRangesMaxBytes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	cfg := TestStoreConfig(nil)
-	cfg.TestingKnobs.DisableMergeQueue = true
-	store := createTestStoreWithConfig(ctx, t, stopper,
-		testStoreOpts{
-			// This test was written before test stores could start with more than one
-			// range and was not adapted.
-			createSystemRanges: false,
-		},
-		&cfg)
-
-	baseID := keys.TestingUserDescID(0)
-	testData := []struct {
-		repl        *Replica
-		expMaxBytes int64
-	}{
-		{store.LookupReplica(roachpb.RKeyMin),
-			store.cfg.DefaultSpanConfig.RangeMaxBytes},
-		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), t),
-			1 << 20},
-		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), t),
-			store.cfg.DefaultSpanConfig.RangeMaxBytes},
-		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+2)), t),
-			2 << 20},
-	}
-
-	// Set zone configs.
-	zoneA := zonepb.DefaultZoneConfig()
-	zoneA.RangeMaxBytes = proto.Int64(1 << 20)
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(baseID), zoneA)
-
-	zoneB := zonepb.DefaultZoneConfig()
-	zoneB.RangeMaxBytes = proto.Int64(2 << 20)
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(baseID+2), zoneB)
-
-	// Despite faking the zone configs, we still need to have a system config
-	// entry so that the store picks up the new zone configs. This new system
-	// config needs to be non-empty so that it differs from the initial value
-	// which triggers the system config callback to be run.
-	sysCfg := &config.SystemConfigEntries{}
-	sysCfg.Values = []roachpb.KeyValue{{Key: roachpb.Key("a")}}
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, sysCfg, 0); err != nil {
-		t.Fatal(err)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		for _, test := range testData {
-			if mb := test.repl.GetMaxBytes(); mb != test.expMaxBytes {
-				return errors.Errorf("range max bytes values did not change to %d; got %d", test.expMaxBytes, mb)
-			}
-		}
-		return nil
-	})
 }
 
 // TestStoreResolveWriteIntent adds a write intent and then verifies
