@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -184,6 +185,137 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	// Maybe add some storing columns.
 	res, _ := IndexStoringMutator(rng, []tree.Statement{ret})
 	return res[0].(*tree.CreateTable)
+}
+
+func parseCreateStatement(createStmtSQL string) (*tree.CreateTable, error) {
+	var p parser.Parser
+	stmts, err := p.Parse(createStmtSQL)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, errors.Errorf("parsed CreateStatement string yielded more than one parsed statment")
+	}
+	tableStmt, ok := stmts[0].AST.(*tree.CreateTable)
+	if !ok {
+		return nil, errors.Errorf("AST could not be cast to *tree.CreateTable")
+	}
+	return tableStmt, nil
+}
+
+// generateInsertStmtVals generates random data for a string builder thats
+// used after the VALUES keyword in an INSERT statement.
+func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool) strings.Builder {
+	var valBuilder strings.Builder
+	valBuilder.WriteString("(")
+	comma := ""
+	for j := 0; j < len(colTypes); j++ {
+		valBuilder.WriteString(comma)
+		var d tree.Datum
+		if rand.Intn(10) < 4 {
+			// 40% of the time, use a corner case value
+			d = randInterestingDatum(rng, colTypes[j])
+		}
+		if colTypes[j].Family() == types.OidFamily {
+			// choose 0 or 1 as the OID value as the value must be less than the
+			// number of tables in the database.
+			d = tree.NewDOid(tree.DInt(rand.Intn(2)))
+		}
+		if d == nil {
+			d = RandDatum(rng, colTypes[j], nullable[j])
+		}
+		valBuilder.WriteString(tree.AsStringWithFlags(d, tree.FmtParsable))
+		comma = ", "
+	}
+	valBuilder.WriteString(")")
+	return valBuilder
+}
+
+// PopulateTableWithRandData populates the provided table with `numrows` rows of random data.
+func PopulateTableWithRandData(rng *rand.Rand, db *gosql.DB, tableName string, numRows int) error {
+	var ignored, createStmtSQL string
+	res := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s", tableName))
+	err := res.Scan(&ignored, &createStmtSQL)
+	if err != nil {
+		return errors.Wrapf(err, "table does not exist in db")
+	}
+	createStmt, err := parseCreateStatement(createStmtSQL)
+	if err != nil {
+		return errors.Wrapf(err, "failed to determine table schema")
+	}
+
+	// Populate helper objects for insert statement creation and error out if a
+	// column's constraints will make it impossible to execute random insert
+	// statements.
+	defs := createStmt.Defs
+	colTypes := make([]*types.T, 0)
+	nullable := make([]bool, 0)
+	var colNameBuilder strings.Builder
+	comma := ""
+	for _, def := range defs {
+		if col, ok := def.(*tree.ColumnTableDef); ok {
+			if col.References.Table != nil {
+				// Given that this function only populates an individual table without
+				// considering other tables in the database, populating a column with a
+				// foreign key reference can be nearly impossible.
+				return errors.Errorf("cannot populate column with foreign key reference")
+			}
+			if len(col.CheckExprs) != 0 {
+				// RandDatum is unaware of CHECK constraints, so populating a column with
+				// CHECK constraints can be nearly impossible.
+				return errors.Errorf("cannot populate column with CHECK constraint")
+			}
+			if (col.Type.(*types.T).Family() == types.OidFamily) && (col.Unique.IsUnique) && numRows > 2 {
+				// For OID columns, PopulateTableWithRandData randomly chooses 0 or 1 as a value,
+				// which means it's impossible to obey a uniqueness constraint if numRows>2.
+				return errors.Errorf("cannot populate oid column with uniqueness constraint when numrows>2")
+			}
+			if col.Computed.Computed || col.Hidden {
+				// cannot insert values into hidden or computed columns, so skip adding
+				// them to the list of columns to insert data into
+				continue
+			}
+			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type.(*types.T)))
+
+			if col.Nullable.Nullability == tree.Null {
+				nullable = append(nullable, true)
+			} else {
+				nullable = append(nullable, false)
+			}
+			colNameBuilder.WriteString(comma)
+			colNameBuilder.WriteString(col.Name.String())
+			comma = ", "
+		}
+	}
+
+	var (
+		success int // number of successfully executed insert statements
+		fail    int // number of failed insert statements
+	)
+	maxTries := numRows * 10
+	for success < numRows {
+		valBuilder := generateInsertStmtVals(rng, colTypes, nullable)
+		insertStmt := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s;",
+			tableName,
+			colNameBuilder.String(),
+			valBuilder.String())
+		_, err := db.Exec(insertStmt)
+		if err != nil {
+			// Inserting into an arbitrary table with a UNIQUE constraint can be finicky,
+			// so allow some room for error!
+			fail++
+			if fail > maxTries {
+				// This could mean PopulateTableWithRandomData or RandDatum couldn't
+				// handle this table's schema. consider filing a bug.
+				return errors.Errorf(`could not populate %d rows for table with schema \n \t %s \n--
+																	only %d succesful insert attempts out of %d total attempts`,
+					numRows, createStmt.String(), success, maxTries)
+			}
+		} else {
+			success++
+		}
+	}
+	return nil
 }
 
 // GenerateRandInterestingTable takes a gosql.DB connection and creates

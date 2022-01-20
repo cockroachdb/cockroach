@@ -14,10 +14,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestPostgresMutator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	q := `
 		CREATE TABLE t (s STRING FAMILY fam1, b BYTES, FAMILY fam2 (b), PRIMARY KEY (s ASC, b DESC), INDEX (s) STORING (b))
 		    PARTITION BY LIST (s)
