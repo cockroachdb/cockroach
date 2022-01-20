@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
@@ -26,7 +25,6 @@ import (
 
 func TestReplicaUnavailableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderBazelWithIssue(t, 75108, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	var repls roachpb.ReplicaSet
