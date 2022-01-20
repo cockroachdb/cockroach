@@ -684,7 +684,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	// Load the client-provided session parameters.
 	var sArgs sql.SessionArgs
-	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf,
+	var cancelRequest string
+	if cancelRequest, sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf,
 		conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get()); err != nil {
 		return s.sendErr(ctx, conn, err)
 	}
@@ -695,6 +696,50 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// been overridden by a status parameter).
 	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
 	ctx = logtags.AddTag(ctx, "client", connDetails.RemoteAddress)
+
+	// If this is a cancel request, process it.
+	if len(cancelRequest) > 0 {
+		response, internalErr := s.SQLServer.DoCancelRequest(ctx, cancelRequest)
+
+		// Create a client error. Note that we return the same error to
+		// the client regardless of which error was encountered
+		// internally, so as to hide the particular cause of failure from
+		// the client. This prevents a malicious user from discovering
+		// details about the configuration by sending random strings.
+		code := pgcode.QueryCancellationStatus
+		if response != nil && response.Retry {
+			code = pgcode.QueryCancellationRetry
+		}
+		clientMsg := ""
+		if response != nil {
+			clientMsg = response.ClientMessage
+		}
+		clientErr := errors.WithDetail(
+			pgerror.Newf(code, "query canceled"),
+			clientMsg)
+
+		// Does the configuration request logging cancel requests?
+		if s.connLogEnabled() {
+			endTime := timeutil.Now()
+			ev := &eventpb.ClientCancelRequest{
+				CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+				CommonConnectionDetails: connDetails,
+				CancelRequest:           cancelRequest,
+				SQLSTATE:                pgerror.GetPGCode(clientErr).String(),
+				ClientMessage:           errors.FlattenDetails(clientErr),
+			}
+			if response != nil {
+				ev.Canceled = response.Canceled
+			}
+			if internalErr != nil {
+				ev.Error = internalErr.Error()
+			}
+			log.StructuredEvent(ctx, ev)
+		}
+		// Regardless of the result, send the client error payload
+		// back to the client and close the connection.
+		return s.sendErr(ctx, conn, clientErr)
+	}
 
 	// If a test is hooking in some authentication option, load it.
 	var testingAuthHook func(context.Context) error
@@ -737,8 +782,8 @@ func parseClientProvidedSessionParameters(
 	buf *pgwirebase.ReadBuffer,
 	origRemoteAddr net.Addr,
 	trustClientProvidedRemoteAddr bool,
-) (sql.SessionArgs, error) {
-	args := sql.SessionArgs{
+) (cancelRequest string, args sql.SessionArgs, err error) {
+	args = sql.SessionArgs{
 		SessionDefaults:             make(map[string]string),
 		CustomOptionSessionDefaults: make(map[string]string),
 		RemoteAddr:                  origRemoteAddr,
@@ -749,7 +794,7 @@ func parseClientProvidedSessionParameters(
 		// Read a key-value pair from the client.
 		key, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrap(
+			return "", sql.SessionArgs{}, pgerror.Wrap(
 				err, pgcode.ProtocolViolation,
 				"error reading option key",
 			)
@@ -760,7 +805,7 @@ func parseClientProvidedSessionParameters(
 		}
 		value, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrapf(
+			return "", sql.SessionArgs{}, pgerror.Wrapf(
 				err, pgcode.ProtocolViolation,
 				"error reading option value for key %q", key,
 			)
@@ -784,39 +829,42 @@ func parseClientProvidedSessionParameters(
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
-				return sql.SessionArgs{}, errors.WithSecondaryError(
+				return "", sql.SessionArgs{}, errors.WithSecondaryError(
 					pgerror.Newf(pgcode.ProtocolViolation,
 						"error parsing results_buffer_size option value '%s' as bytes", value), err)
 			}
 			if args.ConnResultsBufferSize < 0 {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+				return "", sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
 					"results_buffer_size option value '%s' cannot be negative", value)
 			}
 			foundBufferSize = true
 
+		case "crdb:cancel_request":
+			cancelRequest = value
+
 		case "crdb:remote_addr":
 			if !trustClientProvidedRemoteAddr {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+				return "", sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
 					"server not configured to accept remote address override (requested: %q)", value)
 			}
 
 			hostS, portS, err := net.SplitHostPort(value)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
+				return "", sql.SessionArgs{}, pgerror.Wrap(
 					err, pgcode.ProtocolViolation,
 					"invalid address format",
 				)
 			}
 			port, err := strconv.Atoi(portS)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
+				return "", sql.SessionArgs{}, pgerror.Wrap(
 					err, pgcode.ProtocolViolation,
 					"remote port is not numeric",
 				)
 			}
 			ip := net.ParseIP(hostS)
 			if ip == nil {
-				return sql.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
+				return "", sql.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
 					"remote address is not numeric")
 			}
 			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
@@ -824,20 +872,24 @@ func parseClientProvidedSessionParameters(
 		case "options":
 			opts, err := parseOptions(value)
 			if err != nil {
-				return sql.SessionArgs{}, err
+				return "", sql.SessionArgs{}, err
 			}
 			for _, opt := range opts {
 				err = loadParameter(ctx, opt.key, opt.value, &args)
 				if err != nil {
-					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
+					return "", sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
 				}
 			}
 		default:
 			err = loadParameter(ctx, key, value, &args)
 			if err != nil {
-				return sql.SessionArgs{}, err
+				return "", sql.SessionArgs{}, err
 			}
 		}
+	}
+
+	if len(cancelRequest) != 0 {
+		return cancelRequest, args, nil
 	}
 
 	if !foundBufferSize && sv != nil {
@@ -862,7 +914,7 @@ func parseClientProvidedSessionParameters(
 		}
 	}
 
-	return args, nil
+	return "", args, nil
 }
 
 func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs) error {

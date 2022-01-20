@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -1864,6 +1864,7 @@ func (r *SessionRegistry) deregister(id ClusterWideID) {
 type registrySession interface {
 	user() security.SQLUsername
 	cancelQuery(queryID ClusterWideID) bool
+	cancelQueryByKey(ctx context.Context, sessionID, cancelReq string) (bool, bool, string, error)
 	cancelSession()
 	// serialize serializes a Session into a serverpb.Session
 	// that can be served over RPC.
@@ -1888,6 +1889,27 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 	}
 
 	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
+// CancelQueryByKey looks up the specified session in the session
+// registry and cancels its current request. The caller is responsible
+// for all permission checks.
+func (r *SessionRegistry) CancelQueryByKey(
+	ctx context.Context, sessionID ClusterWideID, req *serverpb.CancelQueryByKeyRequest,
+) (*serverpb.CancelQueryByKeyResponse, error) {
+	r.Lock()
+	defer r.Unlock()
+	for id, session := range r.sessions {
+		if id == sessionID {
+			ok, retry, resp, err := session.cancelQueryByKey(ctx, req.SessionID, req.CancelRequest)
+			if err != nil {
+				return nil, err
+			}
+			return &serverpb.CancelQueryByKeyResponse{Canceled: ok, Retry: retry, ClientMessage: resp}, nil
+		}
+	}
+
+	return nil, errors.New("invalid session")
 }
 
 // CancelSession looks up the specified session in the session registry and

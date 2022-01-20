@@ -89,6 +89,22 @@ message ClientConnectionEnd {
   int64 duration = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// ClientCancelReqyest is reported when a client requests
+// a query cancellation out of band.
+//
+// Events of this type are only emitted when the cluster setting
+// `server.auth_log.sql_connections.enabled` is set.
+message ClientCancelRequest {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  string cancel_request = 3 [(gogoproto.jsontag) = ",omitempty"];
+  bool canceled = 4 [(gogoproto.jsontag) = ",omitempty"];;
+  // The SQLSTATE code for the error.
+  string sqlstate = 5 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string client_message = 6 [(gogoproto.jsontag) = ",omitempty"];
+  string error = 7 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // ClientSessionEnd is reported when a client session
 // is completed.
 //

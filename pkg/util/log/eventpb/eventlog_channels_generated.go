@@ -218,6 +218,9 @@ func (m *ClientAuthenticationInfo) LoggingChannel() logpb.Channel { return logpb
 func (m *ClientAuthenticationOk) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *ClientCancelRequest) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *ClientConnectionEnd) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
 
 // LoggingChannel implements the EventPayload interface.

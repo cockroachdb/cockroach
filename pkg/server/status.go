@@ -2420,6 +2420,33 @@ func (s *statusServer) CancelQuery(
 	return output, nil
 }
 
+// CancelQueryByKey responds to a current query cancellation
+// request, and cancels the target query's associated context and sets
+// a cancellation flag.
+func (s *statusServer) CancelQueryByKey(
+	ctx context.Context, req *serverpb.CancelQueryByKeyRequest,
+) (*serverpb.CancelQueryByKeyResponse, error) {
+	sessionID, err := sql.StringToClusterWideID(req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	nodeID := roachpb.NodeID(sessionID.GetNodeID())
+	if nodeID != s.gossip.NodeID.Get() {
+		// Need to forward to another pod.
+		ctx = propagateGatewayMetadata(ctx)
+		ctx = s.AnnotateCtx(ctx)
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.CancelQueryByKey(ctx, req)
+	}
+
+	// Process locally.
+	return s.sessionRegistry.CancelQueryByKey(ctx, sessionID, req)
+}
+
 // ListContentionEvents returns a list of contention events on all nodes in the
 // cluster.
 func (s *statusServer) ListContentionEvents(

@@ -54,6 +54,9 @@ type extendedEvalContext struct {
 	// SessionID for this connection.
 	SessionID ClusterWideID
 
+	// CancelKey for this session.
+	CancelKey security.CancelClientKey
+
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
 
@@ -242,6 +245,10 @@ type planner struct {
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
 	evalCtx.SessionID = sessionID
+}
+
+func (evalCtx *extendedEvalContext) setCancelKey(cancelKey security.CancelClientKey) {
+	evalCtx.CancelKey = cancelKey
 }
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each

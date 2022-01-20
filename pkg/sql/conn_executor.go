@@ -1371,6 +1371,10 @@ type connExecutor struct {
 		// cancels the session if the idle time in a transaction exceeds the
 		// idle_in_transaction_session_timeout.
 		IdleInTransactionSessionTimeout timeout
+
+		// CancelRequestAuthenticator is the object responsible for
+		// authenticating cancel request queries.
+		CancelRequestAuthenticator security.CancelRequestAuthenticator
 	}
 
 	// curStmtAST is the statement that's currently being prepared or executed, if
@@ -1655,7 +1659,7 @@ func (ex *connExecutor) run(
 	parentMon *mon.BytesMonitor,
 	reserved mon.BoundAccount,
 	onCancel context.CancelFunc,
-) error {
+) (err error) {
 	if !ex.activated {
 		ex.activate(ctx, parentMon, reserved)
 	}
@@ -1663,8 +1667,14 @@ func (ex *connExecutor) run(
 	ex.onCancelSession = onCancel
 
 	ex.sessionID = ex.generateID()
+	ex.mu.CancelRequestAuthenticator, err = security.NewCancelRequestAuthenticator(security.HMACCancelProtocol)
+	if err != nil {
+		return errors.HandleAsAssertionFailure(err)
+	}
+	ex.mu.CancelRequestAuthenticator.Initialize(ex.sessionID.String())
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
+	ex.planner.extendedEvalCtx.setCancelKey(ex.mu.CancelRequestAuthenticator.GetClientKey())
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 	for {
 		ex.curStmtAST = nil

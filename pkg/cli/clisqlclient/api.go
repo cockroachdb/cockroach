@@ -16,7 +16,10 @@ import (
 	"time"
 )
 
-// Conn represents a connection to a SQL server.
+// Conn represents a connection to a SQL server. Generally, the
+// methods of this interface are no safe for concurrent use. The
+// caller is responsible to maintain mutual exclusion. One exception
+// is CancelCurrentQuery() as explained below.
 type Conn interface {
 	// The user code is required to call the Close() method when the
 	// connection is not used any more.
@@ -87,6 +90,11 @@ type Conn interface {
 	// GetDriverConn exposes the underlying SQL driver connection object
 	// for use by the cli package.
 	GetDriverConn() DriverConn
+
+	// CancelCurrentQuery cancels the currently running query for this
+	// connection. This is safe to be called concurrently with the other
+	// methods of this interface.
+	CancelCurrentQuery() error
 }
 
 // Rows describes a result set.

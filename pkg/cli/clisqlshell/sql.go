@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -1569,9 +1570,37 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	return nextState
 }
 
+func (c *cliState) handleCancellations(ctx context.Context) {
+	for {
+		select {
+		case <-c.iCtx.interruptCh:
+			// After the user pressed Ctrl+C once, accept additional
+			// Ctrl+C as an instruction to stop the shell.
+			// This way, if query cancellation hangs, or doesn't
+			// do anything, the user can still stop their session.
+			//
+			// The signal handling will be restored on the next
+			//  call to doRunStatements.
+			signal.Stop(c.iCtx.interruptCh)
+			fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query, press ^C again to stop the shell...\n")
+			if err := c.conn.CancelCurrentQuery(); err != nil {
+				fmt.Fprintf(c.iCtx.stderr, "\nwarning: could not cancel query: %v\n", err)
+			}
+
+		case <-ctx.Done():
+			// Shell terminating.
+			return
+		}
+	}
+}
+
 // doRunStatements runs all the statements that have been accumulated by
 // concatLines.
 func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
+	// Set up a Ctrl+C handler for the duration of the query execution.
+	signal.Notify(c.iCtx.interruptCh, os.Interrupt)
+	defer signal.Stop(c.iCtx.interruptCh)
+
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
 	c.lastKnownTxnStatus = " ?"
@@ -1678,6 +1707,7 @@ func NewShell(
 		sqlCtx:     sqlCtx,
 		iCtx: &internalContext{
 			customPromptPattern: defaultPromptPattern,
+			interruptCh:         make(chan os.Signal, 1),
 		},
 		conn:       conn,
 		includeDir: ".",
@@ -1686,6 +1716,10 @@ func NewShell(
 
 // RunInteractive implements the Shell interface.
 func (c *cliState) RunInteractive(cmdIn, cmdOut, cmdErr *os.File) (exitErr error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.handleCancellations(ctx)
+
 	return c.doRunShell(cliStart, cmdIn, cmdOut, cmdErr)
 }
 

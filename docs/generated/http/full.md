@@ -2035,6 +2035,54 @@ Response returned by target query's gateway node.
 
 
 
+## CancelQueryByKey
+
+`POST /_status/cancel_query_by_key`
+
+CancelQueryByKey cancels the current SQL query for a given session ID
+and cancellation key.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| session_id | [string](#cockroach.server.serverpb.CancelQueryByKeyRequest-string) |  |  | [reserved](#support-status) |
+| cancel_request | [string](#cockroach.server.serverpb.CancelQueryByKeyRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| canceled | [bool](#cockroach.server.serverpb.CancelQueryByKeyResponse-bool) |  |  | [reserved](#support-status) |
+| retry | [bool](#cockroach.server.serverpb.CancelQueryByKeyResponse-bool) |  |  | [reserved](#support-status) |
+| client_message | [string](#cockroach.server.serverpb.CancelQueryByKeyResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## CancelLocalQuery
 
 `POST /_status/cancel_local_query`

@@ -290,6 +290,37 @@ func (t *tenantStatusServer) CancelSession(
 	return &response, nil
 }
 
+func (t *tenantStatusServer) CancelQueryByKey(
+	ctx context.Context, request *serverpb.CancelQueryByKeyRequest,
+) (*serverpb.CancelQueryByKeyResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	sessionID, err := sql.StringToClusterWideID(request.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	instanceID := base.SQLInstanceID(sessionID.GetNodeID())
+	if instanceID != t.sqlServer.SQLInstanceID() {
+		// Need to forward to another pod.
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		statusClient, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.CancelQueryByKey(ctx, request)
+	}
+
+	return t.sessionRegistry.CancelQueryByKey(ctx, sessionID, request)
+}
+
 func (t *tenantStatusServer) CancelLocalSession(
 	ctx context.Context, request *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
