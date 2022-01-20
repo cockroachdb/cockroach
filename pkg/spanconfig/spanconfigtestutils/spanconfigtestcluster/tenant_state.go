@@ -15,7 +15,9 @@ import (
 	gosql "database/sql"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,6 +49,22 @@ type Tenant struct {
 		syncutil.Mutex
 		lastCheckpoint, tsAfterLastExec hlc.Timestamp
 	}
+}
+
+// ExecCfg returns a handle to the tenant's ExecutorConfig.
+func (s *Tenant) ExecCfg() sql.ExecutorConfig {
+	return s.ExecutorConfig().(sql.ExecutorConfig)
+}
+
+// ProtectedTimestampProvider returns a handle to the tenant's protected
+// timestamp provider.
+func (s *Tenant) ProtectedTimestampProvider() protectedts.Provider {
+	return s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+}
+
+// JobsRegistry returns a handle to the tenant's job registry.
+func (s *Tenant) JobsRegistry() *jobs.Registry {
+	return s.JobRegistry().(*jobs.Registry)
 }
 
 // Exec is a wrapper around gosql.Exec that kills the test on error. It records
