@@ -430,11 +430,11 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	skip.UnderRace(t)
 
 	runTest := func(t *testing.T, replicaType roachpb.ReplicaType) {
-		var rejectSnapshots int64
+		var rejectSnapshotErr atomic.Value // error
 		knobs, ltk := makeReplicationTestKnobs()
 		ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
-			if atomic.LoadInt64(&rejectSnapshots) > 0 {
-				return errors.New(`nope`)
+			if err := rejectSnapshotErr.Load().(error); err != nil {
+				return err
 			}
 			return nil
 		}
@@ -446,7 +446,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		scratchStartKey := tc.ScratchRange(t)
-		atomic.StoreInt64(&rejectSnapshots, 1)
+		rejectSnapshotErr.Store(errors.New("boom"))
 		var err error
 		switch replicaType {
 		case roachpb.LEARNER:
