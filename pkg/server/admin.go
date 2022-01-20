@@ -1783,8 +1783,11 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return status.Errorf(codes.Unavailable, "node is shutting down")
 	}
 
-	if !s.server.sqlServer.acceptingClients.Get() {
-		return status.Errorf(codes.Unavailable, "node is not accepting SQL clients")
+	if !s.server.sqlServer.isHealthcheckReady.Get() {
+		return status.Errorf(
+			codes.Unavailable,
+			"node is not accepting SQL clients (health check endpoint returns shutting down status)",
+		)
 	}
 
 	return nil
