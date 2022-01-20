@@ -21,3 +21,25 @@ go_library(
         "//pkg/sql/sqlutil",
     ],
 )
+
+go_library(
+    name = "descmetadata",
+    srcs = [
+        "metadata_updater.go",
+        "metadata_updater_factory.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/descmetadata",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlutil",
+    ],
+)

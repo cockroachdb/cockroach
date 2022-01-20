@@ -52,7 +52,9 @@ func (mr *MockCatalogMockRecorder) AddSyntheticDescriptor(arg0 interface{}) *gom
 }
 
 // GetFullyQualifiedName mocks base method.
-func (m *MockCatalog) GetFullyQualifiedName(arg0 context.Context, arg1 catid.DescID) (string, error) {
+func (m *MockCatalog) GetFullyQualifiedName(
+	arg0 context.Context, arg1 catid.DescID,
+) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFullyQualifiedName", arg0, arg1)
 	ret0, _ := ret[0].(string)
@@ -67,7 +69,9 @@ func (mr *MockCatalogMockRecorder) GetFullyQualifiedName(arg0, arg1 interface{})
 }
 
 // MustReadImmutableDescriptor mocks base method.
-func (m *MockCatalog) MustReadImmutableDescriptor(arg0 context.Context, arg1 catid.DescID) (catalog.Descriptor, error) {
+func (m *MockCatalog) MustReadImmutableDescriptor(
+	arg0 context.Context, arg1 catid.DescID,
+) (catalog.Descriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MustReadImmutableDescriptor", arg0, arg1)
 	ret0, _ := ret[0].(catalog.Descriptor)
@@ -76,13 +80,17 @@ func (m *MockCatalog) MustReadImmutableDescriptor(arg0 context.Context, arg1 cat
 }
 
 // MustReadImmutableDescriptor indicates an expected call of MustReadImmutableDescriptor.
-func (mr *MockCatalogMockRecorder) MustReadImmutableDescriptor(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockCatalogMockRecorder) MustReadImmutableDescriptor(
+	arg0, arg1 interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MustReadImmutableDescriptor", reflect.TypeOf((*MockCatalog)(nil).MustReadImmutableDescriptor), arg0, arg1)
 }
 
 // MustReadMutableDescriptor mocks base method.
-func (m *MockCatalog) MustReadMutableDescriptor(arg0 context.Context, arg1 catid.DescID) (catalog.MutableDescriptor, error) {
+func (m *MockCatalog) MustReadMutableDescriptor(
+	arg0 context.Context, arg1 catid.DescID,
+) (catalog.MutableDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MustReadMutableDescriptor", arg0, arg1)
 	ret0, _ := ret[0].(catalog.MutableDescriptor)
@@ -173,18 +181,20 @@ func (mr *MockDependenciesMockRecorder) Catalog() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Catalog", reflect.TypeOf((*MockDependencies)(nil).Catalog))
 }
 
-// CommentUpdater mocks base method.
-func (m *MockDependencies) CommentUpdater(arg0 context.Context) scexec.CommentUpdater {
+// DescriptorMetadataUpdater mocks base method.
+func (m *MockDependencies) DescriptorMetadataUpdater(
+	arg0 context.Context,
+) scexec.DescriptorMetadataUpdater {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CommentUpdater", arg0)
-	ret0, _ := ret[0].(scexec.CommentUpdater)
+	ret := m.ctrl.Call(m, "DescriptorMetadataUpdater", arg0)
+	ret0, _ := ret[0].(scexec.DescriptorMetadataUpdater)
 	return ret0
 }
 
-// CommentUpdater indicates an expected call of CommentUpdater.
+// DescriptorMetadataUpdater indicates an expected call of DescriptorMetadataUpdater.
 func (mr *MockDependenciesMockRecorder) CommentUpdater(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommentUpdater", reflect.TypeOf((*MockDependencies)(nil).CommentUpdater), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescriptorMetadataUpdater", reflect.TypeOf((*MockDependencies)(nil).DescriptorMetadataUpdater), arg0)
 }
 
 // EventLogger mocks base method.
@@ -337,7 +347,12 @@ func (m *MockBackfiller) EXPECT() *MockBackfillerMockRecorder {
 }
 
 // BackfillIndex mocks base method.
-func (m *MockBackfiller) BackfillIndex(arg0 context.Context, arg1 scexec.BackfillProgress, arg2 scexec.BackfillProgressWriter, arg3 catalog.TableDescriptor) error {
+func (m *MockBackfiller) BackfillIndex(
+	arg0 context.Context,
+	arg1 scexec.BackfillProgress,
+	arg2 scexec.BackfillProgressWriter,
+	arg3 catalog.TableDescriptor,
+) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BackfillIndex", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -345,13 +360,17 @@ func (m *MockBackfiller) BackfillIndex(arg0 context.Context, arg1 scexec.Backfil
 }
 
 // BackfillIndex indicates an expected call of BackfillIndex.
-func (mr *MockBackfillerMockRecorder) BackfillIndex(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockBackfillerMockRecorder) BackfillIndex(
+	arg0, arg1, arg2, arg3 interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackfillIndex", reflect.TypeOf((*MockBackfiller)(nil).BackfillIndex), arg0, arg1, arg2, arg3)
 }
 
 // MaybePrepareDestIndexesForBackfill mocks base method.
-func (m *MockBackfiller) MaybePrepareDestIndexesForBackfill(arg0 context.Context, arg1 scexec.BackfillProgress, arg2 catalog.TableDescriptor) (scexec.BackfillProgress, error) {
+func (m *MockBackfiller) MaybePrepareDestIndexesForBackfill(
+	arg0 context.Context, arg1 scexec.BackfillProgress, arg2 catalog.TableDescriptor,
+) (scexec.BackfillProgress, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MaybePrepareDestIndexesForBackfill", arg0, arg1, arg2)
 	ret0, _ := ret[0].(scexec.BackfillProgress)
@@ -360,7 +379,9 @@ func (m *MockBackfiller) MaybePrepareDestIndexesForBackfill(arg0 context.Context
 }
 
 // MaybePrepareDestIndexesForBackfill indicates an expected call of MaybePrepareDestIndexesForBackfill.
-func (mr *MockBackfillerMockRecorder) MaybePrepareDestIndexesForBackfill(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockBackfillerMockRecorder) MaybePrepareDestIndexesForBackfill(
+	arg0, arg1, arg2 interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybePrepareDestIndexesForBackfill", reflect.TypeOf((*MockBackfiller)(nil).MaybePrepareDestIndexesForBackfill), arg0, arg1, arg2)
 }
@@ -417,7 +438,9 @@ func (mr *MockBackfillTrackerMockRecorder) FlushFractionCompleted(arg0 interface
 }
 
 // GetBackfillProgress mocks base method.
-func (m *MockBackfillTracker) GetBackfillProgress(arg0 context.Context, arg1 scexec.Backfill) (scexec.BackfillProgress, error) {
+func (m *MockBackfillTracker) GetBackfillProgress(
+	arg0 context.Context, arg1 scexec.Backfill,
+) (scexec.BackfillProgress, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBackfillProgress", arg0, arg1)
 	ret0, _ := ret[0].(scexec.BackfillProgress)
@@ -426,13 +449,17 @@ func (m *MockBackfillTracker) GetBackfillProgress(arg0 context.Context, arg1 sce
 }
 
 // GetBackfillProgress indicates an expected call of GetBackfillProgress.
-func (mr *MockBackfillTrackerMockRecorder) GetBackfillProgress(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockBackfillTrackerMockRecorder) GetBackfillProgress(
+	arg0, arg1 interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBackfillProgress", reflect.TypeOf((*MockBackfillTracker)(nil).GetBackfillProgress), arg0, arg1)
 }
 
 // SetBackfillProgress mocks base method.
-func (m *MockBackfillTracker) SetBackfillProgress(arg0 context.Context, arg1 scexec.BackfillProgress) error {
+func (m *MockBackfillTracker) SetBackfillProgress(
+	arg0 context.Context, arg1 scexec.BackfillProgress,
+) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetBackfillProgress", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -440,7 +467,9 @@ func (m *MockBackfillTracker) SetBackfillProgress(arg0 context.Context, arg1 sce
 }
 
 // SetBackfillProgress indicates an expected call of SetBackfillProgress.
-func (mr *MockBackfillTrackerMockRecorder) SetBackfillProgress(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockBackfillTrackerMockRecorder) SetBackfillProgress(
+	arg0, arg1 interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBackfillProgress", reflect.TypeOf((*MockBackfillTracker)(nil).SetBackfillProgress), arg0, arg1)
 }
@@ -469,7 +498,9 @@ func (m *MockIndexSpanSplitter) EXPECT() *MockIndexSpanSplitterMockRecorder {
 }
 
 // MaybeSplitIndexSpans mocks base method.
-func (m *MockIndexSpanSplitter) MaybeSplitIndexSpans(arg0 context.Context, arg1 catalog.TableDescriptor, arg2 catalog.Index) error {
+func (m *MockIndexSpanSplitter) MaybeSplitIndexSpans(
+	arg0 context.Context, arg1 catalog.TableDescriptor, arg2 catalog.Index,
+) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MaybeSplitIndexSpans", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -477,7 +508,9 @@ func (m *MockIndexSpanSplitter) MaybeSplitIndexSpans(arg0 context.Context, arg1 
 }
 
 // MaybeSplitIndexSpans indicates an expected call of MaybeSplitIndexSpans.
-func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpans(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpans(
+	arg0, arg1, arg2 interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpans", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpans), arg0, arg1, arg2)
 }
@@ -506,7 +539,9 @@ func (m *MockPeriodicProgressFlusher) EXPECT() *MockPeriodicProgressFlusherMockR
 }
 
 // StartPeriodicUpdates mocks base method.
-func (m *MockPeriodicProgressFlusher) StartPeriodicUpdates(arg0 context.Context, arg1 scexec.BackfillProgressFlusher) func() error {
+func (m *MockPeriodicProgressFlusher) StartPeriodicUpdates(
+	arg0 context.Context, arg1 scexec.BackfillProgressFlusher,
+) func() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartPeriodicUpdates", arg0, arg1)
 	ret0, _ := ret[0].(func() error)
@@ -514,7 +549,9 @@ func (m *MockPeriodicProgressFlusher) StartPeriodicUpdates(arg0 context.Context,
 }
 
 // StartPeriodicUpdates indicates an expected call of StartPeriodicUpdates.
-func (mr *MockPeriodicProgressFlusherMockRecorder) StartPeriodicUpdates(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockPeriodicProgressFlusherMockRecorder) StartPeriodicUpdates(
+	arg0, arg1 interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartPeriodicUpdates", reflect.TypeOf((*MockPeriodicProgressFlusher)(nil).StartPeriodicUpdates), arg0, arg1)
 }
