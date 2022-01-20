@@ -58,6 +58,7 @@ type metadataUpdater struct {
 	ie                sqlutil.InternalExecutor
 	oidBuilder        ConstraintOidBuilder
 	collectionFactory *descs.CollectionFactory
+	cacheEnabled      bool
 }
 
 // UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
@@ -184,7 +185,7 @@ func (mu metadataUpdater) DeleteConstraintComment(
 func (mu metadataUpdater) DeleteDatabaseRoleSettings(
 	ctx context.Context, database catalog.DatabaseDescriptor,
 ) error {
-	_, err := mu.ie.ExecEx(context.Background(),
+	rowsDeleted, err := mu.ie.ExecEx(ctx,
 		"delete-db-role-setting",
 		mu.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -196,6 +197,11 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(
 	)
 	if err != nil {
 		return err
+	}
+	// If system table updates should be minimized, avoid bumping up the version
+	// number of the table below.
+	if mu.cacheEnabled || rowsDeleted == 0 {
+		return nil
 	}
 	// Bump the table version for the role settings table when we modify it.
 	return mu.collectionFactory.Txn(ctx,

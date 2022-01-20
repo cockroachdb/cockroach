@@ -14,9 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
@@ -29,6 +32,7 @@ type MetadataUpdaterFactory struct {
 	ieFactory                sqlutil.SessionBoundInternalExecutorFactory
 	makeConstraintOidBuilder MakeConstraintOidBuilderFn
 	collectionFactory        *descs.CollectionFactory
+	settings                 *settings.Values
 }
 
 // NewMetadataUpdaterFactory creates a new comment updater factory.
@@ -36,24 +40,33 @@ func NewMetadataUpdaterFactory(
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 	makeConstraintOidBuilder MakeConstraintOidBuilderFn,
 	collectionFactory *descs.CollectionFactory,
+	settings *settings.Values,
 ) scexec.DescriptorMetadataUpdaterFactory {
 	return MetadataUpdaterFactory{
 		ieFactory:                ieFactory,
 		makeConstraintOidBuilder: makeConstraintOidBuilder,
 		collectionFactory:        collectionFactory,
+		settings:                 settings,
 	}
 }
 
 // NewMetadataUpdater creates a new comment updater, which can be used to
 // create / destroy metadata (i.e. comments) associated with different
 // schema objects.
-func (cf MetadataUpdaterFactory) NewMetadataUpdater(
+func (mf MetadataUpdaterFactory) NewMetadataUpdater(
 	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
 ) scexec.DescriptorMetadataUpdater {
+	// Unfortunately, we can't use the session data unmodified, previously the
+	// code modifying this metadata would use a circular executor that would ignore
+	// any settings set later on. We will intentionally, unset problematic settings
+	// here.
+	modifiedSessionData := sessionData.Clone()
+	modifiedSessionData.ExperimentalDistSQLPlanningMode = sessiondatapb.ExperimentalDistSQLPlanningOn
 	return metadataUpdater{
 		txn:               txn,
-		ie:                cf.ieFactory(ctx, sessionData),
-		oidBuilder:        cf.makeConstraintOidBuilder(),
-		collectionFactory: cf.collectionFactory,
+		ie:                mf.ieFactory(ctx, modifiedSessionData),
+		oidBuilder:        mf.makeConstraintOidBuilder(),
+		collectionFactory: mf.collectionFactory,
+		cacheEnabled:      sessioninit.CacheEnabled.Get(mf.settings),
 	}
 }

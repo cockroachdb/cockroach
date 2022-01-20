@@ -818,6 +818,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ieFactory,
 		sql.MakeConstraintOidBuilder,
 		collectionFactory,
+		&execCfg.Settings.SV,
 	)
 	execCfg.InternalExecutorFactory = ieFactory
 
