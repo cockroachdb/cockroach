@@ -64,9 +64,7 @@ func TestProtectedTimestampStateReader(t *testing.T) {
 	protectTenants(state, ts(5), []roachpb.TenantID{roachpb.MakeTenantID(2)})
 	protectTenants(state, ts(6), []roachpb.TenantID{roachpb.MakeTenantID(2)})
 
-	ptsStateReader, err := newProtectedTimestampStateReader(context.Background(), *state)
-	require.NoError(t, err)
-
+	ptsStateReader := newProtectedTimestampStateReader(context.Background(), *state)
 	clusterTimestamps := ptsStateReader.GetProtectedTimestampsForCluster()
 	require.Len(t, clusterTimestamps, 1)
 	require.Equal(t, []hlc.Timestamp{ts(3)}, clusterTimestamps)

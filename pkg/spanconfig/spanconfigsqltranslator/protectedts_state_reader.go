@@ -33,16 +33,14 @@ type protectedTimestampStateReader struct {
 // the transactional state of the `system.protected_ts_records` table.
 func newProtectedTimestampStateReader(
 	_ context.Context, ptsState ptpb.State,
-) (*protectedTimestampStateReader, error) {
+) *protectedTimestampStateReader {
 	reader := &protectedTimestampStateReader{
 		schemaObjectProtections: make(map[descpb.ID][]hlc.Timestamp),
 		tenantProtections:       make([]tenantProtectedTimestamps, 0),
 		clusterProtections:      make([]hlc.Timestamp, 0),
 	}
-	if err := reader.loadProtectedTimestampRecords(ptsState); err != nil {
-		return nil, err
-	}
-	return reader, nil
+	reader.loadProtectedTimestampRecords(ptsState)
+	return reader
 }
 
 // GetProtectedTimestampsForCluster returns all the protected timestamps that
@@ -73,7 +71,7 @@ func (p *protectedTimestampStateReader) GetProtectedTimestampsForSchemaObject(
 	return p.schemaObjectProtections[descID]
 }
 
-func (p *protectedTimestampStateReader) loadProtectedTimestampRecords(ptsState ptpb.State) error {
+func (p *protectedTimestampStateReader) loadProtectedTimestampRecords(ptsState ptpb.State) {
 	tenantProtections := make(map[roachpb.TenantID][]hlc.Timestamp)
 	for _, record := range ptsState.Records {
 		switch t := record.Target.GetUnion().(type) {
@@ -94,5 +92,4 @@ func (p *protectedTimestampStateReader) loadProtectedTimestampRecords(ptsState p
 		p.tenantProtections = append(p.tenantProtections,
 			tenantProtectedTimestamps{tenantID: tenID, protections: tenantProtections})
 	}
-	return nil
 }

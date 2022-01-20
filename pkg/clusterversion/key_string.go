@@ -26,18 +26,19 @@ func _() {
 	_ = x[PreSeedTenantSpanConfigs-15]
 	_ = x[SeedTenantSpanConfigs-16]
 	_ = x[PublicSchemasWithDescriptors-17]
-	_ = x[AlterSystemProtectedTimestampAddColumn-18]
-	_ = x[EnsureSpanConfigReconciliation-19]
-	_ = x[EnsureSpanConfigSubscription-20]
-	_ = x[EnableSpanConfigStore-21]
-	_ = x[ScanWholeRows-22]
-	_ = x[SCRAMAuthentication-23]
-	_ = x[UnsafeLossOfQuorumRecoveryRangeLog-24]
+	_ = x[EnsureSpanConfigReconciliation-18]
+	_ = x[EnsureSpanConfigSubscription-19]
+	_ = x[EnableSpanConfigStore-20]
+	_ = x[ScanWholeRows-21]
+	_ = x[SCRAMAuthentication-22]
+	_ = x[UnsafeLossOfQuorumRecoveryRangeLog-23]
+	_ = x[AlterSystemProtectedTimestampAddColumn-24]
+	_ = x[EnableProtectedTimestampsForTenant-25]
 }
 
-const _Key_name = "V21_2Start22_1TargetBytesAvoidExcessAvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptorsAlterSystemProtectedTimestampAddColumnEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreScanWholeRowsSCRAMAuthenticationUnsafeLossOfQuorumRecoveryRangeLog"
+const _Key_name = "V21_2Start22_1TargetBytesAvoidExcessAvoidDrainingNamesDrainingNamesMigrationTraceIDDoesntImplyStructuredRecordingAlterSystemTableStatisticsAddAvgSizeColAlterSystemStmtDiagReqsMVCCAddSSTableInsertPublicSchemaNamespaceEntryOnRestoreUnsplitRangesInAsyncGCJobsValidateGrantOptionPebbleFormatBlockPropertyCollectorProbeRequestSelectRPCsTakeTracingInfoInbandPreSeedTenantSpanConfigsSeedTenantSpanConfigsPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreScanWholeRowsSCRAMAuthenticationUnsafeLossOfQuorumRecoveryRangeLogAlterSystemProtectedTimestampAddColumnEnableProtectedTimestampsForTenant"
 
-var _Key_index = [...]uint16{0, 5, 14, 36, 54, 76, 113, 152, 175, 189, 230, 256, 275, 309, 321, 352, 376, 397, 425, 463, 493, 521, 542, 555, 574, 608}
+var _Key_index = [...]uint16{0, 5, 14, 36, 54, 76, 113, 152, 175, 189, 230, 256, 275, 309, 321, 352, 376, 397, 425, 455, 483, 504, 517, 536, 570, 608, 642}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {

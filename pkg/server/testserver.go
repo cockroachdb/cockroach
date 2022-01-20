@@ -28,6 +28,7 @@ import (
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -500,12 +501,18 @@ func (ts *TestServer) Start(ctx context.Context) error {
 	return ts.Server.Start(ctx)
 }
 
-type dummyProtectedTSProvider struct {
+type tenantProtectedTSProvider struct {
 	protectedts.Provider
+	st *cluster.Settings
 }
 
-func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record) error {
-	return errors.New("fake protectedts.Provider")
+func (d tenantProtectedTSProvider) Protect(
+	ctx context.Context, txn *kv.Txn, rec *ptpb.Record,
+) error {
+	if d.st.Version.IsActive(ctx, clusterversion.EnableProtectedTimestampsForTenant) {
+		return d.Provider.Protect(ctx, txn, rec)
+	}
+	return errors.New("tenant cannot Protect timestamp until the clusterversion has been finalized")
 }
 
 // TestTenant is an in-memory instantiation of the SQL-only process created for
