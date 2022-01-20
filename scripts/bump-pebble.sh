@@ -22,6 +22,9 @@
 
 set -euo pipefail
 
+_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+_root_dir="$_dir"/..
+
 echoerr() { printf "%s\n" "$*" >&2; }
 pushd() { builtin pushd "$@" > /dev/null; }
 popd() { builtin popd "$@" > /dev/null; }
@@ -109,6 +112,9 @@ git commit -m "bump Pebble to ${NEW_SHA:0:12}
 $COMMITS"
 git push -u --force origin "$VENDORED_BRANCH"
 popd
+
+# Mirror the dependency changes to cloud storage.
+"$_root_dir/dev" generate bazel --mirror
 
 # Create the branch and commit on the CockroachDB repository.
 pushd "$COCKROACH_DIR"
