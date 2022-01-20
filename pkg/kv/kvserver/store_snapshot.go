@@ -695,8 +695,9 @@ func (s *Store) receiveSnapshot(
 
 func sendSnapshotError(stream incomingSnapshotStream, err error) error {
 	return stream.Send(&SnapshotResponse{
-		Status:  SnapshotResponse_ERROR,
-		Message: err.Error(),
+		Status:       SnapshotResponse_ERROR,
+		Message:      err.Error(),
+		EncodedError: errors.EncodeError(context.Background(), err),
 	})
 }
 
@@ -1041,9 +1042,12 @@ func sendSnapshot(
 	}
 	switch resp.Status {
 	case SnapshotResponse_ERROR:
-		storePool.throttle(throttleFailed, resp.Message, to.StoreID)
-		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
-			to, snap, resp.Message)
+		err := errors.Errorf("%s", resp.Message)
+		if resp.EncodedError.Error != nil {
+			err = errors.DecodeError(ctx, resp.EncodedError)
+		}
+		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
+		return errors.Wrapf(err, "%s: remote couldn't accept %s", to, snap)
 	case SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
 	default:

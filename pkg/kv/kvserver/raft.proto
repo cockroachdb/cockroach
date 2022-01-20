@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.kv.kvserver;
 option go_package = "kvserver";
 
+import "errorspb/errors.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
@@ -210,8 +211,18 @@ message SnapshotResponse {
     reserved 4;
   }
   Status status = 1;
+  // Message is a message explaining an ERROR return value. It is not set for any
+  // other status.
+  //
+  // DEPRECATED: this field can be removed in 22.2. As of 22.1, the encoded_error
+  // field is always used instead. (22.1 itself needs to populate both due to
+  // needing to be wire-compatible with 21.2).
   string message = 2;
   reserved 3;
+  // encoded_error encodes the error when the status is ERROR.
+  //
+  // MIGRATION: only guaranteed to be set when the message field is no longer there.
+  errorspb.EncodedError encoded_error = 4 [(gogoproto.nullable) = false];
 }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
