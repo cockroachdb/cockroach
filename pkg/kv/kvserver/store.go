@@ -1950,9 +1950,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.onSpanConfigUpdate(ctx, update)
 		})
 
-		// When toggling between the system config span and the span configs
-		// infrastructure, we want to re-apply configs on all replicas from
-		// whatever the new source is.
+		// When toggling between the system config span and the span
+		// configs infrastructure, we want to re-apply configs on all
+		// replicas from whatever the new source is.
 		spanconfigstore.EnabledSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
 			enabled := spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV)
 			if enabled {
@@ -2281,6 +2281,10 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
 func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
+	if !s.cfg.SpanConfigsDisabled && spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
+		return // nothing to do
+	}
+
 	ctx := s.AnnotateCtx(context.Background())
 	s.computeInitialMetrics.Do(func() {
 		// Metrics depend in part on the system config. Compute them as soon as we
