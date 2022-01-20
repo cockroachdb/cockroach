@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -451,6 +452,7 @@ func makeTenantSQLServerArgs(
 	var protectedTSProvider protectedts.Provider
 	{
 		protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
+		fmt.Printf("these are the knobs %+v\n\n", protectedtsKnobs)
 		pp, err := ptprovider.New(ptprovider.Config{
 			DB:               db,
 			InternalExecutor: circularInternalExecutor,
@@ -460,7 +462,7 @@ func makeTenantSQLServerArgs(
 		if err != nil {
 			panic(err)
 		}
-		protectedTSProvider = dummyProtectedTSProvider{pp}
+		protectedTSProvider = tenantProtectedTSProvider{Provider: pp, st: st}
 	}
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)

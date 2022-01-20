@@ -13,6 +13,7 @@ go_test(
         "//pkg/ccl/utilccl",
         "//pkg/gossip",
         "//pkg/jobs",
+        "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
