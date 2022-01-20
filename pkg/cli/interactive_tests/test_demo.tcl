@@ -8,9 +8,25 @@ spawn $argv demo --insecure=true
 eexpect "Welcome"
 # Warn the user that they won't get persistence.
 eexpect "your changes to data stored in the demo session will not be saved!"
-# Inform the necessary URL.
+
+# Verify the URLs for both shared and tenant server.
+eexpect "system tenant"
 eexpect "(webui)"
-eexpect "http:"
+eexpect "http://"
+eexpect ":8081"
+eexpect "(sql)"
+eexpect "root"
+eexpect ":26258/defaultdb"
+eexpect "sslmode=disable"
+eexpect "(sql/unix)"
+eexpect "root:unused@/defaultdb"
+eexpect "=26258"
+eexpect "tenant 1"
+eexpect "(sql)"
+eexpect "root"
+eexpect ":26257/movr"
+eexpect "sslmode=disable"
+
 # Ensure same messages as cockroach sql.
 eexpect "Server version"
 eexpect "Cluster ID"
