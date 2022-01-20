@@ -18,6 +18,7 @@ import (
 	"io"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -135,6 +136,51 @@ func MungeTestXML(srcContent []byte, outFile io.Writer) error {
 	}
 	// We only want the first test suite in the list of suites.
 	return writeToFile(&suites.Suites[0], outFile)
+}
+
+// MergeTestXMLs merges the given list of test suites into a single test suite,
+// then writes the serialized XML to the given outFile. The prefix is passed
+// to xml.Unmarshal. Note that this function might modify the passed-in
+// TestSuites in-place.
+func MergeTestXMLs(suitesToMerge []TestSuites, outFile io.Writer) error {
+	if len(suitesToMerge) == 0 {
+		return fmt.Errorf("expected at least one test suite")
+	}
+	var resultSuites TestSuites
+	resultSuites.Suites = append(resultSuites.Suites, testSuite{})
+	resultSuite := &resultSuites.Suites[0]
+	resultSuite.Attrs = suitesToMerge[0].Suites[0].Attrs
+	cases := make(map[string]*testCase)
+	for _, suites := range suitesToMerge {
+		for _, testCase := range suites.Suites[0].TestCases {
+			oldCase, ok := cases[testCase.Name]
+			if !ok {
+				cases[testCase.Name] = testCase
+				continue
+			}
+			if testCase.Failure != nil {
+				if oldCase.Failure == nil {
+					oldCase.Failure = testCase.Failure
+				} else {
+					oldCase.Failure.Contents = oldCase.Failure.Contents + "\n" + testCase.Failure.Contents
+				}
+			}
+			if testCase.Error != nil {
+				if oldCase.Error == nil {
+					oldCase.Error = testCase.Error
+				} else {
+					oldCase.Error.Contents = oldCase.Error.Contents + "\n" + testCase.Error.Contents
+				}
+			}
+		}
+	}
+	for _, testCase := range cases {
+		resultSuite.TestCases = append(resultSuite.TestCases, testCase)
+	}
+	sort.Slice(resultSuite.TestCases, func(i, j int) bool {
+		return resultSuite.TestCases[i].Name < resultSuite.TestCases[j].Name
+	})
+	return writeToFile(&resultSuites, outFile)
 }
 
 func writeToFile(suite interface{}, outFile io.Writer) error {
