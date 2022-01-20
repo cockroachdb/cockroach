@@ -90,13 +90,13 @@ JDBC:   jdbc:postgresql://somehost:26257/somedb?application_name=myapp&password=
 
 insecure
 ----
-pq URL: postgresql://root@/?sslmode=disable
-DSN:    user=root sslmode=disable
-JDBC:   jdbc:postgresql:///?sslmode=disable&user=root
+pq URL: postgresql:///?sslmode=disable
+DSN:    sslmode=disable
+JDBC:   jdbc:postgresql:///?sslmode=disable
 --defaults filled--
-pq URL: postgresql://root@defaulthost:26257/defaultdb?sslmode=disable
-DSN:    database=defaultdb user=root host=defaulthost port=26257 sslmode=disable
-JDBC:   jdbc:postgresql://defaulthost:26257/defaultdb?sslmode=disable&user=root
+pq URL: postgresql://defaultuser@defaulthost:26257/defaultdb?sslmode=disable
+DSN:    database=defaultdb user=defaultuser host=defaulthost port=26257 sslmode=disable
+JDBC:   jdbc:postgresql://defaulthost:26257/defaultdb?sslmode=disable&user=defaultuser
 
 subtest redundant
 
