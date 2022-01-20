@@ -103,9 +103,6 @@ func randTablesN(r *rand.Rand, n int) string {
 		sb.WriteString(stmt.String())
 		sb.WriteString(";\n")
 	}
-
-	// TODO(mjibson): add random INSERTs.
-
 	return sb.String()
 }
 
