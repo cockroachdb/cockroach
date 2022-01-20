@@ -108,6 +108,9 @@ ORDER BY name ASC`)
 		"system.descriptor",
 		"system.namespace",
 		"system.scheduled_jobs",
+		"system.replication_constraint_stats",
+		"system.replication_critical_localities",
+		"system.replication_stats",
 		"system.settings",
 	)
 	sort.Strings(tables)
