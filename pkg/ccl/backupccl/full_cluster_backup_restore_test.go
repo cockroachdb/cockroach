@@ -303,6 +303,7 @@ CREATE TABLE data2.foo (a int);
 	})
 
 	t.Run("ensure that jobs are restored", func(t *testing.T) {
+		skip.WithIssue(t, 75216, "flaky under testrace")
 		// Ensure that the jobs in the RESTORE cluster is a superset of the jobs
 		// that were in the BACKUP cluster (before the full cluster BACKUP job was
 		// run). There may be more jobs now because the restore can run jobs of
