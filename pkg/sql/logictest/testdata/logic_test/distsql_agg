@@ -575,7 +575,7 @@ SELECT sum(a) FROM data WHERE FALSE
 ----
 NULL
 
-# Test that statistics aggregate functions.
+# Test non distributed statistics aggregate functions.
 statement ok
 CREATE TABLE statistics_agg_test (y INT, x INT)
 
@@ -606,6 +606,21 @@ query FF
 SELECT regr_avgx(y, x), regr_avgy(y, x) FROM statistics_agg_test
 ----
 4.5 50.5
+
+# Test distributed statistics aggregate functions.
+# Split statistics_agg_test in ten parts.
+statement ok
+ALTER TABLE statistics_agg_test SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE statistics_agg_test EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+query F
+SELECT covar_pop(y, x)::decimal FROM statistics_agg_test
+----
+3.75
 
 # Regression test for #37211 (incorrect ordering between aggregator stages).
 statement ok
