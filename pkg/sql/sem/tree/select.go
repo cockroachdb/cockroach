@@ -49,8 +49,8 @@ type Select struct {
 	Locking LockingClause
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Select) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Select) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(node.With)
 	ctx.FormatNode(node.Select)
 	if len(node.OrderBy) > 0 {
@@ -69,8 +69,8 @@ type ParenSelect struct {
 	Select *Select
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ParenSelect) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ParenSelect) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Select)
 	ctx.WriteByte(')')
@@ -89,8 +89,8 @@ type SelectClause struct {
 	TableSelect bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *SelectClause) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SelectClause) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtSummary) {
 		ctx.WriteString("SELECT")
@@ -140,8 +140,8 @@ func (node *SelectClause) Format(ctx *FmtCtx) {
 // SelectExprs represents SELECT expressions.
 type SelectExprs []SelectExpr
 
-// Format implements the NodeFormatter interface.
-func (node *SelectExprs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SelectExprs) FormatImpl(ctx *FmtCtx) {
 	for i := range *node {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -177,8 +177,8 @@ func StarSelectExpr() SelectExpr {
 	return SelectExpr{Expr: StarExpr()}
 }
 
-// Format implements the NodeFormatter interface.
-func (node *SelectExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SelectExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(node.Expr)
 	if node.As != "" {
 		ctx.WriteString(" AS ")
@@ -193,8 +193,8 @@ type AliasClause struct {
 	Cols  NameList
 }
 
-// Format implements the NodeFormatter interface.
-func (a *AliasClause) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (a *AliasClause) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(&a.Alias)
 	if len(a.Cols) != 0 {
 		// Format as "alias (col1, col2, ...)".
@@ -209,8 +209,8 @@ type AsOfClause struct {
 	Expr Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (a *AsOfClause) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (a *AsOfClause) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("AS OF SYSTEM TIME ")
 	ctx.FormatNode(a.Expr)
 }
@@ -221,8 +221,8 @@ type From struct {
 	AsOf   AsOfClause
 }
 
-// Format implements the NodeFormatter interface.
-func (node *From) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *From) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("FROM ")
 	ctx.FormatNode(&node.Tables)
 	if node.AsOf.Expr != nil {
@@ -234,8 +234,8 @@ func (node *From) Format(ctx *FmtCtx) {
 // TableExprs represents a list of table expressions.
 type TableExprs []TableExpr
 
-// Format implements the NodeFormatter interface.
-func (node *TableExprs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *TableExprs) FormatImpl(ctx *FmtCtx) {
 	prefix := ""
 	for _, n := range *node {
 		ctx.WriteString(prefix)
@@ -263,8 +263,8 @@ type StatementSource struct {
 	Statement Statement
 }
 
-// Format implements the NodeFormatter interface.
-func (node *StatementSource) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *StatementSource) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('[')
 	ctx.FormatNode(node.Statement)
 	ctx.WriteByte(']')
@@ -417,8 +417,8 @@ func (ih *IndexFlags) Check() error {
 	return nil
 }
 
-// Format implements the NodeFormatter interface.
-func (ih *IndexFlags) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (ih *IndexFlags) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('@')
 	if !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.IgnoreForeignKeys &&
 		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.zigzagForced() {
@@ -513,8 +513,8 @@ type AliasedTableExpr struct {
 	As         AliasClause
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AliasedTableExpr) FormatImpl(ctx *FmtCtx) {
 	if node.Lateral {
 		ctx.WriteString("LATERAL ")
 	}
@@ -536,8 +536,8 @@ type ParenTableExpr struct {
 	Expr TableExpr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ParenTableExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ParenTableExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Expr)
 	ctx.WriteByte(')')
@@ -577,8 +577,8 @@ const (
 	AstInverted = "INVERTED"
 )
 
-// Format implements the NodeFormatter interface.
-func (node *JoinTableExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *JoinTableExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(node.Left)
 	ctx.WriteByte(' ')
 	if _, isNatural := node.Cond.(NaturalJoinCond); isNatural {
@@ -627,8 +627,8 @@ func (*UsingJoinCond) joinCond()  {}
 // NaturalJoinCond represents a NATURAL join condition
 type NaturalJoinCond struct{}
 
-// Format implements the NodeFormatter interface.
-func (NaturalJoinCond) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (NaturalJoinCond) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("NATURAL")
 }
 
@@ -637,8 +637,8 @@ type OnJoinCond struct {
 	Expr Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *OnJoinCond) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *OnJoinCond) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ON ")
 	ctx.FormatNode(node.Expr)
 }
@@ -648,8 +648,8 @@ type UsingJoinCond struct {
 	Cols NameList
 }
 
-// Format implements the NodeFormatter interface.
-func (node *UsingJoinCond) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *UsingJoinCond) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("USING (")
 	ctx.FormatNode(&node.Cols)
 	ctx.WriteByte(')')
@@ -676,8 +676,8 @@ func NewWhere(typ string, expr Expr) *Where {
 	return &Where{Type: typ, Expr: expr}
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Where) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Where) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(node.Type)
 	ctx.WriteByte(' ')
 	ctx.FormatNode(node.Expr)
@@ -686,8 +686,8 @@ func (node *Where) Format(ctx *FmtCtx) {
 // GroupBy represents a GROUP BY clause.
 type GroupBy []Expr
 
-// Format implements the NodeFormatter interface.
-func (node *GroupBy) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *GroupBy) FormatImpl(ctx *FmtCtx) {
 	prefix := "GROUP BY "
 	for _, n := range *node {
 		ctx.WriteString(prefix)
@@ -699,8 +699,8 @@ func (node *GroupBy) Format(ctx *FmtCtx) {
 // DistinctOn represents a DISTINCT ON clause.
 type DistinctOn []Expr
 
-// Format implements the NodeFormatter interface.
-func (node *DistinctOn) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DistinctOn) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DISTINCT ON (")
 	ctx.FormatNode((*Exprs)(node))
 	ctx.WriteByte(')')
@@ -709,8 +709,8 @@ func (node *DistinctOn) Format(ctx *FmtCtx) {
 // OrderBy represents an ORDER BY clause.
 type OrderBy []*Order
 
-// Format implements the NodeFormatter interface.
-func (node *OrderBy) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *OrderBy) FormatImpl(ctx *FmtCtx) {
 	prefix := "ORDER BY "
 	for _, n := range *node {
 		ctx.WriteString(prefix)
@@ -787,8 +787,8 @@ type Order struct {
 	Index UnrestrictedName
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Order) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Order) FormatImpl(ctx *FmtCtx) {
 	if node.OrderType == OrderByColumn {
 		ctx.FormatNode(node.Expr)
 	} else {
@@ -825,8 +825,8 @@ type Limit struct {
 	LimitAll      bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Limit) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Limit) FormatImpl(ctx *FmtCtx) {
 	needSpace := false
 	if node.Count != nil {
 		ctx.WriteString("LIMIT ")
@@ -850,8 +850,8 @@ type RowsFromExpr struct {
 	Items Exprs
 }
 
-// Format implements the NodeFormatter interface.
-func (node *RowsFromExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RowsFromExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ROWS FROM (")
 	ctx.FormatNode(&node.Items)
 	ctx.WriteByte(')')
@@ -860,8 +860,8 @@ func (node *RowsFromExpr) Format(ctx *FmtCtx) {
 // Window represents a WINDOW clause.
 type Window []*WindowDef
 
-// Format implements the NodeFormatter interface.
-func (node *Window) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Window) FormatImpl(ctx *FmtCtx) {
 	prefix := "WINDOW "
 	for _, n := range *node {
 		ctx.WriteString(prefix)
@@ -881,8 +881,8 @@ type WindowDef struct {
 	Frame      *WindowFrame
 }
 
-// Format implements the NodeFormatter interface.
-func (node *WindowDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *WindowDef) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	needSpaceSeparator := false
 	if node.RefName != "" {
@@ -1104,8 +1104,8 @@ type WindowFrame struct {
 	Exclusion WindowFrameExclusion // optional frame exclusion
 }
 
-// Format implements the NodeFormatter interface.
-func (node *WindowFrameBound) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *WindowFrameBound) FormatImpl(ctx *FmtCtx) {
 	switch node.BoundType {
 	case UnboundedPreceding:
 		ctx.WriteString("UNBOUNDED PRECEDING")
@@ -1124,8 +1124,8 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (node WindowFrameExclusion) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node WindowFrameExclusion) FormatImpl(ctx *FmtCtx) {
 	if node == NoExclusion {
 		return
 	}
@@ -1156,8 +1156,8 @@ func WindowModeName(mode WindowFrameMode) string {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (node *WindowFrame) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *WindowFrame) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(WindowModeName(node.Mode))
 	ctx.WriteByte(' ')
 	if node.Bounds.EndBound != nil {
@@ -1177,8 +1177,8 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 // LockingClause represents a locking clause, like FOR UPDATE.
 type LockingClause []*LockingItem
 
-// Format implements the NodeFormatter interface.
-func (node *LockingClause) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *LockingClause) FormatImpl(ctx *FmtCtx) {
 	for _, n := range *node {
 		ctx.FormatNode(n)
 	}
@@ -1194,8 +1194,8 @@ type LockingItem struct {
 	WaitPolicy LockingWaitPolicy
 }
 
-// Format implements the NodeFormatter interface.
-func (f *LockingItem) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (f *LockingItem) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(f.Strength)
 	if len(f.Targets) > 0 {
 		ctx.WriteString(" OF ")
@@ -1236,8 +1236,8 @@ func (s LockingStrength) String() string {
 	return lockingStrengthName[s]
 }
 
-// Format implements the NodeFormatter interface.
-func (s LockingStrength) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (s LockingStrength) FormatImpl(ctx *FmtCtx) {
 	if s != ForNone {
 		ctx.WriteString(" ")
 		ctx.WriteString(s.String())
@@ -1278,8 +1278,8 @@ func (p LockingWaitPolicy) String() string {
 	return lockingWaitPolicyName[p]
 }
 
-// Format implements the NodeFormatter interface.
-func (p LockingWaitPolicy) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (p LockingWaitPolicy) FormatImpl(ctx *FmtCtx) {
 	if p != LockWaitBlock {
 		ctx.WriteString(" ")
 		ctx.WriteString(p.String())

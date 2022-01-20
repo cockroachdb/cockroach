@@ -18,8 +18,8 @@ type AlterSchema struct {
 
 var _ Statement = &AlterSchema{}
 
-// Format implements the NodeFormatter interface.
-func (node *AlterSchema) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterSchema) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER SCHEMA ")
 	ctx.FormatNode(&node.Schema)
 	ctx.FormatNode(node.Cmd)
@@ -38,8 +38,8 @@ type AlterSchemaRename struct {
 	NewName Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterSchemaRename) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterSchemaRename) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" RENAME TO ")
 	ctx.FormatNode(&node.NewName)
 }
@@ -51,8 +51,8 @@ type AlterSchemaOwner struct {
 	Owner RoleSpec
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterSchemaOwner) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterSchemaOwner) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatNode(&node.Owner)
 }

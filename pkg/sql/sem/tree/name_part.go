@@ -29,8 +29,8 @@ import (
 // `unrestricted_name` nonterminals. See UnrestrictedName for details.
 type Name string
 
-// Format implements the NodeFormatter interface.
-func (n *Name) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *Name) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtAnonymize) && !isArityIndicatorString(string(*n)) {
 		ctx.WriteByte('_')
@@ -84,8 +84,8 @@ func (n Name) Normalize() string {
 // prefer to parse unrestricted_name nonterminals into UnrestrictedNames.
 type UnrestrictedName string
 
-// Format implements the NodeFormatter interface.
-func (u *UnrestrictedName) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (u *UnrestrictedName) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
@@ -123,8 +123,8 @@ func (l NameList) ToSQLUsernames() ([]security.SQLUsername, error) {
 // A NameList is a list of identifiers.
 type NameList []Name
 
-// Format implements the NodeFormatter interface.
-func (l *NameList) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (l *NameList) FormatImpl(ctx *FmtCtx) {
 	for i := range *l {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -140,8 +140,8 @@ type ArraySubscript struct {
 	Slice bool
 }
 
-// Format implements the NodeFormatter interface.
-func (a *ArraySubscript) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (a *ArraySubscript) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('[')
 	if a.Begin != nil {
 		ctx.FormatNode(a.Begin)
@@ -180,8 +180,8 @@ type UnresolvedName struct {
 // UnresolvedName.
 type NameParts = [4]string
 
-// Format implements the NodeFormatter interface.
-func (u *UnresolvedName) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (u *UnresolvedName) FormatImpl(ctx *FmtCtx) {
 	stopAt := 1
 	if u.Star {
 		stopAt = 2

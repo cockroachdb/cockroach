@@ -147,7 +147,7 @@ func TestIndexConstraints(t *testing.T) {
 							ctx.WriteString(md.ColumnMeta(opt.ColumnID(idx + 1)).Alias)
 						}),
 					)
-					expr.Format(fmtCtx)
+					expr.FormatImpl(fmtCtx)
 					fmt.Fprintf(&buf, "Remaining filter: %s\n", fmtCtx.String())
 				}
 				return buf.String()

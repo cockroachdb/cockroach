@@ -25,8 +25,8 @@ type RenameDatabase struct {
 	NewName Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *RenameDatabase) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RenameDatabase) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" RENAME TO ")
@@ -39,8 +39,8 @@ type ReparentDatabase struct {
 	Parent Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ReparentDatabase) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ReparentDatabase) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" CONVERT TO SCHEMA WITH PARENT ")
@@ -59,8 +59,8 @@ type RenameTable struct {
 	IsSequence     bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *RenameTable) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RenameTable) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	if node.IsView {
 		if node.IsMaterialized {
@@ -87,8 +87,8 @@ type RenameIndex struct {
 	IfExists bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *RenameIndex) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RenameIndex) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER INDEX ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -107,8 +107,8 @@ type RenameColumn struct {
 	IfExists bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *RenameColumn) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RenameColumn) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER TABLE ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")

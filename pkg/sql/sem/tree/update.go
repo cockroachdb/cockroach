@@ -31,8 +31,8 @@ type Update struct {
 	Returning ReturningClause
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Update) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Update) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(node.With)
 	ctx.WriteString("UPDATE ")
 	ctx.FormatNode(node.Table)
@@ -63,8 +63,8 @@ func (node *Update) Format(ctx *FmtCtx) {
 // UpdateExprs represents a list of update expressions.
 type UpdateExprs []*UpdateExpr
 
-// Format implements the NodeFormatter interface.
-func (node *UpdateExprs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *UpdateExprs) FormatImpl(ctx *FmtCtx) {
 	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -80,8 +80,8 @@ type UpdateExpr struct {
 	Expr  Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *UpdateExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *UpdateExpr) FormatImpl(ctx *FmtCtx) {
 	open, close := "", ""
 	if node.Tuple {
 		open, close = "(", ")"

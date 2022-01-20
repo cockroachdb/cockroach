@@ -125,7 +125,7 @@ func TestImplicator(t *testing.T) {
 						ctx.WriteString(md.ColumnMeta(opt.ColumnID(idx + 1)).Alias)
 					}),
 				)
-				expr.Format(fmtCtx)
+				expr.FormatImpl(fmtCtx)
 				buf.WriteString(fmtCtx.String())
 			}
 			return buf.String()

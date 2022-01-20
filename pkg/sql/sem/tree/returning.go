@@ -26,8 +26,8 @@ var _ ReturningClause = &NoReturningClause{}
 // ReturningExprs represents RETURNING expressions.
 type ReturningExprs SelectExprs
 
-// Format implements the NodeFormatter interface.
-func (r *ReturningExprs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (r *ReturningExprs) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("RETURNING ")
 	ctx.FormatNode((*SelectExprs)(r))
 }
@@ -38,8 +38,8 @@ var ReturningNothingClause = &ReturningNothing{}
 // ReturningNothing represents RETURNING NOTHING.
 type ReturningNothing struct{}
 
-// Format implements the NodeFormatter interface.
-func (*ReturningNothing) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (*ReturningNothing) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("RETURNING NOTHING")
 }
 
@@ -50,8 +50,8 @@ var AbsentReturningClause = &NoReturningClause{}
 // NoReturningClause represents the absence of a RETURNING clause.
 type NoReturningClause struct{}
 
-// Format implements the NodeFormatter interface.
-func (*NoReturningClause) Format(_ *FmtCtx) {}
+// FormatImpl implements the NodeFormatter interface.
+func (*NoReturningClause) FormatImpl(_ *FmtCtx) {}
 
 // used by parent statements to determine their own StatementReturnType.
 func (*ReturningExprs) statementReturnType() StatementReturnType    { return Rows }

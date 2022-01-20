@@ -19,8 +19,8 @@ type CreateChangefeed struct {
 
 var _ Statement = &CreateChangefeed{}
 
-// Format implements the NodeFormatter interface.
-func (node *CreateChangefeed) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateChangefeed) FormatImpl(ctx *FmtCtx) {
 	if node.SinkURI != nil {
 		ctx.WriteString("CREATE ")
 	} else {

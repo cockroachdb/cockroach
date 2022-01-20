@@ -55,9 +55,9 @@ type AllTablesSelector struct {
 	ObjectNamePrefix
 }
 
-// Format implements the NodeFormatter interface.
-func (at *AllTablesSelector) Format(ctx *FmtCtx) {
-	at.ObjectNamePrefix.Format(ctx)
+// FormatImpl implements the NodeFormatter interface.
+func (at *AllTablesSelector) FormatImpl(ctx *FmtCtx) {
+	at.ObjectNamePrefix.FormatImpl(ctx)
 	if at.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
 	}
@@ -72,8 +72,8 @@ func (at *AllTablesSelector) NormalizeTablePattern() (TablePattern, error) { ret
 // Used by e.g. the GRANT statement.
 type TablePatterns []TablePattern
 
-// Format implements the NodeFormatter interface.
-func (tt *TablePatterns) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (tt *TablePatterns) FormatImpl(ctx *FmtCtx) {
 	for i, t := range *tt {
 		if i > 0 {
 			ctx.WriteString(", ")

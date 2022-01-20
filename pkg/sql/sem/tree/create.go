@@ -51,8 +51,8 @@ type CreateDatabase struct {
 	Placement       DataPlacement
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateDatabase) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateDatabase) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE DATABASE ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
@@ -128,8 +128,8 @@ type IndexElem struct {
 	NullsOrder NullsOrder
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IndexElem) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *IndexElem) FormatImpl(ctx *FmtCtx) {
 	if node.Expr == nil {
 		ctx.FormatNode(&node.Column)
 	} else {
@@ -179,8 +179,8 @@ func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
 type IndexElemList []IndexElem
 
 // Format pretty-prints the contained names separated by commas.
-// Format implements the NodeFormatter interface.
-func (l *IndexElemList) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (l *IndexElemList) FormatImpl(ctx *FmtCtx) {
 	for i := range *l {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -219,8 +219,8 @@ type CreateIndex struct {
 	Concurrently     bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateIndex) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateIndex) FormatImpl(ctx *FmtCtx) {
 	// Please also update indexForDisplay function in
 	// pkg/sql/catalog/catformat/index.go if there's any update to index
 	// definition components.
@@ -293,8 +293,8 @@ const (
 // EnumValue represents a single enum value.
 type EnumValue string
 
-// Format implements the NodeFormatter interface.
-func (n *EnumValue) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *EnumValue) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
@@ -306,8 +306,8 @@ func (n *EnumValue) Format(ctx *FmtCtx) {
 // EnumValueList represents a list of enum values.
 type EnumValueList []EnumValue
 
-// Format implements the NodeFormatter interface.
-func (l *EnumValueList) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (l *EnumValueList) FormatImpl(ctx *FmtCtx) {
 	for i := range *l {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -328,8 +328,8 @@ type CreateType struct {
 
 var _ Statement = &CreateType{}
 
-// Format implements the NodeFormatter interface.
-func (node *CreateType) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateType) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TYPE ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
@@ -367,8 +367,8 @@ func (*LikeTableDef) tableDef()                 {}
 // TableDefs represents a list of table definitions.
 type TableDefs []TableDef
 
-// Format implements the NodeFormatter interface.
-func (node *TableDefs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *TableDefs) FormatImpl(ctx *FmtCtx) {
 	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -674,8 +674,8 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 	return node.Family.Name != "" || node.Family.Create
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ColumnTableDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ColumnTableDef) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 
 	// ColumnTableDef node type will not be specified if it represents a CREATE
@@ -743,7 +743,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 			ctx.WriteString(" (")
 			// TODO(janexing): remove the leading and ending space of the
 			// sequence option expression.
-			genSeqOpt.Format(ctx)
+			genSeqOpt.FormatImpl(ctx)
 			ctx.WriteString(" ) ")
 		}
 	}
@@ -931,8 +931,8 @@ type IndexTableDef struct {
 	Predicate        Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IndexTableDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *IndexTableDef) FormatImpl(ctx *FmtCtx) {
 	if node.Inverted {
 		ctx.WriteString("INVERTED ")
 	}
@@ -1005,8 +1005,8 @@ func (node *UniqueConstraintTableDef) SetIfNotExists() {
 	node.IfNotExists = true
 }
 
-// Format implements the NodeFormatter interface.
-func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *UniqueConstraintTableDef) FormatImpl(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
 		if node.IfNotExists {
@@ -1075,8 +1075,8 @@ type ReferenceActions struct {
 	Update ReferenceAction
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ReferenceActions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ReferenceActions) FormatImpl(ctx *FmtCtx) {
 	if node.Delete != NoAction {
 		ctx.WriteString(" ON DELETE ")
 		ctx.WriteString(node.Delete.String())
@@ -1121,8 +1121,8 @@ type ForeignKeyConstraintTableDef struct {
 	IfNotExists bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ForeignKeyConstraintTableDef) FormatImpl(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
 		if node.IfNotExists {
@@ -1180,8 +1180,8 @@ func (node *CheckConstraintTableDef) SetIfNotExists() {
 	node.IfNotExists = true
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CheckConstraintTableDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CheckConstraintTableDef) FormatImpl(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
 		if node.IfNotExists {
@@ -1202,8 +1202,8 @@ type FamilyTableDef struct {
 	Columns NameList
 }
 
-// Format implements the NodeFormatter interface.
-func (node *FamilyTableDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *FamilyTableDef) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("FAMILY ")
 	if node.Name != "" {
 		ctx.FormatNode(&node.Name)
@@ -1220,8 +1220,8 @@ type ShardedIndexDef struct {
 	ShardBuckets Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShardedIndexDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShardedIndexDef) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" USING HASH WITH BUCKET_COUNT = ")
 	ctx.FormatNode(node.ShardBuckets)
 }
@@ -1263,8 +1263,8 @@ type PartitionByTable struct {
 	*PartitionBy
 }
 
-// Format implements the NodeFormatter interface.
-func (node *PartitionByTable) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *PartitionByTable) FormatImpl(ctx *FmtCtx) {
 	if node == nil {
 		ctx.WriteString(` PARTITION BY NOTHING`)
 		return
@@ -1300,8 +1300,8 @@ type PartitionBy struct {
 	Range []RangePartition
 }
 
-// Format implements the NodeFormatter interface.
-func (node *PartitionBy) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *PartitionBy) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(` PARTITION BY `)
 	node.formatListOrRange(ctx)
 }
@@ -1340,8 +1340,8 @@ type ListPartition struct {
 	Subpartition *PartitionBy
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ListPartition) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ListPartition) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(`PARTITION `)
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(` VALUES IN (`)
@@ -1360,8 +1360,8 @@ type RangePartition struct {
 	Subpartition *PartitionBy
 }
 
-// Format implements the NodeFormatter interface.
-func (node *RangePartition) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RangePartition) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(`PARTITION `)
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(` VALUES FROM (`)
@@ -1383,8 +1383,8 @@ type StorageParam struct {
 // StorageParams is a list of StorageParams.
 type StorageParams []StorageParam
 
-// Format implements the NodeFormatter interface.
-func (o *StorageParams) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (o *StorageParams) FormatImpl(ctx *FmtCtx) {
 	for i := range *o {
 		n := &(*o)[i]
 		if i > 0 {
@@ -1448,8 +1448,8 @@ func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
 	return false
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateTable) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateTable) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
 	switch node.Persistence {
 	case PersistenceTemporary:
@@ -1558,8 +1558,8 @@ type CreateSchema struct {
 	Schema      ObjectNamePrefix
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateSchema) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateSchema) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE SCHEMA")
 
 	if node.IfNotExists {
@@ -1585,8 +1585,8 @@ type CreateSequence struct {
 	Options     SequenceOptions
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateSequence) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateSequence) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
 
 	if node.Persistence == PersistenceTemporary {
@@ -1605,8 +1605,8 @@ func (node *CreateSequence) Format(ctx *FmtCtx) {
 // SequenceOptions represents a list of sequence options.
 type SequenceOptions []SequenceOption
 
-// Format implements the NodeFormatter interface.
-func (node *SequenceOptions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SequenceOptions) FormatImpl(ctx *FmtCtx) {
 	for i := range *node {
 		option := &(*node)[i]
 		ctx.WriteByte(' ')
@@ -1729,8 +1729,8 @@ type LikeTableOption struct {
 	Opt      LikeTableOpt
 }
 
-// Format implements the NodeFormatter interface.
-func (def *LikeTableDef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (def *LikeTableDef) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("LIKE ")
 	ctx.FormatNode(&def.Name)
 	for _, o := range def.Options {
@@ -1739,8 +1739,8 @@ func (def *LikeTableDef) Format(ctx *FmtCtx) {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (l LikeTableOption) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (l LikeTableOption) FormatImpl(ctx *FmtCtx) {
 	if l.Excluded {
 		ctx.WriteString("EXCLUDING ")
 	} else {
@@ -1865,8 +1865,8 @@ type CreateRole struct {
 	KVOptions   KVOptions
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateRole) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateRole) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE")
 	if node.IsRole {
 		ctx.WriteString(" ROLE ")
@@ -1895,8 +1895,8 @@ type CreateView struct {
 	Materialized bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateView) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateView) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
 
 	if node.Replace {
@@ -1958,8 +1958,8 @@ const (
 	RefreshDataClear
 )
 
-// Format implements the NodeFormatter interface.
-func (node *RefreshMaterializedView) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RefreshMaterializedView) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("REFRESH MATERIALIZED VIEW ")
 	if node.Concurrently {
 		ctx.WriteString("CONCURRENTLY ")
@@ -1981,8 +1981,8 @@ type CreateStats struct {
 	Options     CreateStatsOptions
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateStats) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateStats) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE STATISTICS ")
 	ctx.FormatNode(&node.Name)
 
@@ -2017,8 +2017,8 @@ func (o *CreateStatsOptions) Empty() bool {
 	return o.Throttling == 0 && o.AsOf.Expr == nil
 }
 
-// Format implements the NodeFormatter interface.
-func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (o *CreateStatsOptions) FormatImpl(ctx *FmtCtx) {
 	sep := ""
 	if o.Throttling != 0 {
 		ctx.WriteString("THROTTLING ")
@@ -2065,8 +2065,8 @@ type CreateExtension struct {
 	IfNotExists bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CreateExtension) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CreateExtension) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE EXTENSION ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")

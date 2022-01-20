@@ -81,7 +81,7 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []
 	if !ok {
 		panic(errors.AssertionFailedf("failed to find random table"))
 	}
-	table.Format(f)
+	table.FormatImpl(f)
 	tableName := f.CloseAndGetString()
 
 	unpartitioned = fmt.Sprintf("SELECT * FROM %s", tableName)
@@ -92,7 +92,7 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []
 	} else {
 		pred, args = makeBoolExprWithPlaceholders(s, cols)
 	}
-	pred.Format(f)
+	pred.FormatImpl(f)
 	predicate := f.CloseAndGetString()
 
 	part1 := fmt.Sprintf("SELECT * FROM %s WHERE %s", tableName, predicate)
@@ -152,9 +152,9 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 	if !ok1 || !ok2 {
 		panic(errors.AssertionFailedf("failed to find random tables"))
 	}
-	table1.Format(f)
+	table1.FormatImpl(f)
 	tableName1 := f.CloseAndGetString()
-	table2.Format(f)
+	table2.FormatImpl(f)
 	tableName2 := f.CloseAndGetString()
 
 	leftJoinTrue := fmt.Sprintf(
@@ -172,7 +172,7 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 	)
 
 	pred := makeBoolExpr(s, cols1)
-	pred.Format(f)
+	pred.FormatImpl(f)
 	predicate := f.CloseAndGetString()
 
 	part1 := fmt.Sprintf(
@@ -230,9 +230,9 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 	if !ok1 || !ok2 {
 		panic(errors.AssertionFailedf("failed to find random tables"))
 	}
-	table1.Format(f)
+	table1.FormatImpl(f)
 	tableName1 := f.CloseAndGetString()
-	table2.Format(f)
+	table2.FormatImpl(f)
 	tableName2 := f.CloseAndGetString()
 
 	unpartitioned = fmt.Sprintf(
@@ -242,7 +242,7 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 
 	cols := cols1.extend(cols2...)
 	pred := makeBoolExpr(s, cols)
-	pred.Format(f)
+	pred.FormatImpl(f)
 	predicate := f.CloseAndGetString()
 
 	part1 := fmt.Sprintf(
@@ -307,7 +307,7 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 	if !ok {
 		panic(errors.AssertionFailedf("failed to find random table"))
 	}
-	table.Format(f)
+	table.FormatImpl(f)
 	tableName := f.CloseAndGetString()
 	tableNameAlias := strings.TrimSpace(strings.Split(tableName, "AS")[1])
 
@@ -327,7 +327,7 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 	)
 
 	pred := makeBoolExpr(s, cols)
-	pred.Format(f)
+	pred.FormatImpl(f)
 	predicate := f.CloseAndGetString()
 
 	part1 := fmt.Sprintf(

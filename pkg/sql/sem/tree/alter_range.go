@@ -34,7 +34,7 @@ const (
 )
 
 // Format implementsthe NodeFormatter interface.
-func (n *RelocateSubject) Format(ctx *FmtCtx) {
+func (n *RelocateSubject) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(n.String())
 }
 
@@ -51,8 +51,8 @@ func (n RelocateSubject) String() string {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (n *RelocateRange) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *RelocateRange) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER RANGE RELOCATE ")
 	ctx.FormatNode(&n.SubjectReplicas)
 	// When relocating leases, the origin store is implicit.

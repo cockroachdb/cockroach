@@ -230,9 +230,9 @@ func (d *dummyColumn) String() string {
 	return tree.AsString(d)
 }
 
-// Format implements the NodeFormatter interface.
-func (d *dummyColumn) Format(ctx *tree.FmtCtx) {
-	d.name.Format(ctx)
+// FormatImpl implements the NodeFormatter interface.
+func (d *dummyColumn) FormatImpl(ctx *tree.FmtCtx) {
+	d.name.FormatImpl(ctx)
 }
 
 // Walk implements the Expr interface.

@@ -1118,7 +1118,7 @@ func getFinalSourceQuery(
 			if err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 			}
-			d.Format(ctx)
+			ctx.FormatNode(d)
 		}),
 	)
 	ctx.FormatNode(source)

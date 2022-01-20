@@ -20,8 +20,8 @@ type Export struct {
 
 var _ Statement = &Export{}
 
-// Format implements the NodeFormatter interface.
-func (node *Export) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Export) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("EXPORT INTO ")
 	ctx.WriteString(node.FileFormat)
 	ctx.WriteString(" ")

@@ -51,8 +51,8 @@ func (i UnionType) String() string {
 	return unionTypeName[i]
 }
 
-// Format implements the NodeFormatter interface.
-func (node *UnionClause) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *UnionClause) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(node.Left)
 	ctx.WriteByte(' ')
 	ctx.WriteString(node.Type.String())

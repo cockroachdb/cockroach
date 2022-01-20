@@ -85,8 +85,8 @@ func (node *Locality) TelemetryName() string {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Locality) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Locality) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("LOCALITY ")
 	switch node.LocalityLevel {
 	case LocalityLevelGlobal:

@@ -124,7 +124,7 @@ func main() {
 		w := bufio.NewWriterSize(os.Stdout, 1024*1024)
 		fmtctx := tree.NewFmtCtx(tree.FmtSimple)
 		for stmt := range writeStmts {
-			stmt.Format(fmtctx)
+			stmt.FormatImpl(fmtctx)
 			_, _ = w.WriteString(fmtctx.CloseAndGetString())
 			_, _ = w.WriteString(";\n\n")
 		}

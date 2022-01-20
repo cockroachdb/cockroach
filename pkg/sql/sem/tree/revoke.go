@@ -30,8 +30,8 @@ type Revoke struct {
 	GrantOptionFor bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Revoke) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Revoke) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("REVOKE ")
 	// NB: we cannot use FormatNode() here because node.Privileges is
 	// not an AST node. This is OK, because a privilege list cannot
@@ -50,8 +50,8 @@ type RevokeRole struct {
 	AdminOption bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *RevokeRole) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RevokeRole) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("REVOKE ")
 	if node.AdminOption {
 		ctx.WriteString("ADMIN OPTION FOR ")

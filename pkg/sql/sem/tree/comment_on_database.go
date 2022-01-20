@@ -18,8 +18,8 @@ type CommentOnDatabase struct {
 	Comment *string
 }
 
-// Format implements the NodeFormatter interface.
-func (n *CommentOnDatabase) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *CommentOnDatabase) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("COMMENT ON DATABASE ")
 	ctx.FormatNode(&n.Name)
 	ctx.WriteString(" IS ")

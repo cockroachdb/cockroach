@@ -19,8 +19,8 @@ type Prepare struct {
 	Statement Statement
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Prepare) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Prepare) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("PREPARE ")
 	ctx.FormatNode(&node.Name)
 	if len(node.Types) > 0 {
@@ -44,8 +44,8 @@ type CannedOptPlan struct {
 	Plan string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CannedOptPlan) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CannedOptPlan) FormatImpl(ctx *FmtCtx) {
 	// This node can only be used as the AST for a Prepare statement of the form:
 	//   PREPARE name AS OPT PLAN '...').
 	ctx.WriteString("OPT PLAN ")
@@ -61,8 +61,8 @@ type Execute struct {
 	DiscardRows bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Execute) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Execute) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("EXECUTE ")
 	ctx.FormatNode(&node.Name)
 	if len(node.Params) > 0 {
@@ -80,8 +80,8 @@ type Deallocate struct {
 	Name Name // empty for ALL
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Deallocate) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Deallocate) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DEALLOCATE ")
 	if node.Name == "" {
 		ctx.WriteString("ALL")

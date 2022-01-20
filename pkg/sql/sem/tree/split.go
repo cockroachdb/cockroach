@@ -21,8 +21,8 @@ type Split struct {
 	ExpireExpr Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Split) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Split) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
@@ -47,8 +47,8 @@ type Unsplit struct {
 	All  bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Unsplit) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Unsplit) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
@@ -77,8 +77,8 @@ type Relocate struct {
 	SubjectReplicas RelocateSubject
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Relocate) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Relocate) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
@@ -102,8 +102,8 @@ type Scatter struct {
 	From, To Exprs
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Scatter) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Scatter) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")

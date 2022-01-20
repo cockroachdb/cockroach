@@ -165,8 +165,8 @@ type Datums []Datum
 // Len returns the number of Datum values.
 func (d Datums) Len() int { return len(d) }
 
-// Format implements the NodeFormatter interface.
-func (d *Datums) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *Datums) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	for i, v := range *d {
 		if i > 0 {
@@ -489,8 +489,8 @@ func PgwireFormatBool(d bool) byte {
 	return 'f'
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DBool) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DBool) FormatImpl(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
 		ctx.WriteByte(PgwireFormatBool(bool(*d)))
 		return
@@ -645,8 +645,8 @@ func (d *DBitArray) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DBitArray) AmbiguousFormat() bool { return false }
 
-// Format implements the NodeFormatter interface.
-func (d *DBitArray) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DBitArray) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(fmtPgwireFormat) {
 		d.BitArray.Format(&ctx.Buffer)
@@ -794,8 +794,8 @@ func (d *DInt) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DInt) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DInt) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DInt) FormatImpl(ctx *FmtCtx) {
 	// If the number is negative, we need to use parens or the `:::INT` type hint
 	// will take precedence over the negation sign.
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
@@ -950,8 +950,8 @@ func (d *DFloat) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DFloat) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DFloat) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DFloat) FormatImpl(ctx *FmtCtx) {
 	fl := float64(*d)
 
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
@@ -1125,8 +1125,8 @@ func (d *DDecimal) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DDecimal) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DDecimal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DDecimal) FormatImpl(ctx *FmtCtx) {
 	// If the number is negative, we need to use parens or the `:::INT` type hint
 	// will take precedence over the negation sign.
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
@@ -1273,8 +1273,8 @@ func (d *DString) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DString) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DString) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DString) FormatImpl(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
 	if f.HasFlags(fmtRawStrings) {
 		buf.WriteString(string(*d))
@@ -1353,8 +1353,8 @@ func NewDCollatedString(
 // AmbiguousFormat implements the Datum interface.
 func (*DCollatedString) AmbiguousFormat() bool { return false }
 
-// Format implements the NodeFormatter interface.
-func (d *DCollatedString) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DCollatedString) FormatImpl(ctx *FmtCtx) {
 	lexbase.EncodeSQLString(&ctx.Buffer, d.Contents)
 	ctx.WriteString(" COLLATE ")
 	lex.EncodeLocaleName(&ctx.Buffer, d.Locale)
@@ -1532,8 +1532,8 @@ func writeAsHexString(ctx *FmtCtx, d *DBytes) {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DBytes) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DBytes) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(fmtPgwireFormat) {
 		ctx.WriteString(`"\\x`)
@@ -1649,8 +1649,8 @@ func (*DUuid) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DUuid) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DUuid) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DUuid) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -1821,8 +1821,8 @@ func (*DIPAddr) AmbiguousFormat() bool {
 	return true
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DIPAddr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DIPAddr) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -2096,8 +2096,8 @@ func FormatDate(d pgdate.Date, ctx *FmtCtx) {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DDate) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DDate) FormatImpl(ctx *FmtCtx) {
 	FormatDate(d.Date, ctx)
 }
 
@@ -2213,8 +2213,8 @@ func (d *DTime) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTime) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DTime) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DTime) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -2347,8 +2347,8 @@ func (d *DTimeTZ) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimeTZ) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DTimeTZ) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DTimeTZ) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -2630,8 +2630,8 @@ func (d *DTimestamp) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestamp) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DTimestamp) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DTimestamp) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -2796,8 +2796,8 @@ func (d *DTimestampTZ) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DTimestampTZ) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DTimestampTZ) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -3035,8 +3035,8 @@ func FormatDuration(d duration.Duration, ctx *FmtCtx) {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DInterval) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DInterval) FormatImpl(ctx *FmtCtx) {
 	FormatDuration(d.Duration, ctx)
 }
 
@@ -3149,8 +3149,8 @@ func (d *DGeography) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DGeography) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DGeography) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DGeography) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -3271,8 +3271,8 @@ func (d *DGeometry) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DGeometry) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DGeometry) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DGeometry) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -3393,8 +3393,8 @@ func (d *DBox2D) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DBox2D) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DBox2D) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DBox2D) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
 	if !bareStrings {
@@ -3611,8 +3611,8 @@ func (d *DJSON) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DJSON) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DJSON) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DJSON) FormatImpl(ctx *FmtCtx) {
 	// TODO(justin): ideally the JSON string encoder should know it needs to
 	// escape things to be inside SQL strings in order to avoid this allocation.
 	s := d.JSON.String()
@@ -3858,8 +3858,8 @@ func (d *DTuple) IsMin(ctx *EvalContext) bool {
 // AmbiguousFormat implements the Datum interface.
 func (*DTuple) AmbiguousFormat() bool { return false }
 
-// Format implements the NodeFormatter interface.
-func (d *DTuple) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DTuple) FormatImpl(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
 		d.pgwireFormat(ctx)
 		return
@@ -4078,8 +4078,8 @@ func (dNull) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (dNull) AmbiguousFormat() bool { return false }
 
-// Format implements the NodeFormatter interface.
-func (dNull) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (dNull) FormatImpl(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
 		// NULL sub-expressions in pgwire text values are represented with
 		// the empty string.
@@ -4257,8 +4257,8 @@ func (d *DArray) AmbiguousFormat() bool {
 	return !d.HasNonNulls
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DArray) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DArray) FormatImpl(ctx *FmtCtx) {
 	if ctx.flags.HasAnyFlags(fmtPgwireFormat | FmtPGCatalog) {
 		d.pgwireFormat(ctx)
 		return
@@ -4414,8 +4414,8 @@ func (d *DVoid) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DVoid) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DVoid) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DVoid) FormatImpl(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
 	if !f.HasFlags(fmtRawStrings) {
 		// void is an empty string.
@@ -4521,8 +4521,8 @@ func MakeAllDEnumsInType(typ *types.T) []Datum {
 	return result
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DEnum) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DEnum) FormatImpl(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtStaticallyFormatUserDefinedTypes) {
 		s := DBytes(d.PhysicalRep)
 		// We use the fmtFormatByteLiterals flag here so that the bytes
@@ -4533,13 +4533,13 @@ func (d *DEnum) Format(ctx *FmtCtx) {
 		// Instead, we want to emit b'\x80'::: so that '\x80' is scanned as bytes,
 		// triggering the logic to cast the bytes \x80 to t.
 		ctx.WithFlags(ctx.flags|fmtFormatByteLiterals, func() {
-			s.Format(ctx)
+			s.FormatImpl(ctx)
 		})
 	} else if ctx.HasFlags(FmtPgwireText) {
 		ctx.WriteString(d.LogicalRep)
 	} else {
 		s := DString(d.LogicalRep)
-		s.Format(ctx)
+		s.FormatImpl(ctx)
 	}
 }
 
@@ -5036,19 +5036,19 @@ func (d *DOid) CompareError(ctx *EvalContext, other Datum) (int, error) {
 }
 
 // Format implements the Datum interface.
-func (d *DOid) Format(ctx *FmtCtx) {
+func (d *DOid) FormatImpl(ctx *FmtCtx) {
 	if d.semanticType.Oid() == oid.T_oid || d.name == "" {
 		// If we call FormatNode directly when the disambiguateDatumTypes flag
 		// is set, then we get something like 123:::INT:::OID. This is the
 		// important flag set by FmtParsable which is supposed to be
 		// roundtrippable. Since in this branch, a DOid is a thin wrapper around
 		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
-		d.DInt.Format(ctx)
+		d.DInt.FormatImpl(ctx)
 	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
 		ctx.WriteString("crdb_internal.create_")
 		ctx.WriteString(d.semanticType.SQLStandardName())
 		ctx.WriteByte('(')
-		d.DInt.Format(ctx)
+		d.DInt.FormatImpl(ctx)
 		ctx.WriteByte(',')
 		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
 		ctx.WriteByte(')')
@@ -5241,8 +5241,8 @@ func (d *DOidWrapper) AmbiguousFormat() bool {
 	return d.Wrapped.AmbiguousFormat()
 }
 
-// Format implements the NodeFormatter interface.
-func (d *DOidWrapper) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (d *DOidWrapper) FormatImpl(ctx *FmtCtx) {
 	// Custom formatting based on d.OID could go here.
 	ctx.FormatNode(d.Wrapped)
 }

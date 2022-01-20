@@ -25,8 +25,8 @@ const (
 	DiscardModeAll DiscardMode = iota
 )
 
-// Format implements the NodeFormatter interface.
-func (node *Discard) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Discard) FormatImpl(ctx *FmtCtx) {
 	switch node.Mode {
 	case DiscardModeAll:
 		ctx.WriteString("DISCARD ALL")

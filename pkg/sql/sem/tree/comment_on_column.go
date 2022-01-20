@@ -18,8 +18,8 @@ type CommentOnColumn struct {
 	Comment *string
 }
 
-// Format implements the NodeFormatter interface.
-func (n *CommentOnColumn) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *CommentOnColumn) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("COMMENT ON COLUMN ")
 	ctx.FormatNode(n.ColumnItem)
 	ctx.WriteString(" IS ")

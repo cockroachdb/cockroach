@@ -141,8 +141,8 @@ func (c *scopeColumn) String() string {
 	return tree.AsString(c)
 }
 
-// Format implements the NodeFormatter interface.
-func (c *scopeColumn) Format(ctx *tree.FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (c *scopeColumn) FormatImpl(ctx *tree.FmtCtx) {
 	// FmtCheckEquivalence is used by getExprStr when comparing expressions for
 	// equivalence. If that flag is present, then use the unique column id to
 	// differentiate this column from other columns.

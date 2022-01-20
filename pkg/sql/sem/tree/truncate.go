@@ -25,8 +25,8 @@ type Truncate struct {
 	DropBehavior DropBehavior
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Truncate) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Truncate) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("TRUNCATE TABLE ")
 	sep := ""
 	for i := range node.Tables {

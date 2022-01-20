@@ -36,8 +36,8 @@ type AlterDefaultPrivileges struct {
 	Revoke  AbbreviatedRevoke
 }
 
-// Format implements the NodeFormatter interface.
-func (n *AlterDefaultPrivileges) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *AlterDefaultPrivileges) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DEFAULT PRIVILEGES ")
 	if len(n.Roles) > 0 {
 		ctx.WriteString("FOR ROLE ")
@@ -55,9 +55,9 @@ func (n *AlterDefaultPrivileges) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ")
 	}
 	if n.IsGrant {
-		n.Grant.Format(ctx)
+		n.Grant.FormatImpl(ctx)
 	} else {
-		n.Revoke.Format(ctx)
+		n.Revoke.FormatImpl(ctx)
 	}
 }
 
@@ -122,8 +122,8 @@ type AbbreviatedGrant struct {
 	WithGrantOption bool
 }
 
-// Format implements the NodeFormatter interface.
-func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *AbbreviatedGrant) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("GRANT ")
 	n.Privileges.Format(&ctx.Buffer)
 	ctx.WriteString(" ON ")
@@ -138,7 +138,7 @@ func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 		ctx.WriteString("SCHEMAS ")
 	}
 	ctx.WriteString("TO ")
-	n.Grantees.Format(ctx)
+	n.Grantees.FormatImpl(ctx)
 	if n.WithGrantOption {
 		ctx.WriteString(" WITH GRANT OPTION")
 	}
@@ -153,8 +153,8 @@ type AbbreviatedRevoke struct {
 	GrantOptionFor bool
 }
 
-// Format implements the NodeFormatter interface.
-func (n *AbbreviatedRevoke) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *AbbreviatedRevoke) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("REVOKE ")
 	if n.GrantOptionFor {
 		ctx.WriteString("GRANT OPTION FOR ")
@@ -172,5 +172,5 @@ func (n *AbbreviatedRevoke) Format(ctx *FmtCtx) {
 		ctx.WriteString("SCHEMAS ")
 	}
 	ctx.WriteString(" FROM ")
-	n.Grantees.Format(ctx)
+	n.Grantees.FormatImpl(ctx)
 }

@@ -28,8 +28,8 @@ const (
 	SurvivalGoalZoneFailure
 )
 
-// Format implements the NodeFormatter interface.
-func (node *SurvivalGoal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SurvivalGoal) FormatImpl(ctx *FmtCtx) {
 	switch *node {
 	case SurvivalGoalRegionFailure:
 		ctx.WriteString("SURVIVE REGION FAILURE")

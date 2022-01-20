@@ -59,8 +59,8 @@ func (node ZoneSpecifier) TargetsPartition() bool {
 	return node.TargetsTable() && node.Partition != ""
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ZoneSpecifier) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ZoneSpecifier) FormatImpl(ctx *FmtCtx) {
 	if node.NamedZone != "" {
 		ctx.WriteString("RANGE ")
 		ctx.FormatNode(&node.NamedZone)
@@ -90,8 +90,8 @@ type ShowZoneConfig struct {
 	ZoneSpecifier
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowZoneConfig) FormatImpl(ctx *FmtCtx) {
 	if node.ZoneSpecifier == (ZoneSpecifier{}) {
 		ctx.WriteString("SHOW ZONE CONFIGURATIONS")
 	} else {
@@ -112,8 +112,8 @@ type SetZoneConfig struct {
 	Options    KVOptions
 }
 
-// Format implements the NodeFormatter interface.
-func (node *SetZoneConfig) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SetZoneConfig) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	ctx.FormatNode(&node.ZoneSpecifier)
 	ctx.WriteString(" CONFIGURE ZONE ")

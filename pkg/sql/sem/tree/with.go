@@ -32,8 +32,8 @@ type MaterializeClause struct {
 	Materialize bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *With) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *With) FormatImpl(ctx *FmtCtx) {
 	if node == nil {
 		return
 	}

@@ -163,8 +163,8 @@ type varFormatter struct {
 	ColumnName tree.Name
 }
 
-// Format implements the NodeFormatter interface.
-func (c *varFormatter) Format(ctx *tree.FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (c *varFormatter) FormatImpl(ctx *tree.FmtCtx) {
 	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.ObjectName != "" {
 		// This logic is different from (*tree.TableName).Format() with
 		// FmtAlwaysQualify, because FmtShowTableAliases only wants to

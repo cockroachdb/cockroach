@@ -21,7 +21,7 @@ type ReplicationOptions struct {
 var _ NodeFormatter = &ReplicationOptions{}
 
 // Format implements the NodeFormatter interface
-func (o *ReplicationOptions) Format(ctx *FmtCtx) {
+func (o *ReplicationOptions) FormatImpl(ctx *FmtCtx) {
 	var addSep bool
 	maybeAddSep := func() {
 		if addSep {
@@ -31,7 +31,7 @@ func (o *ReplicationOptions) Format(ctx *FmtCtx) {
 	}
 	if o.Cursor != nil {
 		ctx.WriteString("CURSOR=")
-		o.Cursor.Format(ctx)
+		ctx.FormatNode(o.Cursor)
 		addSep = true
 	}
 
@@ -78,8 +78,8 @@ type ReplicationStream struct {
 
 var _ Statement = &ReplicationStream{}
 
-// Format implements the NodeFormatter interface.
-func (n *ReplicationStream) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ReplicationStream) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE REPLICATION STREAM FOR ")
 	ctx.FormatNode(&n.Targets)
 

@@ -27,8 +27,8 @@ const (
 	DataPlacementRestricted
 )
 
-// Format implements the NodeFormatter interface.
-func (node *DataPlacement) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DataPlacement) FormatImpl(ctx *FmtCtx) {
 	switch *node {
 	case DataPlacementRestricted:
 		ctx.WriteString("PLACEMENT RESTRICTED")

@@ -104,8 +104,8 @@ func (r RoleSpec) Undefined() bool {
 	return r.RoleSpecType == RoleName && len(r.Name) == 0
 }
 
-// Format implements the NodeFormatter interface.
-func (r *RoleSpec) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (r *RoleSpec) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtAnonymize) && !isArityIndicatorString(r.Name) {
 		ctx.WriteByte('_')
@@ -120,8 +120,8 @@ func (r *RoleSpec) Format(ctx *FmtCtx) {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (l *RoleSpecList) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (l *RoleSpecList) FormatImpl(ctx *FmtCtx) {
 	for i := range *l {
 		if i > 0 {
 			ctx.WriteString(", ")

@@ -34,8 +34,8 @@ var JobCommandToStatement = map[JobCommand]string{
 	ResumeJob: "RESUME",
 }
 
-// Format implements the NodeFormatter interface.
-func (n *ControlJobs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ControlJobs) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(JobCommandToStatement[n.Command])
 	ctx.WriteString(" JOBS ")
 	ctx.FormatNode(n.Jobs)
@@ -51,8 +51,8 @@ type CancelQueries struct {
 	IfExists bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CancelQueries) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CancelQueries) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CANCEL QUERIES ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -66,8 +66,8 @@ type CancelSessions struct {
 	IfExists bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CancelSessions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CancelSessions) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CANCEL SESSIONS ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -106,8 +106,8 @@ type ControlSchedules struct {
 
 var _ Statement = &ControlSchedules{}
 
-// Format implements the NodeFormatter interface.
-func (n *ControlSchedules) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ControlSchedules) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(n.Command.String())
 	ctx.WriteString(" SCHEDULES ")
 	ctx.FormatNode(n.Schedules)
@@ -127,8 +127,8 @@ type ControlJobsOfType struct {
 	Command JobCommand
 }
 
-// Format implements the NodeFormatter interface.
-func (n *ControlJobsOfType) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ControlJobsOfType) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(JobCommandToStatement[n.Command])
 	ctx.WriteString(" ALL ")
 	ctx.WriteString(n.Type)
@@ -136,7 +136,7 @@ func (n *ControlJobsOfType) Format(ctx *FmtCtx) {
 }
 
 // Format implements NodeFormatter interface.
-func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
+func (n *ControlJobsForSchedules) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(JobCommandToStatement[n.Command])
 	ctx.WriteString(" JOBS FOR SCHEDULES ")
 	ctx.FormatNode(n.Schedules)

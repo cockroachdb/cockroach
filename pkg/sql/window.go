@@ -103,9 +103,9 @@ func (w *windowFuncHolder) samePartition(other *windowFuncHolder) bool {
 
 func (*windowFuncHolder) Variable() {}
 
-func (w *windowFuncHolder) Format(ctx *tree.FmtCtx) {
+func (w *windowFuncHolder) FormatImpl(ctx *tree.FmtCtx) {
 	// Avoid duplicating the type annotation by calling .Format directly.
-	w.expr.Format(ctx)
+	w.expr.FormatImpl(ctx)
 }
 
 func (w *windowFuncHolder) String() string { return tree.AsString(w) }

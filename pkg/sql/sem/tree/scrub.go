@@ -33,8 +33,8 @@ type Scrub struct {
 	AsOf     AsOfClause
 }
 
-// Format implements the NodeFormatter interface.
-func (n *Scrub) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *Scrub) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("EXPERIMENTAL SCRUB ")
 	switch n.Typ {
 	case ScrubTable:
@@ -61,8 +61,8 @@ func (n *Scrub) Format(ctx *FmtCtx) {
 // ScrubOptions corresponds to a comma-delimited list of scrub options.
 type ScrubOptions []ScrubOption
 
-// Format implements the NodeFormatter interface.
-func (n *ScrubOptions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ScrubOptions) FormatImpl(ctx *FmtCtx) {
 	for i, option := range *n {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -95,8 +95,8 @@ type ScrubOptionIndex struct {
 	IndexNames NameList
 }
 
-// Format implements the NodeFormatter interface.
-func (n *ScrubOptionIndex) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ScrubOptionIndex) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("INDEX ")
 	if n.IndexNames != nil {
 		ctx.WriteByte('(')
@@ -110,8 +110,8 @@ func (n *ScrubOptionIndex) Format(ctx *FmtCtx) {
 // ScrubOptionPhysical represents a PHYSICAL scrub check.
 type ScrubOptionPhysical struct{}
 
-// Format implements the NodeFormatter interface.
-func (n *ScrubOptionPhysical) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ScrubOptionPhysical) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("PHYSICAL")
 }
 
@@ -120,8 +120,8 @@ type ScrubOptionConstraint struct {
 	ConstraintNames NameList
 }
 
-// Format implements the NodeFormatter interface.
-func (n *ScrubOptionConstraint) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ScrubOptionConstraint) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CONSTRAINT ")
 	if n.ConstraintNames != nil {
 		ctx.WriteByte('(')

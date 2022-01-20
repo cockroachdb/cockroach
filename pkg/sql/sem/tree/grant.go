@@ -52,8 +52,8 @@ type TargetList struct {
 	Roles    RoleSpecList
 }
 
-// Format implements the NodeFormatter interface.
-func (tl *TargetList) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (tl *TargetList) FormatImpl(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
@@ -79,8 +79,8 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Grant) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Grant) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("GRANT ")
 	node.Privileges.Format(&ctx.Buffer)
 	ctx.WriteString(" ON ")
@@ -96,8 +96,8 @@ type GrantRole struct {
 	AdminOption bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *GrantRole) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *GrantRole) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("GRANT ")
 	ctx.FormatNode(&node.Roles)
 	ctx.WriteString(" TO ")

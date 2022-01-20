@@ -30,8 +30,8 @@ type CopyOptions struct {
 
 var _ NodeFormatter = &CopyOptions{}
 
-// Format implements the NodeFormatter interface.
-func (node *CopyFrom) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CopyFrom) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("COPY ")
 	ctx.FormatNode(&node.Table)
 	if len(node.Columns) > 0 {
@@ -50,7 +50,7 @@ func (node *CopyFrom) Format(ctx *FmtCtx) {
 }
 
 // Format implements the NodeFormatter interface
-func (o *CopyOptions) Format(ctx *FmtCtx) {
+func (o *CopyOptions) FormatImpl(ctx *FmtCtx) {
 	var addSep bool
 	maybeAddSep := func() {
 		if addSep {

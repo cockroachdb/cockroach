@@ -89,8 +89,8 @@ func (v *IndexedVar) ResolvedType() *types.T {
 	return v.typ
 }
 
-// Format implements the NodeFormatter interface.
-func (v *IndexedVar) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (v *IndexedVar) FormatImpl(ctx *FmtCtx) {
 	f := ctx.flags
 	if ctx.indexedVarFormat != nil {
 		ctx.indexedVarFormat(ctx, v.Idx)

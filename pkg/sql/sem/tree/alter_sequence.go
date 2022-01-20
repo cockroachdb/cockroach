@@ -19,8 +19,8 @@ type AlterSequence struct {
 	Options  SequenceOptions
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterSequence) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterSequence) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER SEQUENCE ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")

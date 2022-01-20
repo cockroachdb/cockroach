@@ -781,7 +781,7 @@ func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) strin
 					ctx.Printf("$%d", placeholder.Idx+1)
 					return
 				}
-				d.Format(ctx)
+				ctx.FormatNode(d)
 			}),
 		)
 	} else {
