@@ -11,14 +11,20 @@
 package kvserver
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 )
@@ -39,4 +45,63 @@ func TestReplicaUnavailableError(t *testing.T) {
 	rs := raft.Status{}
 	err := replicaUnavailableError(desc, desc.Replicas().AsProto()[0], lm, &rs)
 	echotest.Require(t, string(redact.Sprint(err)), testutils.TestDataPath(t, "replica_unavailable_error.txt"))
+}
+
+type circuitBreakerReplicaMock struct {
+	clock *hlc.Clock
+}
+
+func (c *circuitBreakerReplicaMock) Clock() *hlc.Clock {
+	return c.clock
+}
+
+func (c *circuitBreakerReplicaMock) Desc() *roachpb.RangeDescriptor {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *circuitBreakerReplicaMock) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	return ba.CreateReply(), nil
+}
+
+func (c *circuitBreakerReplicaMock) slowReplicationThreshold(
+	ba *roachpb.BatchRequest,
+) (time.Duration, bool) {
+	return 0, false
+}
+
+func (c *circuitBreakerReplicaMock) replicaUnavailableError() error {
+	return errors.New("unavailable")
+}
+
+func BenchmarkReplicaCircuitBreaker_Register(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	// Enable circuit breakers.
+	replicaCircuitBreakerSlowReplicationThreshold.Override(ctx, &st.SV, time.Hour)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	r := &circuitBreakerReplicaMock{clock: hlc.NewClock(hlc.UnixNano, 500*time.Millisecond)}
+	onTrip := func() {}
+	onReset := func() {}
+	br := newReplicaCircuitBreaker(st, stopper, log.AmbientContext{}, r, onTrip, onReset)
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ctx, cancel := context.WithCancel(ctx)
+			tok, sig, err := br.Register(ctx, cancel)
+			if err != nil {
+				b.Error(err)
+			}
+			if pErr := br.Unregister(tok, sig, nil); pErr != nil {
+				b.Error(pErr)
+			}
+			cancel()
+		}
+	})
 }

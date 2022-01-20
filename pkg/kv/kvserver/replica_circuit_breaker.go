@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
@@ -61,7 +62,110 @@ type replicaCircuitBreaker struct {
 	stopper *stop.Stopper
 	r       replicaInCircuitBreaker
 	st      *cluster.Settings
+	cancels struct {
+		syncutil.Mutex
+		m map[context.Context]func()
+	}
 	wrapped *circuit.Breaker
+}
+
+// Register takes a cancelable context and its cancel function. The
+// context is cancelled when the circuit breaker trips. If the breaker is
+// already tripped, its error is returned immediately and the caller should not
+// continue processing the request. Otherwise, the caller is provided with a
+// signaller for use in a deferred call to maybeAdjustWithBreakerError, which
+// will annotate the outgoing error in the event of the breaker tripping while
+// the request is processing.
+func (br *replicaCircuitBreaker) Register(
+	ctx context.Context, cancel func(),
+) (_token interface{}, _ signaller, _ error) {
+	// We intentionally lock over the Signal() call and Err() check to avoid races
+	// where the breaker trips but the cancel() function is not invoked. Both of
+	// these calls are cheap and do not allocate.
+	br.cancels.Lock()
+	defer br.cancels.Unlock()
+
+	brSig := br.Signal()
+	if isCircuitBreakerProbe(ctx) {
+		brSig = neverTripSignaller{}
+	}
+
+	if err := brSig.Err(); err != nil {
+		// TODO(tbg): we may want to exclude some requests from this check, or allow
+		// requests to exclude themselves from the check (via their header).
+		cancel()
+		return nil, nil, err
+	}
+	br.cancels.m[ctx] = cancel
+
+	// The token is the context, saving allocations.
+	return ctx, brSig, nil
+}
+
+func (br *replicaCircuitBreaker) Unregister(
+	tok interface{}, sig signaller, pErr *roachpb.Error,
+) *roachpb.Error {
+	brErr := sig.Err()
+	if sig.C() == nil {
+		// Breakers were disabled and we never put the cancel in the registry.
+		return pErr
+	}
+
+	br.cancels.Lock()
+	delete(br.cancels.m, tok.(context.Context))
+	br.cancels.Unlock()
+
+	err := pErr.GoError()
+	if ae := (&roachpb.AmbiguousResultError{}); errors.As(err, &ae) {
+		// The breaker tripped while a command was inflight, so we have to
+		// propagate an ambiguous result. We don't want to replace it, but there
+		// is a way to stash an Error in it so we use that.
+		//
+		// TODO(tbg): could also wrap it; there is no other write to WrappedErr
+		// in the codebase and it might be better to remove it. Nested *Errors
+		// are not a good idea.
+		wrappedErr := brErr
+		if ae.WrappedErr != nil {
+			wrappedErr = errors.Wrapf(brErr, "%v", ae.WrappedErr)
+		}
+		ae.WrappedErr = roachpb.NewError(wrappedErr)
+		return roachpb.NewError(ae)
+	} else if le := (&roachpb.NotLeaseHolderError{}); errors.As(err, &le) {
+		// When a lease acquisition triggered by this request is short-circuited
+		// by the breaker, it will return an opaque NotLeaseholderError, which we
+		// replace with the breaker's error.
+		return roachpb.NewError(errors.CombineErrors(brErr, le))
+	}
+	return pErr
+}
+
+func (br *replicaCircuitBreaker) visitCancels(f func(context.Context)) {
+	br.cancels.Lock()
+	for ctx := range br.cancels.m {
+		f(ctx)
+	}
+	br.cancels.Unlock()
+}
+
+func (br *replicaCircuitBreaker) cancelAllTrackedProposals() error {
+	br.cancels.Lock()
+	defer br.cancels.Unlock()
+	// NB: this intentionally consults the wrapped Signal(), which does not check
+	// the breaker cluster setting.
+	if br.wrapped.Signal().Err() == nil {
+		// TODO(tbg): in the future, we may want to trigger the probe even if
+		// the breaker is not tripped. For example, if we *suspect* that there
+		// might be something wrong with the range but we're not quite sure,
+		// we would like to let the probe decide whether to trip. Once/if we
+		// do this, this code may need to become more permissive and we'll
+		// have to re-work where the cancellation actually occurs.
+		return errors.AssertionFailedf("asked to cancel all proposals, but breaker is not tripped")
+	}
+	for _, cancel := range br.cancels.m {
+		cancel()
+	}
+	br.cancels.m = map[context.Context]func(){}
+	return nil
 }
 
 func (br *replicaCircuitBreaker) enabled() bool {
@@ -96,7 +200,7 @@ type neverTripSignaller struct{}
 func (s neverTripSignaller) Err() error         { return nil }
 func (s neverTripSignaller) C() <-chan struct{} { return nil }
 
-func (br *replicaCircuitBreaker) Signal() signaller {
+func (br *replicaCircuitBreaker) Signal() signaller { // TODO(tbg): unexport?
 	if !br.enabled() {
 		return neverTripSignaller{}
 	}
@@ -117,7 +221,7 @@ func newReplicaCircuitBreaker(
 		r:       r,
 		st:      cs,
 	}
-
+	br.cancels.m = map[context.Context]func(){}
 	br.wrapped = circuit.NewBreaker(circuit.Options{
 		Name:       "breaker", // log bridge has ctx tags
 		AsyncProbe: br.asyncProbe,
@@ -173,6 +277,10 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 			return
 		}
 
+		if err := br.cancelAllTrackedProposals(); err != nil {
+			log.Errorf(ctx, "%s", err)
+			// Proceed.
+		}
 		err := sendProbe(ctx, br.r)
 		report(err)
 	}); err != nil {

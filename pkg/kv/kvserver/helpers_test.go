@@ -226,6 +226,10 @@ func (r *Replica) Breaker() *circuit2.Breaker {
 	return r.breaker.wrapped
 }
 
+func (r *Replica) VisitBreakerContexts(fn func(ctx context.Context)) {
+	r.breaker.visitCancels(fn)
+}
+
 func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
