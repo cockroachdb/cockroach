@@ -38,7 +38,7 @@ var useStreamerEnabled = settings.RegisterBoolSetting(
 	"determines whether the usage of the Streamer API is allowed. "+
 		"Enabling this will increase the speed of lookup/index joins "+
 		"while adhering to memory limits.",
-	true,
+	false,
 )
 
 // TxnKVStreamer handles retrieval of key/values.
