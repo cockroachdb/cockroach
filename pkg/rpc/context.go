@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/syncmap"
@@ -1132,6 +1133,20 @@ type delayingHeader struct {
 	DelayMS  int32
 }
 
+func (rpcCtx *Context) makeDialCtx(
+	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+) context.Context {
+	dialCtx := rpcCtx.masterCtx
+	var rnodeID interface{} = remoteNodeID
+	if remoteNodeID == 0 {
+		rnodeID = '?'
+	}
+	dialCtx = logtags.AddTag(dialCtx, "rnode", rnodeID)
+	dialCtx = logtags.AddTag(dialCtx, "raddr", target)
+	dialCtx = logtags.AddTag(dialCtx, "class", class)
+	return dialCtx
+}
+
 // GRPCDialRaw calls grpc.Dial with options appropriate for the context.
 // Unlike GRPCDialNode, it does not start an RPC heartbeat to validate the
 // connection. This connection will not be reconnected automatically;
@@ -1139,7 +1154,8 @@ type delayingHeader struct {
 // This method implies a DefaultClass ConnectionClass for the returned
 // ClientConn.
 func (rpcCtx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{}, error) {
-	return rpcCtx.grpcDialRaw(rpcCtx.masterCtx, target, 0, DefaultClass)
+	ctx := rpcCtx.makeDialCtx(target, 0, DefaultClass)
+	return rpcCtx.grpcDialRaw(ctx, target, 0, DefaultClass)
 }
 
 // grpcDialRaw connects to the remote node.
@@ -1208,7 +1224,8 @@ func (rpcCtx *Context) grpcDialRaw(
 // used with the gossip client and CLI commands which can talk to any
 // node. This method implies a SystemClass.
 func (rpcCtx *Context) GRPCUnvalidatedDial(target string) *Connection {
-	return rpcCtx.grpcDialNodeInternal(rpcCtx.masterCtx, target, 0, SystemClass)
+	ctx := rpcCtx.makeDialCtx(target, 0, SystemClass)
+	return rpcCtx.grpcDialNodeInternal(ctx, target, 0, SystemClass)
 }
 
 // GRPCDialNode calls grpc.Dial with options appropriate for the
@@ -1221,10 +1238,11 @@ func (rpcCtx *Context) GRPCUnvalidatedDial(target string) *Connection {
 func (rpcCtx *Context) GRPCDialNode(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
+	ctx := rpcCtx.makeDialCtx(target, remoteNodeID, class)
 	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
-		log.Fatalf(context.TODO(), "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
-	return rpcCtx.grpcDialNodeInternal(rpcCtx.masterCtx, target, remoteNodeID, class)
+	return rpcCtx.grpcDialNodeInternal(ctx, target, remoteNodeID, class)
 }
 
 // GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
