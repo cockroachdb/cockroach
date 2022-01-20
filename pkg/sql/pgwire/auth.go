@@ -247,6 +247,12 @@ func (c *conn) findAuthenticationMethod(
 		hbaEntry = &insecureEntry
 		return
 	}
+	if c.sessionArgs.SessionRevivalToken != nil {
+		methodFn = authSessionRevivalToken(c.sessionArgs.SessionRevivalToken)
+		c.sessionArgs.SessionRevivalToken = nil
+		hbaEntry = &sessionRevivalEntry
+		return
+	}
 
 	// Look up the method from the HBA configuration.
 	var mi methodInfo

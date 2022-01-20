@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -734,7 +735,8 @@ func handleCancel(conn net.Conn) error {
 }
 
 // parseClientProvidedSessionParameters reads the incoming k/v pairs
-// in the startup message into a sql.SessionArgs struct.
+// in the startup message into a sql.SessionArgs struct. It also returns
+// the session revival token if one was found.
 func parseClientProvidedSessionParameters(
 	ctx context.Context,
 	sv *settings.Values,
@@ -781,10 +783,19 @@ func parseClientProvidedSessionParameters(
 			// here, so that further lookups for authentication have the correct
 			// identifier.
 			args.User, _ = security.MakeSQLUsernameFromUserInput(value, security.UsernameValidation)
-			// TODO(#sql-experience): we should retrieve the admin status during
-			// authentication using the roles cache, instead of using a simple/naive
-			// username match. See #69355.
+			// IsSuperuser will get updated later when we load the user's session
+			// initialization information.
 			args.IsSuperuser = args.User.IsRootUser()
+
+		case "crdb:session_revival_token_base64":
+			token, err := base64.StdEncoding.DecodeString(value)
+			if err != nil {
+				return sql.SessionArgs{}, pgerror.Wrapf(
+					err, pgcode.ProtocolViolation,
+					"%s", key,
+				)
+			}
+			args.SessionRevivalToken = token
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
