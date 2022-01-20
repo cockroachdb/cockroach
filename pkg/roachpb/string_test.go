@@ -11,6 +11,9 @@
 package roachpb_test
 
 import (
+	"context"
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	// Hook up the pretty printer.
@@ -18,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -141,4 +146,19 @@ func TestSpansString(t *testing.T) {
 	} {
 		require.Equal(t, tc.expected, tc.spans.String())
 	}
+}
+
+func TestReplicaUnavailableError(t *testing.T) {
+	ctx := context.Background()
+	var _ = (*roachpb.ReplicaUnavailableError)(nil)
+	rDesc := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3}
+	var set roachpb.ReplicaSet
+	set.AddReplica(rDesc)
+	desc := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax, set)
+
+	var err = roachpb.NewReplicaUnavailableError(desc, rDesc)
+	err = errors.DecodeError(ctx, errors.EncodeError(ctx, err))
+
+	s := fmt.Sprintf("%s\n%s", err, redact.Sprint(err))
+	echotest.Require(t, s, filepath.Join("testdata", "replica_unavailable_error.txt"))
 }
