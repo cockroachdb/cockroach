@@ -225,10 +225,6 @@ const (
 	SeedTenantSpanConfigs
 	// PublicSchemasWithDescriptors backs public schemas with descriptors.
 	PublicSchemasWithDescriptors
-	// AlterSystemProtectedTimestampAddColumn adds a target column to the
-	// system.protected_ts_records table that describes what is protected by the
-	// record.
-	AlterSystemProtectedTimestampAddColumn
 	// EnsureSpanConfigReconciliation ensures that the host tenant has run its
 	// reconciliation process at least once.
 	EnsureSpanConfigReconciliation
@@ -239,6 +235,13 @@ const (
 	// EnableSpanConfigStore enables the use of the span configs infrastructure
 	// in KV.
 	EnableSpanConfigStore
+	// AlterSystemProtectedTimestampAddColumn adds a target column to the
+	// system.protected_ts_records table that describes what is protected by the
+	// record.
+	AlterSystemProtectedTimestampAddColumn
+	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
+	// in secondary tenants.
+	EnableProtectedTimestampsForTenant
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -344,20 +347,24 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 34},
 	},
 	{
-		Key:     AlterSystemProtectedTimestampAddColumn,
+		Key:     EnsureSpanConfigReconciliation,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 36},
 	},
 	{
-		Key:     EnsureSpanConfigReconciliation,
+		Key:     EnsureSpanConfigSubscription,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 38},
 	},
 	{
-		Key:     EnsureSpanConfigSubscription,
+		Key:     EnableSpanConfigStore,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 40},
 	},
 	{
-		Key:     EnableSpanConfigStore,
+		Key:     AlterSystemProtectedTimestampAddColumn,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 42},
+	},
+	{
+		Key:     EnableProtectedTimestampsForTenant,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 44},
 	},
 
 	// *************************************************

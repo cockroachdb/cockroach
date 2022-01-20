@@ -19,17 +19,26 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -61,6 +70,15 @@ import (
 // - "mark-table-public" [database=<str>] [table=<str>]
 //   Marks the given table as public.
 //
+// - "protect" [id=<int>] [ts=<int>]
+//   cluster                  OR
+//   tenants       id1,id2... OR
+//   schemaObject  id1,id2...
+//   Creates and writes a protected timestamp record with id and ts with an
+//   appropriate ptpb.Target.
+//
+// - "release" [id=<int>]
+//   Releases the protected timestamp record with id.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -77,17 +95,21 @@ func TestDataDriven(t *testing.T) {
 		// test cluster).
 		ManagerDisableJobCreation: true,
 	}
+	ptsKnobs := &protectedts.TestingKnobs{
+		EnableProtectedTimestampForMultiTenant: true,
+	}
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					SpanConfig: scKnobs,
+					SpanConfig:  scKnobs,
+					ProtectedTS: ptsKnobs,
 				},
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
 
-		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs)
+		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, ptsKnobs)
 		defer spanConfigTestCluster.Cleanup()
 
 		var tenant *spanconfigtestcluster.Tenant
@@ -96,6 +118,29 @@ func TestDataDriven(t *testing.T) {
 			tenant.Exec(`SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`)
 		} else {
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
+		}
+
+		execCfg := tenant.ExecutorConfig().(sql.ExecutorConfig)
+		ptp := tenant.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+		jr := tenant.JobRegistry().(*jobs.Registry)
+
+		mkRecordAndProtect := func(recordID string, ts hlc.Timestamp, target *ptpb.Target) {
+			jobID := jr.MakeJobID()
+			require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
+				require.NoError(t, err)
+				rec := jobsprotectedts.MakeRecord(recID, int64(jobID), ts,
+					nil /* deprecatedSpans */, jobsprotectedts.Jobs, target)
+				return ptp.Protect(ctx, txn, rec)
+			}))
+		}
+
+		releaseRecord := func(recordID string) {
+			require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
+				require.NoError(t, err)
+				return ptp.Release(ctx, txn, recID)
+			}))
 		}
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -182,7 +227,18 @@ func TestDataDriven(t *testing.T) {
 				tenant.WithMutableTableDescriptor(ctx, dbName, tbName, func(mutable *tabledesc.Mutable) {
 					mutable.SetPublic()
 				})
-
+			case "protect":
+				var recordID string
+				var protectTS int
+				d.ScanArgs(t, "id", &recordID)
+				d.ScanArgs(t, "ts", &protectTS)
+				target := spanconfigtestutils.ParseProtectionTarget(t, d.Input)
+				mkRecordAndProtect(recordID, hlc.Timestamp{WallTime: int64(protectTS)}, target)
+				return ""
+			case "release":
+				var recordID string
+				d.ScanArgs(t, "id", &recordID)
+				releaseRecord(recordID)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}

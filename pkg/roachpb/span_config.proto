@@ -14,6 +14,7 @@ option go_package = "roachpb";
 
 import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
 // TODO(irfansharif): We could have the proto definitions in pkg/config/zonepb
 // use these messages instead of duplicating everything.
@@ -140,6 +141,11 @@ message SpanConfig {
   // preferred option to least. The first preference that an existing replica of
   // a range matches will take priority for the lease.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+
+  // ProtectedTimestamps captures all the protected timestamp records that apply
+  // to the range. The timestamp values represent the timestamps after which
+  // data will be protected from GC, if the protection succeeds.
+  repeated util.hlc.Timestamp protected_timestamps = 10 [(gogoproto.nullable) = false];
 }
 
 // SpanConfigEntry ties a span to its corresponding config.
