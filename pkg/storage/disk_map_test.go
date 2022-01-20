@@ -180,7 +180,7 @@ func TestPebbleMap(t *testing.T) {
 	}
 	defer e.Close()
 
-	runTestForEngine(ctx, t, "testdata/diskmap", e)
+	runTestForEngine(ctx, t, testutils.TestDataPath(t, "diskmap"), e)
 
 }
 
@@ -197,7 +197,7 @@ func TestPebbleMultiMap(t *testing.T) {
 	}
 	defer e.Close()
 
-	runTestForEngine(ctx, t, "testdata/diskmap_duplicates_pebble", e)
+	runTestForEngine(ctx, t, testutils.TestDataPath(t, "diskmap_duplicates_pebble"), e)
 
 }
 

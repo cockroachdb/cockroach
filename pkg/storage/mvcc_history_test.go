@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -91,7 +92,7 @@ func TestMVCCHistories(t *testing.T) {
 	// Everything reads/writes under the same prefix.
 	span := roachpb.Span{Key: keys.LocalMax, EndKey: roachpb.KeyMax}
 
-	datadriven.Walk(t, "testdata/mvcc_histories", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
 		// We start from a clean slate in every test file.
 		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
 			func(cfg *engineConfig) error {

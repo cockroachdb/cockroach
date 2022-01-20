@@ -104,7 +104,7 @@ func TestInitialKeys(t *testing.T) {
 func TestInitialKeysAndSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	datadriven.RunTest(t, "testdata/initial_keys", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "initial_keys"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "initial-keys":
 			var tenant string

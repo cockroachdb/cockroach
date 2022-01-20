@@ -106,6 +106,7 @@ go_test(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],

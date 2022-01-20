@@ -13,7 +13,6 @@ package circuit
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -174,7 +173,7 @@ func TestBreaker(t *testing.T) {
 	}
 
 	datadriven.RunTest(t,
-		filepath.Join("testdata", t.Name()+".txt"),
+		testutils.TestDataPath(t, t.Name()+".txt"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			return allBuf.String()
 		})
@@ -228,7 +227,7 @@ func TestBreakerProbeIsReactive(t *testing.T) {
 	requireNumProbes(t, 2)
 
 	datadriven.RunTest(t,
-		filepath.Join("testdata", t.Name()+".txt"),
+		testutils.TestDataPath(t, t.Name()+".txt"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			return allBuf.String()
 		})

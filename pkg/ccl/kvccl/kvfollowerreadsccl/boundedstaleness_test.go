@@ -280,7 +280,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 		return errorRegexp.ReplaceAllString(s, "$1 XXX")
 	}
 
-	datadriven.Walk(t, "testdata/boundedstaleness", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "boundedstaleness"), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 

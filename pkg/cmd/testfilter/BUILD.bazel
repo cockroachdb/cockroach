@@ -21,6 +21,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":testfilter_lib"],
     deps = [
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],

@@ -86,6 +86,7 @@ go_test(
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",

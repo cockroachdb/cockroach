@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,7 +44,7 @@ func TestBuildDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	datadriven.Walk(t, filepath.Join("testdata"), func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		for _, depsType := range []struct {
 			name                string
 			dependenciesWrapper func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies))

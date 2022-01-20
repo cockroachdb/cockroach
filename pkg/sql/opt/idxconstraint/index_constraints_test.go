@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -57,7 +58,7 @@ import (
 func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, tu.TestDataPath(t), func(t *testing.T, path string) {
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 

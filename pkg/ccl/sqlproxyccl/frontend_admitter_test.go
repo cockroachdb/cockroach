@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -23,7 +24,7 @@ import (
 )
 
 func tlsConfig() (*tls.Config, error) {
-	cer, err := tls.LoadX509KeyPair("testdata/testserver.crt", "testdata/testserver.key")
+	cer, err := tls.LoadX509KeyPair(filepath.Join("testdata", "testserver.crt"), filepath.Join("testdata", "testserver.key"))
 	if err != nil {
 		return nil, err
 	}
