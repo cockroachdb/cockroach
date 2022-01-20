@@ -521,7 +521,7 @@ func (p *planner) dropIndexByName(
 	}
 	tableDesc.RemovePublicNonPrimaryIndex(idxOrdinal)
 
-	commentUpdater := p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+	commentUpdater := p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
 		ctx,
 		p.txn,
 		p.SessionData(),

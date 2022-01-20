@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package commenter
+package descmetadata
 
 import (
 	"context"
@@ -22,30 +22,31 @@ import (
 // MakeConstraintOidBuilderFn creates a ConstraintOidBuilder.
 type MakeConstraintOidBuilderFn func() ConstraintOidBuilder
 
-// CommentUpdaterFactory used to construct a commenter.CommentUpdater, which
+// MetadataUpdaterFactory used to construct a commenter.DescriptorMetadataUpdater, which
 // can be used to update comments on schema objects.
-type CommentUpdaterFactory struct {
+type MetadataUpdaterFactory struct {
 	ieFactory                sqlutil.SessionBoundInternalExecutorFactory
 	makeConstraintOidBuilder MakeConstraintOidBuilderFn
 }
 
-// NewCommentUpdaterFactory creates a new comment updater factory.
-func NewCommentUpdaterFactory(
+// NewMetadataUpdaterFactory creates a new comment updater factory.
+func NewMetadataUpdaterFactory(
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 	makeConstraintOidBuilder MakeConstraintOidBuilderFn,
-) scexec.CommentUpdaterFactory {
-	return CommentUpdaterFactory{
+) scexec.DescriptorMetadataUpdaterFactory {
+	return MetadataUpdaterFactory{
 		ieFactory:                ieFactory,
 		makeConstraintOidBuilder: makeConstraintOidBuilder,
 	}
 }
 
-// NewCommentUpdater creates a new comment updater, which can be used to
-// create / destroy comments associated with different schema objects.
-func (cf CommentUpdaterFactory) NewCommentUpdater(
+// NewMetadataUpdater creates a new comment updater, which can be used to
+// create / destroy metadata (i.e. comments) associated with different
+// schema objects.
+func (cf MetadataUpdaterFactory) NewMetadataUpdater(
 	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
-) scexec.CommentUpdater {
-	return commentUpdater{
+) scexec.DescriptorMetadataUpdater {
+	return metadataUpdater{
 		txn:        txn,
 		ie:         cf.ieFactory(ctx, sessionData),
 		oidBuilder: cf.makeConstraintOidBuilder(),

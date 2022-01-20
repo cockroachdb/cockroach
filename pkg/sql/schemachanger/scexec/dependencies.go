@@ -39,7 +39,7 @@ type Dependencies interface {
 	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
 	EventLogger() EventLogger
-	CommentUpdater(ctx context.Context) CommentUpdater
+	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -243,8 +243,9 @@ type BackfillProgressFlusher interface {
 	FlushFractionCompleted(ctx context.Context) error
 }
 
-// CommentUpdater is used to update comments associated with schema objects.
-type CommentUpdater interface {
+// DescriptorMetadataUpdater is used to update metadata associated with schema objects,
+// for example comments associated with a schema.
+type DescriptorMetadataUpdater interface {
 	// UpsertDescriptorComment updates a comment associated with a schema object.
 	UpsertDescriptorComment(id int64, subID int64, commentType keys.CommentType, comment string) error
 
@@ -258,11 +259,11 @@ type CommentUpdater interface {
 	DeleteConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintName string, constraintType scpb.ConstraintType) error
 }
 
-// CommentUpdaterFactory is used to construct a CommentUpdater for a given
+// DescriptorMetadataUpdaterFactory is used to construct a DescriptorMetadataUpdater for a given
 // transaction and context.
-type CommentUpdaterFactory interface {
-	// NewCommentUpdater creates a new CommentUpdater.
-	NewCommentUpdater(
+type DescriptorMetadataUpdaterFactory interface {
+	// NewMetadataUpdater creates a new DescriptorMetadataUpdater.
+	NewMetadataUpdater(
 		ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
-	) CommentUpdater
+	) DescriptorMetadataUpdater
 }

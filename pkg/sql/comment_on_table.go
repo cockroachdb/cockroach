@@ -22,9 +22,9 @@ import (
 )
 
 type commentOnTableNode struct {
-	n         *tree.CommentOnTable
-	tableDesc catalog.TableDescriptor
-	commenter scexec.CommentUpdater
+	n               *tree.CommentOnTable
+	tableDesc       catalog.TableDescriptor
+	metadataUpdater scexec.DescriptorMetadataUpdater
 }
 
 // CommentOnTable add comment on a table.
@@ -52,7 +52,7 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 	return &commentOnTableNode{
 		n:         n,
 		tableDesc: tableDesc,
-		commenter: p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+		metadataUpdater: p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
 			ctx,
 			p.txn,
 			p.SessionData(),
@@ -62,13 +62,13 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 
 func (n *commentOnTableNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		err := n.commenter.UpsertDescriptorComment(
+		err := n.metadataUpdater.UpsertDescriptorComment(
 			int64(n.tableDesc.GetID()), 0, keys.TableCommentType, *n.n.Comment)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := n.commenter.DeleteDescriptorComment(
+		err := n.metadataUpdater.DeleteDescriptorComment(
 			int64(n.tableDesc.GetID()), 0, keys.TableCommentType)
 		if err != nil {
 			return err

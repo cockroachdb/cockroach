@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package commenter
+package descmetadata
 
 import (
 	"context"
@@ -49,16 +49,16 @@ type ConstraintOidBuilder interface {
 	) *tree.DOid
 }
 
-// commentUpdater which implements scexec.CommentUpdater that is used to update
-// comments on different schema objects.
-type commentUpdater struct {
+// metadataUpdater which implements scexec.DescriptorMetadataUpdater that is used to update
+// metaadata such as comments on different schema objects.
+type metadataUpdater struct {
 	txn        *kv.Txn
 	ie         sqlutil.InternalExecutor
 	oidBuilder ConstraintOidBuilder
 }
 
-// UpsertDescriptorComment implements scexec.CommentUpdater.
-func (cu commentUpdater) UpsertDescriptorComment(
+// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
+func (cu metadataUpdater) UpsertDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType, comment string,
 ) error {
 	_, err := cu.ie.ExecEx(context.Background(),
@@ -74,8 +74,8 @@ func (cu commentUpdater) UpsertDescriptorComment(
 	return err
 }
 
-// DeleteDescriptorComment implements scexec.CommentUpdater.
-func (cu commentUpdater) DeleteDescriptorComment(
+// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
+func (cu metadataUpdater) DeleteDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType,
 ) error {
 	_, err := cu.ie.ExecEx(context.Background(),
@@ -91,7 +91,7 @@ func (cu commentUpdater) DeleteDescriptorComment(
 	return err
 }
 
-func (cu commentUpdater) oidFromConstraint(
+func (cu metadataUpdater) oidFromConstraint(
 	desc catalog.TableDescriptor,
 	schemaName string,
 	constraintName string,
@@ -146,8 +146,8 @@ func (cu commentUpdater) oidFromConstraint(
 	return nil
 }
 
-// UpsertConstraintComment implements scexec.CommentUpdater.
-func (cu commentUpdater) UpsertConstraintComment(
+// UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
+func (cu metadataUpdater) UpsertConstraintComment(
 	desc catalog.TableDescriptor,
 	schemaName string,
 	constraintName string,
@@ -162,8 +162,8 @@ func (cu commentUpdater) UpsertConstraintComment(
 	return cu.UpsertDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType, comment)
 }
 
-// DeleteConstraintComment implements scexec.CommentUpdater.
-func (cu commentUpdater) DeleteConstraintComment(
+// DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
+func (cu metadataUpdater) DeleteConstraintComment(
 	desc catalog.TableDescriptor,
 	schemaName string,
 	constraintName string,
