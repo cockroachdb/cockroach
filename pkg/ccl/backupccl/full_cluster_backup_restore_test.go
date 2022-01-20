@@ -48,6 +48,7 @@ func TestFullClusterBackup(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DisableSpanConfigs: true, // TODO(irfansharif): #75060.
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					// We compare job progress before and after a restore. Disable
