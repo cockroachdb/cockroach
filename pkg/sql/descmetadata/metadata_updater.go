@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -53,9 +54,11 @@ type ConstraintOidBuilder interface {
 // metadataUpdater which implements scexec.DescriptorMetadataUpdater that is used to update
 // metaadata such as comments on different schema objects.
 type metadataUpdater struct {
-	txn        *kv.Txn
-	ie         sqlutil.InternalExecutor
-	oidBuilder ConstraintOidBuilder
+	txn               *kv.Txn
+	ie                sqlutil.InternalExecutor
+	oidBuilder        ConstraintOidBuilder
+	collectionFactory *descs.CollectionFactory
+	cacheEnabled      bool
 }
 
 // UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
@@ -180,7 +183,7 @@ func (cu metadataUpdater) DeleteConstraintComment(
 
 // DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
 func (cu metadataUpdater) DeleteDatabaseRoleSettings(id descpb.ID) error {
-	_, err := cu.ie.ExecEx(context.Background(),
+	rowsDeleted, err := cu.ie.ExecEx(context.Background(),
 		"delete-db-role-setting",
 		cu.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -190,9 +193,33 @@ func (cu metadataUpdater) DeleteDatabaseRoleSettings(id descpb.ID) error {
 		),
 		id,
 	)
-
-	// TODO(fqazi): The existing role setting code will update the version number
-	// of the table here, we need to execute the same logic. A later commit will
-	// this add this in before adoption.
-	return err
+	if err != nil {
+		return err
+	}
+	// If system table updates should be minimized, avoid bumping up the version
+	// number of the table below.
+	if cu.cacheEnabled || rowsDeleted == 0 {
+		return nil
+	}
+	// Bump the table version for the role settings table when we modify it.
+	return cu.collectionFactory.Txn(context.TODO(),
+		cu.ie,
+		cu.txn.DB(),
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			_, desc, err := descriptors.GetMutableTableByName(
+				context.TODO(),
+				cu.txn,
+				sessioninit.DatabaseRoleSettingsTableName,
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required:       true,
+						RequireMutable: true,
+					},
+				})
+			if err != nil {
+				return err
+			}
+			desc.MaybeIncrementVersion()
+			return nil
+		})
 }
