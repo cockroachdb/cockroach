@@ -40,7 +40,7 @@ func NewJobRunDependencies(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
-	commentUpdaterFactory scexec.CommentUpdaterFactory,
+	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 	sessionData *sessiondata.SessionData,
@@ -72,7 +72,7 @@ type jobExecutionDeps struct {
 	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
 	partitioner           scmutationexec.Partitioner
 	backfiller            scexec.Backfiller
-	commentUpdaterFactory scexec.CommentUpdaterFactory
+	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
 	rangeCounter          RangeCounter
 	jobRegistry           *jobs.Registry
 	job                   *jobs.Job

@@ -23,10 +23,10 @@ import (
 )
 
 type commentOnIndexNode struct {
-	n         *tree.CommentOnIndex
-	tableDesc *tabledesc.Mutable
-	index     catalog.Index
-	commenter scexec.CommentUpdater
+	n               *tree.CommentOnIndex
+	tableDesc       *tabledesc.Mutable
+	index           catalog.Index
+	metadataUpdater scexec.DescriptorMetadataUpdater
 }
 
 // CommentOnIndex adds a comment on an index.
@@ -49,7 +49,7 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 		n:         n,
 		tableDesc: tableDesc,
 		index:     index,
-		commenter: p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+		metadataUpdater: p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
 			ctx,
 			p.txn,
 			p.SessionData(),
@@ -58,7 +58,7 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 
 func (n *commentOnIndexNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		err := n.commenter.UpsertDescriptorComment(
+		err := n.metadataUpdater.UpsertDescriptorComment(
 			int64(n.tableDesc.ID),
 			int64(n.index.GetID()),
 			keys.IndexCommentType,
@@ -68,7 +68,7 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		err := n.commenter.DeleteDescriptorComment(
+		err := n.metadataUpdater.DeleteDescriptorComment(
 			int64(n.tableDesc.ID), int64(n.index.GetID()), keys.IndexCommentType)
 		if err != nil {
 			return err

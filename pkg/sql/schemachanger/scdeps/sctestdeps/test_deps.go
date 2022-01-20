@@ -877,7 +877,9 @@ func (s *TestState) DeleteConstraintComment(
 	return nil
 }
 
-// CommentUpdater implement scexec.Dependencies.
-func (s *TestState) CommentUpdater(ctx context.Context) scexec.CommentUpdater {
+// DescriptorMetadataUpdater implement scexec.Dependencies.
+func (s *TestState) DescriptorMetadataUpdater(
+	ctx context.Context,
+) scexec.DescriptorMetadataUpdater {
 	return s
 }
