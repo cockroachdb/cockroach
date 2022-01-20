@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1000,6 +1002,166 @@ func TestDTimeTZ(t *testing.T) {
 			assert.Equal(t, tc.isMax, tc.t.IsMax(ctx))
 			assert.Equal(t, tc.isMin, tc.t.IsMin(ctx))
 		})
+	}
+}
+
+func checkTimeTZ(t *testing.T, d *tree.DTimeTZ) {
+	t.Helper()
+	if d.OffsetSecs < timetz.MinTimeTZOffsetSecs || d.OffsetSecs > timetz.MaxTimeTZOffsetSecs {
+		t.Fatalf("d.OffsetSecs out of range: %d", d.OffsetSecs)
+	}
+	if d.TimeOfDay < timeofday.Min || d.TimeOfDay > timeofday.Max {
+		t.Fatalf("d.TimeOfDay out of range: %d", d.TimeOfDay)
+	}
+}
+
+func TestDTimeTZPrev(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewPseudoRand()
+	evalCtx := &tree.EvalContext{
+		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+			Location: time.UTC,
+		}),
+	}
+
+	// Check a few specific values.
+	closeToMidnight, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "23:59:59.865326-03:15:29", time.Microsecond)
+	require.NoError(t, err)
+	require.False(t, depOnCtx)
+	prev, ok := closeToMidnight.Prev(evalCtx)
+	require.True(t, ok)
+	require.Equal(t, "'11:16:28.865325-15:59:00'", prev.String())
+	prevPrev, ok := prev.Prev(evalCtx)
+	require.True(t, ok)
+	assert.Equal(t, "'11:16:29.865325-15:58:59'", prevPrev.String())
+
+	maxTime, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "24:00:00-1559", time.Microsecond)
+	require.NoError(t, err)
+	require.False(t, depOnCtx)
+	prev, ok = maxTime.Prev(evalCtx)
+	require.True(t, ok)
+	assert.Equal(t, "'23:59:59.999999-15:59:00'", prev.String())
+
+	minTime, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "00:00:00+1559", time.Microsecond)
+	require.NoError(t, err)
+	require.False(t, depOnCtx)
+	_, ok = minTime.Prev(evalCtx)
+	assert.False(t, ok)
+
+	minTimePlusOne, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "00:00:00.000001+1559", time.Microsecond)
+	require.NoError(t, err)
+	require.False(t, depOnCtx)
+	prev, ok = minTimePlusOne.Prev(evalCtx)
+	require.True(t, ok)
+	assert.Equal(t, minTime, prev)
+
+	// Choose a random start time, and run Prev for 10000 iterations.
+	startTime := randgen.RandDatum(rng, types.TimeTZ, false /* nullOk */)
+	var total int
+	for datum, ok := startTime, true; ok && total < 10000; datum, ok = datum.Prev(evalCtx) {
+		total++
+
+		// Check that the result of calling Prev is valid.
+		timeTZ, ok := datum.(*tree.DTimeTZ)
+		require.True(t, ok)
+		checkTimeTZ(t, timeTZ)
+
+		// Check that the result of calling Next on this new value is valid.
+		nextDatum, nextOk := timeTZ.Next(evalCtx)
+		if !nextOk {
+			assert.Equal(t, timeTZ, tree.DMaxTimeTZ)
+			continue
+		}
+		nextTimeTZ, ok := nextDatum.(*tree.DTimeTZ)
+		require.True(t, ok)
+		checkTimeTZ(t, nextTimeTZ)
+
+		// Check that the two datums have the expected relationship to one another.
+		assert.True(t, nextTimeTZ.After(timeTZ.TimeTZ))
+		assert.True(t, timeTZ.Before(nextTimeTZ.TimeTZ))
+		if nextTimeTZ.OffsetSecs == timetz.MinTimeTZOffsetSecs ||
+			nextTimeTZ.TimeOfDay+duration.MicrosPerSec > timeofday.Max {
+			assert.True(t, nextTimeTZ.ToTime().Sub(timeTZ.ToTime()) == time.Microsecond)
+		} else {
+			assert.True(t, nextTimeTZ.ToTime().Equal(timeTZ.ToTime()))
+		}
+	}
+}
+
+func TestDTimeTZNext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewPseudoRand()
+	evalCtx := &tree.EvalContext{
+		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+			Location: time.UTC,
+		}),
+	}
+
+	// Check a few specific values.
+	closeToMidnight, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "00:00:00.865326+03:15:29", time.Microsecond)
+	require.NoError(t, err)
+	require.False(t, depOnCtx)
+	next, ok := closeToMidnight.Next(evalCtx)
+	require.True(t, ok)
+	require.Equal(t, "'12:43:31.865327+15:59:00'", next.String())
+	nextNext, ok := next.Next(evalCtx)
+	require.True(t, ok)
+	assert.Equal(t, "'12:43:30.865327+15:58:59'", nextNext.String())
+
+	minTime, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "00:00:00+1559", time.Microsecond)
+	require.NoError(t, err)
+	require.False(t, depOnCtx)
+	next, ok = minTime.Next(evalCtx)
+	require.True(t, ok)
+	assert.Equal(t, "'00:00:00.000001+15:59:00'", next.String())
+
+	maxTime, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "24:00:00-1559", time.Microsecond)
+	require.NoError(t, err)
+	require.False(t, depOnCtx)
+	_, ok = maxTime.Next(evalCtx)
+	assert.False(t, ok)
+
+	maxTimeMinusOne, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "23:59:59.999999-1559", time.Microsecond)
+	require.NoError(t, err)
+	require.False(t, depOnCtx)
+	next, ok = maxTimeMinusOne.Next(evalCtx)
+	require.True(t, ok)
+	assert.Equal(t, maxTime, next)
+
+	// Choose a random start time, and run Next for 10000 iterations.
+	startTime := randgen.RandDatum(rng, types.TimeTZ, false /* nullOk */)
+	var total int
+	for datum, ok := startTime, true; ok && total < 10000; datum, ok = datum.Next(evalCtx) {
+		total++
+
+		// Check that the result of calling Next is valid.
+		timeTZ, ok := datum.(*tree.DTimeTZ)
+		require.True(t, ok)
+		checkTimeTZ(t, timeTZ)
+
+		// Check that the result of calling Prev on this new value is valid.
+		prevDatum, prevOk := timeTZ.Prev(evalCtx)
+		if !prevOk {
+			assert.Equal(t, timeTZ, tree.DMinTimeTZ)
+			continue
+		}
+		prevTimeTZ, ok := prevDatum.(*tree.DTimeTZ)
+		require.True(t, ok)
+		checkTimeTZ(t, prevTimeTZ)
+
+		// Check that the two datums have the expected relationship to one another.
+		assert.True(t, prevTimeTZ.Before(timeTZ.TimeTZ))
+		assert.True(t, timeTZ.After(prevTimeTZ.TimeTZ))
+		if prevTimeTZ.OffsetSecs == timetz.MaxTimeTZOffsetSecs ||
+			prevTimeTZ.TimeOfDay-duration.MicrosPerSec < timeofday.Min {
+			assert.True(t, timeTZ.ToTime().Sub(prevTimeTZ.ToTime()) == time.Microsecond)
+		} else {
+			assert.True(t, timeTZ.ToTime().Equal(prevTimeTZ.ToTime()))
+		}
 	}
 }
 
