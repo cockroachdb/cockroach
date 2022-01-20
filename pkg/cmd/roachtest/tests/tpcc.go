@@ -845,6 +845,9 @@ func (s tpccBenchSpec) startOpts() (option.StartOpts, install.ClusterSettings) {
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachtestOpts.DontEncrypt = true
 	settings := install.MakeClusterSettings()
+	// Facilitate diagnosing out-of-memory conditions in tpccbench runs.
+	// See https://github.com/cockroachdb/cockroach/issues/75071.
+	settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=15s")
 	if s.LoadConfig == singlePartitionedLoadgen {
 		settings.NumRacks = s.partitions()
 	}
