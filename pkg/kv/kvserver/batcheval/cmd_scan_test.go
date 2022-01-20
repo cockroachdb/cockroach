@@ -16,8 +16,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -117,9 +122,9 @@ func testScanReverseScanInner(
 	cArgs := CommandArgs{
 		Args: req,
 		Header: roachpb.Header{
-			Timestamp:             ts,
-			TargetBytes:           tb,
-			TargetBytesAllowEmpty: allowEmpty,
+			Timestamp:   ts,
+			TargetBytes: tb,
+			AllowEmpty:  allowEmpty,
 		},
 		EvalCtx: (&MockEvalCtx{ClusterSettings: settings}).EvalContext(),
 	}
@@ -175,4 +180,78 @@ func testScanReverseScanInner(
 	if rows != nil {
 		require.Len(t, rows, expN)
 	}
+}
+
+// TestScanReverseScanWholeRows checks that WholeRowsOfSize is wired up
+// correctly. Comprehensive testing is done e.g. in TestMVCCHistories.
+func TestScanReverseScanWholeRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ts := hlc.Timestamp{WallTime: 1}
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Write 2 rows with 3 column families each.
+	var rowKeys []roachpb.Key
+	for r := 0; r < 2; r++ {
+		for cf := uint32(0); cf < 3; cf++ {
+			key := makeRowKey(t, r, cf)
+			err := storage.MVCCPut(ctx, eng, nil, key, ts, roachpb.MakeValueFromString("value"), nil)
+			require.NoError(t, err)
+			rowKeys = append(rowKeys, key)
+		}
+	}
+
+	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+		var req roachpb.Request
+		var resp roachpb.Response
+		if !reverse {
+			req = &roachpb.ScanRequest{}
+			resp = &roachpb.ScanResponse{}
+		} else {
+			req = &roachpb.ReverseScanRequest{}
+			resp = &roachpb.ReverseScanResponse{}
+		}
+		req.SetHeader(roachpb.RequestHeader{Key: rowKeys[0], EndKey: roachpb.KeyMax})
+
+		// Scan with limit of 5 keys. This should only return the first row (3 keys),
+		// since they second row would yield 6 keys total.
+		cArgs := CommandArgs{
+			EvalCtx: (&MockEvalCtx{ClusterSettings: cluster.MakeTestingClusterSettings()}).EvalContext(),
+			Args:    req,
+			Header: roachpb.Header{
+				Timestamp:          ts,
+				MaxSpanRequestKeys: 5,
+				WholeRowsOfSize:    3,
+			},
+		}
+
+		if !reverse {
+			_, err := Scan(ctx, eng, cArgs, resp)
+			require.NoError(t, err)
+		} else {
+			_, err := ReverseScan(ctx, eng, cArgs, resp)
+			require.NoError(t, err)
+		}
+
+		require.EqualValues(t, resp.Header().NumKeys, 3)
+	})
+}
+
+// makeRowKey makes a key for a SQL row for use in tests, using the system
+// tenant with table 1 index 1, and a single column.
+func makeRowKey(t *testing.T, id int, columnFamily uint32) roachpb.Key {
+	var colMap catalog.TableColMap
+	colMap.Set(0, 0)
+
+	var err error
+	key := keys.SystemSQLCodec.IndexPrefix(1, 1)
+	key, _, err = rowenc.EncodeColumns(
+		[]descpb.ColumnID{0}, nil /* directions */, colMap,
+		[]tree.Datum{tree.NewDInt(tree.DInt(id))}, key)
+	require.NoError(t, err)
+	return keys.MakeFamilyKey(key, columnFamily)
 }

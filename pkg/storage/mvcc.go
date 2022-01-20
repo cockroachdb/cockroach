@@ -874,7 +874,7 @@ func mvccGet(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.Uncertainty)
+	mvccScanner.init(opts.Txn, opts.Uncertainty, 0)
 	mvccScanner.get(ctx)
 
 	// If we have a trace, emit the scan stats that we produced.
@@ -2366,7 +2366,8 @@ func mvccScanToBytes(
 		maxKeys:                opts.MaxKeys,
 		targetBytes:            opts.TargetBytes,
 		targetBytesAvoidExcess: opts.TargetBytesAvoidExcess,
-		targetBytesAllowEmpty:  opts.TargetBytesAllowEmpty,
+		allowEmpty:             opts.AllowEmpty,
+		wholeRows:              opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
 		maxIntents:             opts.MaxIntents,
 		inconsistent:           opts.Inconsistent,
 		tombstones:             opts.Tombstones,
@@ -2374,7 +2375,11 @@ func mvccScanToBytes(
 		keyBuf:                 mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.Uncertainty)
+	var trackLastOffsets int
+	if opts.WholeRowsOfSize > 1 {
+		trackLastOffsets = int(opts.WholeRowsOfSize)
+	}
+	mvccScanner.init(opts.Txn, opts.Uncertainty, trackLastOffsets)
 
 	var res MVCCScanResult
 	var err error
@@ -2482,7 +2487,7 @@ type MVCCScanOptions struct {
 	// memory during a Scan operation. Once the target is satisfied (i.e. met or
 	// exceeded) by the emitted KV pairs, iteration stops (with a ResumeSpan as
 	// appropriate). In particular, at least one kv pair is returned (when one
-	// exists), unless TargetBytesAllowEmpty is set.
+	// exists), unless AllowEmpty is set.
 	//
 	// The number of bytes a particular kv pair accrues depends on internal data
 	// structures, but it is guaranteed to exceed that of the bytes stored in
@@ -2496,9 +2501,16 @@ type MVCCScanOptions struct {
 	// TODO(erikgrinaker): This option exists for backwards compatibility with
 	// 21.2 RPC clients, in 22.2 it should always be enabled.
 	TargetBytesAvoidExcess bool
-	// TargetBytesAllowEmpty will return an empty result if the first kv pair
-	// exceeds the TargetBytes limit and TargetBytesAvoidExcess is set.
-	TargetBytesAllowEmpty bool
+	// AllowEmpty will return an empty result if the first kv pair exceeds the
+	// TargetBytes limit and TargetBytesAvoidExcess is set.
+	AllowEmpty bool
+	// WholeRowsOfSize will prevent returning partial rows when limits (MaxKeys or
+	// TargetBytes) are set. The value indicates the max number of keys per row.
+	// If the last KV pair(s) belong to a partial row, they will be removed from
+	// the result -- except if the result only consists of a single partial row
+	// and AllowEmpty is false, in which case the remaining KV pairs of the row
+	// will be fetched and returned too.
+	WholeRowsOfSize int32
 	// MaxIntents is a maximum number of intents collected by scanner in
 	// consistent mode before returning WriteIntentError.
 	//

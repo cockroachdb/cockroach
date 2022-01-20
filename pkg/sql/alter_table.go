@@ -1613,7 +1613,7 @@ func validateConstraintNameIsNotUsed(
 		if name == "" {
 			return false, nil
 		}
-		idx, _ := tableDesc.FindIndexWithName(name.String())
+		idx, _ := tableDesc.FindIndexWithName(string(name))
 		if idx == nil {
 			return false, nil
 		}

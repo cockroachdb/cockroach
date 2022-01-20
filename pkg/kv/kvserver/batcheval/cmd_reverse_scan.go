@@ -48,8 +48,9 @@ func ReverseScan(
 		MaxKeys:                h.MaxSpanRequestKeys,
 		MaxIntents:             storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:            h.TargetBytes,
-		TargetBytesAvoidExcess: h.TargetBytesAllowEmpty || avoidExcess, // AllowEmpty takes precedence
-		TargetBytesAllowEmpty:  h.TargetBytesAllowEmpty,
+		TargetBytesAvoidExcess: h.AllowEmpty || avoidExcess, // AllowEmpty takes precedence
+		AllowEmpty:             h.AllowEmpty,
+		WholeRowsOfSize:        h.WholeRowsOfSize,
 		FailOnMoreRecent:       args.KeyLocking != lock.None,
 		Reverse:                true,
 		MemoryAccount:          cArgs.EvalCtx.GetResponseMemoryAccount(),

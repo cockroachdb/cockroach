@@ -79,6 +79,41 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 	}
 }
 
+func BenchmarkMVCCScan_PebbleSQLRows(b *testing.B) {
+	skip.UnderShort(b)
+	ctx := context.Background()
+	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			for _, numColumnFamilies := range []int{1, 3, 10} {
+				b.Run(fmt.Sprintf("columnFamilies=%d", numColumnFamilies), func(b *testing.B) {
+					for _, numVersions := range []int{1} {
+						b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+							for _, valueSize := range []int{8, 64, 512} {
+								b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+									for _, wholeRows := range []bool{false, true} {
+										b.Run(fmt.Sprintf("wholeRows=%t", wholeRows), func(b *testing.B) {
+											runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
+												benchDataOptions: benchDataOptions{
+													numColumnFamilies: numColumnFamilies,
+													numVersions:       numVersions,
+													valueBytes:        valueSize,
+												},
+												numRows:   numRows,
+												reverse:   false,
+												wholeRows: wholeRows,
+											})
+										})
+									}
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	ctx := context.Background()
