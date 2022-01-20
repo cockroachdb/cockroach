@@ -221,6 +221,28 @@ func ListFromBitField(m uint32, objectType ObjectType) List {
 	return ret
 }
 
+// PrivilegesFromBitFields takes a bitfield of privilege kinds, a bitfield of grant options, and an ObjectType
+// returns a List. It is ordered in increasing value of privilege.Kind.
+func PrivilegesFromBitFields(
+	kindBits uint32, grantOptionBits uint32, objectType ObjectType,
+) []Privilege {
+	var ret []Privilege
+
+	kinds := GetValidPrivilegesForObject(objectType)
+
+	for _, kind := range kinds {
+		mask := kind.Mask()
+		if kindBits&mask != 0 {
+			grantOption := grantOptionBits&mask != 0
+			ret = append(ret, Privilege{
+				Kind:        kind,
+				GrantOption: grantOption,
+			})
+		}
+	}
+	return ret
+}
+
 // ListFromStrings takes a list of strings and attempts to build a list of Kind.
 // We convert each string to uppercase and search for it in the ByName map.
 // If an entry is not found in ByName, an error is returned.
