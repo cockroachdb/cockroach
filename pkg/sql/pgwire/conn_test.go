@@ -49,6 +49,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/vendor/github.com/jackc/pgproto3/v2"
+	"github.com/cockroachdb/cockroach/vendor/github.com/jackc/pgx/v4"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"

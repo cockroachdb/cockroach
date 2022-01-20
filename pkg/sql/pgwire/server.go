@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -781,10 +782,19 @@ func parseClientProvidedSessionParameters(
 			// here, so that further lookups for authentication have the correct
 			// identifier.
 			args.User, _ = security.MakeSQLUsernameFromUserInput(value, security.UsernameValidation)
-			// TODO(#sql-experience): we should retrieve the admin status during
-			// authentication using the roles cache, instead of using a simple/naive
-			// username match. See #69355.
+			// IsSuperuser will get updated later when we load the user's session
+			// initialization information.
 			args.IsSuperuser = args.User.IsRootUser()
+
+		case "crdb:session_revival_token":
+			token, err := base64.StdEncoding.DecodeString(value)
+			if err != nil {
+				return sql.SessionArgs{}, pgerror.Wrapf(
+					err, pgcode.ProtocolViolation,
+					"error decoding value for key %q", key,
+				)
+			}
+			args.SessionRevivalToken = token
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
