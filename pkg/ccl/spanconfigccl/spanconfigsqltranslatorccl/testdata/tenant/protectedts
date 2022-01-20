@@ -1,0 +1,75 @@
+# Create a database with some tables and write protected timestamps on the
+# tables and database. Check that span configurations are as we expect.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1(id INT);
+CREATE TABLE db.t2();
+----
+
+# Schema object IDs
+# db: 54
+# t1: 56
+# t2: 57
+
+# Alter zone config fields on the database and one of the tables to ensure
+# things are cascading.
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
+----
+
+# Write a protected timestamp on t1.
+protect record-id=1 ts=1
+descs 56
+----
+
+translate database=db
+----
+/Tenant/10/Table/5{6-7}                    num_replicas=7 num_voters=5 pts=[1]
+/Tenant/10/Table/5{7-8}                    num_replicas=7
+
+# Write a protected timestamp on db, so we should see it on both t1 and t2.
+protect record-id=2 ts=2
+descs 54
+----
+
+translate database=db
+----
+/Tenant/10/Table/5{6-7}                    num_replicas=7 num_voters=5 pts=[1 2]
+/Tenant/10/Table/5{7-8}                    num_replicas=7 pts=[2]
+
+# Release the protected timestamp on table t1
+release record-id=1
+----
+
+translate database=db
+----
+/Tenant/10/Table/5{6-7}                    num_replicas=7 num_voters=5 pts=[2]
+/Tenant/10/Table/5{7-8}                    num_replicas=7 pts=[2]
+
+# Release the protected timestamp on database db
+release record-id=2
+----
+
+translate database=db
+----
+/Tenant/10/Table/5{6-7}                    num_replicas=7 num_voters=5
+/Tenant/10/Table/5{7-8}                    num_replicas=7
+
+# Create an index on t1 to ensure that subzones also see protected timestamps.
+exec-sql
+CREATE INDEX idx ON db.t1(id);
+ALTER INDEX db.t1@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+protect record-id=3 ts=3
+descs 56
+----
+
+translate database=db
+----
+/Tenant/10/Table/56{-/2}                   num_replicas=7 num_voters=5 pts=[3]
+/Tenant/10/Table/56/{2-3}                  ttl_seconds=1 num_replicas=7 num_voters=5 pts=[3]
+/Tenant/10/Table/5{6/3-7}                  num_replicas=7 num_voters=5 pts=[3]
+/Tenant/10/Table/5{7-8}                    num_replicas=7

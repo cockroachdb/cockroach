@@ -177,4 +177,4 @@ trace.debug.enable	boolean	false	if set, traces for recent requests can be seen 
 trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	21.2-48	set the active cluster version in the format '<major>.<minor>'
+version	version	21.2-50	set the active cluster version in the format '<major>.<minor>'
