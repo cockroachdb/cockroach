@@ -212,6 +212,12 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(sv *settings.Values) string { return sessiondatapb.BytesEncodeHex.String() },
 	},
 
+	`cancel_key`: {
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return evalCtx.CancelKey.String(), nil
+		},
+	},
+
 	`client_min_messages`: {
 		Set: func(
 			_ context.Context, m sessionDataMutator, s string,

@@ -26,6 +26,7 @@ go_library(
         "buffer.go",
         "buffer_util.go",
         "cancel_queries.go",
+        "cancel_request.go",
         "cancel_sessions.go",
         "check.go",
         "cluster_wide_id.go",

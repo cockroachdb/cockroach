@@ -52,6 +52,10 @@ type internalContext struct {
 	stdout *os.File
 	stderr *os.File
 
+	// interruptCh is the channel that gets notified when
+	// the user presses Ctrl+C during query execution.
+	interruptCh chan os.Signal
+
 	// quitAfterExecStmts tells the shell whether to quit
 	// after processing the execStmts.
 	quitAfterExecStmts bool

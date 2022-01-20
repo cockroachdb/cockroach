@@ -370,6 +370,16 @@ var (
 	// does not have a primary key.
 	NoPrimaryKey = MakeCode("55C02")
 
+	// Class 57C - Operator intervention, CockroachDB-specific.
+
+	// QueryCancellationStatus is an error payload that conveys the
+	// query cancellation status to the client, when the cancellation
+	// succeeds or fails, and the result is final.
+	QueryCancellationStatus = MakeCode("57CCS")
+	// QueryCancellationRetry is an error payload that conveys
+	// that query cancellation has failed but the client should retry.
+	QueryCancellationRetry = MakeCode("57CCR")
+
 	// Class 58C - System errors related to CockroachDB node problems.
 
 	// RangeUnavailable signals that some data from the cluster cannot be

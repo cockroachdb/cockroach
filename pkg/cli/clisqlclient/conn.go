@@ -22,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -43,6 +46,15 @@ type sqlConn struct {
 	url          string
 	conn         DriverConn
 	reconnecting bool
+
+	// sessionMu stores the session ID / cancel key details.  It's
+	// protected by a mutex because the cancellation can be issued
+	// concurrently with reconnect events.
+	sessionMu struct {
+		syncutil.Mutex
+
+		cancelClient security.CancelRequestClient
+	}
 
 	// passwordMissing is true iff the url is missing a password.
 	passwordMissing bool
@@ -188,6 +200,10 @@ func (c *sqlConn) EnsureConn() error {
 			err = errors.CombineErrors(err, c.Close())
 			return wrapConnError(err)
 		}
+		if err := c.retrieveCancelKey(); err != nil {
+			err = errors.CombineErrors(err, c.Close())
+			return wrapConnError(err)
+		}
 		c.reconnecting = false
 	}
 	return nil
@@ -325,6 +341,99 @@ func toString(v driver.Value) string {
 		return fmt.Sprint(string(x))
 	default:
 		return fmt.Sprint(x)
+	}
+}
+
+// retrieveCancelKey retrieves the session ID and cancel key for this
+// connection.
+func (c *sqlConn) retrieveCancelKey() error {
+	val, _, ok := c.GetServerValue("session ID", "SHOW cancel_key")
+	if !ok {
+		// No key, or previous-version server.
+		fmt.Fprintln(c.errw, "warning: no cancel key, cannot interrupt queries gracefully.")
+		return nil
+	}
+	s1, ok := val.(string)
+	if !ok {
+		fmt.Fprintln(c.errw, "warning: unknown cancel key type %T, cannot interrupt queries gracefully.", val)
+		return nil
+	}
+	val, _, ok = c.GetServerValue("session ID", "SHOW session_id")
+	if !ok {
+		fmt.Fprintln(c.errw, "warning: no session ID, cannot interrupt queries gracefully.")
+		return nil
+	}
+	s2, ok := val.(string)
+	if !ok {
+		fmt.Fprintln(c.errw, "warning: unknown session ID type %T, cannot interrupt queries gracefully.", val)
+		return nil
+	}
+
+	client, err := security.NewCancelRequestClient(s2, s1)
+	if err != nil {
+		fmt.Fprintf(c.errw, "warning: %v. cannot interrupt queries gracefully.\n", err)
+		return nil
+	}
+
+	c.sessionMu.Lock()
+	defer c.sessionMu.Unlock()
+	c.sessionMu.cancelClient = client
+	return nil
+}
+
+func (c *sqlConn) CancelCurrentQuery() error {
+	client := func() security.CancelRequestClient {
+		c.sessionMu.Lock()
+		defer c.sessionMu.Unlock()
+		return c.sessionMu.cancelClient
+	}()
+
+	cancelURL, err := url.Parse(c.url)
+	if err != nil {
+		return err
+	}
+	vals, err := url.ParseQuery(cancelURL.RawQuery)
+	if err != nil {
+		return err
+	}
+
+	// Cancellation requests may need to be retried.
+	for {
+		sessionID, req := client.MakeRequest()
+		vals["crdb:cancel_request"] = []string{sessionID + ":" + req.String()}
+		cancelURL.RawQuery = vals.Encode()
+		cancelURLstring := cancelURL.String()
+		connector, err := pq.NewConnector(cancelURLstring)
+		if err != nil {
+			return err
+		}
+		cancelConn, err := connector.Connect(context.TODO())
+		if err != nil {
+			if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) &&
+				(pqErr.Code == pq.ErrorCode(pgcode.QueryCancellationStatus.String()) ||
+					pqErr.Code == pq.ErrorCode(pgcode.QueryCancellationRetry.String())) {
+				if pqErr.Detail != "" {
+					msg, err := client.ParseClientMessage(pqErr.Detail)
+					if err != nil {
+						return errors.Wrap(err, "parsing server-side cancel response")
+					}
+					if err := client.UpdateFromServer(msg); err != nil {
+						return errors.Wrap(err, "processing server-side cancel response")
+					}
+				}
+				if pqErr.Code == pq.ErrorCode(pgcode.QueryCancellationRetry.String()) {
+					// Retry the cancellation.
+					continue
+				}
+				// Successful cancellation. Done.
+				return nil
+			}
+			// Non-cancellation error. Return error to shell.
+			return err
+		}
+		// Should be unneeded since we're expecting the conn to fail.
+		_ = cancelConn.Close()
+		return nil
 	}
 }
 

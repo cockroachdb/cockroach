@@ -865,6 +865,17 @@ message CancelSessionResponse {
   string error = 2;
 }
 
+message CancelQueryByKeyRequest {
+  string session_id = 1 [(gogoproto.customname) = "SessionID"];
+  string cancel_request = 2;
+}
+
+message CancelQueryByKeyResponse {
+  bool canceled = 1;
+  bool retry = 2;
+  string client_message = 3;
+}
+
 // Request object for ListContentionEvents and ListLocalContentionEvents.
 message ListContentionEventsRequest {}
 
@@ -1526,6 +1537,15 @@ service Status {
     option (google.api.http) = {
       post : "/_status/cancel_query/{node_id}"
 			body: "*"
+    };
+  }
+
+  // CancelQueryByKey cancels the current SQL query for a given session ID
+  // and cancellation key.
+  rpc CancelQueryByKey(CancelQueryByKeyRequest) returns (CancelQueryByKeyResponse) {
+    option (google.api.http) = {
+      post : "/_status/cancel_query_by_key"
+      body: "*"
     };
   }
 

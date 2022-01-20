@@ -1878,6 +1878,34 @@ Events of this type are only emitted when the cluster setting
 | `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
 | `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
 
+### `client_cancel_request`
+
+ClientCancelReqyest is reported when a client requests
+a query cancellation out of band.
+
+Events of this type are only emitted when the cluster setting
+`server.auth_log.sql_connections.enabled` is set.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `CancelRequest` |  | yes |
+| `Canceled` |  | no |
+| `SQLSTATE` | The SQLSTATE code for the error. | no |
+| `ClientMessage` |  | yes |
+| `Error` |  | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
+| `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+
 ### `client_connection_end`
 
 An event of type `client_connection_end` is reported when a client connection
