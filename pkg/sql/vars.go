@@ -1033,6 +1033,9 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/12/runtime-config-client.html.
+	`default_table_access_method`: makeCompatStringVar(`default_table_access_method`, `heap`),
+
 	// See https://www.postgresql.org/docs/13/runtime-config-compatible.html
 	// CockroachDB only supports safe_encoding for now. If `client_encoding` is updated to
 	// allow encodings other than UTF8, then the default value of `backslash_quote` should
