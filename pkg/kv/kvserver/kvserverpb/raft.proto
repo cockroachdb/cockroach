@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.kv.kvserver.kvserverpb;
 option go_package = "kvserverpb";
 
+import "errorspb/errors.proto";
 import "roachpb/errors.proto";
 import "roachpb/internal_raft.proto";
 import "roachpb/metadata.proto";
@@ -237,11 +238,22 @@ message SnapshotResponse {
     reserved 4;
   }
   Status status = 1;
-  string message = 2;
+  // Message is a message explaining an ERROR return value. It is not set for any
+  // other status.
+  //
+  // As of 23.1, the encoded_error field is always used instead. 23.1 itself
+  // needs to populate both due to needing to be compatible with 22.2. Once
+  // the MinSupportedVersion is 23.1, this can be removed.
+  string deprecated_message = 2;
   reserved 3;
 
   // Traces from snapshot processing, returned on status APPLIED or ERROR.
   repeated util.tracing.tracingpb.RecordedSpan collected_spans = 4 [(gogoproto.nullable) = false];
+
+  // encoded_error encodes the error when the status is ERROR.
+  //
+  // MIGRATION: only guaranteed to be set when the message field is no longer there.
+  errorspb.EncodedError encoded_error = 5 [(gogoproto.nullable) = false];
 }
 
 // DelegateSnapshotRequest is the request used to delegate send snapshot requests.

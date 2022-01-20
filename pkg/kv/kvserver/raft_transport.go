@@ -329,12 +329,10 @@ func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapsh
 	}
 	// Check to ensure the header is valid.
 	if req == nil {
+		err := errors.New("client error: no message in first delegated snapshot request")
 		return stream.Send(
 			&kvserverpb.DelegateSnapshotResponse{
-				SnapResponse: &kvserverpb.SnapshotResponse{
-					Status:  kvserverpb.SnapshotResponse_ERROR,
-					Message: "client error: no message in first delegated snapshot request",
-				},
+				SnapResponse: snapRespErr(err),
 			},
 		)
 	}
@@ -364,9 +362,8 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 		return err
 	}
 	if req.Header == nil {
-		return stream.Send(&kvserverpb.SnapshotResponse{
-			Status:  kvserverpb.SnapshotResponse_ERROR,
-			Message: "client error: no header in first snapshot request message"})
+		err := errors.New("client error: no header in first snapshot request message")
+		return stream.Send(snapRespErr(err))
 	}
 	rmr := req.Header.RaftMessageRequest
 	handler, ok := t.getHandler(rmr.ToReplica.StoreID)
@@ -651,14 +648,14 @@ func (t *RaftTransport) DelegateSnapshot(
 	nodeID := req.DelegatedSender.NodeID
 	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
 	if err != nil {
-		return err
+		return errors.Mark(err, errMarkSnapshotError)
 	}
 	client := NewMultiRaftClient(conn)
 
 	// Creates a rpc stream between the leaseholder and sender.
 	stream, err := client.DelegateRaftSnapshot(ctx)
 	if err != nil {
-		return err
+		return errors.Mark(err, errMarkSnapshotError)
 	}
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
