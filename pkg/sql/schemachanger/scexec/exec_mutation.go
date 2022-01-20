@@ -138,7 +138,7 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 		}
 	}
-	commentUpdater := deps.CommentUpdater(ctx)
+	commentUpdater := deps.DescriptorMetadataUpdater(ctx)
 	for _, comment := range mvs.commentsToUpdate {
 		if len(comment.comment) > 0 {
 			if err := commentUpdater.UpsertDescriptorComment(
