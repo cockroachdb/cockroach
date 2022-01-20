@@ -257,20 +257,28 @@ CREATE INDEX pauseidx ON tbl(j);
 
 # clear the pause point now that the job is paused.
 statement ok
-RESET CLUSTER SETTING jobs.debug.pausepoints 
+RESET CLUSTER SETTING jobs.debug.pausepoints
+
+# Confirm the table ID of 'tbl'.  The keys in the resume spans below
+# assume the following table ID. If the table ID changes, then the
+# keys below also need to be updated.
+query I
+SELECT id from system.namespace WHERE name = 'tbl'
+----
+61
 
 # while the backfill is paused, go in and replace the resume spans with some new
 # spans that both the wrong tenant ID or no tenant ID before resuming it to make
 # sure that on resume it re-keys the spans correctly. We pretty_key these below
 # to confirm/show what is in them.
-statement ok 
-UPDATE system.jobs 
+statement ok
+UPDATE system.jobs
   SET payload = crdb_internal.json_to_pb(
     'cockroach.sql.jobs.jobspb.Payload',
       json_set(
-        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload), 
-        ARRAY['schemaChange', 'resumeSpanList', '0'], 
-        '{"resumeSpans": [{"key": "/u/IiQ==", "endKey": "/u/Iiew="}, {"key": "yIns", "endKey" : "yIo="}]}'::jsonb
+        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload),
+        ARRAY['schemaChange', 'resumeSpanList', '0'],
+        '{"resumeSpans": [{"key": "/u/FiQ==", "endKey": "/u/Fiew="}, {"key": "xYns", "endKey" : "xYo="}]}'::jsonb
       )
     )
 WHERE crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->>'description' LIKE 'CREATE INDEX pauseidx%';
@@ -278,19 +286,19 @@ WHERE crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->>'
 # confirm we see these bogus start and end keys in the job, both for the wrong
 # tenant and for no tenant.
 query TTTT
-SELECT 
+SELECT
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'key', 'base64'), 0),
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'endKey', 'base64'), 0),
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'key', 'base64'), 0),
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'endKey', 'base64'), 0)
 FROM (
-  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM system.jobs 
+  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM system.jobs
 ) WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%';
 ----
-/103/Table/64/1   /103/Table/64/1/100   /64/1/100   /64/2
+/103/Table/61/1   /103/Table/61/1/100   /61/1/100   /61/2
 
 # resume the job and ensure it completes, which includes validation.
-statement ok 
+statement ok
 RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'CREATE INDEX pauseidx%');
 
 query T
