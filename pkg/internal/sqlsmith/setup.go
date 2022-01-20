@@ -84,7 +84,8 @@ func randTablesN(r *rand.Rand, n int) string {
 	`)
 
 	// Create the random tables.
-	stmts := randgen.RandCreateTables(r, "table", n,
+	tablePrefix := "table"
+	stmts := randgen.RandCreateTables(r, tablePrefix, n,
 		randgen.StatisticsMutator,
 		randgen.PartialIndexMutator,
 		randgen.ForeignKeyMutator,
@@ -103,9 +104,6 @@ func randTablesN(r *rand.Rand, n int) string {
 		sb.WriteString(stmt.String())
 		sb.WriteString(";\n")
 	}
-
-	// TODO(mjibson): add random INSERTs.
-
 	return sb.String()
 }
 

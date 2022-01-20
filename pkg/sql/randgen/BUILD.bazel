@@ -49,7 +49,7 @@ go_library(
 
 go_test(
     name = "randgen_test",
-    srcs = ["mutator_test.go"],
+    srcs = ["mutator_test.go","schema_test.go"],
     embed = [":randgen"],
     deps = ["//pkg/util/randutil"],
 )
