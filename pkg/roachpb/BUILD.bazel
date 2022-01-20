@@ -168,8 +168,6 @@ go_test(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
         "//pkg/testutils/buildutil",
-        "//pkg/testutils/echotest",
-        "//pkg/testutils/skip",
         "//pkg/testutils/zerofields",
         "//pkg/util",
         "//pkg/util/bitarray",
@@ -211,11 +209,14 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
+	"//pkg/testutils/echotest",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
+	"@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
+    data = glob(["testdata/**"]),
 )
 
 proto_library(
