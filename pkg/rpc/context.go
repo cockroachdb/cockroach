@@ -1208,7 +1208,7 @@ func (rpcCtx *Context) grpcDialRaw(
 // used with the gossip client and CLI commands which can talk to any
 // node. This method implies a SystemClass.
 func (rpcCtx *Context) GRPCUnvalidatedDial(target string) *Connection {
-	return rpcCtx.grpcDialNodeInternal(target, 0, SystemClass)
+	return rpcCtx.grpcDialNodeInternal(rpcCtx.masterCtx, target, 0, SystemClass)
 }
 
 // GRPCDialNode calls grpc.Dial with options appropriate for the
@@ -1224,7 +1224,7 @@ func (rpcCtx *Context) GRPCDialNode(
 	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
 		log.Fatalf(context.TODO(), "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
-	return rpcCtx.grpcDialNodeInternal(target, remoteNodeID, class)
+	return rpcCtx.grpcDialNodeInternal(rpcCtx.masterCtx, target, remoteNodeID, class)
 }
 
 // GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
@@ -1240,8 +1240,11 @@ func (rpcCtx *Context) GRPCDialPod(
 	return rpcCtx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), class)
 }
 
+// grpcDialNodeInternal connects to the remote node and sets up the async heartbeater.
+// The dialCtx passed as argument must be derived from rpcCtx.masterCtx, so
+// that it respects the same cancellation policy.
 func (rpcCtx *Context) grpcDialNodeInternal(
-	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+	dialCtx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
 	thisConnKeys := []connKey{{target, remoteNodeID, class}}
 	value, ok := rpcCtx.conns.Load(thisConnKeys[0])
@@ -1276,10 +1279,10 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		// Either we kick off the heartbeat loop (and clean up when it's done),
 		// or we clean up the connKey entries immediately.
 		var redialChan <-chan struct{}
-		conn.grpcConn, redialChan, conn.dialErr = rpcCtx.grpcDialRaw(rpcCtx.masterCtx, target, remoteNodeID, class)
+		conn.grpcConn, redialChan, conn.dialErr = rpcCtx.grpcDialRaw(dialCtx, target, remoteNodeID, class)
 		if conn.dialErr == nil {
 			if err := rpcCtx.Stopper.RunAsyncTask(
-				rpcCtx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
+				dialCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					err := rpcCtx.runHeartbeat(conn, target, redialChan)
 					if err != nil && !grpcutil.IsClosedConnection(err) &&
 						!grpcutil.IsConnectionRejected(err) {
