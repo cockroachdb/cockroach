@@ -3079,6 +3079,8 @@ SELECT crdb_internal.check_password_hash_format(('SCRAM-SHA-256$'||'4096:B5VaTCv
 ----
 scram-sha-256
 
+subtest pgcrypto
+
 # NB: CockroachDB currently differs from Postgres, since the shaX functions
 # return a string in CockroachDB, while Postgres returns bytea.
 query BTT
@@ -3132,6 +3134,8 @@ NULL  NULL  NULL
 statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
 SELECT hmac('dog', 'key', 'made up alg')
 
+subtest session_revival_token
+
 skipif config 3node-tenant
 statement error session revival tokens are not supported on this cluster
 select crdb_internal.create_session_revival_token()
@@ -3140,14 +3144,21 @@ onlyif config 3node-tenant
 statement error cannot create token for root user
 select crdb_internal.create_session_revival_token()
 
+statement ok
+CREATE USER parentuser;
+GRANT parentuser TO testuser
+
 user testuser
 
 statement ok
 CREATE TABLE token_payload(algorithm STRING, "expiresAt" TIMESTAMPTZ, "issuedAt" TIMESTAMPTZ, "user" STRING)
 
-# create_session_revival_token requires tenant-signing certs, so only work
-# in 3node-tenant. The token can't be tested for validity here, but we can
-# verify that the information in the token makes sense.
+# Make sure the token is generated for testuser, not parentuser.
+statement ok
+SET ROLE parentuser
+
+# create_session_revival_token requires tenant-signing certs, so it only works
+# in 3node-tenant.
 onlyif config 3node-tenant
 query TTBBBB
 WITH
