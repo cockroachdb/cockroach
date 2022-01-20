@@ -62,6 +62,7 @@ SELECT
     WHERE 
       table_id = ANY (descriptor_ids)
   ) AS full_table_names, 
+  changefeed_details->'opts'->>'topics' AS topics,
   changefeed_details->'opts'->>'format' AS format 
 FROM 
   crdb_internal.jobs 

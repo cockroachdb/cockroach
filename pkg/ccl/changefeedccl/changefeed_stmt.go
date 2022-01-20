@@ -398,6 +398,14 @@ func changefeedPlanHook(
 			if err := canarySink.Close(); err != nil {
 				return err
 			}
+			if sink, ok := canarySink.(*kafkaSink); ok {
+				var topics []string
+				for _, topic := range sink.topics {
+					p.BufferClientNotice(ctx, pgnotice.Newf(`topic %s created`, topic))
+					topics = append(topics, topic)
+				}
+				details.Opts[changefeedbase.Topics] = strings.Join(topics, ",")
+			}
 		}
 
 		// The below block creates the job and if there's an initial scan, protects

@@ -77,6 +77,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 		FullTableNames []uint8
 		format         string
 		description    string
+		topics         string
 		DescriptorIDs  []descpb.ID
 	}
 
@@ -122,15 +123,16 @@ func TestShowChangefeedJobs(t *testing.T) {
 
 	var out row
 
-	query = `SELECT job_id, sink_uri, full_table_names, format FROM [SHOW CHANGEFEED JOB $1]`
-	sqlDB.QueryRow(t, query, multiChangefeedID).Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format)
+	query = `SELECT job_id, sink_uri, full_table_names, format, IFNULL(topics, '') FROM [SHOW CHANGEFEED JOB $1]`
+	sqlDB.QueryRow(t, query, multiChangefeedID).Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
 
 	require.Equal(t, multiChangefeedID, out.id, "Expected id:%d but found id:%d", multiChangefeedID, out.id)
 	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+	require.Equal(t, "", out.topics, "Expected topics to be empty")
 
-	query = `SELECT job_id, description, sink_uri, full_table_names, format FROM [SHOW CHANGEFEED JOBS] ORDER BY sink_uri`
+	query = `SELECT job_id, description, sink_uri, full_table_names, format, IFNULL(topics, '') FROM [SHOW CHANGEFEED JOBS] ORDER BY sink_uri`
 	rowResults := sqlDB.Query(t, query)
 
 	if !rowResults.Next() {
@@ -141,7 +143,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 			t.Fatalf("Expected more rows when querying and none found for query: %s", query)
 		}
 	}
-	err := rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format)
+	err := rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,6 +152,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+	require.Equal(t, "", out.topics, "Expected topics to be empty")
 
 	if !rowResults.Next() {
 		err := rowResults.Err()
@@ -159,7 +162,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 			t.Fatalf("Expected more rows when querying and none found for query: %s", query)
 		}
 	}
-	err = rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format)
+	err = rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,6 +172,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 	require.Equal(t, "webhook-https://fake-http-sink:8081", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "webhook-https://fake-http-sink:8081", out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+	require.Equal(t, "", out.topics, "Expected topics to be empty")
 
 	hasNext := rowResults.Next()
 	require.Equal(t, false, hasNext, "Expected no more rows for query:%s", query)
