@@ -1229,6 +1229,8 @@ func getClientGRPCConn(
 			Clock:    clock,
 			Stopper:  stopper,
 			Settings: cfg.Settings,
+
+			ClientOnly: true,
 		})
 	if cfg.TestingKnobs.Server != nil {
 		rpcContext.Knobs = cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs
