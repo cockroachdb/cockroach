@@ -108,6 +108,7 @@ Typical usage:
 
 	// Create all the sub-commands.
 	ret.cli.AddCommand(
+		makeAcceptanceCmd(ret.acceptance),
 		makeBenchCmd(ret.bench),
 		makeBuildCmd(ret.build),
 		makeBuilderCmd(ret.builder),
