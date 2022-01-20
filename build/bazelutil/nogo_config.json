@@ -1678,6 +1678,11 @@
             "github.com/cockroachdb/cockroach/.*$": "first-party code"
         }
     },
+    "U1000": {
+        "only_files": {
+            "github.com/cockroachdb/cockroach/.*$": "first-party code"
+        }
+    },
     "unreachable": {
         "only_files": {
             "github.com/cockroachdb/cockroach/.*$": "first-party code"
