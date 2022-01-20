@@ -560,7 +560,7 @@ func getSessionArgs(ln net.Listener, trustRemoteAddr bool) (net.Conn, sql.Sessio
 		return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
 	}
 
-	args, err := parseClientProvidedSessionParameters(
+	args, _, err := parseClientProvidedSessionParameters(
 		context.Background(), nil, &buf, conn.RemoteAddr(), trustRemoteAddr,
 	)
 	return conn, args, err

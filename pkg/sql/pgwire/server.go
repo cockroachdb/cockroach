@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -687,7 +688,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	// Load the client-provided session parameters.
 	var sArgs sql.SessionArgs
-	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf,
+	var sessionRevivalToken []byte
+	if sArgs, sessionRevivalToken, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf,
 		conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get()); err != nil {
 		return s.sendErr(ctx, conn, err)
 	}
@@ -714,13 +716,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		reserved,
 		connStart,
 		authOptions{
-			connType:        connType,
-			connDetails:     connDetails,
-			insecure:        s.cfg.Insecure,
-			ie:              s.execCfg.InternalExecutor,
-			auth:            hbaConf,
-			identMap:        identMap,
-			testingAuthHook: testingAuthHook,
+			connType:            connType,
+			connDetails:         connDetails,
+			insecure:            s.cfg.Insecure,
+			ie:                  s.execCfg.InternalExecutor,
+			auth:                hbaConf,
+			sessionRevivalToken: sessionRevivalToken,
+			identMap:            identMap,
+			testingAuthHook:     testingAuthHook,
 		})
 	return nil
 }
@@ -734,26 +737,28 @@ func handleCancel(conn net.Conn) error {
 }
 
 // parseClientProvidedSessionParameters reads the incoming k/v pairs
-// in the startup message into a sql.SessionArgs struct.
+// in the startup message into a sql.SessionArgs struct. It also returns
+// the session revival token if one was found.
 func parseClientProvidedSessionParameters(
 	ctx context.Context,
 	sv *settings.Values,
 	buf *pgwirebase.ReadBuffer,
 	origRemoteAddr net.Addr,
 	trustClientProvidedRemoteAddr bool,
-) (sql.SessionArgs, error) {
+) (sql.SessionArgs, []byte, error) {
 	args := sql.SessionArgs{
 		SessionDefaults:             make(map[string]string),
 		CustomOptionSessionDefaults: make(map[string]string),
 		RemoteAddr:                  origRemoteAddr,
 	}
 	foundBufferSize := false
+	var sessionRevivalToken []byte
 
 	for {
 		// Read a key-value pair from the client.
 		key, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrap(
+			return sql.SessionArgs{}, nil, pgerror.Wrap(
 				err, pgcode.ProtocolViolation,
 				"error reading option key",
 			)
@@ -764,7 +769,7 @@ func parseClientProvidedSessionParameters(
 		}
 		value, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrapf(
+			return sql.SessionArgs{}, nil, pgerror.Wrapf(
 				err, pgcode.ProtocolViolation,
 				"error reading option value for key %q", key,
 			)
@@ -781,46 +786,55 @@ func parseClientProvidedSessionParameters(
 			// here, so that further lookups for authentication have the correct
 			// identifier.
 			args.User, _ = security.MakeSQLUsernameFromUserInput(value, security.UsernameValidation)
-			// TODO(#sql-experience): we should retrieve the admin status during
-			// authentication using the roles cache, instead of using a simple/naive
-			// username match. See #69355.
+			// IsSuperuser will get updated later when we load the user's session
+			// initialization information.
 			args.IsSuperuser = args.User.IsRootUser()
+
+		case "crdb:session_revival_token_base64":
+			token, err := base64.StdEncoding.DecodeString(value)
+			if err != nil {
+				return sql.SessionArgs{}, nil, pgerror.Wrapf(
+					err, pgcode.ProtocolViolation,
+					"error decoding base64 value for key %q", key,
+				)
+			}
+			sessionRevivalToken = token
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
-				return sql.SessionArgs{}, errors.WithSecondaryError(
+				return sql.SessionArgs{}, nil, errors.WithSecondaryError(
 					pgerror.Newf(pgcode.ProtocolViolation,
 						"error parsing results_buffer_size option value '%s' as bytes", value), err)
 			}
 			if args.ConnResultsBufferSize < 0 {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+				return sql.SessionArgs{}, nil, pgerror.Newf(pgcode.ProtocolViolation,
 					"results_buffer_size option value '%s' cannot be negative", value)
 			}
 			foundBufferSize = true
 
 		case "crdb:remote_addr":
 			if !trustClientProvidedRemoteAddr {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+				return sql.SessionArgs{}, nil, pgerror.Newf(pgcode.ProtocolViolation,
 					"server not configured to accept remote address override (requested: %q)", value)
 			}
 
 			hostS, portS, err := net.SplitHostPort(value)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
+				return sql.SessionArgs{}, nil, pgerror.Wrap(
 					err, pgcode.ProtocolViolation,
 					"invalid address format",
 				)
 			}
 			port, err := strconv.Atoi(portS)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
+				return sql.SessionArgs{}, nil, pgerror.Wrap(
 					err, pgcode.ProtocolViolation,
 					"remote port is not numeric",
 				)
 			}
 			ip := net.ParseIP(hostS)
 			if ip == nil {
-				return sql.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
+				return sql.SessionArgs{}, nil, pgerror.New(pgcode.ProtocolViolation,
 					"remote address is not numeric")
 			}
 			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
@@ -828,18 +842,18 @@ func parseClientProvidedSessionParameters(
 		case "options":
 			opts, err := parseOptions(value)
 			if err != nil {
-				return sql.SessionArgs{}, err
+				return sql.SessionArgs{}, nil, err
 			}
 			for _, opt := range opts {
 				err = loadParameter(ctx, opt.key, opt.value, &args)
 				if err != nil {
-					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
+					return sql.SessionArgs{}, nil, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
 				}
 			}
 		default:
 			err = loadParameter(ctx, key, value, &args)
 			if err != nil {
-				return sql.SessionArgs{}, err
+				return sql.SessionArgs{}, nil, err
 			}
 		}
 	}
@@ -866,7 +880,7 @@ func parseClientProvidedSessionParameters(
 		}
 	}
 
-	return args, nil
+	return args, sessionRevivalToken, nil
 }
 
 func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs) error {

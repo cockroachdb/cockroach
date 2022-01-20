@@ -66,6 +66,10 @@ type authOptions struct {
 	// ie is the server-wide internal executor, used to
 	// retrieve entries from system.users.
 	ie *sql.InternalExecutor
+	// sessionRevivalToken may contain a token generated from a different session
+	// that can be used to authenticate this session. If it is set, all other
+	// authentication is skipped.
+	sessionRevivalToken []byte
 
 	// The following fields are only used by tests.
 
@@ -245,6 +249,11 @@ func (c *conn) findAuthenticationMethod(
 		// remaining of the configuration is ignored.
 		methodFn = authTrust
 		hbaEntry = &insecureEntry
+		return
+	}
+	if authOpt.sessionRevivalToken != nil {
+		methodFn = authSessionRevivalToken(authOpt.sessionRevivalToken)
+		hbaEntry = &sessionRevivalEntry
 		return
 	}
 

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -103,6 +104,7 @@ var _ AuthMethod = authCertPassword
 var _ AuthMethod = authCertScram
 var _ AuthMethod = authTrust
 var _ AuthMethod = authReject
+var _ AuthMethod = authSessionRevivalToken([]byte{})
 
 // authPassword is the AuthMethod constructor for HBA method
 // "password": authenticate using a cleartext password received from
@@ -590,4 +592,39 @@ func authReject(
 		return errors.New("authentication rejected by configuration")
 	})
 	return b, nil
+}
+
+// authSessionRevivalToken is the AuthMethod constructor for the CRDB-specific
+// session revival token.
+func authSessionRevivalToken(token []byte) AuthMethod {
+	return func(
+		_ context.Context,
+		c AuthConn,
+		_ tls.ConnectionState,
+		execCfg *sql.ExecutorConfig,
+		_ *hba.Entry,
+		_ *identmap.Conf,
+	) (*AuthBehaviors, error) {
+		b := &AuthBehaviors{}
+		b.SetRoleMapper(UseProvidedIdentity)
+		b.SetAuthenticator(func(ctx context.Context, user security.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
+			c.LogAuthInfof(ctx, "session revival token detected; attempting to use it")
+			if !execCfg.AllowSessionRevival {
+				return errors.New("session revival tokens are not supported on this cluster")
+			}
+			cm, err := execCfg.RPCContext.SecurityContext.GetCertificateManager()
+			if err != nil {
+				return err
+			}
+			valid, err := sessionrevival.ValidateSessionRevivalToken(cm, user, token)
+			if err != nil {
+				return errors.Wrap(err, "session revival token is invalid")
+			}
+			if !valid {
+				return errors.New("session revival token is invalid for an unknown reason")
+			}
+			return nil
+		})
+		return b, nil
+	}
 }
