@@ -66,6 +66,7 @@ func TestVerifyPassword(t *testing.T) {
 		{"druidia", "12345", "LOGIN", "", nil},
 
 		{"richardc", "12345", "NOLOGIN", "", nil},
+		{"richardc2", "12345", "NOSQLLOGIN", "", nil},
 		{"before_epoch", "12345", "", "VALID UNTIL '1969-01-01'", nil},
 		{"epoch", "12345", "", "VALID UNTIL '1970-01-01'", nil},
 		{"cockroach", "12345", "", "VALID UNTIL '2100-01-01'", nil},
@@ -92,41 +93,42 @@ func TestVerifyPassword(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		username           string
-		password           string
-		isSuperuser        bool
-		shouldAuthenticate bool
-		expectedErrString  string
+		testName                    string
+		username                    string
+		password                    string
+		isSuperuser                 bool
+		shouldAuthenticateSQL       bool
+		shouldAuthenticateDBConsole bool
 	}{
-		{"azure_diamond", "hunter2", false, true, ""},
-		{"Azure_Diamond", "hunter2", false, false, ""},
-		{"azure_diamond", "hunter", false, false, "crypto/bcrypt"},
-		{"azure_diamond", "", false, false, "crypto/bcrypt"},
-		{"azure_diamond", "🍦", false, false, "crypto/bcrypt"},
-		{"azure_diamond", "hunter2345", false, false, "crypto/bcrypt"},
-		{"azure_diamond", "shunter2", false, false, "crypto/bcrypt"},
-		{"azure_diamond", "12345", false, false, "crypto/bcrypt"},
-		{"azure_diamond", "*******", false, false, "crypto/bcrypt"},
-		{"druidia", "12345", false, true, ""},
-		{"druidia", "hunter2", false, false, "crypto/bcrypt"},
-		{"root", "", true, false, "crypto/bcrypt"},
-		{"some_admin", "", true, false, "crypto/bcrypt"},
-		{"", "", false, false, "does not exist"},
-		{"doesntexist", "zxcvbn", false, false, "does not exist"},
+		{"valid login", "azure_diamond", "hunter2", false, true, true},
+		{"wrong password", "azure_diamond", "hunter", false, false, false},
+		{"empty password", "azure_diamond", "", false, false, false},
+		{"wrong emoji password", "azure_diamond", "🍦", false, false, false},
+		{"correct password with suffix should fail", "azure_diamond", "hunter2345", false, false, false},
+		{"correct password with prefix should fail", "azure_diamond", "shunter2", false, false, false},
+		{"wrong password all numeric", "azure_diamond", "12345", false, false, false},
+		{"wrong password all stars", "azure_diamond", "*******", false, false, false},
+		{"valid login numeric password", "druidia", "12345", false, true, true},
+		{"wrong password matching other user", "druidia", "hunter2", false, false, false},
+		{"root with empty password should fail", "root", "", true, false, false},
+		{"some_admin with empty password should fail", "some_admin", "", true, false, false},
+		{"empty username and password should fail", "", "", false, false, false},
+		{"username does not exist should fail", "doesntexist", "zxcvbn", false, false, false},
 
-		{"richardc", "12345", false, false,
-			"richardc does not have login privilege"},
-		{"before_epoch", "12345", false, false, ""},
-		{"epoch", "12345", false, false, ""},
-		{"cockroach", "12345", false, true, ""},
-		{"toolate", "12345", false, false, ""},
-		{"timelord", "12345", false, true, ""},
-		{"cthon98", "12345", false, true, ""},
+		{"user with NOLOGIN role option should fail", "richardc", "12345", false, false, false},
+		// This is the one test case where SQL and DB Console login outcomes differ.
+		{"user with NOSQLLOGIN role option should fail SQL but succeed on DB Console", "richardc2", "12345", false, false, true},
+		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", false, false, false},
+		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", false, false, false},
+		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", false, true, true},
+		{"user with VALID UNTIL 10 minutes ago should fail", "toolate", "12345", false, false, false},
+		{"user with VALID UNTIL future time in Shanghai time zone should succeed", "timelord", "12345", false, true, true},
+		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", false, true, true},
 	} {
-		t.Run("", func(t *testing.T) {
+		t.Run(tc.testName, func(t *testing.T) {
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			exists, canLogin, isSuperuser, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+			exists, canLoginSQL, canLoginDBConsole, isSuperuser, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, &ie, username, "", /* databaseName */
 			)
 
@@ -140,10 +142,15 @@ func TestVerifyPassword(t *testing.T) {
 			}
 
 			valid := true
+			validDBConsole := true
 			expired := false
 
-			if !exists || !canLogin {
+			if !exists || !canLoginSQL {
 				valid = false
+			}
+
+			if !exists || !canLoginDBConsole {
+				validDBConsole = false
 			}
 
 			hashedPassword, err := pwRetrieveFn(ctx)
@@ -159,6 +166,7 @@ func TestVerifyPassword(t *testing.T) {
 			err = security.CompareHashAndPassword(ctx, hashedPassword, tc.password)
 			if err != nil {
 				valid = false
+				validDBConsole = false
 			}
 
 			if validUntil != nil {
@@ -167,13 +175,22 @@ func TestVerifyPassword(t *testing.T) {
 				}
 			}
 
-			if valid && !expired != tc.shouldAuthenticate {
+			if valid && !expired != tc.shouldAuthenticateSQL {
 				t.Errorf(
-					"credentials %s/%s valid = %t, wanted %t",
+					"sql credentials %s/%s valid = %t, wanted %t",
 					tc.username,
 					tc.password,
 					valid,
-					tc.shouldAuthenticate,
+					tc.shouldAuthenticateSQL,
+				)
+			}
+			if validDBConsole && !expired != tc.shouldAuthenticateDBConsole {
+				t.Errorf(
+					"db console credentials %s/%s valid = %t, wanted %t",
+					tc.username,
+					tc.password,
+					valid,
+					tc.shouldAuthenticateDBConsole,
 				)
 			}
 			require.Equal(t, tc.isSuperuser, isSuperuser)

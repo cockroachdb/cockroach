@@ -59,8 +59,10 @@ type Cache struct {
 type AuthInfo struct {
 	// UserExists is set to true if the user has a row in system.users.
 	UserExists bool
-	// CanLogin is set to false if the user has the NOLOGIN role option.
-	CanLogin bool
+	// CanLoginSQL is set to false if the user has the NOLOGIN or NOSQLLOGIN role option.
+	CanLoginSQL bool
+	// CanLoginDBConsole is set to false if the user has NOLOGIN role option.
+	CanLoginDBConsole bool
 	// HashedPassword is the hashed password and can be nil.
 	HashedPassword []byte
 	// ValidUntil is the VALID UNTIL role option.

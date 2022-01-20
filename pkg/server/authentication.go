@@ -145,7 +145,7 @@ func (s *authenticationServer) UserLogin(
 	username, _ := security.MakeSQLUsernameFromUserInput(req.Username, security.UsernameValidation)
 
 	// Verify the provided username/password pair.
-	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
+	verified, expired, err := s.verifyPasswordDBConsole(ctx, username, req.Password)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
 	}
@@ -209,7 +209,7 @@ func (s *authenticationServer) demoLogin(w http.ResponseWriter, req *http.Reques
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(userInput, security.UsernameValidation)
 	// Verify the provided username/password pair.
-	verified, expired, err := s.verifyPassword(ctx, username, password)
+	verified, expired, err := s.verifyPasswordDBConsole(ctx, username, password)
 	if err != nil {
 		fail(err)
 		return
@@ -254,7 +254,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
-	exists, canLogin, _, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -265,8 +265,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed creating session for username")
 	}
-
-	if !exists || !canLogin {
+	if !exists || !canLoginDBConsole {
 		return nil, errWebAuthenticationFailure
 	}
 
@@ -407,17 +406,20 @@ WHERE id = $1`
 	return true, username, nil
 }
 
-// verifyPassword verifies the passed username/password pair against the
+// verifyPasswordDBConsole verifies the passed username/password pair against the
 // system.users table. The returned boolean indicates whether or not the
 // verification succeeded; an error is returned if the validation process could
 // not be completed.
 //
+// This function should *not* be used to validate logins into the SQL
+// shell since it checks a separate authentication scheme.
+//
 // The caller is responsible for ensuring that the username is normalized.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
-func (s *authenticationServer) verifyPassword(
+func (s *authenticationServer) verifyPasswordDBConsole(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
-	exists, canLogin, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -427,7 +429,7 @@ func (s *authenticationServer) verifyPassword(
 	if err != nil {
 		return false, false, err
 	}
-	if !exists || !canLogin {
+	if !exists || !canLoginDBConsole {
 		return false, false, nil
 	}
 	hashedPassword, err := pwRetrieveFn(ctx)
