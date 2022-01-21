@@ -47,15 +47,9 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (entry roachpb.SpanConf
 	{
 		types := []*types.T{sd.columns[0].GetType()}
 		startKeyRow := make([]rowenc.EncDatum, 1)
-		_, matches, _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, types, startKeyRow, nil /* colDirs */, kv.Key)
+		_, _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, types, startKeyRow, nil /* colDirs */, kv.Key)
 		if err != nil {
 			return roachpb.SpanConfigEntry{}, errors.Wrapf(err, "failed to decode key: %v", kv.Key)
-		}
-		if !matches {
-			return roachpb.SpanConfigEntry{},
-				errors.AssertionFailedf(
-					"system.span_configurations descriptor does not match key: %v", kv.Key,
-				)
 		}
 		if err := startKeyRow[0].EnsureDecoded(types[0], &sd.alloc); err != nil {
 			return roachpb.SpanConfigEntry{}, err

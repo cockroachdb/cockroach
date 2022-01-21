@@ -464,28 +464,27 @@ func DecodeIndexKeyPrefix(
 // The remaining bytes in the index key are returned which will either be an
 // encoded column ID for the primary key index, the primary key suffix for
 // non-unique secondary indexes or unique secondary indexes containing NULL or
-// empty. If the given descriptor does not match the key, false is returned with
-// no error.
+// empty.
 func DecodeIndexKey(
 	codec keys.SQLCodec,
 	types []*types.T,
 	vals []EncDatum,
 	colDirs []descpb.IndexDescriptor_Direction,
 	key []byte,
-) (remainingKey []byte, matches bool, foundNull bool, _ error) {
+) (remainingKey []byte, foundNull bool, _ error) {
 	key, err := codec.StripTenantPrefix(key)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, err
 	}
 	key, _, _, err = DecodePartialTableIDIndexID(key)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, err
 	}
 	remainingKey, foundNull, err = DecodeKeyVals(types, vals, colDirs, key)
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, err
 	}
-	return remainingKey, true, foundNull, nil
+	return remainingKey, foundNull, nil
 }
 
 // DecodeKeyVals decodes the values that are part of the key. The decoded

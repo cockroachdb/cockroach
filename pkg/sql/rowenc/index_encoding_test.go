@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,12 +92,8 @@ func decodeIndex(
 	}
 	values := make([]EncDatum, index.NumKeyColumns())
 	colDirs := index.IndexDesc().KeyColumnDirections
-	_, ok, _, err := DecodeIndexKey(codec, types, values, colDirs, key)
-	if err != nil {
+	if _, _, err := DecodeIndexKey(codec, types, values, colDirs, key); err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, errors.Errorf("key did not match descriptor")
 	}
 
 	decodedValues := make([]tree.Datum, len(values))

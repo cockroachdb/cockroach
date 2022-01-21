@@ -187,12 +187,8 @@ func decodeTableStatisticsKV(
 	types := []*types.T{types.Int, types.Int}
 	dirs := []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC}
 	keyVals := make([]rowenc.EncDatum, 2)
-	_, matches, _, err := rowenc.DecodeIndexKey(codec, types, keyVals, dirs, kv.Key)
-	if err != nil {
+	if _, _, err := rowenc.DecodeIndexKey(codec, types, keyVals, dirs, kv.Key); err != nil {
 		return 0, err
-	}
-	if !matches {
-		return 0, errors.New("descriptor does not match")
 	}
 
 	if err := keyVals[0].EnsureDecoded(types[0], da); err != nil {
