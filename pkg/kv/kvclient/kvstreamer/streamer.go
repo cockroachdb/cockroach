@@ -229,6 +229,10 @@ type Streamer struct {
 		// TODO(yuzefovich): consider using ring.Buffer instead of a slice.
 		requestsToServe []singleRangeBatch
 
+		// hasWork is used by the worker coordinator to block until some
+		// requests are added to requestsToServe.
+		hasWork *sync.Cond
+
 		// numRangesLeftPerScanRequest tracks how many ranges a particular
 		// originally enqueued ScanRequest touches, but scanning of those ranges
 		// isn't complete. It is allocated lazily when the first ScanRequest is
@@ -254,7 +258,13 @@ type Streamer struct {
 		// results are the results of already completed requests that haven't
 		// been returned by GetResults() yet.
 		results []Result
-		err     error
+		// err is set once the Streamer cannot make progress any more and will
+		// be returned by GetResults().
+		err error
+
+		// done is set to true once the Streamer is closed meaning the worker
+		// coordinator must exit.
+		done bool
 	}
 }
 
@@ -303,6 +313,7 @@ func NewStreamer(
 		stopper:    stopper,
 		budget:     newBudget(acc, limitBytes),
 	}
+	s.mu.hasWork = sync.NewCond(&s.mu.Mutex)
 	s.coordinator = workerCoordinator{
 		s:                      s,
 		txn:                    txn,
@@ -316,7 +327,6 @@ func NewStreamer(
 		"single Streamer async concurrency",
 		uint64(streamerConcurrencyLimit.Get(&st.SV)),
 	)
-	s.coordinator.mu.hasWork = sync.NewCond(&s.coordinator.mu)
 	streamerConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
 		s.coordinator.asyncSem.UpdateCapacity(uint64(streamerConcurrencyLimit.Get(&st.SV)))
 	})
@@ -537,7 +547,7 @@ func (s *Streamer) Enqueue(
 
 	// Memory reservation was approved, so the requests are good to go.
 	s.mu.requestsToServe = requestsToServe
-	s.coordinator.mu.hasWork.Signal()
+	s.mu.hasWork.Signal()
 	return nil
 }
 
@@ -609,11 +619,11 @@ func (s *Streamer) setError(err error) {
 func (s *Streamer) Close() {
 	if s.coordinatorStarted {
 		s.coordinatorCtxCancel()
-		s.coordinator.mu.Lock()
-		s.coordinator.mu.done = true
+		s.mu.Lock()
+		s.mu.done = true
 		// Unblock the coordinator in case it is waiting for more work.
-		s.coordinator.mu.hasWork.Signal()
-		s.coordinator.mu.Unlock()
+		s.mu.hasWork.Signal()
+		s.mu.Unlock()
 	}
 	s.waitGroup.Wait()
 	*s = Streamer{}
@@ -680,14 +690,6 @@ type workerCoordinator struct {
 	// For request and response admission control.
 	requestAdmissionHeader roachpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
-
-	mu struct {
-		syncutil.Mutex
-		hasWork *sync.Cond
-		// done is set to true once the Streamer is closed meaning the worker
-		// coordinator must exit.
-		done bool
-	}
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
@@ -700,23 +702,33 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	defer w.s.waitGroup.Done()
 	for {
 		// Get next requests to serve.
-		requestsToServe, avgResponseSize, shouldExit := w.getRequests()
+		//
+		// We have to be this tricky with acquiring the Streamer's mutex and
+		// not releasing it in order to not miss the signal on hasWork condition
+		// variable.
+		w.s.mu.Lock()
+		requestsToServe, avgResponseSize, shouldExit := w.getRequestsLocked()
 		if shouldExit {
+			w.s.mu.Unlock()
 			return
 		}
 		if len(requestsToServe) == 0 {
-			// If the Streamer isn't closed yet, block until there are enqueued
-			// requests.
-			w.mu.Lock()
-			if !w.mu.done {
-				w.mu.hasWork.Wait()
-			}
-			w.mu.Unlock()
+			// We're still holding the Streamer's mutex.
+			w.s.mu.hasWork.Wait()
+			w.s.mu.Unlock()
+			// Check whether the Streamer has been canceled or closed while we
+			// were waiting for work.
 			if ctx.Err() != nil {
+				// Note that if it was a graceful closure, we still will see a
+				// context cancellation error; however, it won't be propagated
+				// to the client because no more calls after Close() are
+				// allowed.
 				w.s.setError(ctx.Err())
 				return
 			}
 			continue
+		} else {
+			w.s.mu.Unlock()
 		}
 
 		// Now wait until there is enough budget to at least receive one full
@@ -741,19 +753,19 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	}
 }
 
-// getRequests returns all currently enqueued requests to be served.
+// getRequestsLocked returns all currently enqueued requests to be served. It
+// assumes that the Streamer's mutex is being held.
 //
 // A boolean that indicates whether the coordinator should exit is returned.
-func (w *workerCoordinator) getRequests() (
+func (w *workerCoordinator) getRequestsLocked() (
 	requestsToServe []singleRangeBatch,
 	avgResponseSize int64,
 	shouldExit bool,
 ) {
-	w.s.mu.Lock()
-	defer w.s.mu.Unlock()
+	w.s.mu.AssertHeld()
 	requestsToServe = w.s.mu.requestsToServe
 	avgResponseSize = w.s.mu.avgResponseEstimator.getAvgResponseSize()
-	shouldExit = w.s.mu.err != nil
+	shouldExit = w.s.mu.err != nil || w.s.mu.done
 	return requestsToServe, avgResponseSize, shouldExit
 }
 
@@ -866,7 +878,7 @@ func (w *workerCoordinator) addRequest(req singleRangeBatch) {
 	w.s.mu.Lock()
 	defer w.s.mu.Unlock()
 	w.s.mu.requestsToServe = append(w.s.mu.requestsToServe, req)
-	w.mu.hasWork.Signal()
+	w.s.mu.hasWork.Signal()
 }
 
 func (w *workerCoordinator) asyncRequestCleanup() {
