@@ -26,6 +26,7 @@ go_test(
     deps = [
         "//pkg/util/contextutil",
         "//pkg/util/log",
+        "//pkg/testutils/docker/docker-fsnotify:docker-fsnotify",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_docker_docker//client",
     ],

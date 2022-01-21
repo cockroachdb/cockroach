@@ -13,6 +13,7 @@ package docker
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -61,6 +62,18 @@ func TestSingleNodeDocker(t *testing.T) {
 	pwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(errors.NewAssertionErrorWithWrappedErrf(err, "cannot get pwd"))
+	}
+
+	err = filepath.Walk(".",
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			fmt.Println(path, info.Size())
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	var dockerTests = []singleNodeDockerTest{
