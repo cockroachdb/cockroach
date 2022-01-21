@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/sys/unix"
 	"golang.org/x/time/rate"
 )
 
@@ -354,16 +355,6 @@ func startPProfEndPoint(ctx context.Context) {
 func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 
-	var formatter outputFormat
-	switch *displayFormat {
-	case "simple":
-		formatter = &textFormatter{}
-	case "incremental-json":
-		formatter = &jsonFormatter{w: os.Stdout}
-	default:
-		return errors.Errorf("unknown display format: %s", *displayFormat)
-	}
-
 	startPProfEndPoint(ctx)
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
@@ -408,6 +399,27 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			log.Errorf(context.Background(), "error serving prometheus: %v", err)
 		}
 	}()
+	return executeWorkload(ctx, gen, urls, dbName, o, limiter, reg)
+}
+
+func executeWorkload(
+	ctx context.Context,
+	gen workload.Generator,
+	urls []string,
+	dbName string,
+	o workload.Opser,
+	limiter *rate.Limiter,
+	reg *histogram.Registry,
+) error {
+	var formatter outputFormat
+	switch *displayFormat {
+	case "simple":
+		formatter = &textFormatter{}
+	case "incremental-json":
+		formatter = &jsonFormatter{w: os.Stdout}
+	default:
+		return errors.Errorf("unknown display format: %s", *displayFormat)
+	}
 
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
@@ -489,7 +501,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	ticker := time.NewTicker(*displayEvery)
 	defer ticker.Stop()
-	done := make(chan os.Signal, 3)
+	done := make(chan os.Signal, 4)
 	signal.Notify(done, exitSignals...)
 
 	go func() {
@@ -497,11 +509,20 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		done <- os.Interrupt
 	}()
 
-	if *duration > 0 {
+	if h, ok := gen.(workload.Hookser); ok && h.Hooks().CompletionHook != nil {
+		if err := h.Hooks().CompletionHook(*duration, *ramp, func() { done <- unix.SIGUSR1 }); err != nil {
+			return err
+		}
+	} else if *duration > 0 {
 		go func() {
 			time.Sleep(*duration + *ramp)
 			done <- os.Interrupt
 		}()
+	}
+
+	var tickHook func(startElapsed time.Duration, t histogram.Tick)
+	if h, ok := gen.(workload.Hookser); ok && h.Hooks().TickHook != nil {
+		tickHook = h.Hooks().TickHook
 	}
 
 	var jsonEnc *json.Encoder
@@ -540,6 +561,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			startElapsed := timeutil.Since(start)
 			reg.Tick(func(t histogram.Tick) {
 				formatter.outputTick(startElapsed, t)
+				if tickHook != nil {
+					tickHook(startElapsed, t)
+				}
 				if jsonEnc != nil && rampDone == nil {
 					if err := jsonEnc.Encode(t.Snapshot()); err != nil {
 						log.Warningf(ctx, "histogram: %v", err)
@@ -558,7 +582,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				t.Hist.Reset()
 			})
 
-		case <-done:
+		case sig := <-done:
 			cancelWorkers()
 			if ops.Close != nil {
 				ops.Close(ctx)
@@ -590,8 +614,18 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			if h, ok := gen.(workload.Hookser); ok {
 				if h.Hooks().PostRun != nil {
 					if err := h.Hooks().PostRun(startElapsed); err != nil {
+						// Restart workload if this restart was user initiated.
+						if errors.Is(err, workload.ErrRetryWorkload) && sig == unix.SIGUSR1 {
+							fmt.Printf("Retrying workload as requested by post-run\n")
+							reg.Tick(func(t histogram.Tick) {
+								t.Cumulative.Reset()
+								t.Hist.Reset()
+							})
+							return executeWorkload(ctx, gen, urls, dbName, o, limiter, reg)
+						}
 						fmt.Printf("failed post-run hook: %v\n", err)
 					}
+
 				}
 			}
 
