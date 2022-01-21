@@ -393,7 +393,7 @@ func (r *roleAuthorizationMux) hasRoleOption(
 	row, err := r.ie.QueryRowEx(
 		ctx, "check-role-option", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},
-		"SELECT crdb_internal.has_role_option($1)", roleOption.String())
+		"SELECT crdb_internal.has_role_option($1)", roleOption.ToString())
 	if err != nil {
 		return false, err
 	}
