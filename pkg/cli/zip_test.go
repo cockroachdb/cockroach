@@ -76,7 +76,6 @@ table_name NOT IN (
 	'databases',
 	'forward_dependencies',
 	'index_columns',
-	'interleaved',
 	'lost_descriptors_with_data',
 	'table_columns',
 	'table_row_statistics',

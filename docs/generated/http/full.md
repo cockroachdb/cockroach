@@ -209,6 +209,71 @@ RegionsResponse describes the available regions.
 
 
 
+## NodesList
+
+
+
+NodesList returns all available nodes with their addresses.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+NodesListRequest requests list of all nodes.
+The nodes are KV nodes when the cluster is a single
+tenant cluster or the host cluster in case of multi-tenant
+clusters.
+The nodes are SQL instances in case of multi-tenant
+clusters.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+NodesListResponse contains a list of all nodes with their addresses.
+The nodes are KV nodes when the cluster is a single
+tenant cluster or the host cluster in case of multi-tenant
+clusters.
+The nodes are SQL instances in case of multi-tenant
+clusters.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| nodes | [NodeDetails](#cockroach.server.serverpb.NodesListResponse-cockroach.server.serverpb.NodeDetails) | repeated | nodes contains a list of NodeDetails. Each individual node within the list is a SQL node in case of a tenant server and KV nodes in case of a KV server. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesListResponse-cockroach.server.serverpb.NodeDetails"></a>
+#### NodeDetails
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.NodesListResponse-int32) |  | node_id is a unique identifier for the node. This corresponds to SQL instance ID for a tenant server and KV node id for for a KV server. | [reserved](#support-status) |
+| address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodesListResponse-cockroach.util.UnresolvedAddr) |  | address is the RPC address for a KV node. This will be set to null for a tenant server node. | [reserved](#support-status) |
+| sql_address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodesListResponse-cockroach.util.UnresolvedAddr) |  | sql_address is the SQL address for a node. | [reserved](#support-status) |
+
+
+
+
+
+
 ## Nodes
 
 `GET /_status/nodes`
