@@ -87,13 +87,5 @@ create table tbl (i INT, k t,  PRIMARY KEY (i, k), INDEX idx (k) PARTITION BY RA
 # statement error pgcode 2BP01 could not remove enum value "a" as it is being used in the partitioning of index tbl@idx
 # alter type t drop value 'a';
 
-# We want to fail even if the index is being dropped. The reason is that it
-# would be bad if we rolled back the dropping of the index.
-statement error pgcode XXA00 could not remove enum value "a" as it is being used in the partitioning of index tbl@idx
-begin;
-drop index tbl@idx;
-alter type t drop value 'a';
-commit
-
 statement ok
 alter type t drop value 'c';
