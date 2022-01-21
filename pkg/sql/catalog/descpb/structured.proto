@@ -1108,6 +1108,7 @@ message TableDescriptor {
                               (gogoproto.customname) = "JobID", deprecated = true];
   }
 
+  // Before 22.1:
   // The schema elements that have been dropped and whose underlying
   // data needs to be gc-ed. These schema elements have already transitioned
   // through the drop state machine when they were in the above mutations
@@ -1115,8 +1116,12 @@ message TableDescriptor {
   // can be reused. This list is separate because mutations can
   // lie in this list for a long time (gc deadline) and should not block
   // the execution of other schema changes on the table.
+  //
+  // Since 22.1 this is field is deprecated and no longer maintained.
+  // The index GC job still removes mutations it finds in this list.
   repeated GCDescriptorMutation gc_mutations = 33 [(gogoproto.nullable) = false,
-                                                  (gogoproto.customname) = "GCMutations"];
+                                                   (gogoproto.customname) = "GCMutations",
+                                                   deprecated = true];
 
   optional string create_query = 34 [(gogoproto.nullable) = false];
 

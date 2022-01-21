@@ -19,17 +19,28 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
 )
 
 // CheckKeyCount checks that the number of keys in the provided span matches
 // numKeys.
 func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 	t.Helper()
-	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
+	if err := CheckKeyCountE(t, kvDB, span, numKeys); err != nil {
 		t.Fatal(err)
-	} else if l := numKeys; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
+}
+
+// CheckKeyCountE returns an error if the the number of keys in the
+// provided span does not match numKeys.
+func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) error {
+	t.Helper()
+	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
+		return err
+	} else if l := numKeys; len(kvs) != l {
+		return errors.Newf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+	return nil
 }
 
 // CreateKVTable creates a basic table named t.<name> that stores key/value

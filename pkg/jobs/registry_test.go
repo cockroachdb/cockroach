@@ -93,38 +93,16 @@ func writeMutation(
 	}
 }
 
-func writeGCMutation(
-	t *testing.T,
-	kvDB *kv.DB,
-	tableDesc *tabledesc.Mutable,
-	m descpb.TableDescriptor_GCDescriptorMutation,
-) {
-	tableDesc.GCMutations = append(tableDesc.GCMutations, m)
-	tableDesc.Version++
-	if err := catalog.ValidateSelf(tableDesc); err != nil {
-		t.Fatal(err)
-	}
-	if err := kvDB.Put(
-		context.Background(),
-		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
-		tableDesc.DescriptorProto(),
-	); err != nil {
-		t.Fatal(err)
-	}
-}
-
 type mutationOptions struct {
 	// Set if the desc should have any mutations of any sort.
 	hasMutation bool
-	// Set if the mutation being inserted is a GCMutation.
-	hasGCMutation bool
 	// Set if the desc should have a job that is dropping it.
 	hasDropJob bool
 }
 
 func (m mutationOptions) string() string {
-	return fmt.Sprintf("hasMutation=%s_hasGCMutation=%s_hasDropJob=%s",
-		strconv.FormatBool(m.hasMutation), strconv.FormatBool(m.hasGCMutation),
+	return fmt.Sprintf("hasMutation=%s_hasDropJob=%s",
+		strconv.FormatBool(m.hasMutation),
 		strconv.FormatBool(m.hasDropJob))
 }
 
@@ -172,7 +150,7 @@ func TestRegistryGC(t *testing.T) {
 	writeJob := func(name string, created, finished time.Time, status Status, mutOptions mutationOptions) string {
 		tableName := constructTableName(name, mutOptions)
 		if _, err := sqlDB.Exec(fmt.Sprintf(`
-CREATE DATABASE IF NOT EXISTS t; 
+CREATE DATABASE IF NOT EXISTS t;
 CREATE TABLE t."%s" (k VARCHAR PRIMARY KEY DEFAULT 'default', v VARCHAR,i VARCHAR NOT NULL DEFAULT 'i');
 INSERT INTO t."%s" VALUES('a', 'foo');
 `, tableName, tableName)); err != nil {
@@ -187,10 +165,6 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 			writeColumnMutation(t, kvDB, tableDesc, "i", descpb.DescriptorMutation{State: descpb.
 				DescriptorMutation_DELETE_AND_WRITE_ONLY, Direction: descpb.DescriptorMutation_DROP})
 		}
-		if mutOptions.hasGCMutation {
-			writeGCMutation(t, kvDB, tableDesc, descpb.TableDescriptor_GCDescriptorMutation{})
-		}
-
 		payload, err := protoutil.Marshal(&jobspb.Payload{
 			Description: name,
 			// register a mutation on the table so that jobs that reference
@@ -222,58 +196,54 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 
 	// Test the descriptor when any of the following are set.
 	// 1. Mutations
-	// 2. GC Mutations
-	// 3. A drop job
+	// 2. A drop job
 	for _, hasMutation := range []bool{true, false} {
-		for _, hasGCMutation := range []bool{true, false} {
-			for _, hasDropJob := range []bool{true, false} {
-				if !hasMutation && !hasGCMutation && !hasDropJob {
-					continue
-				}
-				mutOptions := mutationOptions{
-					hasMutation:   hasMutation,
-					hasGCMutation: hasGCMutation,
-					hasDropJob:    hasDropJob,
-				}
-				oldRunningJob := writeJob("old_running", muchEarlier, time.Time{}, StatusRunning, mutOptions)
-				oldSucceededJob := writeJob("old_succeeded", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded, mutOptions)
-				oldFailedJob := writeJob("old_failed", muchEarlier, muchEarlier.Add(time.Minute),
-					StatusFailed, mutOptions)
-				oldRevertFailedJob := writeJob("old_revert_failed", muchEarlier, muchEarlier.Add(time.Minute),
-					StatusRevertFailed, mutOptions)
-				oldCanceledJob := writeJob("old_canceled", muchEarlier, muchEarlier.Add(time.Minute),
-					StatusCanceled, mutOptions)
-				newRunningJob := writeJob("new_running", earlier, earlier.Add(time.Minute), StatusRunning,
-					mutOptions)
-				newSucceededJob := writeJob("new_succeeded", earlier, earlier.Add(time.Minute), StatusSucceeded, mutOptions)
-				newFailedJob := writeJob("new_failed", earlier, earlier.Add(time.Minute), StatusFailed, mutOptions)
-				newRevertFailedJob := writeJob("new_revert_failed", earlier, earlier.Add(time.Minute), StatusRevertFailed, mutOptions)
-				newCanceledJob := writeJob("new_canceled", earlier, earlier.Add(time.Minute),
-					StatusCanceled, mutOptions)
-
-				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-					{oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
-					{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
-
-				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
-					t.Fatal(err)
-				}
-				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-					{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newSucceededJob},
-					{newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
-
-				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
-					t.Fatal(err)
-				}
-				db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
-					{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
-
-				// Delete the revert failed, and running jobs for the next run of the
-				// test.
-				_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id = $1 OR id = $2 OR id = $3 OR id = $4`,
-					oldRevertFailedJob, newRevertFailedJob, oldRunningJob, newRunningJob)
-				require.NoError(t, err)
+		for _, hasDropJob := range []bool{true, false} {
+			if !hasMutation && !hasDropJob {
+				continue
 			}
+			mutOptions := mutationOptions{
+				hasMutation: hasMutation,
+				hasDropJob:  hasDropJob,
+			}
+			oldRunningJob := writeJob("old_running", muchEarlier, time.Time{}, StatusRunning, mutOptions)
+			oldSucceededJob := writeJob("old_succeeded", muchEarlier, muchEarlier.Add(time.Minute), StatusSucceeded, mutOptions)
+			oldFailedJob := writeJob("old_failed", muchEarlier, muchEarlier.Add(time.Minute),
+				StatusFailed, mutOptions)
+			oldRevertFailedJob := writeJob("old_revert_failed", muchEarlier, muchEarlier.Add(time.Minute),
+				StatusRevertFailed, mutOptions)
+			oldCanceledJob := writeJob("old_canceled", muchEarlier, muchEarlier.Add(time.Minute),
+				StatusCanceled, mutOptions)
+			newRunningJob := writeJob("new_running", earlier, earlier.Add(time.Minute), StatusRunning,
+				mutOptions)
+			newSucceededJob := writeJob("new_succeeded", earlier, earlier.Add(time.Minute), StatusSucceeded, mutOptions)
+			newFailedJob := writeJob("new_failed", earlier, earlier.Add(time.Minute), StatusFailed, mutOptions)
+			newRevertFailedJob := writeJob("new_revert_failed", earlier, earlier.Add(time.Minute), StatusRevertFailed, mutOptions)
+			newCanceledJob := writeJob("new_canceled", earlier, earlier.Add(time.Minute),
+				StatusCanceled, mutOptions)
+
+			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+				{oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
+				{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
+
+			if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
+				t.Fatal(err)
+			}
+			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newSucceededJob},
+				{newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
+
+			if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
+				t.Fatal(err)
+			}
+			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
+				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
+
+			// Delete the revert failed, and running jobs for the next run of the
+			// test.
+			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id = $1 OR id = $2 OR id = $3 OR id = $4`,
+				oldRevertFailedJob, newRevertFailedJob, oldRunningJob, newRunningJob)
+			require.NoError(t, err)
 		}
 	}
 }

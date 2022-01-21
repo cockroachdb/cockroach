@@ -63,11 +63,6 @@ var ErrMissingColumns = errors.New("table must contain at least 1 column")
 // ErrMissingPrimaryKey indicates a table with no primary key.
 var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
-// ErrIndexGCMutationsList is returned by FindIndexWithID to signal that the
-// index with the given ID does not have a descriptor and is in the garbage
-// collected mutations list.
-var ErrIndexGCMutationsList = errors.New("index in GC mutations list")
-
 // PostDeserializationTableDescriptorChanges are a set of booleans to indicate
 // which types of upgrades or fixes occurred when filling in the descriptor
 // after deserialization.
