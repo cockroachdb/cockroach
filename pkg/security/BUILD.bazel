@@ -22,6 +22,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/security",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -42,9 +43,11 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_xdg_go_scram//:scram",
         "@com_github_xdg_go_stringprep//:stringprep",
         "@org_golang_x_crypto//bcrypt",
         "@org_golang_x_crypto//ocsp",
+        "@org_golang_x_crypto//pbkdf2",
         "@org_golang_x_sync//errgroup",
     ],
 )
@@ -62,6 +65,7 @@ go_test(
         "certs_test.go",
         "join_token_test.go",
         "main_test.go",
+        "password_test.go",
         "permission_check_test.go",
         "tls_test.go",
         "username_test.go",
@@ -74,6 +78,7 @@ go_test(
         "//pkg/rpc",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/envutil",
@@ -84,6 +89,7 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_crypto//bcrypt",
         "@org_golang_x_exp//rand",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
