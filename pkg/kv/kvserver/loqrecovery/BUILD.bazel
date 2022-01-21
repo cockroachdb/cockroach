@@ -14,6 +14,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/roachpb:with-mocks",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -29,6 +31,7 @@ go_library(
 go_test(
     name = "loqrecovery_test",
     srcs = [
+        "record_test.go",
         "recovery_env_test.go",
         "recovery_test.go",
     ],
