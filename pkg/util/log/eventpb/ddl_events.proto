@@ -160,6 +160,15 @@ message SetSchema {
   string descriptor_type = 5 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// SetEphemeral is recorded when a table's row data is marked or unmarked as ephemeral.
+message SetEphemeral {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected descriptor.
+  string descriptor_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  bool  ephemeral = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // CreateTable is recorded when a table is created.
 message CreateTable {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

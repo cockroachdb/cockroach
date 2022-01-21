@@ -314,7 +314,12 @@ func (*AlterTableSetEphemeralData) StatementReturnType() StatementReturnType { r
 func (*AlterTableSetEphemeralData) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTableSetEphemeralData) StatementTag() string { return "ALTER TABLE SET EPHEMERAL DATA" }
+func (n *AlterTableSetEphemeralData) StatementTag() string {
+	if !n.IsEphemeralData {
+		return "ALTER TABLE SET NOT EPHEMERAL DATA"
+	}
+	return "ALTER TABLE SET EPHEMERAL DATA"
+}
 
 func (*AlterTableSetEphemeralData) hiddenFromShowQueries() {}
 

@@ -282,6 +282,11 @@ func (desc *TableDescriptor) Persistence() tree.Persistence {
 	return tree.PersistencePermanent
 }
 
+// IsEphemeral implements the TableDescriptor interface.
+func (desc *TableDescriptor) IsEphemeral() bool {
+	return desc.Ephemeral
+}
+
 // IsVirtualTable returns true if the TableDescriptor describes a
 // virtual Table (like the information_schema tables) and thus doesn't
 // need to be physically stored.

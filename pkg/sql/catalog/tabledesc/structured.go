@@ -2464,6 +2464,11 @@ func (desc *Mutable) SetTableLocalityRegionalByRow(regionColName tree.Name) {
 	desc.LocalityConfig = &lc
 }
 
+// SetEphemeralData sets the descriptor's ephemeral bit to the provided value.
+func (desc *Mutable) SetEphemeralData(ephemeral bool) {
+	desc.Ephemeral = ephemeral
+}
+
 // LocalityConfigRegionalByRow returns a config for a REGIONAL BY ROW table.
 func LocalityConfigRegionalByRow(regionColName tree.Name) catpb.LocalityConfig {
 	rbr := &catpb.LocalityConfig_RegionalByRow{}

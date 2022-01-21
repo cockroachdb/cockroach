@@ -243,6 +243,7 @@ func init() {
 		&tree.AlterTableLocality{},
 		&tree.AlterTableOwner{},
 		&tree.AlterTableSetSchema{},
+		&tree.AlterTableSetEphemeralData{},
 		&tree.AlterType{},
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
