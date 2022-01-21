@@ -26,7 +26,7 @@ import (
 // CanUseStreamer returns whether the kvstreamer.Streamer API should be used.
 func CanUseStreamer(ctx context.Context, settings *cluster.Settings) bool {
 	// TODO(yuzefovich): remove the version gate in 22.2 cycle.
-	return settings.Version.IsActive(ctx, clusterversion.TargetBytesAvoidExcess) &&
+	return settings.Version.IsActive(ctx, clusterversion.ScanWholeRows) &&
 		useStreamerEnabled.Get(&settings.SV)
 }
 
