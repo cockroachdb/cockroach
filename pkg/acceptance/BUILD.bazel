@@ -55,6 +55,7 @@ go_test(
     ],
     embed = [":acceptance"],
     gotags = ["acceptance"],
+    tags = ["integration"],
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/build/bazel",
