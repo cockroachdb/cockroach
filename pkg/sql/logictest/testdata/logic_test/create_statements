@@ -6562,7 +6562,7 @@ unlogged_tbl  CREATE TABLE public.unlogged_tbl (
               FAMILY "primary" (col)
 )
 
-statement error invalid storage parameter "foo"
+statement error pgcode 22023 invalid storage parameter "foo"
 CREATE TABLE a (b INT) WITH (foo=100);
 
 statement error parameter "fillfactor" requires a float value
