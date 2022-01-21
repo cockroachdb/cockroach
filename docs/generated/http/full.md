@@ -209,6 +209,71 @@ RegionsResponse describes the available regions.
 
 
 
+## NodesList
+
+
+
+NodesList returns all available nodes with their addresses.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+NodesListRequest requests list of all nodes.
+The nodes are KV nodes when the cluster is a single
+tenant cluster or the host cluster in case of multi-tenant
+clusters.
+The nodes are SQL instances in case of multi-tenant
+clusters.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+NodesListResponse contains a list of all nodes with their addresses.
+The nodes are KV nodes when the cluster is a single
+tenant cluster or the host cluster in case of multi-tenant
+clusters.
+The nodes are SQL instances in case of multi-tenant
+clusters.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| nodes | [NodeDetails](#cockroach.server.serverpb.NodesListResponse-cockroach.server.serverpb.NodeDetails) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesListResponse-cockroach.server.serverpb.NodeDetails"></a>
+#### NodeDetails
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.NodesListResponse-int32) |  |  | [reserved](#support-status) |
+| address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodesListResponse-cockroach.util.UnresolvedAddr) |  |  | [reserved](#support-status) |
+| sql_address | [cockroach.util.UnresolvedAddr](#cockroach.server.serverpb.NodesListResponse-cockroach.util.UnresolvedAddr) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## Nodes
 
 `GET /_status/nodes`

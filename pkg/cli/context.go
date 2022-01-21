@@ -333,6 +333,10 @@ type zipContext struct {
 
 	// The log/heap/etc files to include.
 	files fileSelection
+
+	// serverless indicates whether the cluster to fetch debug data
+	// from is serverless.
+	serverless bool
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This

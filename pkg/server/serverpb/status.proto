@@ -308,6 +308,31 @@ message RegionsResponse {
   map<string, Region> regions = 1;
 }
 
+// NodesListRequest requests list of all nodes.
+// The nodes are KV nodes when the cluster is a single
+// tenant cluster or the host cluster in case of multi-tenant
+// clusters.
+// The nodes are SQL instances in case of multi-tenant
+// clusters.
+message NodesListRequest {}
+
+message NodeDetails {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID"];
+  util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
+  util.UnresolvedAddr sql_address = 3 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "SQLAddress"];
+}
+
+// NodesListResponse contains a list of all nodes with their addresses.
+// The nodes are KV nodes when the cluster is a single
+// tenant cluster or the host cluster in case of multi-tenant
+// clusters.
+// The nodes are SQL instances in case of multi-tenant
+// clusters.
+message NodesListResponse {
+  repeated NodeDetails nodes = 1 [(gogoproto.nullable) = false];
+}
+
 message NodeRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -1435,6 +1460,9 @@ service Status {
 
   // RegionsRequest retrieves all available regions.
   rpc Regions(RegionsRequest) returns (RegionsResponse) {}
+
+  // NodesList returns all available nodes with their addresses.
+  rpc NodesList(NodesListRequest) returns (NodesListResponse) {}
 
   // Nodes returns status info for all commissioned nodes. Decommissioned nodes
   // are not included, except in rare cases where the node doing the

@@ -1450,6 +1450,14 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 `,
 	}
 
+	ZipServerless = FlagInfo{
+		Name: "serverless",
+		Description: `
+Set this flag to true to indicate the cockroach cluster to fetch debug data
+from is serverless. Default value is false.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
