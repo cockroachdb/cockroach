@@ -21,7 +21,9 @@ go_test(
     name = "docker_test",
     size = "enormous",
     srcs = ["single_node_docker_test.go"],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//pkg/testutils/docker/docker-fsnotify:docker-fsnotify",
+    ],
     embed = [":testutils_docker"],
     deps = [
         "//pkg/util/contextutil",

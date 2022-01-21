@@ -13,6 +13,7 @@ package docker
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -22,8 +23,6 @@ import (
 	"github.com/docker/docker/client"
 	"golang.org/x/net/context"
 )
-
-const upstreamArtifactsPath = "/home/agent/work/.go/src/github.com/cockroachdb/cockroach/upstream_artifacts"
 
 // sqlQuery consists of a sql query and the expected result.
 type sqlQuery struct {
@@ -63,6 +62,8 @@ func TestSingleNodeDocker(t *testing.T) {
 		t.Fatal(errors.NewAssertionErrorWithWrappedErrf(err, "cannot get pwd"))
 	}
 
+	fsnotifyPath := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(pwd)))))), "docker-fsnotify")
+
 	var dockerTests = []singleNodeDockerTest{
 		{
 			testName:      "single-node-insecure-mode",
@@ -73,7 +74,7 @@ func TestSingleNodeDocker(t *testing.T) {
 				},
 				volSetting: []string{
 					fmt.Sprintf("%s/cockroach-data/roach2:/cockroach/cockroach-data", pwd),
-					fmt.Sprintf("%s/docker-fsnotify/:/cockroach/docker-fsnotify", upstreamArtifactsPath),
+					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
 				},
 				cmd: []string{"start-single-node", "--insecure"},
 			},

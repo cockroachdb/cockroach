@@ -42,9 +42,5 @@ docker save "$docker_tag" | gzip > "${artifacts}/${docker_image_tar_name}".gz
 
 cp upstream_artifacts/cockroach "${artifacts}"/cockroach
 
-docker_fsnotify_dir="$(dirname "${0}")/docker-fsnotify"
-cd $docker_fsnotify_dir && go build
-cp ./docker-fsnotify "${artifacts}"/docker-fsnotify
-
 tc_end_block "Build and save docker image to artifacts"
 
