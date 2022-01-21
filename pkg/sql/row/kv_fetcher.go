@@ -164,7 +164,7 @@ const (
 // unexpectedly.
 func (f *KVFetcher) NextKV(
 	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
-) (moreKVs bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
+) (ok bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
 	for {
 		// Only one of f.kvs or f.batchResponse will be set at a given time. Which
 		// one is set depends on the format returned by a given BatchRequest.
@@ -206,12 +206,9 @@ func (f *KVFetcher) NextKV(
 			}, lastKey, nil
 		}
 
-		moreKVs, f.kvs, f.batchResponse, err = f.nextBatch(ctx)
-		if err != nil {
-			return moreKVs, kv, false, err
-		}
-		if !moreKVs {
-			return false, kv, false, nil
+		ok, f.kvs, f.batchResponse, err = f.nextBatch(ctx)
+		if err != nil || !ok {
+			return ok, kv, false, err
 		}
 		f.newSpan = true
 		nBytes := len(f.batchResponse)
