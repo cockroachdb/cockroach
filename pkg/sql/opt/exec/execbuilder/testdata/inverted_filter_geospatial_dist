@@ -1,4 +1,5 @@
 # LogicTest: 5node
+# cluster-opt: disable-span-configs
 
 statement ok
 CREATE TABLE geo_table(
