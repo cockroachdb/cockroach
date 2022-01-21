@@ -17,8 +17,11 @@ import { HotRangesState } from "../../redux/hotRanges/hotRangesReducer";
 import { selectHotRanges } from "../../redux/hotRanges/hotRangesSelectors";
 import HotRangesTable from "./hotRangesTable";
 import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, Text } from "@cockroachlabs/cluster-ui";
+import classNames from "classnames/bind";
+import styles from "./hotRanges.module.styl";
 
+const cx = classNames.bind(styles);
 const HotRangesPage = () => {
   const dispatch = useDispatch();
   const hotRanges: HotRangesState = useSelector(selectHotRanges);
@@ -31,6 +34,7 @@ const HotRangesPage = () => {
     <div className="section">
       <Helmet title="Hot Ranges" />
       <h1 className="base-heading">Hot ranges</h1>
+      <Text className={cx("hotranges-description")}>The hot ranges table shows ranges receiving a high number of reads or writes. By default the table is sorted by <br /> ranges with the highest QPS (Queries Per Second). Use this information to... <a href="" target="_blank">Learn more</a></Text>
       <ErrorBoundary>
         <Loading
           loading={hotRanges.loading}

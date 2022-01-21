@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment";
 import { cockroach } from "src/js/protos";
 import { getHotRanges } from "src/util/api";
 import { all, call, put, takeEvery } from "redux-saga/effects";
@@ -23,11 +24,18 @@ import IHotRangesRequest = cockroach.server.serverpb.IHotRangesRequest;
 
 import { PayloadAction } from "oss/src/interfaces/action";
 
+const getCurrentDateTime = () => {
+  const nowUtc = moment.utc();
+  return (
+    nowUtc.format("MMM DD, YYYY") + " at " + nowUtc.format("h:mm A") + " (UTC)"
+  );
+};
+
 export function* getHotRangesSaga(action: PayloadAction<IHotRangesRequest>) {
   const hotRangesRequest = new HotRangesRequest(action.payload);
   try {
     const resp: HotRangesResponse = yield call(getHotRanges, hotRangesRequest);
-    yield put(getHotRangesSucceededAction(resp?.ranges));
+    yield put(getHotRangesSucceededAction({ ranges: resp?.ranges, updateTime: getCurrentDateTime() }));
   } catch (e) {
     yield put(getHotRangesFailedAction(e));
   }

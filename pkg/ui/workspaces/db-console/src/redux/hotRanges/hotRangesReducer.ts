@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment";
 import { cockroach } from "src/js/protos";
 
 export interface HotRangesState {
@@ -22,13 +21,6 @@ const INITIAL_STATE = {
   loading: true,
 };
 
-const getCurrentDateTime = () => {
-  const nowUtc = moment.utc();
-  return (
-    nowUtc.format("MMM DD, YYYY") + " at " + nowUtc.format("h:mm A") + " (UTC)"
-  );
-};
-
 export default function(state = INITIAL_STATE, action: any): HotRangesState {
   switch (action.type) {
     case "GET_HOT_RANGES":
@@ -39,8 +31,8 @@ export default function(state = INITIAL_STATE, action: any): HotRangesState {
     case "GET_HOT_RANGES_SUCCEEDED":
       return {
         loading: false,
-        lastUpdate: getCurrentDateTime(),
-        data: action.payload,
+        lastUpdate: action.payload.updateTime,
+        data: action.payload.ranges,
         error: undefined,
       };
     case "GET_HOT_RANGES_FAILED":
