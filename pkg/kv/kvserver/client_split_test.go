@@ -3018,7 +3018,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 		select {
 		case <-blockRangeLookups:
 			if kv.TestingIsRangeLookup(ba) &&
-				ba.Requests[0].GetInner().(*roachpb.ScanRequest).Key.Equal(bounds.Key.AsRawKey()) {
+				ba.Requests[0].GetInner().Header().Key.Equal(bounds.Key.AsRawKey()) {
 
 				select {
 				case rangeLookupIsBlocked <- struct{}{}:

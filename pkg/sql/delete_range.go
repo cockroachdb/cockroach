@@ -186,12 +186,9 @@ func (d *deleteRangeNode) processResults(
 				continue
 			}
 
-			after, ok, _, err := d.fetcher.ReadIndexKey(keyBytes)
+			after, _, err := d.fetcher.DecodeIndexKey(keyBytes)
 			if err != nil {
 				return nil, err
-			}
-			if !ok {
-				return nil, errors.AssertionFailedf("key did not match descriptor")
 			}
 			k := keyBytes[:len(keyBytes)-len(after)]
 			if !bytes.Equal(k, prev) {
