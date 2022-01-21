@@ -1540,13 +1540,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
-	// There is still a DROP INDEX mutation waiting for GC.
-	if e := 1; len(tableDesc.GetGCMutations()) != e {
-		t.Fatalf("the table has %d instead of %d GC mutations", len(tableDesc.GetGCMutations()), e)
-	} else if m := tableDesc.GetGCMutations()[0]; m.IndexID != 2 && m.DropTime == 0 && m.JobID == 0 {
-		t.Fatalf("unexpected GC mutation %v", m)
-	}
-
 	// There is still some garbage index data that needs to be purged. All the
 	// rows from k = 0 to k = chunkSize - 1 have index values.
 	numGarbageValues := chunkSize
@@ -1565,19 +1558,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// above garbage left behind.
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 
-	testutils.SucceedsSoon(t, func() error {
-		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.GetGCMutations()) > 0 {
-			return errors.Errorf("%d GC mutations remaining", len(tableDesc.GetGCMutations()))
-		}
-		return nil
-	})
-
 	// No garbage left behind.
-	numGarbageValues = 0
-	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, 1, maxValue+1+numGarbageValues); err != nil {
-		t.Fatal(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		numGarbageValues = 0
+		return sqltestutils.CheckTableKeyCount(ctx, kvDB, 1, maxValue+1+numGarbageValues)
+	})
 
 	// A new attempt cleans up a chunk of data.
 	if attempts != expectedAttempts+1 {
@@ -1908,20 +1893,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		t.Fatal(err)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
-		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.GetGCMutations()) > 0 {
-			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GetGCMutations()))
-		}
-		return nil
-	})
-
 	ctx := context.Background()
 
-	// Check that the number of k-v pairs is accurate.
-	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, 3, maxValue); err != nil {
-		t.Fatal(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		// Check that the number of k-v pairs is accurate.
+		return sqltestutils.CheckTableKeyCount(ctx, kvDB, 3, maxValue)
+	})
 
 	// State of jobs table
 	skip.WithIssue(t, 51796, "TODO(pbardea): The following fails due to causes seemingly unrelated to GC")
@@ -2273,7 +2250,7 @@ func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT PRIMARY KEY, y INT NOT NULL, z INT, INDEX i (z));
-INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3); 
+INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2850,11 +2827,11 @@ func TestPrimaryKeyChangeKVOps(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (
-	x INT PRIMARY KEY, 
-	y INT NOT NULL, 
-	z INT, 
-	a INT, 
-	b INT, 
+	x INT PRIMARY KEY,
+	y INT NOT NULL,
+	z INT,
+	a INT,
+	b INT,
 	c INT,
 	FAMILY (x), FAMILY (y), FAMILY (z, a), FAMILY (b), FAMILY (c)
 )
@@ -3184,7 +3161,7 @@ func TestMultiplePrimaryKeyChanges(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT NOT NULL, y INT NOT NULL, z INT NOT NULL, w int, INDEX i (w));
-INSERT INTO t.test VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3); 
+INSERT INTO t.test VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -6016,103 +5993,6 @@ ALTER TABLE t.test2 ADD FOREIGN KEY (k) REFERENCES t.test;
 	}
 }
 
-// TestOrphanedGCMutationsRemoved tests that if a table descriptor has a
-// GCMutations which references a job that does not exist anymore, that it will
-// eventually be cleaned up anyway. One way this can arise is when a table
-// was backed up right after an index deletion.
-func TestOrphanedGCMutationsRemoved(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 51796, "TODO (lucy): get rid of this test once GCMutations goes away")
-	params, _ := tests.CreateTestServerParams()
-	const chunkSize = 200
-	// Disable synchronous schema change processing so that the mutations get
-	// processed asynchronously.
-	var enableAsyncSchemaChanges uint32
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			BackfillChunkSize: chunkSize,
-		},
-	}
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with AddImmediateGCZoneConfig.
-	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
-
-	retryOpts := retry.Options{
-		InitialBackoff: 20 * time.Millisecond,
-		MaxBackoff:     200 * time.Millisecond,
-		Multiplier:     2,
-	}
-
-	// Create a k-v table.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
-`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`CREATE INDEX t_v ON t.test(v)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Add some data.
-	const maxValue = chunkSize + 1
-	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
-		t.Fatal(err)
-	}
-
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	// Wait until indexes are created.
-	for r := retry.Start(retryOpts); r.Next(); {
-		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.PublicNonPrimaryIndexes()) == 1 {
-			break
-		}
-	}
-
-	if _, err := sqlDB.Exec(`DROP INDEX t.t_v`); err != nil {
-		t.Fatal(err)
-	}
-
-	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if e := 1; e != len(tableDesc.GetGCMutations()) {
-		t.Fatalf("e = %d, v = %d", e, len(tableDesc.GetGCMutations()))
-	}
-
-	// Delete the associated job.
-	jobID := tableDesc.GetGCMutations()[0].JobID
-	if _, err := sqlDB.Exec(fmt.Sprintf("DELETE FROM system.jobs WHERE id=%d", jobID)); err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure the GCMutations has not yet been completed.
-	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if e := 1; e != len(tableDesc.GetGCMutations()) {
-		t.Fatalf("e = %d, v = %d", e, len(tableDesc.GetGCMutations()))
-	}
-
-	// Enable async schema change processing for purged schema changes.
-	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
-
-	// Add immediate GC TTL to allow index creation purge to complete.
-	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure that GC mutations that cannot find their job will eventually be
-	// cleared.
-	testutils.SucceedsSoon(t, func() error {
-		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.GetGCMutations()) > 0 {
-			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GetGCMutations()))
-		}
-		return nil
-	})
-}
-
 // TestMultipleRevert starts a schema change then cancels it. After the canceled
 // job, after reversing the mutations the job is set up to throw an error so
 // that mutations are attempted to be reverted again. The mutation shouldn't be
@@ -6612,7 +6492,7 @@ func TestFailureToMarkCanceledReversalLeadsToCanceledStatus(t *testing.T) {
 		jobsErrGroup.Go(func() error {
 			return testutils.SucceedsSoonError(func() error {
 				return sqlDB.QueryRow(`
-SELECT job_id FROM crdb_internal.jobs 
+SELECT job_id FROM crdb_internal.jobs
  WHERE description LIKE '%` + idxName + `%'`).Scan(&jobIDs[i])
 			})
 		})
@@ -6700,7 +6580,7 @@ func TestCancelMultipleQueued(t *testing.T) {
 		jobsErrGroup.Go(func() error {
 			return testutils.SucceedsSoonError(func() error {
 				return sqlDB.QueryRow(`
-SELECT job_id FROM crdb_internal.jobs 
+SELECT job_id FROM crdb_internal.jobs
  WHERE description LIKE '%` + idxName + `%'`).Scan(&jobIDs[i])
 			})
 		})
