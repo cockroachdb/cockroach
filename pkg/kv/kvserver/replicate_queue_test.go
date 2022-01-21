@@ -388,7 +388,7 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 func checkReplicaCount(
 	ctx context.Context,
 	tc *testcluster.TestCluster,
-	rangeDesc roachpb.RangeDescriptor,
+	rangeDesc *roachpb.RangeDescriptor,
 	voterCount, nonVoterCount int,
 ) (bool, error) {
 	err := forceScanOnAllReplicationQueues(tc)
@@ -396,7 +396,7 @@ func checkReplicaCount(
 		log.Infof(ctx, "store.ForceReplicationScanAndProcess() failed with: %s", err)
 		return false, err
 	}
-	rangeDesc, err = tc.LookupRange(rangeDesc.StartKey.AsRawKey())
+	*rangeDesc, err = tc.LookupRange(rangeDesc.StartKey.AsRawKey())
 	if err != nil {
 		return false, err
 	}
@@ -433,15 +433,18 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 				},
 			},
 		)
+		_, err := tc.ServerConn(0).Exec(
+			`SET CLUSTER SETTING server.failed_reservation_timeout='1ms'`)
+		require.NoError(t, err)
 
 		scratchKey := tc.ScratchRange(t)
 		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-		_, err := tc.ServerConn(0).Exec(
+		_, err = tc.ServerConn(0).Exec(
 			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 3, num_voters = 1`,
 		)
 		require.NoError(t, err)
 		require.Eventually(t, func() bool {
-			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
+			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
 				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
@@ -466,7 +469,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 			tc.Server(0).Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, beforeNodeIDs))
 
 		require.Eventually(t, func() bool {
-			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
+			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
 				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
@@ -520,7 +523,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		// replicateQueue on and ensure that these redundant non-voters are removed.
 		tc.ToggleReplicateQueues(true)
 		require.Eventually(t, func() bool {
-			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
+			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
 				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
@@ -564,15 +567,19 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 				},
 			},
 		)
+		_, err := tc.ServerConn(0).Exec(
+			`SET CLUSTER SETTING server.failed_reservation_timeout='1ms'`)
+		require.NoError(t, err)
+
 		// Setup a scratch range on a test cluster with 2 non-voters and 1 voter.
 		scratchKey := tc.ScratchRange(t)
 		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-		_, err := tc.ServerConn(0).Exec(
+		_, err = tc.ServerConn(0).Exec(
 			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 3, num_voters = 1`,
 		)
 		require.NoError(t, err)
 		require.Eventually(t, func() bool {
-			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
+			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
 				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
@@ -607,7 +614,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		beforeNodeIDs := getNonVoterNodeIDs(scratchRange)
 		markDead(beforeNodeIDs)
 		require.Eventually(t, func() bool {
-			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
+			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
 				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
@@ -658,7 +665,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 
 		toggleReplicationQueues(tc, true)
 		require.Eventually(t, func() bool {
-			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
+			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
 				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
