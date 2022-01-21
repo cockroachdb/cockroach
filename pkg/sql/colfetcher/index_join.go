@@ -398,11 +398,7 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 func (s *ColIndexJoin) GetBytesRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Note that if Init() was never called, s.rf.fetcher will remain nil, and
-	// GetBytesRead() will return 0. We are also holding the mutex, so a
-	// concurrent call to Init() will have to wait, and the fetcher will remain
-	// uninitialized until we return.
-	return s.rf.fetcher.GetBytesRead()
+	return s.rf.getBytesRead()
 }
 
 // GetRowsRead is part of the colexecop.KVReader interface.
@@ -447,7 +443,7 @@ func NewColIndexJoin(
 
 	table := flowCtx.TableDescriptor(&spec.Table)
 	index := table.ActiveIndexes()[spec.IndexIdx]
-	tableArgs, neededColumns, err := populateTableArgs(
+	tableArgs, neededColumns, err := populateTableArgsLegacy(
 		ctx, flowCtx, table, index, nil, /* invertedCol */
 		spec.HasSystemColumns, post, helper,
 	)
@@ -491,7 +487,7 @@ func NewColIndexJoin(
 		flowCtx.TraceKV,
 	}
 	if err = fetcher.Init(
-		flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs, spec.HasSystemColumns,
+		flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs,
 	); err != nil {
 		fetcher.Release()
 		return nil, err

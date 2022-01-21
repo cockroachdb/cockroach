@@ -66,12 +66,15 @@ go_test(
     srcs = [
         "component_stats_test.go",
         "expr_test.go",
+        "flow_diagram_external_test.go",
         "flow_diagram_test.go",
     ],
     embed = [":execinfrapb"],
     deps = [
         "//pkg/roachpb:with-mocks",
+        "//pkg/security",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",

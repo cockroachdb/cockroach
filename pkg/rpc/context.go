@@ -424,6 +424,11 @@ type ContextOptions struct {
 	// server. If unset in the options, the RPC context will instantiate
 	// its own separate container (this is useful in tests).
 	ClusterID *base.ClusterIDContainer
+
+	// ClientOnly indicates that this RPC context is run by a CLI
+	// utility, not a server, and thus misses server configuration, a
+	// cluster version, a node ID, etc.
+	ClientOnly bool
 }
 
 func (c ContextOptions) validate() error {
@@ -911,11 +916,19 @@ func (rpcCtx *Context) grpcDialOptions(
 		tagger := func(span *tracing.Span) {
 			span.SetTag("node", attribute.IntValue(int(rpcCtx.NodeID.Get())))
 		}
+		compatMode := func(reqCtx context.Context) bool {
+			return !rpcCtx.ContextOptions.Settings.Version.IsActive(reqCtx, clusterversion.SelectRPCsTakeTracingInfoInband)
+		}
+
+		if rpcCtx.ClientOnly {
+			// client-only RPC contexts don't have a node ID to report nor a
+			// cluster version to check against.
+			tagger = func(span *tracing.Span) {}
+			compatMode = func(_ context.Context) bool { return false }
+		}
+
 		unaryInterceptors = append(unaryInterceptors,
-			tracing.ClientInterceptor(tracer, tagger,
-				func(reqCtx context.Context) bool {
-					return !rpcCtx.ContextOptions.Settings.Version.IsActive(reqCtx, clusterversion.SelectRPCsTakeTracingInfoInband)
-				} /* compatibilityMode */))
+			tracing.ClientInterceptor(tracer, tagger, compatMode))
 		streamInterceptors = append(streamInterceptors,
 			tracing.StreamClientInterceptor(tracer, tagger))
 	}
