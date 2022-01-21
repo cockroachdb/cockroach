@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -129,4 +130,64 @@ func TestMemoryLimit(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestStreamerTightBudget verifies that the Streamer utilizes its available
+// budget as tightly as possible, without incurring unnecessary debt. It gives
+// the Streamer such a budget that a single result puts it in debt, so there
+// should be no more than a single request "in progress" (i.e. one request in
+// flight or one unreleased result).
+func TestStreamerTightBudget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a cluster with large --max-sql-memory parameter so that the
+	// Streamer isn't hitting the root budget exceeded error.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	const blobSize = 1 << 20
+	const numRows = 5
+
+	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k))")
+	require.NoError(t, err)
+	for i := 0; i < numRows; i++ {
+		if i > 0 {
+			// Create a new range for this row.
+			_, err = db.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", i))
+			require.NoError(t, err)
+		}
+		_, err = db.Exec(fmt.Sprintf("INSERT INTO t SELECT %d, 1, repeat('a', %d)", i, blobSize))
+		require.NoError(t, err)
+	}
+
+	// Populate the range cache.
+	_, err = db.Exec("SELECT count(*) from t")
+	require.NoError(t, err)
+
+	// Set the workmem limit to a low value such it will allow the Streamer to
+	// have at most one request to be "in progress".
+	_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", blobSize))
+	require.NoError(t, err)
+
+	memMonitor := s.ExecutorConfig().(ExecutorConfig).RootMemoryMonitor
+
+	// Perform an index join to read the blobs.
+	query := "SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
+	memMonitor.TestClearMaximumBytes()
+	row := db.QueryRow(query)
+	var sum int
+	require.NoError(t, row.Scan(&sum))
+	require.Equal(t, numRows*blobSize, sum)
+	// Verify that the query didn't request more than 3 x workmem at any point.
+	// The thinking behind this number:
+	// - about 1 x blobSize is used by the Streamer's budget to account for the
+	// request in progress;
+	// - about 1 x blobSize is used by the ColIndexJoin when it copies over the
+	// result into the columnar batch;
+	// - about 1 x blobSize for other things happening in the cluster.
+	require.Greater(t, int64(blobSize*3), memMonitor.MaximumBytes())
 }

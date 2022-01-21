@@ -444,6 +444,14 @@ func (mm *BytesMonitor) MaximumBytes() int64 {
 	return mm.mu.maxAllocated
 }
 
+// TestClearMaximumBytes resets the maximum number of bytes that were allocated
+// by this monitor. This should only be used in tests.
+func (mm *BytesMonitor) TestClearMaximumBytes() {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	mm.mu.maxAllocated = 0
+}
+
 // AllocBytes returns the current number of allocated bytes in this monitor.
 func (mm *BytesMonitor) AllocBytes() int64 {
 	mm.mu.Lock()

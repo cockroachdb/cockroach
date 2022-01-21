@@ -12,6 +12,7 @@ package kvstreamer
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -24,7 +25,7 @@ import (
 // support the notion of budget "going in debt". This can occur in a degenerate
 // case when a single large row exceeds the provided limit. The Streamer is
 // expected to have only a single request in flight in this case. Additionally,
-// the budget provides blocking (via waitCh) until it gets out of debt.
+// the budget provides blocking until some memory is returned to the budget.
 type budget struct {
 	mu struct {
 		// If the Streamer's mutex also needs to be locked, the budget's mutex
@@ -33,15 +34,17 @@ type budget struct {
 		// acc represents the current reservation of this budget against the
 		// root memory pool.
 		acc *mon.BoundAccount
+		// waitForBudget is used by the main loop of the workerCoordinator to
+		// block until the next release() call.
+		waitForBudget *sync.Cond
 	}
 	// limitBytes is the maximum amount of bytes that this budget should reserve
 	// against acc, i.e. acc.Used() should not exceed limitBytes. However, in a
 	// degenerate case of a single large row, the budget can go into debt and
 	// acc.Used() might exceed limitBytes.
+	//
+	// Available budget can be calculated as limitBytes - mu.acc.Used().
 	limitBytes int64
-	// waitCh is used by the main loop of the workerCoordinator to block until
-	// available() becomes positive (until some release calls occur).
-	waitCh chan struct{}
 }
 
 // newBudget creates a new budget with the specified limit. The limit determines
@@ -58,25 +61,10 @@ type budget struct {
 // to interact with the account only after canceling the Streamer (because
 // memory accounts are not thread-safe).
 func newBudget(acc *mon.BoundAccount, limitBytes int64) *budget {
-	b := budget{
-		limitBytes: limitBytes,
-		waitCh:     make(chan struct{}),
-	}
+	b := budget{limitBytes: limitBytes}
 	b.mu.acc = acc
+	b.mu.waitForBudget = sync.NewCond(&b.mu.Mutex)
 	return &b
-}
-
-// available returns how many bytes are currently available in the budget. The
-// answer can be negative, in case the Streamer has used un-budgeted memory
-// (e.g. one result was very large putting the budget in debt).
-//
-// Note that it's possible that actually available budget is less than the
-// number returned - this might occur if --max-sql-memory root pool is almost
-// used up.
-func (b *budget) available() int64 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.limitBytes - b.mu.acc.Used()
 }
 
 // consume draws bytes from the available budget. An error is returned if the
@@ -115,12 +103,5 @@ func (b *budget) release(ctx context.Context, bytes int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.mu.acc.Shrink(ctx, bytes)
-	if b.limitBytes > b.mu.acc.Used() {
-		// Since we now have some available budget, we non-blockingly send on
-		// the wait channel to notify the mainCoordinator about it.
-		select {
-		case b.waitCh <- struct{}{}:
-		default:
-		}
-	}
+	b.mu.waitForBudget.Signal()
 }
