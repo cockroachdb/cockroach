@@ -1024,8 +1024,8 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 
 	// If we have a protected timestamp record which precedes the implied
 	// threshold, use the threshold it implies instead.
-	if c.earliestRecord != nil && c.earliestRecord.Timestamp.Less(threshold) {
-		return c.earliestRecord.Timestamp.Prev()
+	if !c.earliestProtectionTimestamp.IsEmpty() && c.earliestProtectionTimestamp.Less(threshold) {
+		return c.earliestProtectionTimestamp.Prev()
 	}
 	return threshold
 }
