@@ -204,7 +204,7 @@ go_library(
 
 go_test(
     name = "kvserver_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "addressing_test.go",
         "allocator_scorer_test.go",
