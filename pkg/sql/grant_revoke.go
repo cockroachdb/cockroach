@@ -120,6 +120,12 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 
+	if n.withGrantOption && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"version %v must be finalized to use grant options",
+			clusterversion.ByKey(clusterversion.ValidateGrantOption))
+	}
+
 	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
@@ -188,11 +194,10 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		if len(n.desiredprivs) > 0 {
-			// Only allow granting/revoking privileges that the requesting
-			// user themselves have on the descriptor.
-
 			grantPresent, allPresent := false, false
 			for _, priv := range n.desiredprivs {
+				// Only allow granting/revoking privileges that the requesting
+				// user themselves have on the descriptor.
 				if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
 					return err
 				}
@@ -201,43 +206,48 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			}
 			privileges := descriptor.GetPrivileges()
 
+			noticeMessage := ""
 			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
 				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, n.isGrant)
 				if err != nil {
 					return err
 				}
 
-				noticeMessage := ""
-				// we only output the message for ALL privilege if it is being granted without the WITH GRANT OPTION flag
-				// if GRANT privilege is involved, we must always output the message
+				// We only output the message for ALL privilege if it is being granted
+				// without the WITH GRANT OPTION flag if GRANT privilege is involved, we
+				// must always output the message
 				if allPresent && n.isGrant && !n.withGrantOption {
 					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
 				} else if grantPresent {
 					noticeMessage = "the GRANT privilege is deprecated"
-				}
-
-				if len(noticeMessage) > 0 {
-					params.p.noticeSender.BufferNotice(
-						errors.WithHint(
-							pgnotice.Newf("%s", noticeMessage),
-							"please use WITH GRANT OPTION",
-						),
-					)
 				}
 			}
 
 			for _, grantee := range n.grantees {
 				n.changePrivilege(privileges, n.desiredprivs, grantee)
 
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-					if grantPresent || allPresent {
-						if n.isGrant {
-							privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
-						} else if !n.isGrant && !n.withGrantOption {
-							privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
-						}
+				// TODO (sql-exp): remove the rest of this loop in 22.2.
+				granteeHasGrantPriv := privileges.CheckPrivilege(grantee, privilege.GRANT)
+
+				if granteeHasGrantPriv && n.isGrant && !n.withGrantOption && len(noticeMessage) == 0 {
+					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
+				}
+				if grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant) {
+					if n.isGrant {
+						privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
+					} else if !n.isGrant && !n.withGrantOption {
+						privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
 					}
 				}
+			}
+
+			if len(noticeMessage) > 0 {
+				params.p.noticeSender.BufferNotice(
+					errors.WithHint(
+						pgnotice.Newf("%s", noticeMessage),
+						"please use WITH GRANT OPTION",
+					),
+				)
 			}
 
 			// Ensure superusers have exactly the allowed privilege set.

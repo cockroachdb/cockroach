@@ -90,6 +90,12 @@ func (p *planner) alterDefaultPrivileges(
 }
 
 func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
+	if (n.n.Grant.WithGrantOption || n.n.Revoke.GrantOptionFor) &&
+		!params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"version %v must be finalized to use grant options",
+			clusterversion.ByKey(clusterversion.ValidateGrantOption))
+	}
 	targetRoles, err := n.n.Roles.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
 	if err != nil {
 		return err
@@ -194,12 +200,11 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 		}
 
 		grantPresent, allPresent := false, false
+		for _, priv := range privileges {
+			grantPresent = grantPresent || priv == privilege.GRANT
+			allPresent = allPresent || priv == privilege.ALL
+		}
 		if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
-			for _, priv := range privileges {
-				grantPresent = grantPresent || priv == privilege.GRANT
-				allPresent = allPresent || priv == privilege.ALL
-			}
-
 			noticeMessage := ""
 			// we only output the message for ALL privilege if it is being granted without the WITH GRANT OPTION flag
 			// if GRANT privilege is involved, we must always output the message
@@ -208,7 +213,6 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 			} else if grantPresent {
 				noticeMessage = "the GRANT privilege is deprecated"
 			}
-
 			if len(noticeMessage) > 0 {
 				params.p.noticeSender.BufferNotice(
 					errors.WithHint(
@@ -297,12 +301,11 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	}
 
 	grantPresent, allPresent := false, false
+	for _, priv := range privileges {
+		grantPresent = grantPresent || priv == privilege.GRANT
+		allPresent = allPresent || priv == privilege.ALL
+	}
 	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.ValidateGrantOption) {
-		for _, priv := range privileges {
-			grantPresent = grantPresent || priv == privilege.GRANT
-			allPresent = allPresent || priv == privilege.ALL
-		}
-
 		noticeMessage := ""
 		// we only output the message for ALL privilege if it is being granted without the WITH GRANT OPTION flag
 		// if GRANT privilege is involved, we must always output the message

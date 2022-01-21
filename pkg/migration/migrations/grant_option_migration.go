@@ -44,6 +44,23 @@ func grantOptionMigration(
 	addGrantOptionFunc := func(ids []descpb.ID, descs []descpb.Descriptor, timestamps []hlc.Timestamp) error {
 		var modifiedDescs []catalog.MutableDescriptor
 		for i, id := range ids {
+			// Temporarily change the version in order to force the migration to run
+			// on each descriptor. This handles the case where privileges were
+			// created in a mixed-version cluster with version=GrantOptionVersion,
+			// but then later has its grant option bits wiped out by a node running
+			// on the old version.
+			table, database, typ, schema := descpb.FromDescriptorWithMVCCTimestamp(&descs[i], timestamps[i])
+			switch {
+			case table != nil:
+				table.Privileges.Version = descpb.Version21_2
+			case database != nil:
+				database.Privileges.Version = descpb.Version21_2
+			case typ != nil:
+				typ.Privileges.Version = descpb.Version21_2
+			case schema != nil:
+				schema.Privileges.Version = descpb.Version21_2
+			}
+
 			b := catalogkv.NewBuilderWithMVCCTimestamp(&descs[i], timestamps[i])
 			if b == nil {
 				return errors.Newf("unable to find descriptor for id %d", id)
