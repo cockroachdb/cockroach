@@ -62,35 +62,6 @@ const (
 	NOSQLLOGIN
 )
 
-// toStringMap is a map of Kind -> SQL role string.
-var toStringMap = map[Option]string{
-	CREATEROLE:             `CREATEROLE`,
-	NOCREATEROLE:           `NOCREATEROLE`,
-	PASSWORD:               `PASSWORD`,
-	LOGIN:                  `LOGIN`,
-	NOLOGIN:                `NOLOGIN`,
-	VALIDUNTIL:             `VALID UNTIL`,
-	CONTROLJOB:             `CONTROLJOB`,
-	NOCONTROLJOB:           `NOCONTROLJOB`,
-	CONTROLCHANGEFEED:      `CONTROLCHANGEFEED`,
-	NOCONTROLCHANGEFEED:    `NOCONTROLCHANGEFEED`,
-	CREATEDB:               `CREATEDB`,
-	NOCREATEDB:             `NOCREATEDB`,
-	CREATELOGIN:            `CREATELOGIN`,
-	NOCREATELOGIN:          `NOCREATELOGIN`,
-	VIEWACTIVITY:           `VIEWACTIVITY`,
-	NOVIEWACTIVITY:         `NOVIEWACTIVITY`,
-	CANCELQUERY:            `CANCELQUERY`,
-	NOCANCELQUERY:          `NOCANCELQUERY`,
-	MODIFYCLUSTERSETTING:   `MODIFYCLUSTERSETTING`,
-	NOMODIFYCLUSTERSETTING: `NOMODIFYCLUSTERSETTING`,
-	DEFAULTSETTINGS:        `DEFAULTSETTINGS`,
-	VIEWACTIVITYREDACTED:   `VIEWACTIVITYREDACTED`,
-	NOVIEWACTIVITYREDACTED: `NOVIEWACTIVITYREDACTED`,
-	SQLLOGIN:               `SQLLOGIN`,
-	NOSQLLOGIN:             `NOSQLLOGIN`,
-}
-
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
 // option to the role.
 var toSQLStmts = map[Option]string{
@@ -161,13 +132,6 @@ func ToOption(str string) (Option, error) {
 	}
 
 	return ret, nil
-}
-
-// ToString returns the role in string format.
-// It should be used instead of roleOption.String() to accommodate the cases
-// with space on the role (e.g. `VALID UNTIL`).
-func (o Option) ToString() string {
-	return toStringMap[o]
 }
 
 // List is a list of role options.

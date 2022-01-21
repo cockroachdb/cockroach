@@ -540,7 +540,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			`SELECT 1 from %s WHERE option = '%s' AND username = $1 LIMIT 1`,
-			sessioninit.RoleOptionsTableName, roleOption.ToString()), user.Normalized())
+			sessioninit.RoleOptionsTableName, roleOption.String()), user.Normalized())
 	if err != nil {
 		return false, err
 	}
