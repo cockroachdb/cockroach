@@ -30,7 +30,7 @@ upsert descriptor #54
 upsert descriptor #56
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
@@ -139,21 +139,21 @@ upsert descriptor #54
 upsert descriptor #57
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #59
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #60
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
@@ -188,7 +188,7 @@ create job #1: "schema change job"
 upsert descriptor #54
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  schemas:
   -    public:
   -      id: 55
@@ -199,7 +199,7 @@ upsert descriptor #54
 upsert descriptor #55
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
@@ -217,7 +217,7 @@ delete database namespace entry {0 0 db} -> 54
 delete schema namespace entry {54 0 public} -> 55
 upsert descriptor #54
   ...
-       version: 3
+       version: 2
      state: DROP
   -  version: "6"
   +  version: "7"
@@ -302,7 +302,7 @@ delete object namespace entry {61 63 v5} -> 74
 upsert descriptor #61
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  schemas:
   -    public:
   -      id: 62
@@ -315,14 +315,14 @@ upsert descriptor #61
 upsert descriptor #62
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #63
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
@@ -551,7 +551,7 @@ upsert descriptor #71
 upsert descriptor #72
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  referencingDescriptorIds:
   -  - 74
   -  version: "2"
@@ -561,7 +561,7 @@ upsert descriptor #72
 upsert descriptor #73
   ...
          withGrantOption: 2
-       version: 3
+       version: 2
   -  referencingDescriptorIds:
   -  - 74
   -  version: "2"
@@ -605,7 +605,7 @@ delete schema namespace entry {61 0 public} -> 62
 delete schema namespace entry {61 0 sc1} -> 63
 upsert descriptor #61
   ...
-       version: 3
+       version: 2
      state: DROP
   -  version: "3"
   +  version: "4"
