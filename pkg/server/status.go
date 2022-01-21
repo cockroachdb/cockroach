@@ -1348,6 +1348,32 @@ func regionsResponseFromNodesResponse(nr *serverpb.NodesResponse) *serverpb.Regi
 	return ret
 }
 
+// NodesList returns a list of nodes with their corresponding addresses.
+func (s *statusServer) NodesList(
+	ctx context.Context, _ *serverpb.NodesListRequest,
+) (*serverpb.NodesListResponse, error) {
+	// The node status contains details about the command line, network
+	// addresses, env vars etc which are admin-only.
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	statuses, _, err := s.getNodeStatuses(ctx, 0 /* limit */, 0 /* offset */)
+	if err != nil {
+		return nil, err
+	}
+	resp := &serverpb.NodesListResponse{
+		Nodes: make([]serverpb.NodeDetails, len(statuses)),
+	}
+	for i, status := range statuses {
+		resp.Nodes[i].NodeID = int32(status.Desc.NodeID)
+		resp.Nodes[i].Address = status.Desc.Address
+		resp.Nodes[i].SQLAddress = status.Desc.SQLAddress
+	}
+	return resp, nil
+}
+
 // Nodes returns all node statuses.
 //
 // Do not use this method inside the server code! Use
@@ -1505,12 +1531,9 @@ func (s *statusServer) ListNodesInternal(
 	return resp, err
 }
 
-func (s *statusServer) nodesHelper(
+func (s *statusServer) getNodeStatuses(
 	ctx context.Context, limit, offset int,
-) (*serverpb.NodesResponse, int, error) {
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
-
+) (statuses []statuspb.NodeStatus, next int, _ error) {
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -1521,7 +1544,6 @@ func (s *statusServer) nodesHelper(
 		return nil, 0, status.Errorf(codes.Internal, err.Error())
 	}
 
-	var next int
 	var rows []kv.KeyValue
 	if len(b.Results[0].Rows) > 0 {
 		var rowsInterface interface{}
@@ -1529,14 +1551,28 @@ func (s *statusServer) nodesHelper(
 		rows = rowsInterface.([]kv.KeyValue)
 	}
 
-	resp := serverpb.NodesResponse{
-		Nodes: make([]statuspb.NodeStatus, len(rows)),
-	}
+	statuses = make([]statuspb.NodeStatus, len(rows))
 	for i, row := range rows {
-		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
+		if err := row.ValueProto(&statuses[i]); err != nil {
 			log.Errorf(ctx, "%v", err)
 			return nil, 0, status.Errorf(codes.Internal, err.Error())
 		}
+	}
+	return statuses, next, nil
+}
+
+func (s *statusServer) nodesHelper(
+	ctx context.Context, limit, offset int,
+) (*serverpb.NodesResponse, int, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	statuses, next, err := s.getNodeStatuses(ctx, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	resp := serverpb.NodesResponse{
+		Nodes: statuses,
 	}
 
 	clock := s.admin.server.clock

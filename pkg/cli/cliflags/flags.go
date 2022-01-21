@@ -1450,6 +1450,14 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 `,
 	}
 
+	ZipTenant = FlagInfo{
+		Name: "tenant",
+		Description: `
+Set this flag to true to indicate the cockroach server to fetch debug data
+from is a tenant server. Default value is false.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
