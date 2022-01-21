@@ -129,14 +129,19 @@ Please follow the instructions above on updating the golang version, omitting th
 
 ## Updating the `bazelbuilder` image
 
-The `bazelbuilder` image is used exclusively for performing builds using Bazel. Only add dependencies to the image that are necessary for performing Bazel builds. The process for updating the image is as follows:
+The `bazelbuilder` image is used exclusively for performing builds using Bazel. Only add dependencies to the image that are necessary for performing Bazel builds. (Since the Bazel build downloads most dependencies as needed, updates to the Bazel builder image should be very infrequent.) The `bazelbuilder` image is published both for `amd64` and `arm64` platforms. You can go through the process of publishing a new Bazel build
 
+- (One-time setup) Depending on how your Docker instance is configured, you may have to run `docker run --privileged --rm tonistiigi/binfmt --install all`. This will install `qemu` emulators on your system for platforms besides your native one.
 - Edit `build/bazelbuilder/Dockerfile` as desired.
-- Perform the normal sequence of steps for pushing a new Docker image (for `$TAG`, you can use the value of `date +%Y%m%d-%H%M%S`):
+- Build the image for both platforms and publish the cross-platform manifest. Note that the non-native build for your image will be very slow since it will have to emulate.
 ```
-    docker build build/bazelbuilder
-    docker image tag $IMAGE_HASH cockroachdb/bazel:$TAG
-    docker image push cockroachdb/bazel:$TAG
+    TAG=$(date +%Y%m%d-%H%M%S)
+    docker build --platform linux/amd64 -t cockroachdb/bazel:amd64-$TAG build/bazelbuilder
+    docker push cockroachdb/bazel:amd64-$TAG
+    docker build --platform linux/arm64 -t cockroachdb/bazel:arm64-$TAG build/bazelbuilder
+    docker push cockroachdb/bazel:arm64-$TAG
+    docker manifest create cockroachdb/bazel:$TAG --amend cockroachdb/bazel:amd64-$TAG --amend cockroachdb/bazel:arm64-$TAG
+    docker manifest push cockroachdb/bazel:$TAG
 ```
 - Then, update `build/teamcity-bazel-support.sh` with the new tag and commit all your changes.
 - Ensure the "GitHub CI (Optional)" job passes on your PR before merging.
