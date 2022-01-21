@@ -139,6 +139,9 @@ func WriteDescriptors(
 				return err
 			}
 			b.CPut(catalogkeys.EncodeNameKey(codec, desc), desc.GetID(), nil)
+
+			// We also have to put a system.namespace entry for the public schema.
+			b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
 		}
 
 		// Write namespace and descriptor entries for each schema.
@@ -2169,6 +2172,9 @@ func (r *restoreResumer) dropDescriptors(
 
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
+
+		b.Del(catalogkeys.MakeSchemaNameKey(codec, db.GetID(), tree.PublicSchema))
+
 		nameKey := catalogkeys.MakeDatabaseNameKey(codec, db.GetName())
 		b.Del(nameKey)
 		descsCol.AddDeletedDescriptor(db)
