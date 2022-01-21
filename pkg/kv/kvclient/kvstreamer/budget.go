@@ -102,10 +102,16 @@ func (b *budget) consumeLocked(ctx context.Context, bytes int64, allowDebt bool)
 	return b.mu.acc.Grow(ctx, bytes)
 }
 
-// release returns bytes to the available budget.
+// release returns bytes to the available budget. b's mutex must not be held.
 func (b *budget) release(ctx context.Context, bytes int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.releaseLocked(ctx, bytes)
+}
+
+// releaseLocked is the same as release when b's mutex is already being held.
+func (b *budget) releaseLocked(ctx context.Context, bytes int64) {
+	b.mu.AssertHeld()
 	b.mu.acc.Shrink(ctx, bytes)
 	b.mu.waitForBudget.Signal()
 }

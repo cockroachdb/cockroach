@@ -132,14 +132,12 @@ type Hints struct {
 // contributes to the refcounts.
 func (r Result) Release(ctx context.Context) {
 	if s := r.memoryTok.streamer; s != nil {
-		// Note that it is important to decrement numUnreleasedResults first,
-		// before releasing the memory - this ensures that the workerCoordinator
-		// doesn't wait forever for the budget in case this is the last Result
-		// to be released.
+		s.budget.mu.Lock()
+		defer s.budget.mu.Unlock()
+		s.budget.releaseLocked(ctx, r.memoryTok.toRelease)
 		s.mu.Lock()
+		defer s.mu.Unlock()
 		s.mu.numUnreleasedResults--
-		s.mu.Unlock()
-		s.budget.release(ctx, r.memoryTok.toRelease)
 	}
 }
 
