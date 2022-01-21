@@ -1853,6 +1853,9 @@ func (r *restoreResumer) publishDescriptors(
 				return err
 			}
 		}
+		if err := mutTable.AllocateIDs(ctx); err != nil {
+			return err
+		}
 		allMutDescs = append(allMutDescs, mutTable)
 		newTables = append(newTables, mutTable.TableDesc())
 		// For cluster restores, all the jobs are restored directly from the jobs
