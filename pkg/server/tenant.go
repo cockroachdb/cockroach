@@ -533,6 +533,7 @@ func makeTenantSQLServerArgs(
 		rangeFeedFactory:         rangeFeedFactory,
 		regionsServer:            tenantConnect,
 		costController:           costController,
+		allowSessionRevival:      true,
 	}, nil
 }
 

@@ -238,6 +238,16 @@ func (*DummyEvalPlanner) DecodeGist(gist string) ([]string, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+// CreateSessionRevivalToken is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) CreateSessionRevivalToken() (*tree.DBytes, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// ValidateSessionRevivalToken is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) ValidateSessionRevivalToken(token *tree.DBytes) (*tree.DBool, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // ExecutorConfig is part of the EvalPlanner interface.
 func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
