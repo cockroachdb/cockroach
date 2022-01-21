@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,7 +36,7 @@ func ApplyStorageParameters(
 	for _, sp := range params {
 		key := string(sp.Key)
 		if sp.Value == nil {
-			return errors.Errorf("storage parameter %q requires a value", key)
+			return pgerror.Newf(pgcode.InvalidParameterValue, "storage parameter %q requires a value", key)
 		}
 		// Expressions may be an unresolved name.
 		// Cast these as strings.
@@ -78,7 +80,7 @@ func applyFillFactorStorageParam(evalCtx *tree.EvalContext, key string, datum tr
 		return err
 	}
 	if val < 0 || val > 100 {
-		return errors.Newf("%q must be between 0 and 100", key)
+		return pgerror.Newf(pgcode.InvalidParameterValue, "%q must be between 0 and 100", key)
 	}
 	if evalCtx != nil {
 		evalCtx.ClientNoticeSender.BufferClientNotice(
@@ -151,7 +153,7 @@ func (a *TableStorageParamObserver) Apply(
 		`user_catalog_table`:
 		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 	}
-	return errors.Errorf("invalid storage parameter %q", key)
+	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
 
 // IndexStorageParamObserver observes storage parameters for indexes.
@@ -177,7 +179,11 @@ func (a *IndexStorageParamObserver) applyS2ConfigSetting(
 ) error {
 	s2Config := getS2ConfigFromIndex(a.IndexDesc)
 	if s2Config == nil {
-		return errors.Newf("index setting %q can only be set on GEOMETRY or GEOGRAPHY spatial indexes", key)
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"index setting %q can only be set on GEOMETRY or GEOGRAPHY spatial indexes",
+			key,
+		)
 	}
 
 	val, err := DatumAsInt(evalCtx, key, expr)
@@ -185,7 +191,13 @@ func (a *IndexStorageParamObserver) applyS2ConfigSetting(
 		return errors.Wrapf(err, "error decoding %q", key)
 	}
 	if val < min || val > max {
-		return errors.Newf("%q value must be between %d and %d inclusive", key, min, max)
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"%q value must be between %d and %d inclusive",
+			key,
+			min,
+			max,
+		)
 	}
 	switch key {
 	case `s2_max_level`:
@@ -203,7 +215,7 @@ func (a *IndexStorageParamObserver) applyGeometryIndexSetting(
 	evalCtx *tree.EvalContext, key string, expr tree.Datum,
 ) error {
 	if a.IndexDesc.GeoConfig.S2Geometry == nil {
-		return errors.Newf("%q can only be applied to GEOMETRY spatial indexes", key)
+		return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be applied to GEOMETRY spatial indexes", key)
 	}
 	val, err := DatumAsFloat(evalCtx, key, expr)
 	if err != nil {
@@ -219,7 +231,7 @@ func (a *IndexStorageParamObserver) applyGeometryIndexSetting(
 	case `geometry_max_y`:
 		a.IndexDesc.GeoConfig.S2Geometry.MaxY = val
 	default:
-		return errors.Newf("unknown key: %q", key)
+		return pgerror.Newf(pgcode.InvalidParameterValue, "unknown key: %q", key)
 	}
 	return nil
 }
@@ -247,7 +259,7 @@ func (a *IndexStorageParamObserver) Apply(
 		`autosummarize`:
 		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 	}
-	return errors.Errorf("invalid storage parameter %q", key)
+	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
 
 // RunPostChecks implements the StorageParamObserver interface.
@@ -255,7 +267,8 @@ func (a *IndexStorageParamObserver) RunPostChecks() error {
 	s2Config := getS2ConfigFromIndex(a.IndexDesc)
 	if s2Config != nil {
 		if (s2Config.MaxLevel)%s2Config.LevelMod != 0 {
-			return errors.Newf(
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
 				"s2_max_level (%d) must be divisible by s2_level_mod (%d)",
 				s2Config.MaxLevel,
 				s2Config.LevelMod,
@@ -265,14 +278,16 @@ func (a *IndexStorageParamObserver) RunPostChecks() error {
 
 	if cfg := a.IndexDesc.GeoConfig.S2Geometry; cfg != nil {
 		if cfg.MaxX <= cfg.MinX {
-			return errors.Newf(
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
 				"geometry_max_x (%f) must be greater than geometry_min_x (%f)",
 				cfg.MaxX,
 				cfg.MinX,
 			)
 		}
 		if cfg.MaxY <= cfg.MinY {
-			return errors.Newf(
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
 				"geometry_max_y (%f) must be greater than geometry_min_y (%f)",
 				cfg.MaxY,
 				cfg.MinY,
