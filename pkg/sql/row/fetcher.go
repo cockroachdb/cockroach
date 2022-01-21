@@ -638,11 +638,6 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 		return true, nil
 	}
 
-	// foundNull is set when decoding a new index key for a row finds a NULL value
-	// in the index key. This is used when decoding unique secondary indexes in order
-	// to tell whether they have extra columns appended to the key.
-	var foundNull bool
-
 	// unchangedPrefix will be set to true if we can skip decoding the index key
 	// completely, because the last key we saw has identical prefix to the
 	// current key.
@@ -654,12 +649,40 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 		// Skip decoding!
 		rf.keyRemainingBytes = rf.kv.Key[len(rf.indexKey):]
 	} else if rf.mustDecodeIndexKey {
+		var foundNull bool
 		rf.keyRemainingBytes, moreKVs, foundNull, err = rf.ReadIndexKey(rf.kv.Key)
 		if err != nil {
 			return false, err
 		}
 		if !moreKVs {
 			return false, errors.AssertionFailedf("key did not match any of the table descriptors")
+		}
+		// For unique secondary indexes, the index-key does not distinguish one row
+		// from the next if both rows contain identical values along with a NULL.
+		// Consider the keys:
+		//
+		//   /test/unique_idx/NULL/0
+		//   /test/unique_idx/NULL/1
+		//
+		// The index-key extracted from the above keys is /test/unique_idx/NULL. The
+		// trailing /0 and /1 are the primary key used to unique-ify the keys when a
+		// NULL is present. When a null is present in the index key, we cut off more
+		// of the index key so that the prefix includes the primary key columns.
+		//
+		// Note that we do not need to do this for non-unique secondary indexes because
+		// the extra columns in the primary key will _always_ be there, so we can decode
+		// them when processing the index. The difference with unique secondary indexes
+		// is that the extra columns are not always there, and are used to unique-ify
+		// the index key, rather than provide the primary key column values.
+		if foundNull && rf.table.isSecondaryIndex && rf.table.index.IsUnique() && len(rf.table.desc.GetFamilies()) != 1 {
+			for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
+				var err error
+				// Slice off an extra encoded column from rf.keyRemainingBytes.
+				rf.keyRemainingBytes, err = keyside.Skip(rf.keyRemainingBytes)
+				if err != nil {
+					return false, err
+				}
+			}
 		}
 	} else {
 		// We still need to consume the key until the family
@@ -671,34 +694,6 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 		}
 
 		rf.keyRemainingBytes = rf.kv.Key[prefixLen:]
-	}
-
-	// For unique secondary indexes, the index-key does not distinguish one row
-	// from the next if both rows contain identical values along with a NULL.
-	// Consider the keys:
-	//
-	//   /test/unique_idx/NULL/0
-	//   /test/unique_idx/NULL/1
-	//
-	// The index-key extracted from the above keys is /test/unique_idx/NULL. The
-	// trailing /0 and /1 are the primary key used to unique-ify the keys when a
-	// NULL is present. When a null is present in the index key, we cut off more
-	// of the index key so that the prefix includes the primary key columns.
-	//
-	// Note that we do not need to do this for non-unique secondary indexes because
-	// the extra columns in the primary key will _always_ be there, so we can decode
-	// them when processing the index. The difference with unique secondary indexes
-	// is that the extra columns are not always there, and are used to unique-ify
-	// the index key, rather than provide the primary key column values.
-	if foundNull && rf.table.isSecondaryIndex && rf.table.index.IsUnique() && len(rf.table.desc.GetFamilies()) != 1 {
-		for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
-			var err error
-			// Slice off an extra encoded column from rf.keyRemainingBytes.
-			rf.keyRemainingBytes, err = keyside.Skip(rf.keyRemainingBytes)
-			if err != nil {
-				return false, err
-			}
-		}
 	}
 
 	switch {
