@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,8 +24,8 @@ import (
 // cachedProtectedTimestampState is used to cache information about the state
 // of protected timestamps as they pertain to this replica. The data is
 // refreshed when the replica examines protected timestamps when being
-// considered for gc or when verifying a protected timestamp record.
-// It is consulted when determining whether a request can be served.
+// considered for gc. It is consulted when determining whether a request can be
+// served.
 type cachedProtectedTimestampState struct {
 	// readAt denotes the timestamp at which this record was read.
 	// It is used to coordinate updates to this field. It is also used to
@@ -35,8 +34,8 @@ type cachedProtectedTimestampState struct {
 	// that protected timestamps have not been observed. In this case we must
 	// assume that any protected timestamp could exist to provide the contract
 	// on verify.
-	readAt         hlc.Timestamp
-	earliestRecord *ptpb.Record
+	readAt                      hlc.Timestamp
+	earliestProtectionTimestamp hlc.Timestamp
 }
 
 // clearIfNotNewer clears the state in ts if it is not newer than the passed
@@ -66,31 +65,32 @@ func (r *Replica) maybeUpdateCachedProtectedTS(ts *cachedProtectedTimestampState
 }
 
 func (r *Replica) readProtectedTimestampsRLocked(
-	ctx context.Context, f func(r *ptpb.Record),
+	ctx context.Context,
 ) (ts cachedProtectedTimestampState) {
 	desc := r.descRLocked()
 	gcThreshold := *r.mu.state.GCThreshold
 
-	ts.readAt = r.store.protectedtsCache.Iterate(ctx,
-		roachpb.Key(desc.StartKey),
-		roachpb.Key(desc.EndKey),
-		func(rec *ptpb.Record) (wantMore bool) {
-			// Check if we've already GC'd past the timestamp this record was trying
-			// to protect, in which case we know that the record does not apply.
-			// Note that when we implement PROTECT_AT, we'll need to consult some
-			// replica state here to determine whether the record indeed has been
-			// applied.
-			if isValid := gcThreshold.LessEq(rec.Timestamp); !isValid {
-				return true
-			}
-			if f != nil {
-				f(rec)
-			}
-			if ts.earliestRecord == nil || rec.Timestamp.Less(ts.earliestRecord.Timestamp) {
-				ts.earliestRecord = rec
-			}
-			return true
-		})
+	sp := roachpb.Span{
+		Key:    roachpb.Key(desc.StartKey),
+		EndKey: roachpb.Key(desc.EndKey),
+	}
+	var protectionTimestamps []hlc.Timestamp
+	protectionTimestamps, ts.readAt = r.store.protectedtsReader.GetProtectionTimestamps(ctx, sp)
+	earliestTS := hlc.Timestamp{}
+	for _, protectionTimestamp := range protectionTimestamps {
+		if protectionTimestamp.Less(earliestTS) && gcThreshold.LessEq(protectionTimestamp) {
+			earliestTS = protectionTimestamp
+		}
+		// Check if the timestamp the record was trying to protect is strictly
+		// below the GCThreshold, in which case, we know the record does not apply.
+		if isValid := gcThreshold.LessEq(protectionTimestamp); !isValid {
+			continue
+		}
+		if earliestTS.IsEmpty() || protectionTimestamp.Less(earliestTS) {
+			earliestTS = protectionTimestamp
+		}
+	}
+	ts.earliestProtectionTimestamp = earliestTS
 	return ts
 }
 
@@ -126,12 +126,12 @@ func (r *Replica) checkProtectedTimestampsForGC(
 
 	// read.earliestRecord is the record with the earliest timestamp which is
 	// greater than the existing gcThreshold.
-	read = r.readProtectedTimestampsRLocked(ctx, nil)
+	read = r.readProtectedTimestampsRLocked(ctx)
 	gcTimestamp = read.readAt
-	if read.earliestRecord != nil {
+	if !read.earliestProtectionTimestamp.IsEmpty() {
 		// NB: we want to allow GC up to the timestamp preceding the earliest valid
-		// record.
-		impliedGCTimestamp := gc.TimestampForThreshold(read.earliestRecord.Timestamp.Prev(), gcTTL)
+		// protection timestamp.
+		impliedGCTimestamp := gc.TimestampForThreshold(read.earliestProtectionTimestamp.Prev(), gcTTL)
 		if impliedGCTimestamp.Less(gcTimestamp) {
 			gcTimestamp = impliedGCTimestamp
 		}

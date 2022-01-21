@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/kv/kvserver/protectedts/ptverifier",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql/sqlutil",
         "//pkg/util/metric",
         "//pkg/util/stop",

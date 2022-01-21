@@ -133,7 +133,6 @@ go_library(
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/rangefeed",
         "//pkg/kv/kvserver/rditer",
