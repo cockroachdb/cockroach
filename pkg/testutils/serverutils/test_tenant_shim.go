@@ -40,6 +40,9 @@ type TestTenantInterface interface {
 	// HTTPAddr returns the tenant's http address.
 	HTTPAddr() string
 
+	// RPCAddr returns the tenant's RPC address.
+	RPCAddr() string
+
 	// PGServer returns the tenant's *pgwire.Server as an interface{}.
 	PGServer() interface{}
 
