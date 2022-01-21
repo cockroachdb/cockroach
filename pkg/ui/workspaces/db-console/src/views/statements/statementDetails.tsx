@@ -18,6 +18,7 @@ import {
   refreshNodes,
   refreshStatementDiagnosticsRequests,
   refreshStatements,
+  refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import {
   nodeDisplayNameByIDSelector,
@@ -50,6 +51,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import {
   trackDownloadDiagnosticsBundleAction,
   trackStatementDetailsSubnavSelectionAction,
@@ -236,6 +238,7 @@ const mapStateToProps = (
       state,
       statementFingerprint,
     ),
+    hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
   };
 };
 
@@ -249,6 +252,7 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
   onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
   refreshNodes: refreshNodes,
   refreshNodesLiveness: refreshLiveness,
+  refreshUserSQLRoles: refreshUserSQLRoles,
 };
 
 export default withRouter(

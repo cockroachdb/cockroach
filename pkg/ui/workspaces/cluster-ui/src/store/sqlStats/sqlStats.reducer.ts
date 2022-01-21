@@ -10,7 +10,7 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { DOMAIN_NAME, noopReducer } from "../utils";
+import { DOMAIN_NAME } from "../utils";
 import { StatementsRequest } from "src/api/statementsApi";
 
 type StatementsResponse = cockroach.server.serverpb.StatementsResponse;

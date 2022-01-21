@@ -82,6 +82,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 export interface StatementsPageDispatchProps {
   refreshStatements: (req?: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
+  refreshUserSQLRoles: () => void;
   resetSQLStats: () => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (statement: string) => void;
@@ -114,6 +115,7 @@ export interface StatementsPageStateProps {
   filters: Filters;
   search: string;
   isTenant?: UIConfigState["isTenant"];
+  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
 }
 
 export interface StatementsPageState {
@@ -153,6 +155,11 @@ export class StatementsPage extends React.Component<
     this.state = merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
   }
+
+  static defaultProps: Partial<StatementsPageProps> = {
+    isTenant: false,
+    hasViewActivityRedactedRole: false,
+  };
 
   getStateFromHistory = (): Partial<StatementsPageState> => {
     const {
@@ -238,7 +245,8 @@ export class StatementsPage extends React.Component<
 
   componentDidMount(): void {
     this.refreshStatements();
-    if (!this.props.isTenant) {
+    this.props.refreshUserSQLRoles();
+    if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
       this.props.refreshStatementDiagnosticsRequests();
     }
   }
@@ -278,7 +286,7 @@ export class StatementsPage extends React.Component<
   componentDidUpdate = (): void => {
     this.updateQueryParams();
     this.refreshStatements();
-    if (!this.props.isTenant) {
+    if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
       this.props.refreshStatementDiagnosticsRequests();
     }
   };
@@ -466,6 +474,7 @@ export class StatementsPage extends React.Component<
       onColumnsChange,
       nodeRegions,
       isTenant,
+      hasViewActivityRedactedRole,
       sortSetting,
       search,
     } = this.props;
@@ -495,6 +504,7 @@ export class StatementsPage extends React.Component<
       nodeRegions,
       "statement",
       isTenant,
+      hasViewActivityRedactedRole,
       search,
       this.activateDiagnosticsRef,
       onDiagnosticsReportDownload,
