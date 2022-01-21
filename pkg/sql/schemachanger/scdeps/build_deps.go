@@ -198,6 +198,17 @@ func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	return desc
 }
 
+// MustGetSchemasForDatabase  implements the scbuild.CatalogReader interface.
+func (d *buildDeps) MustGetSchemasForDatabase(
+	ctx context.Context, database catalog.DatabaseDescriptor,
+) map[descpb.ID]string {
+	schemas, err := d.descsCollection.GetSchemasForDatabase(ctx, d.txn, database)
+	if err != nil {
+		panic(err)
+	}
+	return schemas
+}
+
 var _ scbuild.Dependencies = (*buildDeps)(nil)
 
 // AuthorizationAccessor implements the scbuild.Dependencies interface.

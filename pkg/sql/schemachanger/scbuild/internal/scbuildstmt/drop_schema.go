@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,17 +33,6 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 		if sc == nil {
 			continue
 		}
-		// Block all unsupported schema types for drop schema statements. The
-		// underlying logic supports cleaning up things under public / temporary
-		// schemas, but those are non-user deletable.
-		if sc.GetName() == tree.PublicSchema {
-			panic(pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", sc.GetName()))
-		}
-		if sc.SchemaKind() == catalog.SchemaPublic ||
-			sc.SchemaKind() == catalog.SchemaTemporary {
-			panic(pgerror.Newf(pgcode.InvalidSchemaName,
-				"cannot drop schema %q", sc.GetName))
-		}
 		dropSchema(b, db, sc, n.DropBehavior, false /* parent drop*/)
 		b.IncrementSubWorkID()
 	}
@@ -53,14 +43,27 @@ func dropSchema(
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 	behavior tree.DropBehavior,
-	parentDrop bool,
+	databaseIsBeingDropped bool,
 ) (nodeAdded bool, dropIDs catalog.DescriptorIDSet) {
-	// Dropping virtual schemas is never allowed. This code is used for cascaded
-	// drops for databases. So, its valid for public schemas or temporary ones
-	// to be used here.
+	// Dropping virtual schemas is never allowed.
 	if sc.SchemaKind() == catalog.SchemaVirtual {
 		panic(pgerror.Newf(pgcode.InvalidSchemaName,
 			"cannot drop schema %q", sc.GetName))
+	}
+	// This code is used for cascaded drops for databases. So, it's valid for
+	//public schemas or temporary ones to be dropped here.
+	if !databaseIsBeingDropped &&
+		sc.GetName() == tree.PublicSchema {
+		panic(pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", sc.GetName()))
+	}
+	if !databaseIsBeingDropped &&
+		(sc.SchemaKind() == catalog.SchemaPublic ||
+			sc.SchemaKind() == catalog.SchemaTemporary) {
+		panic(pgerror.Newf(pgcode.InvalidSchemaName,
+			"cannot drop schema %q", sc.GetName))
+	}
+	if sc.SchemaKind() == catalog.SchemaTemporary {
+		panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary schema"))
 	}
 	descsThatNeedElements := catalog.DescriptorIDSet{}
 	_, objectIDs := b.CatalogReader().ReadObjectNamesAndIDs(b, db, sc)
@@ -114,7 +117,7 @@ func dropSchema(
 						foundDrop = true
 					}
 				})
-				if !foundDrop && parentDrop {
+				if !foundDrop && databaseIsBeingDropped {
 					tableDesc := b.MustReadTable(id)
 					if tableDesc.GetParentID() == sc.GetParentID() {
 						// Parent will clean up this object.

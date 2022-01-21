@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -69,6 +70,15 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 			}
 			return nil
 		})
+		// If the set of schema IDs accumulated above and the ones including
+		// temporary schemas don't match. The fail this operation since temporary
+		// schemas exist.
+		schemas := b.CatalogReader().MustGetSchemasForDatabase(b, db)
+		if len(schemas) != schemaIDs.Len() {
+			panic(scerrors.NotImplementedErrorf(
+				nil,
+				"dropping a database with temporary schemas"))
+		}
 		for _, schemaID := range schemaIDs.Ordered() {
 			schema := c.MustReadSchema(schemaID)
 			if schema.Dropped() {
