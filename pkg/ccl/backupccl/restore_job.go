@@ -343,6 +343,9 @@ func WriteDescriptors(
 			// behavior if the cluster version is bumped DURING a restore.
 			dKey := catalogkv.MakeDatabaseNameKey(ctx, settings, desc.GetName())
 			b.CPut(dKey.Key(codec), desc.GetID(), nil)
+
+			// We also have to put a system.namespace entry for the public schema.
+			b.CPut(catalogkeys.NewPublicSchemaKey(desc.GetID()).Key(codec), keys.PublicSchemaID, nil)
 		}
 
 		// Write namespace and descriptor entries for each schema.
@@ -2357,6 +2360,8 @@ func (r *restoreResumer) dropDescriptors(
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
 		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(codec))
+		b.Del(catalogkeys.NewPublicSchemaKey(db.GetID()).Key(codec))
+
 		deletedDBs[db.GetID()] = struct{}{}
 	}
 

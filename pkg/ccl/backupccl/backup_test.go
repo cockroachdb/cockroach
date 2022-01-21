@@ -8348,3 +8348,70 @@ CREATE SCHEMA db.s;
 
 	sqlDB.Exec(t, `BACKUP DATABASE db TO 'nodelocal://0/test/2'`)
 }
+
+// Verify that upon restoring a database, there is a namespace entry for its
+// public schema.
+func TestRestoreSyntheticPublicSchemaNamespaceEntry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const numAccounts = 100
+	params := base.TestClusterArgs{}
+
+	_, _, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, params)
+	defer cleanup()
+
+	sqlDB.Exec(t, "CREATE DATABASE d")
+	sqlDB.Exec(t, "BACKUP DATABASE d TO $1", LocalFoo)
+	sqlDB.Exec(t, "DROP DATABASE d")
+
+	sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo))
+
+	var dbID int
+	row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'd'`)
+	row.Scan(&dbID)
+
+	sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = 'public' AND "parentID"=%d`, dbID), [][]string{{"29"}})
+}
+
+// Verify that if a database restore fails, the cleanup removes the database's
+// public namespace entry.
+func TestRestoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const numAccounts = 100
+	params := base.TestClusterArgs{}
+	_, _, _, dataDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	_, tc, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, dataDir,
+		InitManualReplication, params)
+	defer cleanup()
+
+	for _, server := range tc.Servers {
+		registry := server.JobRegistry().(*jobs.Registry)
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.beforePublishingDescriptors = func() error {
+					return errors.New("boom")
+				}
+				return r
+			},
+		}
+	}
+
+	// Drop the default databases so only the system database remains.
+	sqlDB.Exec(t, "DROP DATABASE defaultdb")
+	sqlDB.Exec(t, "DROP DATABASE postgres")
+
+	sqlDB.Exec(t, "CREATE DATABASE d")
+	sqlDB.Exec(t, "BACKUP DATABASE d TO $1", LocalFoo)
+	sqlDB.Exec(t, "DROP DATABASE d")
+
+	restoreQuery := fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo)
+	sqlDB.ExpectErr(t, "boom", restoreQuery)
+
+	// We should have no non-system database with a public schema name space
+	// entry with id 29.
+	sqlDB.CheckQueryResults(t, `SELECT id FROM system.namespace WHERE name = 'public' AND id=29 AND "parentID"!=1`, [][]string{})
+}
