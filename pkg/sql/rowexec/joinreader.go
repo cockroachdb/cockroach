@@ -130,6 +130,7 @@ type joinReader struct {
 		unlimitedMemMonitor *mon.BytesMonitor
 		budgetAcc           mon.BoundAccount
 		budgetLimit         int64
+		maxKeysPerRow       int
 	}
 
 	input execinfra.RowSource
@@ -462,28 +463,21 @@ func newJoinReader(
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
 
 	if jr.usesStreamer {
-		maxKeysPerRow, err := jr.desc.KeysPerRow(jr.index.GetID())
+		// jr.batchSizeBytes will be used up by the input batch, and we'll give
+		// everything else to the streamer budget. Note that budgetLimit will
+		// always be positive given that memoryLimit is at least 8MiB and
+		// batchSizeBytes is at most 4MiB.
+		jr.streamerInfo.budgetLimit = memoryLimit - jr.batchSizeBytes
+		// We need to use an unlimited monitor for the streamer's budget since
+		// the streamer itself is responsible for staying under the limit.
+		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
+			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.EvalCtx.Mon,
+		)
+		jr.streamerInfo.unlimitedMemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
+		jr.streamerInfo.maxKeysPerRow, err = jr.desc.KeysPerRow(jr.index.GetID())
 		if err != nil {
 			return nil, err
-		}
-		if maxKeysPerRow > 1 {
-			// Currently, the streamer only supports cases with a single column
-			// family.
-			jr.usesStreamer = false
-		} else {
-			// jr.batchSizeBytes will be used up by the input batch, and we'll
-			// give everything else to the streamer budget. Note that
-			// budgetLimit will always be positive given that memoryLimit is at
-			// least 8MiB and batchSizeBytes is at most 4MiB.
-			jr.streamerInfo.budgetLimit = memoryLimit - jr.batchSizeBytes
-			// We need to use an unlimited monitor for the streamer's budget
-			// since the streamer itself is responsible for staying under the
-			// limit.
-			jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
-				"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.EvalCtx.Mon,
-			)
-			jr.streamerInfo.unlimitedMemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-			jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		}
 	}
 
@@ -1039,6 +1033,7 @@ func (jr *joinReader) Start(ctx context.Context) {
 		jr.streamerInfo.Streamer.Init(
 			kvstreamer.OutOfOrder,
 			kvstreamer.Hints{UniqueRequests: true},
+			jr.streamerInfo.maxKeysPerRow,
 		)
 	}
 	jr.runningState = jrReadingInput
