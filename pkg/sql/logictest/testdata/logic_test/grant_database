@@ -46,14 +46,14 @@ a  test-user  ALL
 statement ok
 CREATE TABLE a.t (id INT PRIMARY KEY)
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON a.t
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-a              public       t           admin      ALL
-a              public       t           readwrite  ALL
-a              public       t           root       ALL
-a              public       t           test-user  ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+a              public       t           admin      ALL             false
+a              public       t           readwrite  ALL             true
+a              public       t           root       ALL             false
+a              public       t           test-user  ALL             true
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
@@ -155,14 +155,14 @@ SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 
 # Verify that the table privileges have not changed.
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON a.t
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-a              public       t           admin      ALL
-a              public       t           readwrite  ALL
-a              public       t           root       ALL
-a              public       t           test-user  ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+a              public       t           admin      ALL             false
+a              public       t           readwrite  ALL             true
+a              public       t           root       ALL             false
+a              public       t           test-user  ALL             true
 
 # Usage privilege should not be grantable on databases.
 
@@ -182,13 +182,13 @@ CREATE TABLE b.t()
 
 # CONNECT privilege should not be inherited from DB when creating a table.
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON b.t
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-b              public       t           admin     ALL
-b              public       t           root      ALL
-b              public       t           testuser  ALL
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+b              public       t           admin     ALL             false
+b              public       t           root      ALL             false
+b              public       t           testuser  ALL             false
 
 # Calling SHOW GRANTS on an invalid user should error out.
 

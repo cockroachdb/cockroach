@@ -4528,9 +4528,9 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 					userNameStr := tree.NewDString(u.User.Normalized())
 					for _, priv := range u.Privileges {
 						if err := addRow(
-							dbNameStr,             // database_name
-							userNameStr,           // grantee
-							tree.NewDString(priv), // privilege_type
+							dbNameStr,                           // database_name
+							userNameStr,                         // grantee
+							tree.NewDString(priv.Kind.String()), // privilege_type
 						); err != nil {
 							return err
 						}
