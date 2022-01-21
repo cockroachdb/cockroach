@@ -339,7 +339,6 @@ go_test(
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
-        "//pkg/kv/kvserver/protectedts/ptverifier",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/readsummary/rspb",
