@@ -1,0 +1,58 @@
+statement ok
+CREATE TABLE t(x INT PRIMARY KEY)
+
+query I
+SELECT id FROM system.namespace WHERE name='t';
+----
+56
+
+# Ensure we can set and unset the ephemeral bit on a table.
+statement ok
+ALTER TABLE t SET EPHEMERAL DATA;
+
+query T
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'ephemeral'
+FROM system.descriptor WHERE id = 56;
+----
+true
+
+statement ok
+ALTER TABLE t SET NOT EPHEMERAL DATA;
+
+query T
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'ephemeral'
+FROM system.descriptor WHERE id = 56;
+----
+NULL
+
+# Ensure we cannot set schema to a temporary schema.
+statement ok
+SET experimental_enable_temp_tables = 'on'
+
+statement ok
+CREATE TEMPORARY TABLE temp1()
+
+statement error pq: cannot set data in a temporary table to be ephemeral
+ALTER TABLE temp1 SET EPHEMERAL DATA
+
+# Add an inbound foreign key to t and try to set to ephemeral.
+statement ok
+CREATE TABLE t2(x INT REFERENCES t(x) ON DELETE CASCADE);
+
+statement error pq: cannot set data in a table with inbound foreign key constraints to be ephemeral
+ALTER TABLE t SET EPHEMERAL DATA;
+
+# Check that we can still set ephemeral on a table with outbound fk.
+statement ok
+ALTER TABLE t2 SET EPHEMERAL DATA;
+
+query I
+SELECT id FROM system.namespace WHERE name='t2';
+----
+59
+
+query T
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'ephemeral'
+FROM system.descriptor WHERE id = 59;
+----
+true

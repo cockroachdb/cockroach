@@ -268,6 +268,9 @@ type TableDescriptor interface {
 	// virtual Table (like the information_schema tables) and thus doesn't
 	// need to be physically stored.
 	IsVirtualTable() bool
+	// IsEphemeral returns true if the TableDescriptor's row data has been marked
+	// as ephemeral.
+	IsEphemeral() bool
 	// IsPhysicalTable returns true if the TableDescriptor actually describes a
 	// physical Table that needs to be stored in the kv layer, as opposed to a
 	// different resource like a view or a virtual table. Physical tables have

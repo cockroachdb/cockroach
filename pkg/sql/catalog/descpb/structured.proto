@@ -1150,6 +1150,24 @@ message TableDescriptor {
   // This means that all indexes implicitly inherit all partitioning
   // from the PARTITION ALL BY clause.
   optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
+
+  // Ephemeral specifies if the table's row data is considered ephemeral. An
+  // ephemeral table can be configured with a short GC TTL to avoid excessive
+  // buildup of key revisions. This is particularly useful for table's with
+  // high-churn.
+  //
+  // Marking a table as ephemeral currently has the following effects:
+  //
+  // BACKUP: A backup of a target that includes this table, will exclude this
+  // table from the protected timestamp record that holds up GC on the target.
+  // This is useful since backups can run for an order of hours, resulting in GC
+  // being held up throughout. A consequence of not protecting the data from GC
+  // is that an ephemeral table's row data will not be backed up. Restoring an
+  // ephemeral table will result in an empty table being created in the
+  // restoring cluster.
+  optional bool ephemeral = 47 [(gogoproto.nullable) = false];
+
+  // Next ID: 48
 }
 
 // SurvivalGoal is the survival goal for a database.
