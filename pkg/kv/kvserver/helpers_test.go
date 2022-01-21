@@ -488,7 +488,7 @@ func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
 	defer r.maybeUpdateCachedProtectedTS(&ts)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ts = r.readProtectedTimestampsRLocked(ctx, nil /* f */)
+	ts = r.readProtectedTimestampsRLocked(ctx)
 }
 
 // ClosedTimestampPolicy returns the closed timestamp policy of the range, which
