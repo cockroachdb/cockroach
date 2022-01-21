@@ -679,6 +679,7 @@ func init() {
 		boolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
 		durationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		intFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
+		boolFlag(f, &zipCtx.tenant, cliflags.ZipTenant)
 	}
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {

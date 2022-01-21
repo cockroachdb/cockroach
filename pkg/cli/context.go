@@ -333,6 +333,10 @@ type zipContext struct {
 
 	// The log/heap/etc files to include.
 	files fileSelection
+
+	// tenant is set to true to indicate that debug data
+	// needs to be collected from a tenant server.
+	tenant bool
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This

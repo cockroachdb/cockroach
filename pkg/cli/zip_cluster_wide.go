@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,6 +37,11 @@ const (
 func makeClusterWideZipRequests(
 	admin serverpb.AdminClient, status serverpb.StatusClient,
 ) []zipRequest {
+	if zipCtx.tenant {
+		// TODO(rima): Implement admin server with Events
+		// and Settings endpoint for tenant servers.
+		return []zipRequest{}
+	}
 	return []zipRequest{
 		// NB: we intentionally omit liveness since it's already pulled manually (we
 		// act on the output to special case decommissioned nodes).
@@ -111,11 +115,47 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.table_indexes",
 }
 
+// Tables containing cluster-wide info that are collected using SQL
+// into a debug zip.
+var debugZipTablesPerTenant = []string{
+	"crdb_internal.cluster_contention_events",
+	"crdb_internal.cluster_distsql_flows",
+	"crdb_internal.cluster_database_privileges",
+	"crdb_internal.cluster_queries",
+	"crdb_internal.cluster_sessions",
+	"crdb_internal.cluster_settings",
+	"crdb_internal.cluster_transactions",
+
+	"crdb_internal.default_privileges",
+
+	"crdb_internal.jobs",
+	"system.jobs",       // get the raw, restorable jobs records too.
+	"system.descriptor", // descriptors also contain job-like mutation state.
+	"system.namespace",
+	"system.scheduled_jobs",
+	"system.settings", // get the raw settings to determine what's explicitly set.
+
+	// The synthetic SQL CREATE statements for all tables.
+	// Note the "". to collect across all databases.
+	`"".crdb_internal.create_schema_statements`,
+	`"".crdb_internal.create_statements`,
+	// Ditto, for CREATE TYPE.
+	`"".crdb_internal.create_type_statements`,
+
+	"crdb_internal.regions",
+	"crdb_internal.schema_changes",
+	"crdb_internal.partitions",
+	"crdb_internal.zones",
+	"crdb_internal.invalid_objects",
+	"crdb_internal.index_usage_statistics",
+	"crdb_internal.table_indexes",
+}
+
 // collectClusterData runs the data collection that only needs to
 // occur once for the entire cluster.
 func (zc *debugZipContext) collectClusterData(
 	ctx context.Context, firstNodeDetails *serverpb.DetailsResponse,
-) (nodeList []statuspb.NodeStatus, livenessByNodeID nodeLivenesses, err error) {
+) (nodeList []serverpb.NodeDetails, livenessByNodeID nodeLivenesses, err error) {
 	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status)
 
 	for _, r := range clusterWideZipRequests {
@@ -124,7 +164,11 @@ func (zc *debugZipContext) collectClusterData(
 		}
 	}
 
-	for _, table := range debugZipTablesPerCluster {
+	debugZipTables := debugZipTablesPerCluster
+	if zipCtx.tenant {
+		debugZipTables = debugZipTablesPerTenant
+	}
+	for _, table := range debugZipTables {
 		query := fmt.Sprintf(`SELECT * FROM %s`, table)
 		if override, ok := customQuery[table]; ok {
 			query = override
@@ -135,10 +179,10 @@ func (zc *debugZipContext) collectClusterData(
 	}
 
 	{
-		var nodes *serverpb.NodesResponse
+		var nodes *serverpb.NodesListResponse
 		s := zc.clusterPrinter.start("requesting nodes")
 		err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
-			nodes, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+			nodes, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{})
 			return err
 		})
 		if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodes, err); cErr != nil {
@@ -149,14 +193,20 @@ func (zc *debugZipContext) collectClusterData(
 		// still want to inspect the per-node endpoints on the head
 		// node. As per the above, we were able to connect at least to
 		// that.
-		nodeList = []statuspb.NodeStatus{{Desc: roachpb.NodeDescriptor{
-			NodeID:     firstNodeDetails.NodeID,
+		nodeList = []serverpb.NodeDetails{{
+			NodeID:     int32(firstNodeDetails.NodeID),
 			Address:    firstNodeDetails.Address,
 			SQLAddress: firstNodeDetails.SQLAddress,
-		}}}
+		}}
+
 		if nodes != nil {
 			// If the nodes were found, use that instead.
 			nodeList = nodes.Nodes
+		}
+
+		if zipCtx.tenant {
+			// No need to fetch KV node liveness information, return early.
+			return nodeList, nil, nil
 		}
 
 		// We'll want livenesses to decide whether a node is decommissioned.

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
@@ -95,8 +94,8 @@ func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r
 // forAllNodes runs fn on every node, possibly concurrently.
 func (zc *debugZipContext) forAllNodes(
 	ctx context.Context,
-	nodeList []statuspb.NodeStatus,
-	fn func(ctx context.Context, node statuspb.NodeStatus) error,
+	nodeList []serverpb.NodeDetails,
+	fn func(ctx context.Context, node serverpb.NodeDetails) error,
 ) error {
 	if zipCtx.concurrency == 1 {
 		// Sequential case. Simplify.
@@ -116,7 +115,7 @@ func (zc *debugZipContext) forAllNodes(
 	var wg sync.WaitGroup
 	for _, node := range nodeList {
 		wg.Add(1)
-		go func(node statuspb.NodeStatus) {
+		go func(node serverpb.NodeDetails) {
 			defer wg.Done()
 			if err := zc.sem.Acquire(ctx, 1); err != nil {
 				nodeErrs <- err
@@ -139,7 +138,7 @@ func (zc *debugZipContext) forAllNodes(
 
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
-func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
+func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	if err := zipCtx.files.validate(); err != nil {
 		return err
 	}
@@ -169,6 +168,12 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	sqlAddr := firstNodeDetails.SQLAddress
 	if sqlAddr.IsEmpty() {
+		if zipCtx.tenant {
+			// No way to access a tenant server without a SQL address,
+			// return error. Technically, this should never happen as tenant
+			// server details should always have a SQL address.
+			return s.fail(errors.New("no SQL address for tenant"))
+		}
 		// No SQL address: either a pre-19.2 node, or same address for both
 		// SQL and RPC.
 		sqlAddr = firstNodeDetails.Address
@@ -229,6 +234,9 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	// Fetch the cluster-wide details.
+	// For serverless clusters, the nodeList will be a list of all
+	// currently active SQL nodes (aka pods) and livenessByNodeID
+	// will be nil.
 	nodeList, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
 	if err != nil {
 		return err
@@ -241,7 +249,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	// Collect the per-node data.
-	if err := zc.forAllNodes(ctx, nodeList, func(ctx context.Context, node statuspb.NodeStatus) error {
+	if err := zc.forAllNodes(ctx, nodeList, func(ctx context.Context, node serverpb.NodeDetails) error {
 		return zc.collectPerNodeData(ctx, node, livenessByNodeID)
 	}); err != nil {
 		return err

@@ -50,6 +50,7 @@ func TestingReset() {
 // TestCLI wraps a test server and is used by tests to make assertions about the output of CLI commands.
 type TestCLI struct {
 	*server.TestServer
+	tenant      serverutils.TestTenantInterface
 	certsDir    string
 	cleanupFunc func() error
 	prevStderr  *os.File
@@ -80,6 +81,9 @@ type TestCLIParams struct {
 
 	// NoNodelocal, if true, disables node-local external I/O storage.
 	NoNodelocal bool
+
+	// Multitenant, if true, starts the test in multitenant mode.
+	Multitenant bool
 }
 
 // testTempFilePrefix is a sentinel marker to be used as the prefix of a
@@ -155,6 +159,19 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		log.Infof(context.Background(), "SQL listener at %s", c.ServingSQLAddr())
 	}
 
+	if params.Multitenant {
+		if c.TestServer == nil {
+			c.fail(errors.New("multitenant mode for CLI requires a DB server, try setting `NoServer` argument to false"))
+		}
+		c.tenant, _ = serverutils.StartTenant(
+			c.t,
+			c.TestServer,
+			base.TestTenantArgs{
+				TenantID:      serverutils.TestTenantID(),
+				ForceInsecure: true,
+			},
+		)
+	}
 	baseCfg.User = security.NodeUserName()
 
 	// Ensure that CLI error messages and anything meant for the
@@ -203,6 +220,9 @@ func (c *TestCLI) RestartServer(params TestCLIParams) {
 	c.TestServer = s.(*server.TestServer)
 	log.Infof(context.Background(), "restarted server at %s / %s",
 		c.ServingRPCAddr(), c.ServingSQLAddr())
+	if params.Multitenant {
+		c.tenant, _ = serverutils.StartTenant(c.t, c.TestServer, base.TestTenantArgs{TenantID: serverutils.TestTenantID()})
+	}
 }
 
 // Cleanup cleans up after the test, stopping the server if necessary.
@@ -313,11 +333,16 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
 		if c.TestServer != nil {
-			addr := c.ServingRPCAddr()
-			if isSQL, err := isSQLCommand(origArgs); err != nil {
-				return err
-			} else if isSQL {
-				addr = c.ServingSQLAddr()
+			var addr string
+			if c.tenant != nil {
+				addr = c.tenant.SQLAddr()
+			} else {
+				addr = c.ServingRPCAddr()
+				if isSQL, err := isSQLCommand(origArgs); err != nil {
+					return err
+				} else if isSQL {
+					addr = c.ServingSQLAddr()
+				}
 			}
 			h, p, err := net.SplitHostPort(addr)
 			if err != nil {
@@ -331,6 +356,7 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 				args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
 			}
 		}
+
 		args = append(args, origArgs[1:]...)
 
 		// `nodelocal upload` and `userfile upload -r` CLI tests create unique temp

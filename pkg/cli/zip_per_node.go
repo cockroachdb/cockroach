@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,11 +30,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// makePreNodeZipRequests defines the zipRequests (API requests) that are to be
+// makePerNodeZipRequests defines the zipRequests (API requests) that are to be
 // performed once per node.
-func makePerNodeZipRequests(
-	prefix, id string, admin serverpb.AdminClient, status serverpb.StatusClient,
-) []zipRequest {
+func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []zipRequest {
+	if zipCtx.tenant {
+		return []zipRequest{
+			{
+				fn: func(ctx context.Context) (interface{}, error) {
+					return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id})
+				},
+				pathName: prefix + "/details",
+			},
+		}
+	}
 	return []zipRequest{
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
@@ -55,6 +63,27 @@ func makePerNodeZipRequests(
 			pathName: prefix + "/enginestats",
 		},
 	}
+}
+
+// Tables collected from each tenant SQL node in a debug zip.
+var debugZipTablesPerTenantNode = []string{
+	"crdb_internal.feature_usage",
+
+	"crdb_internal.leases",
+
+	"crdb_internal.node_build_info",
+	"crdb_internal.node_contention_events",
+	"crdb_internal.node_distsql_flows",
+	"crdb_internal.node_inflight_trace_spans",
+	"crdb_internal.node_metrics",
+	"crdb_internal.node_queries",
+	"crdb_internal.node_runtime_info",
+	"crdb_internal.node_sessions",
+	"crdb_internal.node_statement_statistics",
+	"crdb_internal.node_transaction_statistics",
+	"crdb_internal.node_transactions",
+	"crdb_internal.node_txn_stats",
+	"crdb_internal.active_range_feeds",
 }
 
 // Tables collected from each node in a debug zip using SQL.
@@ -94,9 +123,10 @@ var debugZipTablesPerNode = []string{
 // This is called first and in isolation, before other zip operations
 // possibly influence the nodes.
 func (zc *debugZipContext) collectCPUProfiles(
-	ctx context.Context, nodeList []statuspb.NodeStatus, livenessByNodeID nodeLivenesses,
+	ctx context.Context, nodeList []serverpb.NodeDetails, livenessByNodeID nodeLivenesses,
 ) error {
-	if zipCtx.cpuProfDuration <= 0 {
+	// TODO(rima): Collect profiles for tenant SQL nodes.
+	if zipCtx.cpuProfDuration <= 0 || zipCtx.tenant {
 		// Nothing to do; return early.
 		return nil
 	}
@@ -112,7 +142,8 @@ func (zc *debugZipContext) collectCPUProfiles(
 	// NB: this takes care not to produce non-deterministic log output.
 	resps := make([]profData, len(nodeList))
 	for i := range nodeList {
-		if livenessByNodeID[nodeList[i].Desc.NodeID] == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+		nodeID := roachpb.NodeID(nodeList[i].NodeID)
+		if livenessByNodeID[nodeID] == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 			continue
 		}
 		wg.Add(1)
@@ -127,7 +158,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 			var pd profData
 			err := contextutil.RunWithTimeout(ctx, "fetch cpu profile", zc.timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
 				resp, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
-					NodeId:  fmt.Sprintf("%d", nodeList[i].Desc.NodeID),
+					NodeId:  fmt.Sprintf("%d", nodeID),
 					Type:    serverpb.ProfileRequest_CPU,
 					Seconds: secs,
 					Labels:  true,
@@ -153,7 +184,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 		if len(pd.data) == 0 && pd.err == nil {
 			continue // skipped node
 		}
-		nodeID := nodeList[i].Desc.NodeID
+		nodeID := nodeList[i].NodeID
 		prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeID))
 		s := zc.clusterPrinter.start("profile for node %d", nodeID)
 		if err := zc.z.createRawOrError(s, prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
@@ -164,25 +195,26 @@ func (zc *debugZipContext) collectCPUProfiles(
 }
 
 func (zc *debugZipContext) collectPerNodeData(
-	ctx context.Context, node statuspb.NodeStatus, livenessByNodeID nodeLivenesses,
+	ctx context.Context, node serverpb.NodeDetails, livenessByNodeID nodeLivenesses,
 ) error {
-	nodeID := node.Desc.NodeID
+	nodeID := roachpb.NodeID(node.NodeID)
 
-	liveness := livenessByNodeID[nodeID]
-	if liveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
-		// Decommissioned + process terminated. Let's not waste time
-		// on this node.
-		//
-		// NB: we still inspect DECOMMISSIONING nodes (marked as
-		// decommissioned but the process is still alive) to get a
-		// chance to collect their log files.
-		//
-		// NB: we still inspect DEAD nodes because even though they
-		// don't heartbeat their liveness record their process might
-		// still be up and willing to deliver some log files.
-		return nil
+	if livenessByNodeID != nil {
+		liveness := livenessByNodeID[nodeID]
+		if liveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+			// Decommissioned + process terminated. Let's not waste time
+			// on this node.
+			//
+			// NB: we still inspect DECOMMISSIONING nodes (marked as
+			// decommissioned but the process is still alive) to get a
+			// chance to collect their log files.
+			//
+			// NB: we still inspect DEAD nodes because even though they
+			// don't heartbeat their liveness record their process might
+			// still be up and willing to deliver some log files.
+			return nil
+		}
 	}
-
 	nodePrinter := zipCtx.newZipReporter("node %d", nodeID)
 	id := fmt.Sprintf("%d", nodeID)
 	prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
@@ -206,11 +238,18 @@ func (zc *debugZipContext) collectPerNodeData(
 	// not work and if it doesn't, we let the invalid curSQLConn get
 	// used anyway so that anything that does *not* need it will
 	// still happen.
-	sqlAddr := node.Desc.CheckedSQLAddress()
+	sqlAddr := node.SQLAddress
+	if sqlAddr.IsEmpty() {
+		sqlAddr = node.Address
+	}
 	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
 	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
 
-	for _, table := range debugZipTablesPerNode {
+	debugZipTables := debugZipTablesPerNode
+	if zipCtx.tenant {
+		debugZipTables = debugZipTablesPerTenantNode
+	}
+	for _, table := range debugZipTables {
 		query := fmt.Sprintf(`SELECT * FROM %s`, table)
 		if override, ok := customQuery[table]; ok {
 			query = override
@@ -220,7 +259,7 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	}
 
-	perNodeZipRequests := makePerNodeZipRequests(prefix, id, zc.admin, zc.status)
+	perNodeZipRequests := makePerNodeZipRequests(prefix, id, zc.status)
 
 	for _, r := range perNodeZipRequests {
 		if err := zc.runZipRequest(ctx, nodePrinter, r); err != nil {
@@ -228,6 +267,13 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	}
 
+	if zipCtx.tenant {
+		// Return early for tenant servers since subsequent endpoints (stacks, profiles etc.)
+		// are not yet supported for tenants.
+		// TODO(rima): Remove this section once all endpoints are supported for
+		// tenants.
+		return nil
+	}
 	var stacksData []byte
 	s := nodePrinter.start("requesting stacks")
 	requestErr := zc.runZipFn(ctx, s,
