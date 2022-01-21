@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,6 +46,31 @@ func grantOptionMigration(
 	addGrantOptionFunc := func(ids []descpb.ID, descs []descpb.Descriptor, timestamps []hlc.Timestamp) error {
 		var modifiedDescs []catalog.MutableDescriptor
 		for i, id := range ids {
+			// Temporarily change the version in order to force the migration to run
+			// on each descriptor. This handles the case where privileges were
+			// created in a mixed-version cluster with version=GrantOptionVersion,
+			// but then later has its grant option bits wiped out by a node running
+			// on the old version.
+			table, database, typ, schema := descpb.FromDescriptorWithMVCCTimestamp(&descs[i], timestamps[i])
+			var p *descpb.PrivilegeDescriptor
+			switch {
+			case table != nil:
+				p = table.Privileges
+			case database != nil:
+				p = database.Privileges
+			case typ != nil:
+				p = typ.Privileges
+			case schema != nil:
+				p = schema.Privileges
+			}
+			if p != nil {
+				// If root doesn't have these grant option bits set, then we know
+				// that an old node must have clobbered the grant option bits.
+				if !p.CheckGrantOptions(security.RootUserName(), privilege.List{privilege.ALL}) {
+					p.Version = descpb.Version21_2
+				}
+			}
+
 			b := catalogkv.NewBuilderWithMVCCTimestamp(&descs[i], timestamps[i])
 			if b == nil {
 				return errors.Newf("unable to find descriptor for id %d", id)

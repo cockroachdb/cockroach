@@ -393,7 +393,8 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 		}
 		primaryRegion = tree.Name(defaultPrimaryRegion)
 		// TODO(#67156): send notice immediately, so it pops up even on error.
-		p.noticeSender.BufferNotice(
+		p.BufferClientNotice(
+			ctx,
 			pgnotice.Newf("setting %s as the PRIMARY REGION as no PRIMARY REGION was specified", primaryRegion),
 		)
 	}
