@@ -43,6 +43,10 @@ mkdir -p $ARTIFACTS_DIR
 # Use an `if` so that the `-e` option doesn't stop the script on error.
 pushd ./vendor/github.com/cockroachdb/pebble/internal/metamorphic
 if ! stdbuf -oL -eL \
+
+  # NB: If adjusting the metamorphic test flags below, be sure to also update
+  # pkg/cmd/github-post/main.go to ensure the GitHub issue poster includes the
+  # correct flags in the reproduction command.
   go test -mod=vendor -exec "stress ${STRESSFLAGS}" -run 'TestMeta$$' \
   -timeout 0 -tags 'invariants' -test.v \
   -dir $ARTIFACTS_DIR -ops "uniform:5000-25000" 2>&1 | tee $ARTIFACTS_DIR/metamorphic.log; then

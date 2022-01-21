@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -564,33 +563,24 @@ func makeIters(
 func makeRowFetcher(
 	ctx context.Context, entry backupccl.BackupTableEntry, codec keys.SQLCodec,
 ) (row.Fetcher, error) {
-	var colIdxMap catalog.TableColMap
-	var valNeededForCol util.FastIntSet
 	colDescs := make([]catalog.Column, len(entry.Desc.PublicColumns()))
 	for i, col := range entry.Desc.PublicColumns() {
-		colIdxMap.Set(col.GetID(), i)
-		valNeededForCol.Add(i)
 		colDescs[i] = col
 	}
 
 	if debugBackupArgs.withRevisions {
-		newIndex := len(entry.Desc.PublicColumns())
 		newCol, err := entry.Desc.FindColumnWithName(colinfo.MVCCTimestampColumnName)
 		if err != nil {
 			return row.Fetcher{}, errors.Wrapf(err, "get mvcc timestamp column")
 		}
-		colIdxMap.Set(newCol.GetID(), newIndex)
-		valNeededForCol.Add(newIndex)
 		colDescs = append(colDescs, newCol)
 	}
 
 	table := row.FetcherTableArgs{
 		Desc:             entry.Desc,
 		Index:            entry.Desc.GetPrimaryIndex(),
-		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: false,
-		Cols:             colDescs,
-		ValNeededForCol:  valNeededForCol,
+		Columns:          colDescs,
 	}
 
 	var rf row.Fetcher

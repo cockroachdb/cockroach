@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingui"
 	"github.com/cockroachdb/errors"
 	pebbletool "github.com/cockroachdb/pebble/tool"
 	metrics "github.com/rcrowley/go-metrics"
@@ -61,14 +63,18 @@ var _ = func() *settings.StringSetting {
 
 // Server serves the /debug/* family of tools.
 type Server struct {
-	st  *cluster.Settings
-	mux *http.ServeMux
-	spy logSpy
+	ambientCtx log.AmbientContext
+	st         *cluster.Settings
+	mux        *http.ServeMux
+	spy        logSpy
 }
 
 // NewServer sets up a debug server.
 func NewServer(
-	st *cluster.Settings, hbaConfDebugFn http.HandlerFunc, profiler pprofui.Profiler,
+	ambientContext log.AmbientContext,
+	st *cluster.Settings,
+	hbaConfDebugFn http.HandlerFunc,
+	profiler pprofui.Profiler,
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -137,9 +143,10 @@ func NewServer(
 	})
 
 	return &Server{
-		st:  st,
-		mux: mux,
-		spy: spy,
+		ambientCtx: ambientContext,
+		st:         st,
+		mux:        mux,
+		spy:        spy,
 	}
 }
 
@@ -230,6 +237,12 @@ func (ds *Server) RegisterClosedTimestampSideTransport(
 			w.Header().Add("Content-type", "text/html")
 			fmt.Fprint(w, sender.HTML())
 		})
+}
+
+// RegisterTracez registers the /debug/tracez handler, which renders snapshots
+// of active spans.
+func (ds *Server) RegisterTracez(tr *tracing.Tracer) {
+	tracingui.RegisterHTTPHandlers(ds.ambientCtx, ds.mux, tr)
 }
 
 // ServeHTTP serves various tools under the /debug endpoint.

@@ -834,7 +834,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
-	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn(), sStatus)
+	debugServer := debug.NewServer(cfg.BaseConfig.AmbientCtx, st, sqlServer.pgServer.HBADebugFn(), sStatus)
 	node.InitLogger(sqlServer.execCfg)
 
 	*lateBoundServer = Server{
@@ -1958,6 +1958,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
 	s.debug.RegisterClosedTimestampSideTransport(s.ctSender, s.node.storeCfg.ClosedTimestampReceiver)
+	s.debug.RegisterTracez(s.cfg.Tracer)
 
 	s.ctSender.Run(ctx, state.nodeID)
 

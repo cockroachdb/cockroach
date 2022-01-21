@@ -662,6 +662,13 @@ func fetchIndex(
 			valsNeeded.Add(colIdxMap.GetDefault(colID))
 		})
 	}
+	var columns []catalog.Column
+	for i, col := range table.PublicColumns() {
+		if valsNeeded.Contains(i) {
+			columns = append(columns, col)
+		}
+	}
+
 	require.NoError(t, err)
 	spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, idx.GetID())}
 	const reverse = false
@@ -677,9 +684,7 @@ func fetchIndex(
 		row.FetcherTableArgs{
 			Desc:             table,
 			Index:            idx,
-			ColIdxMap:        colIdxMap,
-			Cols:             table.PublicColumns(),
-			ValNeededForCol:  valsNeeded,
+			Columns:          columns,
 			IsSecondaryIndex: !idx.Primary(),
 		},
 	))
@@ -695,12 +700,7 @@ func fetchIndex(
 			break
 		}
 		// Copy the datums out as the slice is reused internally.
-		row := make(tree.Datums, 0, valsNeeded.Len())
-		for i := range datums {
-			if valsNeeded.Contains(i) {
-				row = append(row, datums[i])
-			}
-		}
+		row := append(tree.Datums(nil), datums...)
 		rows = append(rows, row)
 	}
 	return rows

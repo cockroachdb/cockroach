@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -72,10 +73,8 @@ func (isc *inputStatCollector) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 }
 
 // rowFetcherStatCollector is a wrapper on top of a row.Fetcher that collects stats.
-//
-// Only row.Fetcher methods that collect stats are overridden.
 type rowFetcherStatCollector struct {
-	*row.Fetcher
+	fetcher *row.Fetcher
 	// stats contains the collected stats.
 	stats              execinfrapb.InputStats
 	startScanStallTime time.Duration
@@ -85,20 +84,9 @@ var _ rowFetcher = &rowFetcherStatCollector{}
 
 // newRowFetcherStatCollector returns a new rowFetcherStatCollector.
 func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
-	res := &rowFetcherStatCollector{Fetcher: f}
+	res := &rowFetcherStatCollector{fetcher: f}
 	res.stats.NumTuples.Set(0)
 	return res
-}
-
-// NextRow is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) NextRow(ctx context.Context) (rowenc.EncDatumRow, error) {
-	start := timeutil.Now()
-	row, err := c.Fetcher.NextRow(ctx)
-	if row != nil {
-		c.stats.NumTuples.Add(1)
-	}
-	c.stats.WaitTime.Add(timeutil.Since(start))
-	return row, err
 }
 
 // StartScan is part of the rowFetcher interface.
@@ -112,7 +100,7 @@ func (c *rowFetcherStatCollector) StartScan(
 	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartScan(ctx, txn, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
+	err := c.fetcher.StartScan(ctx, txn, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -122,7 +110,7 @@ func (c *rowFetcherStatCollector) StartScanFrom(
 	ctx context.Context, f row.KVBatchFetcher, traceKV bool,
 ) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartScanFrom(ctx, f, traceKV)
+	err := c.fetcher.StartScanFrom(ctx, f, traceKV)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -140,11 +128,54 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
-	err := c.Fetcher.StartInconsistentScan(
+	err := c.fetcher.StartInconsistentScan(
 		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
+}
+
+// NextRow is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) NextRow(ctx context.Context) (rowenc.EncDatumRow, error) {
+	start := timeutil.Now()
+	row, err := c.fetcher.NextRow(ctx)
+	if row != nil {
+		c.stats.NumTuples.Add(1)
+	}
+	c.stats.WaitTime.Add(timeutil.Since(start))
+	return row, err
+}
+
+// NextRowInto is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) NextRowInto(
+	ctx context.Context, destination rowenc.EncDatumRow, colIdxMap catalog.TableColMap,
+) (ok bool, err error) {
+	start := timeutil.Now()
+	ok, err = c.fetcher.NextRowInto(ctx, destination, colIdxMap)
+	if ok {
+		c.stats.NumTuples.Add(1)
+	}
+	c.stats.WaitTime.Add(timeutil.Since(start))
+	return ok, err
+}
+
+// PartialKey is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) PartialKey(nCols int) (roachpb.Key, error) {
+	return c.fetcher.PartialKey(nCols)
+}
+
+func (c *rowFetcherStatCollector) Reset() {
+	c.fetcher.Reset()
+}
+
+// GetBytesRead is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) GetBytesRead() int64 {
+	return c.fetcher.GetBytesRead()
+}
+
+// Close is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) Close(ctx context.Context) {
+	c.fetcher.Close(ctx)
 }
 
 // getInputStats is a utility function to check whether the given input is

@@ -49,9 +49,8 @@ message ValuesCoreSpec {
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
 //
-// The "internal columns" of a TableReader (see ProcessorSpec) are all the
-// columns of the table. Internally, only the values for the columns specified
-// by needed_columns are to be populated.
+// The "internal columns" of a TableReader (see ProcessorSpec) correspond to the
+// specified column IDs.
 message TableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
@@ -61,6 +60,12 @@ message TableReaderSpec {
   reserved 4;
   repeated roachpb.Span spans = 18 [(gogoproto.nullable) = false];
 
+  // Columns identifies the columns that we are decoding; the table reader
+  // produces these columns in this order. When empty, the table reader produces
+  // empty rows.
+  repeated uint32 column_ids = 19 [(gogoproto.customname) = "ColumnIDs",
+                                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+
   // A hint for how many rows the consumer of the table reader output might
   // need. This is used to size the initial KV batches to try to avoid reading
   // many more rows than needed by the processor receiving the output.
@@ -69,9 +74,9 @@ message TableReaderSpec {
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
 
-  // Indicates whether the TableReader is being run as an exhaustive
-  // check. This is only true during SCRUB commands. No longer supported.
-  optional bool deprecated_is_check = 6 [(gogoproto.nullable) = false];
+  // This field used to indicate whether the TableReader is being run as an
+  // exhaustive check (no longer implemented).
+  reserved 6;
 
   // This field used to be a visibility level of the columns that should be
   // produced. We now always produce all columns (public and not public).
@@ -130,9 +135,10 @@ message TableReaderSpec {
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
 
   reserved 13;
-  // Indicates whether or not this TableReader is expected to produce any
-  // system columns in its output.
-  optional bool has_system_columns = 14 [(gogoproto.nullable) = false];
+
+  // This field used to indicate whether or not this TableReader is expected to
+  // produce any system columns in its output.
+  reserved 14;
 
   reserved 15;
 
