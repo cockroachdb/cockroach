@@ -15,14 +15,32 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+func TestValidRoles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	ctx := context.Background()
+	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
+
+	for name := range roleoption.ByName {
+		_, err := s.(*TestServer).status.baseStatusServer.privilegeChecker.hasRoleOption(ctx, fooUser, roleoption.ByName[name])
+		require.NoError(t, err)
+	}
+}
 
 func TestSQLRolesAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
