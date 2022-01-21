@@ -225,10 +225,10 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	)
 
 	url := fmt.Sprintf("postgres://bob:wrong@%s/dim-dog-28.defaultdb?sslmode=require", addr)
-	te.TestConnectErr(ctx, t, url, 0, "ERROR: password authentication failed for user bob")
+	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
 	url = fmt.Sprintf("postgres://bob@%s/dim-dog-28.defaultdb?sslmode=require", addr)
-	te.TestConnectErr(ctx, t, url, 0, "ERROR: password authentication failed for user bob")
+	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
 	url = fmt.Sprintf("postgres://bob:builder@%s/dim-dog-28.defaultdb?sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
@@ -449,7 +449,7 @@ func TestInsecureProxy(t *testing.T) {
 	)
 
 	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
-	te.TestConnectErr(ctx, t, url, 0, "ERROR: password authentication failed for user bob")
+	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
 	url = fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {

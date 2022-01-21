@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/jackc/pgx/v4"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -111,7 +111,7 @@ GRANT admin TO foo`); err != nil {
 		if err == nil {
 			defer func() { _ = dbSQL.Close(ctx) }()
 		}
-		if !testutils.IsError(err, "password authentication failed for user foo") {
+		if !testutils.IsError(err, "failed SASL auth") {
 			t.Fatalf("expected password error, got %v", err)
 		}
 	}()

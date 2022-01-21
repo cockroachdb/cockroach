@@ -265,13 +265,14 @@ func (p *planner) checkPasswordAndGetHash(
 	if security.AutoDetectPasswordHashes.Get(&st.SV) {
 		var isPreHashed, schemeSupported bool
 		var schemeName string
-		isPreHashed, schemeSupported, schemeName, hashedPassword, err = security.CheckPasswordHashValidity(ctx, []byte(password))
+		var issueNum int
+		isPreHashed, schemeSupported, issueNum, schemeName, hashedPassword, err = security.CheckPasswordHashValidity(ctx, []byte(password))
 		if err != nil {
 			return hashedPassword, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 		if isPreHashed {
 			if !schemeSupported {
-				return hashedPassword, unimplemented.NewWithIssueDetailf(42519, schemeName, "the password hash scheme %q is not supported", schemeName)
+				return hashedPassword, unimplemented.NewWithIssueDetailf(issueNum, schemeName, "the password hash scheme %q is not supported", schemeName)
 			}
 			return hashedPassword, nil
 		}

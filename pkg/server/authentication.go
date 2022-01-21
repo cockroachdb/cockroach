@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -255,7 +254,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
 
-	exists, _, canLoginDBConsole, _, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -420,7 +419,7 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPasswordDBConsole(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
-	exists, _, canLoginDBConsole, _, validUntil, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.server.sqlServer.execCfg,
 		s.server.sqlServer.execCfg.InternalExecutor,
@@ -433,18 +432,30 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 	if !exists || !canLoginDBConsole {
 		return false, false, nil
 	}
-	hashedPassword, err := pwRetrieveFn(ctx)
+	expired, hashedPassword, err := pwRetrieveFn(ctx)
 	if err != nil {
 		return false, false, err
 	}
 
-	if validUntil != nil {
-		if validUntil.Time.Sub(timeutil.Now()) < 0 {
-			return false, true, nil
-		}
+	if expired {
+		return false, true, nil
 	}
 
-	return security.CompareHashAndPassword(ctx, hashedPassword, password) == nil, false, nil
+	ok, err := security.CompareHashAndCleartextPassword(ctx, hashedPassword, password)
+	if ok && err == nil {
+		// Password authentication succeeded using cleartext.  If the
+		// stored hash was encoded using crdb-bcrypt, we might want to
+		// upgrade it to SCRAM instead.
+		//
+		// This auto-conversion is a CockroachDB-specific feature, which
+		// pushes clusters upgraded from a previous version into using
+		// SCRAM-SHA-256.
+		sql.MaybeUpgradeStoredPasswordHash(ctx,
+			s.server.sqlServer.execCfg,
+			username,
+			password, hashedPassword)
+	}
+	return ok, false, err
 }
 
 // CreateAuthSecret creates a secret, hash pair to populate a session auth token.

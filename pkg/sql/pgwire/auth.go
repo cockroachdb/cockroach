@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -37,6 +36,13 @@ const (
 	// authCleartextPassword is the pgwire auth response code to request
 	// a plaintext password during the connection handshake.
 	authCleartextPassword int32 = 3
+
+	// authReqSASL is the begin request for a SCRAM handshake.
+	authReqSASL int32 = 10
+	// authReqSASLContinue is the continue request for a SCRAM handshake.
+	authReqSASLContinue int32 = 11
+	// authReqSASLFin is the final message for a SCRAM handshake.
+	authReqSASLFin int32 = 12
 )
 
 type authOptions struct {
@@ -139,7 +145,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLoginSQL, _, isSuperuser, validUntil, defaultSettings, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, isSuperuser, defaultSettings, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -156,10 +162,9 @@ func (c *conn) handleAuthentication(
 
 	if !exists {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, nil)
-		return connClose, sendError(pgerror.Newf(
+		return connClose, sendError(pgerror.WithCandidateCode(
+			security.NewErrPasswordUserAuthFailed(dbUser),
 			pgcode.InvalidAuthorizationSpecification,
-			security.ErrPasswordUserAuthFailed,
-			dbUser,
 		))
 	}
 
@@ -172,16 +177,10 @@ func (c *conn) handleAuthentication(
 		))
 	}
 
-	// Set up lazy provider for password or cert-password methods.
-	pwDataFn := func(ctx context.Context) ([]byte, *tree.DTimestamp, error) {
-		pwHash, err := pwRetrievalFn(ctx)
-		return pwHash, validUntil, err
-	}
-
 	// At this point, we know that the requested user exists and is
 	// allowed to log in. Now we can delegate to the selected AuthMethod
 	// implementation to complete the authentication.
-	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwDataFn); err != nil {
+	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
 		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}

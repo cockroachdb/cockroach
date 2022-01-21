@@ -12,7 +12,7 @@ import (
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
-	"github.com/jackc/pgproto3/v2"
+	pgproto3 "github.com/jackc/pgproto3/v2"
 )
 
 // authenticate handles the startup of the pgwire protocol to the point where
@@ -49,9 +49,26 @@ var authenticate = func(clientConn, crdbConn net.Conn, throttleHook func(throttl
 		case
 			*pgproto3.AuthenticationCleartextPassword,
 			*pgproto3.AuthenticationMD5Password,
+			*pgproto3.AuthenticationSASLContinue,
+			*pgproto3.AuthenticationSASLFinal,
 			*pgproto3.AuthenticationSASL:
 			if err = feSend(backendMsg); err != nil {
 				return err
+			}
+			switch backendMsg.(type) {
+			case *pgproto3.AuthenticationCleartextPassword:
+				_ = fe.SetAuthType(pgproto3.AuthTypeCleartextPassword)
+			case *pgproto3.AuthenticationMD5Password:
+				_ = fe.SetAuthType(pgproto3.AuthTypeMD5Password)
+			case *pgproto3.AuthenticationSASLContinue:
+				_ = fe.SetAuthType(pgproto3.AuthTypeSASLContinue)
+			case *pgproto3.AuthenticationSASL:
+				_ = fe.SetAuthType(pgproto3.AuthTypeSASL)
+			case *pgproto3.AuthenticationSASLFinal:
+				// Final SCRAM message. Nothing more to expect from the
+				// client: the next message will be from the server and be
+				// AuthenticationOk or AuthenticationFail.
+				continue
 			}
 			fntMsg, err := fe.Receive()
 			if err != nil {

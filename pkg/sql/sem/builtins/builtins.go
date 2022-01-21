@@ -6368,7 +6368,7 @@ table's zone configuration this will return NULL.`,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				arg := []byte(tree.MustBeDBytes(args[0]))
 				ctx := evalCtx.Ctx()
-				isHashed, _, schemeName, _, err := security.CheckPasswordHashValidity(ctx, arg)
+				isHashed, _, _, schemeName, _, err := security.CheckPasswordHashValidity(ctx, arg)
 				if err != nil {
 					return tree.DNull, pgerror.WithCandidateCode(err, pgcode.Syntax)
 				}
