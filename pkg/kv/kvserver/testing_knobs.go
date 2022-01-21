@@ -374,6 +374,9 @@ type StoreTestingKnobs struct {
 	// UseSystemConfigSpanForQueues uses the system config span infrastructure
 	// for internal queues (as opposed to the span configs infrastructure). This
 	// is used only for (old) tests written with the system config span in mind.
+	//
+	// TODO(irfansharif): Get rid of this knob, maybe by first moving
+	// DisableSpanConfigs into a testing knob instead of a server arg.
 	UseSystemConfigSpanForQueues bool
 }
 
