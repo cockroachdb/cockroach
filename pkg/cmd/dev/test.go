@@ -112,15 +112,12 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	var testTargets []string
 	for _, pkg := range pkgs {
-		pkg = strings.TrimPrefix(pkg, "//")
-		pkg = strings.TrimPrefix(pkg, "./")
-		pkg = strings.TrimRight(pkg, "/")
-
-		if !strings.HasPrefix(pkg, "pkg/") {
-			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+		dir, isRecursive, tag, err := d.parsePkg(pkg)
+		if err != nil {
+			return err
 		}
-
-		if strings.HasSuffix(pkg, "/...") {
+		querySuffix := ""
+		if isRecursive {
 			// Similar to `go test`, we implement `...` expansion to allow
 			// callers to use the following pattern to test all packages under a
 			// named one:
@@ -145,26 +142,20 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			// [1]: pkg/rpc/heartbeat.proto is one example of this pattern,
 			// where we define `Stringer` separately for the `RemoteOffset`
 			// type.
-			{
-				queryArgs := []string{fmt.Sprintf("kind(go_test,  //%s)", pkg)}
-				out, err := d.getQueryOutput(ctx, queryArgs...)
-				if err != nil {
-					return err
-				}
-				targets := strings.Split(strings.TrimSpace(string(out)), "\n")
-				testTargets = append(testTargets, targets...)
-			}
-		} else if strings.Contains(pkg, ":") {
-			testTargets = append(testTargets, pkg)
+			querySuffix = "/..."
 		} else {
-			queryArgs := []string{fmt.Sprintf("kind(go_test, //%s:all)", pkg)}
-			out, err := d.getQueryOutput(ctx, queryArgs...)
-			if err != nil {
-				return err
+			if tag == "" {
+				tag = "all"
 			}
-			tests := strings.Split(strings.TrimSpace(string(out)), "\n")
-			testTargets = append(testTargets, tests...)
+			querySuffix = ":" + tag
 		}
+		query := fmt.Sprintf("kind(go_test, //%s%s)", dir, querySuffix)
+		out, err := d.getQueryOutput(ctx, query)
+		if err != nil {
+			return err
+		}
+		tests := strings.Split(strings.TrimSpace(string(out)), "\n")
+		testTargets = append(testTargets, tests...)
 	}
 
 	args = append(args, testTargets...)
