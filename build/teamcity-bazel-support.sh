@@ -1,7 +1,7 @@
 # FYI: You can run `./dev builder` to run this Docker image. :)
 # `dev` depends on this variable! Don't change the name or format unless you
 # also update `dev` accordingly.
-BAZEL_IMAGE=cockroachdb/bazel:20211124-095044
+BAZEL_IMAGE=cockroachdb/bazel:20220121-121551
 
 # Call `run_bazel $NAME_OF_SCRIPT` to start an appropriately-configured Docker
 # container with the `cockroachdb/bazel` image running the given script.
