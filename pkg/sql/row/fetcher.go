@@ -193,8 +193,10 @@ type Fetcher struct {
 
 	// -- Fields updated during a scan --
 
-	kvFetcher      *KVFetcher
-	indexKey       []byte // the index key of the current row
+	kvFetcher *KVFetcher
+	// indexKey stores the index key of the current row, up to (and not including)
+	// any family ID.
+	indexKey       []byte
 	prettyValueBuf *bytes.Buffer
 
 	valueColsFound int // how many needed cols we've found so far in the value
@@ -590,8 +592,9 @@ func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher, traceKV 
 		rf.kvFetcher.Close(ctx)
 	}
 	rf.kvFetcher = newKVFetcher(f)
+	rf.kvEnd = false
 	// Retrieve the first key.
-	_, err := rf.NextKey(ctx)
+	_, err := rf.nextKey(ctx)
 	return err
 }
 
@@ -618,48 +621,64 @@ func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	rf.kv = kvCopy
 }
 
-// NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
-// has been completed.
-func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
-	moreKVs, kv, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+// nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether the
+// key indicates a new row (as opposed to another family for the current row).
+func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
+	ok, kv, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 	if err != nil {
 		return false, ConvertFetchError(ctx, rf, err)
 	}
 	rf.setNextKV(kv, finalReferenceToBatch)
 
-	rf.kvEnd = !moreKVs
-	if rf.kvEnd {
+	if !ok {
 		// No more keys in the scan.
-		//
-		// NB: this assumes that the KV layer will never split a range
-		// between column families, which is a brittle assumption.
-		// See:
-		// https://github.com/cockroachdb/cockroach/pull/42056
+		rf.kvEnd = true
 		return true, nil
 	}
 
-	// foundNull is set when decoding a new index key for a row finds a NULL value
-	// in the index key. This is used when decoding unique secondary indexes in order
-	// to tell whether they have extra columns appended to the key.
-	var foundNull bool
-
-	// unchangedPrefix will be set to true if we can skip decoding the index key
-	// completely, because the last key we saw has identical prefix to the
-	// current key.
-	//
-	// See Init() for a detailed description of when we can get away with not
-	// reading the index key.
-	unchangedPrefix := rf.indexKey != nil && bytes.HasPrefix(rf.kv.Key, rf.indexKey)
+	// unchangedPrefix will be set to true if the current KV belongs to the same
+	// row as the previous KV (i.e. the last and current keys have identical
+	// prefix). In this case, we can skip decoding the index key completely.
+	unchangedPrefix := rf.numKeysPerRow > 1 && rf.indexKey != nil && bytes.HasPrefix(rf.kv.Key, rf.indexKey)
 	if unchangedPrefix {
 		// Skip decoding!
 		rf.keyRemainingBytes = rf.kv.Key[len(rf.indexKey):]
-	} else if rf.mustDecodeIndexKey {
-		rf.keyRemainingBytes, moreKVs, foundNull, err = rf.ReadIndexKey(rf.kv.Key)
+		return false, nil
+	}
+
+	// The current key belongs to a new row.
+	if rf.mustDecodeIndexKey {
+		var foundNull bool
+		rf.keyRemainingBytes, foundNull, err = rf.DecodeIndexKey(rf.kv.Key)
 		if err != nil {
 			return false, err
 		}
-		if !moreKVs {
-			return false, errors.AssertionFailedf("key did not match any of the table descriptors")
+		// For unique secondary indexes, the index-key does not distinguish one row
+		// from the next if both rows contain identical values along with a NULL.
+		// Consider the keys:
+		//
+		//   /test/unique_idx/NULL/0
+		//   /test/unique_idx/NULL/1
+		//
+		// The index-key extracted from the above keys is /test/unique_idx/NULL. The
+		// trailing /0 and /1 are the primary key used to unique-ify the keys when a
+		// NULL is present. When a null is present in the index key, we cut off more
+		// of the index key so that the prefix includes the primary key columns.
+		//
+		// Note that we do not need to do this for non-unique secondary indexes because
+		// the extra columns in the primary key will _always_ be there, so we can decode
+		// them when processing the index. The difference with unique secondary indexes
+		// is that the extra columns are not always there, and are used to unique-ify
+		// the index key, rather than provide the primary key column values.
+		if foundNull && rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.numKeysPerRow > 1 {
+			for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
+				var err error
+				// Slice off an extra encoded column from rf.keyRemainingBytes.
+				rf.keyRemainingBytes, err = keyside.Skip(rf.keyRemainingBytes)
+				if err != nil {
+					return false, err
+				}
+			}
 		}
 	} else {
 		// We still need to consume the key until the family
@@ -673,54 +692,8 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, _ error) {
 		rf.keyRemainingBytes = rf.kv.Key[prefixLen:]
 	}
 
-	// For unique secondary indexes, the index-key does not distinguish one row
-	// from the next if both rows contain identical values along with a NULL.
-	// Consider the keys:
-	//
-	//   /test/unique_idx/NULL/0
-	//   /test/unique_idx/NULL/1
-	//
-	// The index-key extracted from the above keys is /test/unique_idx/NULL. The
-	// trailing /0 and /1 are the primary key used to unique-ify the keys when a
-	// NULL is present. When a null is present in the index key, we cut off more
-	// of the index key so that the prefix includes the primary key columns.
-	//
-	// Note that we do not need to do this for non-unique secondary indexes because
-	// the extra columns in the primary key will _always_ be there, so we can decode
-	// them when processing the index. The difference with unique secondary indexes
-	// is that the extra columns are not always there, and are used to unique-ify
-	// the index key, rather than provide the primary key column values.
-	if foundNull && rf.table.isSecondaryIndex && rf.table.index.IsUnique() && len(rf.table.desc.GetFamilies()) != 1 {
-		for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
-			var err error
-			// Slice off an extra encoded column from rf.keyRemainingBytes.
-			rf.keyRemainingBytes, err = keyside.Skip(rf.keyRemainingBytes)
-			if err != nil {
-				return false, err
-			}
-		}
-	}
-
-	switch {
-	case len(rf.table.desc.GetFamilies()) == 1:
-		// If we only have one family, we know that there is only 1 k/v pair per row.
-		rowDone = true
-	case !unchangedPrefix:
-		// If the prefix of the key has changed, current key is from a different
-		// row than the previous one.
-		rowDone = true
-	default:
-		rowDone = false
-	}
-
-	if rf.indexKey != nil && rowDone {
-		// The current key belongs to a new row. Output the
-		// current row.
-		rf.indexKey = nil
-		return true, nil
-	}
-
-	return false, nil
+	rf.indexKey = nil
+	return true, nil
 }
 
 func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []rowenc.EncDatum) string {
@@ -736,23 +709,15 @@ func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []rowenc.EncDatum) str
 	return buf.String()
 }
 
-// ReadIndexKey decodes an index key for a given table.
-// It returns whether or not the key is for any of the tables initialized
-// in Fetcher, and the remaining part of the key if it is.
-// ReadIndexKey additionally returns whether or not it encountered a null while decoding.
-func (rf *Fetcher) ReadIndexKey(
-	key roachpb.Key,
-) (remaining []byte, ok bool, foundNull bool, err error) {
-	remaining, foundNull, err = rowenc.DecodeKeyVals(
+// DecodeIndexKey decodes an index key and returns the remaining key and whether
+// it encountered a null while decoding.
+func (rf *Fetcher) DecodeIndexKey(key roachpb.Key) (remaining []byte, foundNull bool, err error) {
+	return rowenc.DecodeKeyVals(
 		rf.table.keyValTypes,
 		rf.table.keyVals,
 		rf.table.indexColumnDirs,
 		key[rf.table.knownPrefixLength:],
 	)
-	if err != nil {
-		return nil, false, false, err
-	}
-	return remaining, true, foundNull, nil
 }
 
 // KeyToDesc implements the KeyToDescTranslator interface. The implementation is
@@ -761,7 +726,7 @@ func (rf *Fetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	if len(key) < rf.table.knownPrefixLength {
 		return nil, false
 	}
-	if _, ok, _, err := rf.ReadIndexKey(key); !ok || err != nil {
+	if _, _, err := rf.DecodeIndexKey(key); err != nil {
 		return nil, false
 	}
 	return rf.table.desc, true
@@ -1095,7 +1060,7 @@ func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, err err
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 
-		rowDone, err := rf.NextKey(ctx)
+		rowDone, err := rf.nextKey(ctx)
 		if err != nil {
 			return nil, err
 		}
