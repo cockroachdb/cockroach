@@ -138,4 +138,5 @@ STATICCHECK_CHECKS = [
     "//build/bazelutil/staticcheckanalyzers/st1021",
     "//build/bazelutil/staticcheckanalyzers/st1022",
     "//build/bazelutil/staticcheckanalyzers/st1023",
+    "//build/bazelutil/staticcheckanalyzers/u1000",
 ]
