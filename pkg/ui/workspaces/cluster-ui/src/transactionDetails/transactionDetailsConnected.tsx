@@ -13,7 +13,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { AppState } from "src/store";
+import { AppState, uiConfigActions } from "src/store";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
   TransactionDetails,
@@ -24,7 +24,10 @@ import {
   selectTransactionsData,
   selectTransactionsLastError,
 } from "../transactionsPage/transactionsPage.selectors";
-import { selectIsTenant } from "../store/uiConfig";
+import {
+  selectIsTenant,
+  selectHasViewActivityRedactedRole,
+} from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
@@ -74,6 +77,7 @@ const mapStateToProps = (state: AppState, props: TransactionDetailsProps) => {
       props.match,
       txnFingerprintIdAttr,
     ),
+    hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
   };
 };
 
@@ -82,6 +86,7 @@ const mapDispatchToProps = (
 ): TransactionDetailsDispatchProps => ({
   refreshData: (req?: StatementsRequest) =>
     dispatch(sqlStatsActions.refresh(req)),
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
 });
 
 export const TransactionDetailsPageConnected = withRouter<any, any>(

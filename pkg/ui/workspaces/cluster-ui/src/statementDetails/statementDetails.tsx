@@ -138,6 +138,7 @@ export type NodesSummary = {
 export interface StatementDetailsDispatchProps {
   refreshStatements: (req?: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
+  refreshUserSQLRoles: () => void;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
   createStatementDiagnosticsReport: (
@@ -166,6 +167,7 @@ export interface StatementDetailsStateProps {
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
   uiConfig?: UIConfigState["pages"]["statementDetails"];
   isTenant?: UIConfigState["isTenant"];
+  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -352,6 +354,7 @@ export class StatementDetails extends React.Component<
       showStatementDiagnosticsLink: true,
     },
     isTenant: false,
+    hasViewActivityRedactedRole: false,
   };
 
   changeSortSetting = (ss: SortSetting): void => {
@@ -370,19 +373,24 @@ export class StatementDetails extends React.Component<
 
   componentDidMount(): void {
     this.refreshStatements();
+    this.props.refreshUserSQLRoles();
     if (!this.props.isTenant) {
-      this.props.refreshStatementDiagnosticsRequests();
       this.props.refreshNodes();
       this.props.refreshNodesLiveness();
+      if (!this.props.hasViewActivityRedactedRole) {
+        this.props.refreshStatementDiagnosticsRequests();
+      }
     }
   }
 
   componentDidUpdate(): void {
     this.refreshStatements();
     if (!this.props.isTenant) {
-      this.props.refreshStatementDiagnosticsRequests();
       this.props.refreshNodes();
       this.props.refreshNodesLiveness();
+      if (!this.props.hasViewActivityRedactedRole) {
+        this.props.refreshStatementDiagnosticsRequests();
+      }
     }
   }
 
@@ -461,6 +469,7 @@ export class StatementDetails extends React.Component<
       onDiagnosticBundleDownload,
       nodeRegions,
       isTenant,
+      hasViewActivityRedactedRole,
     } = this.props;
     const { currentTab } = this.state;
 
@@ -810,7 +819,7 @@ export class StatementDetails extends React.Component<
             </Col>
           </Row>
         </TabPane>
-        {!isTenant && (
+        {!isTenant && !hasViewActivityRedactedRole && (
           <TabPane
             tab={`Diagnostics ${
               hasDiagnosticReports ? `(${diagnosticsReports.length})` : ""
