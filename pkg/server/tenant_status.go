@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -887,4 +889,72 @@ func (t *tenantStatusServer) TableIndexStats(
 
 	return getTableIndexUsageStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
 		t.sqlServer.internalExecutor)
+}
+
+// Details returns information for a given instance ID such as
+// the instance address and build info.
+func (t *tenantStatusServer) Details(
+	ctx context.Context, req *serverpb.DetailsRequest,
+) (*serverpb.DetailsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	instanceID, local, err := t.parseInstanceID(req.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.Details(ctx, req)
+	}
+	localInstance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, t.sqlServer.SQLInstanceID())
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "local instance unavailable")
+	}
+	resp := &serverpb.DetailsResponse{
+		NodeID:     roachpb.NodeID(instanceID),
+		BuildInfo:  build.GetInfo(),
+		SQLAddress: util.MakeUnresolvedAddr("", localInstance.InstanceAddr),
+	}
+
+	return resp, nil
+}
+
+func (t *tenantStatusServer) NodesList(
+	ctx context.Context, req *serverpb.NodesListRequest,
+) (*serverpb.NodesListResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// The node list contains details about the network addresses which are admin-only.
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+	instances, err := t.sqlServer.sqlInstanceProvider.GetAllInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var resp serverpb.NodesListResponse
+	for _, instance := range instances {
+		// For SQL only servers, the (RPC) Address and SQL address is the same.
+		nodeDetails := serverpb.NodeDetails{
+			NodeID:     int32(instance.InstanceID),
+			Address:    util.MakeUnresolvedAddr("", instance.InstanceAddr),
+			SQLAddress: util.MakeUnresolvedAddr("", instance.InstanceAddr),
+		}
+		resp.Nodes = append(resp.Nodes, nodeDetails)
+	}
+	return &resp, err
 }

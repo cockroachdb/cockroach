@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -111,11 +112,30 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.table_indexes",
 }
 
+// getNodesList constructs a NodesListResponse using the Nodes API. We need this while building
+// the nodes list for older servers that don't support the new NodesList API.
+func (zc *debugZipContext) getNodesList(ctx context.Context) (*serverpb.NodesListResponse, error) {
+	nodes, err := zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	nodesList := &serverpb.NodesListResponse{}
+	for _, node := range nodes.Nodes {
+		nodeDetails := serverpb.NodeDetails{
+			NodeID:     int32(node.Desc.NodeID),
+			Address:    node.Desc.Address,
+			SQLAddress: node.Desc.SQLAddress,
+		}
+		nodesList.Nodes = append(nodesList.Nodes, nodeDetails)
+	}
+	return nodesList, nil
+}
+
 // collectClusterData runs the data collection that only needs to
 // occur once for the entire cluster.
 func (zc *debugZipContext) collectClusterData(
 	ctx context.Context, firstNodeDetails *serverpb.DetailsResponse,
-) (nodeList []statuspb.NodeStatus, livenessByNodeID nodeLivenesses, err error) {
+) (nodeList []serverpb.NodeDetails, livenessByNodeID nodeLivenesses, err error) {
 	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status)
 
 	for _, r := range clusterWideZipRequests {
@@ -135,10 +155,15 @@ func (zc *debugZipContext) collectClusterData(
 	}
 
 	{
-		var nodes *serverpb.NodesResponse
+		var nodes *serverpb.NodesListResponse
 		s := zc.clusterPrinter.start("requesting nodes")
 		err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
-			nodes, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+			nodes, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{})
+			if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
+				// Fallback to the old Nodes API; this could occur while connecting to
+				// an older node which does not have the NodesList API implemented.
+				nodes, err = zc.getNodesList(ctx)
+			}
 			return err
 		})
 		if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodes, err); cErr != nil {
@@ -149,11 +174,12 @@ func (zc *debugZipContext) collectClusterData(
 		// still want to inspect the per-node endpoints on the head
 		// node. As per the above, we were able to connect at least to
 		// that.
-		nodeList = []statuspb.NodeStatus{{Desc: roachpb.NodeDescriptor{
-			NodeID:     firstNodeDetails.NodeID,
+		nodeList = []serverpb.NodeDetails{{
+			NodeID:     int32(firstNodeDetails.NodeID),
 			Address:    firstNodeDetails.Address,
 			SQLAddress: firstNodeDetails.SQLAddress,
-		}}}
+		}}
+
 		if nodes != nil {
 			// If the nodes were found, use that instead.
 			nodeList = nodes.Nodes
@@ -174,6 +200,5 @@ func (zc *debugZipContext) collectClusterData(
 			livenessByNodeID = lresponse.Statuses
 		}
 	}
-
 	return nodeList, livenessByNodeID, nil
 }

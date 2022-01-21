@@ -539,6 +539,17 @@ func (t *TestTenant) HTTPAddr() string {
 	return t.httpAddr
 }
 
+// RPCAddr is part of the TestTenantInterface interface.
+func (t *TestTenant) RPCAddr() string {
+	// The RPC and SQL functionality for tenants is multiplexed
+	// on the same address. Having a separate interface to access
+	// for the two addresses makes it easier to distinguish
+	// the use case for which the address is being used.
+	// This also provides parity between SQL only servers and
+	// regular servers.
+	return t.sqlAddr
+}
+
 // PGServer is part of TestTenantInterface.
 func (t *TestTenant) PGServer() interface{} {
 	return t.pgServer
