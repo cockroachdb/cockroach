@@ -72,28 +72,26 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	}
 	benchesMap := make(map[string]bool)
 	for _, pkg := range pkgs {
-		pkg = strings.TrimPrefix(pkg, "//")
-		pkg = strings.TrimRight(pkg, "/")
-
-		if !strings.HasPrefix(pkg, "pkg/") {
-			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+		dir, isRecursive, tag, err := d.parsePkg(pkg)
+		if err != nil {
+			return err
 		}
-
-		if strings.HasSuffix(pkg, "/...") {
-			pkg = strings.TrimSuffix(pkg, "/...")
+		if isRecursive {
 			// Use `git grep` to find all Go files that contain benchmark tests.
-			out, err := d.exec.CommandContextSilent(ctx, "git", "grep", "-l", "^func Benchmark", "--", pkg+"/*_test.go")
+			out, err := d.exec.CommandContextSilent(ctx, "git", "grep", "-l", "^func Benchmark", "--", dir+"/*_test.go")
 			if err != nil {
 				return err
 			}
 			files := strings.Split(strings.TrimSpace(string(out)), "\n")
 			for _, file := range files {
-				dir, _ := filepath.Split(file)
+				dir, _ = filepath.Split(file)
 				dir = strings.TrimSuffix(dir, "/")
 				benchesMap[dir] = true
 			}
+		} else if tag != "" {
+			return fmt.Errorf("malformed package %q, tags not supported in 'bench' command", pkg)
 		} else {
-			benchesMap[pkg] = true
+			benchesMap[dir] = true
 		}
 	}
 	// De-duplicate and sort the list of benches to run.
