@@ -1,8 +1,18 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "compose",
     srcs = ["empty.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/compose",
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "compose_test",
+    srcs = ["compose_test.go"],
+    data = ["//pkg/compose:compare/docker-compose.yml"],
+    embed = [":compose"],
+    gotags = ["compose"],
+    tags = ["integration"],
+    deps = ["//pkg/build/bazel"],
 )

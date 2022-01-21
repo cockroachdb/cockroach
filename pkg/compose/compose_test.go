@@ -24,6 +24,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 )
 
 var (
@@ -32,9 +34,19 @@ var (
 )
 
 func TestComposeCompare(t *testing.T) {
+	var dockerComposeYml string
+	if bazel.BuiltWithBazel() {
+		var err error
+		dockerComposeYml, err = bazel.Runfile("pkg/compose/compare/docker-compose.yml")
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		dockerComposeYml = filepath.Join("compare", "docker-compose.yml")
+	}
 	cmd := exec.Command(
 		"docker-compose",
-		"-f", filepath.Join("compare", "docker-compose.yml"),
+		"-f", dockerComposeYml,
 		"--no-ansi",
 		"up",
 		"--force-recreate",
