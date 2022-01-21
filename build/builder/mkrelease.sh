@@ -9,8 +9,7 @@
 # Possible configurations:
 #
 #   - amd64-linux-gnu:      amd64, Linux 2.6.32, dynamically link glibc 2.12.2
-#   - amd64-linux-msan:     amd64, recent Linux, enable Clang's memory sanitizer
-#   - arm64-linux-gnueabi:  arm64, Linux 3.7.10, dynamically link glibc 2.12.2
+#   - arm64-linux-gnu:      arm64, Linux 3.7.10, dynamically link glibc 2.12.2
 #   - amd64-darwin:         amd64, macOS 10.9
 #   - amd64-windows:        amd64, Windows 8, statically link all non-Windows libraries
 #   - s390x-linux-gnu:      s390x, Linux 2.6.32, dynamically link glibc 2.12.2
@@ -49,7 +48,7 @@ case "${1-}" in
       SUFFIX=-linux-2.6.32-gnu-amd64
     ) ;;
 
-  ?(arm64-)linux?(-gnueabi))
+  ?(arm64-)linux?(-gnu))
     # Manually set the correct values for configure checks that libkrb5 won't be
     # able to perform because we're cross-compiling.
     export krb5_cv_attr_constructor_destructor=yes
@@ -59,19 +58,9 @@ case "${1-}" in
       XGOOS=linux
       XGOARCH=arm64
       XCMAKE_SYSTEM_NAME=Linux
-      TARGET_TRIPLE=aarch64-unknown-linux-gnueabi
+      TARGET_TRIPLE=aarch64-unknown-linux-gnu
       LDFLAGS="-static-libgcc -static-libstdc++"
       SUFFIX=-linux-3.7.10-gnu-aarch64
-    ) ;;
-
-  ?(amd64-)linux-msan)
-    flags="-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -I/libcxx_msan/include -I/libcxx_msan/include/c++/v1"
-    args=(
-      CFLAGS="$flags"
-      CXXFLAGS="$flags"
-      LDFLAGS="-fsanitize=memory -stdlib=libc++ -L/libcxx_msan/lib -lc++abi -Wl,-rpath,/libcxx_msan/lib"
-      GOFLAGS=-msan
-      TAGS=stdmalloc
     ) ;;
 
   ?(amd64-)darwin)

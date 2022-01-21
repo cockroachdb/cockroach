@@ -1,11 +1,13 @@
 # Common helpers for teamcity-*.sh scripts.
 
 # root is the absolute path to the root directory of the repository.
-root=$(cd "$(dirname "$0")/.." && pwd)
+root="$(dirname $(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ))"
 
 source "$root/build/teamcity-common-support.sh"
+source "$root/build/teamcity/util.sh"
 
 remove_files_on_exit() {
+  rm -f ~/.ssh/id_rsa{,.pub}
   common_support_remove_files_on_exit
 }
 trap remove_files_on_exit EXIT
@@ -101,6 +103,12 @@ function run_json_test() {
     rm -f "${fullfile}"
   fi
   rm -f "${tmpfile}" artifacts/stripped.txt
+
+  # Some unit tests test automatic ballast creation. These ballasts can be
+  # larger than the maximum artifact size. Remove any artifacts with the
+  # EMERGENCY_BALLAST filename.
+  find artifacts -name "EMERGENCY_BALLAST" -delete
+
   tc_end_block "artifacts"
 
   # Make it easier to figure out whether we're exiting because of a test failure
@@ -111,13 +119,21 @@ function run_json_test() {
   return $status
 }
 
-function maybe_stress() {
+function would_stress() {
   # Don't stressrace on the release branches; we only want that to happen on the
   # PRs. There's no need in making master flakier than it needs to be; nightly
   # stress will weed out the flaky tests.
-  # NB: as a consequence of the above, this code doesn't know about posting
-  # Github issues.
   if tc_release_branch; then
+    return 1
+  else
+    return 0
+  fi
+}
+
+function maybe_stress() {
+   # NB: This code doesn't know about posting Github issues as we don't stress on
+   # the release branches.
+  if ! would_stress; then
     return 0
   fi
 
@@ -126,6 +142,7 @@ function maybe_stress() {
 
   block="Maybe ${target} pull request"
   tc_start_block "${block}"
+  run build/builder.sh make protobuf
   run build/builder.sh go install ./pkg/cmd/github-pull-request-make
   run_json_test build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET="${target}" github-pull-request-make
   tc_end_block "${block}"
@@ -269,18 +286,11 @@ tc_release_branch() {
   [[ "$TC_BUILD_BRANCH" == master || "$TC_BUILD_BRANCH" == release-* || "$TC_BUILD_BRANCH" == provisional_* ]]
 }
 
-tc_start_block() {
-  echo "##teamcity[blockOpened name='$1']"
-}
 
 if_tc() {
   if [[ "${TC_BUILD_ID-}" ]]; then
     "$@"
   fi
-}
-
-tc_end_block() {
-  echo "##teamcity[blockClosed name='$1']"
 }
 
 tc_prepare() {
@@ -289,4 +299,42 @@ tc_prepare() {
   run mkdir -p artifacts
   maybe_ccache
   tc_end_block "Prepare environment"
+}
+
+generate_ssh_key() {
+  if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
+    ssh-keygen -q -N "" -f ~/.ssh/id_rsa
+  fi
+}
+
+maybe_require_release_justification() {
+    # Set this to 1 to require a "release justification" note in the commit message
+    # or the PR description.
+    require_justification=0
+    if [ "$require_justification" = 1 ]; then
+        tc_start_block "Ensure commit message contains a release justification"
+        # Ensure master branch commits have a release justification.
+        if [[ $(git log -n1 | grep -ci "Release justification: \S\+") == 0 ]]; then
+            echo "Build Failed. No Release justification in the commit message or in the PR description." >&2
+            echo "Commits must have a Release justification of the form:" >&2
+            echo "Release justification: <some description of why this commit is safe to add to the release branch.>" >&2
+            exit 1
+        fi
+        tc_end_block "Ensure commit message contains a release justification"
+    fi
+}
+
+# Call this function with one argument, the error message to print if the
+# workspace is dirty.
+check_workspace_clean() {
+  # The workspace is clean iff `git status --porcelain` produces no output. Any
+  # output is either an error message or a listing of an untracked/dirty file.
+  if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
+    git status >&2 || true
+    git diff -a >&2 || true
+    echo "====================================================" >&2
+    echo "Some automatically generated code is not up to date." >&2
+    echo $1 >&2
+    exit 1
+  fi
 }
