@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
@@ -246,7 +245,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		ScanInterval:                10 * time.Minute,
 		HistogramWindowInterval:     metric.TestSampleInterval,
-		ProtectedTimestampCache:     protectedts.EmptyCache(clock),
+		ProtectedTimestampReader:    spanconfig.EmptyProtectedTSReader(clock),
 
 		// Use a constant empty system config, which mirrors the previously
 		// existing logic to install an empty system config in gossip.
@@ -732,7 +731,7 @@ type Store struct {
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
 	sstSnapshotStorage SSTSnapshotStorage
-	protectedtsCache   protectedts.Cache
+	protectedtsReader  spanconfig.ProtectedTSReader
 	ctSender           *sidetransport.Sender
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
@@ -1044,10 +1043,9 @@ type StoreConfig struct {
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
 
-	// ProtectedTimestampCache maintains the state of the protected timestamp
-	// subsystem. It is queried during the GC process and in the handling of
-	// AdminVerifyProtectedTimestampRequest.
-	ProtectedTimestampCache protectedts.Cache
+	// ProtectedTimestampReader provides a read-only view into the protected
+	// timestamp subsystem. It is queried during the GC process.
+	ProtectedTimestampReader spanconfig.ProtectedTSReader
 
 	// KV Memory Monitor. Must be non-nil for production, and can be nil in some
 	// tests.
@@ -1227,7 +1225,7 @@ func NewStore(
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
 		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
-	s.protectedtsCache = cfg.ProtectedTimestampCache
+	s.protectedtsReader = cfg.ProtectedTimestampReader
 
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.

@@ -11,6 +11,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/stop",

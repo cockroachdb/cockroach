@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -56,6 +57,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -511,36 +513,37 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	systemConfigWatcher := systemconfigwatcher.New(
 		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
 	)
+	protectedTSReader := spanconfigptsreader.NewAdapter(protectedtsProvider.(*ptprovider.Provider).Cache.(*ptcache.Cache))
 
 	storeCfg := kvserver.StoreConfig{
-		DefaultSpanConfig:       cfg.DefaultZoneConfig.AsSpanConfig(),
-		Settings:                st,
-		AmbientCtx:              cfg.AmbientCtx,
-		RaftConfig:              cfg.RaftConfig,
-		Clock:                   clock,
-		DB:                      db,
-		Gossip:                  g,
-		NodeLiveness:            nodeLiveness,
-		Transport:               raftTransport,
-		NodeDialer:              nodeDialer,
-		RPCContext:              rpcContext,
-		ScanInterval:            cfg.ScanInterval,
-		ScanMinIdleTime:         cfg.ScanMinIdleTime,
-		ScanMaxIdleTime:         cfg.ScanMaxIdleTime,
-		HistogramWindowInterval: cfg.HistogramWindowInterval(),
-		StorePool:               storePool,
-		SQLExecutor:             internalExecutor,
-		LogRangeEvents:          cfg.EventLogEnabled,
-		RangeDescriptorCache:    distSender.RangeDescriptorCache(),
-		TimeSeriesDataStore:     tsDB,
-		ClosedTimestampSender:   ctSender,
-		ClosedTimestampReceiver: ctReceiver,
-		ExternalStorage:         externalStorage,
-		ExternalStorageFromURI:  externalStorageFromURI,
-		ProtectedTimestampCache: protectedtsProvider,
-		KVMemoryMonitor:         kvMemoryMonitor,
-		RangefeedBudgetFactory:  rangeReedBudgetFactory,
-		SystemConfigProvider:    systemConfigWatcher,
+		DefaultSpanConfig:        cfg.DefaultZoneConfig.AsSpanConfig(),
+		Settings:                 st,
+		AmbientCtx:               cfg.AmbientCtx,
+		RaftConfig:               cfg.RaftConfig,
+		Clock:                    clock,
+		DB:                       db,
+		Gossip:                   g,
+		NodeLiveness:             nodeLiveness,
+		Transport:                raftTransport,
+		NodeDialer:               nodeDialer,
+		RPCContext:               rpcContext,
+		ScanInterval:             cfg.ScanInterval,
+		ScanMinIdleTime:          cfg.ScanMinIdleTime,
+		ScanMaxIdleTime:          cfg.ScanMaxIdleTime,
+		HistogramWindowInterval:  cfg.HistogramWindowInterval(),
+		StorePool:                storePool,
+		SQLExecutor:              internalExecutor,
+		LogRangeEvents:           cfg.EventLogEnabled,
+		RangeDescriptorCache:     distSender.RangeDescriptorCache(),
+		TimeSeriesDataStore:      tsDB,
+		ClosedTimestampSender:    ctSender,
+		ClosedTimestampReceiver:  ctReceiver,
+		ExternalStorage:          externalStorage,
+		ExternalStorageFromURI:   externalStorageFromURI,
+		ProtectedTimestampReader: protectedTSReader,
+		KVMemoryMonitor:          kvMemoryMonitor,
+		RangefeedBudgetFactory:   rangeReedBudgetFactory,
+		SystemConfigProvider:     systemConfigWatcher,
 	}
 
 	var spanConfig struct {

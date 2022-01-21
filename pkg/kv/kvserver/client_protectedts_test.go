@@ -18,10 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -212,10 +213,10 @@ func TestProtectedTimestamps(t *testing.T) {
 
 	// Verify that the record did indeed make its way down into KV where the
 	// replica can read it from.
-	ptp := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+	ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptp, ptsRec.Timestamp, ptsRec.DeprecatedSpans),
+		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans),
 	)
 
 	// Make a new record that is doomed to fail.
@@ -227,11 +228,12 @@ func TestProtectedTimestamps(t *testing.T) {
 	_, err = ptsWithDB.GetRecord(ctx, nil /* txn */, failedRec.ID.GetUUID())
 	require.NoError(t, err)
 
+	// Verify that the record did indeed make its way down into KV where the
 	// replica can read it from. We then verify (below) that the failed record
 	// does not affect the ability to GC.
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptp, failedRec.Timestamp, failedRec.DeprecatedSpans),
+		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans),
 	)
 
 	// Add a new record that is after the old record.
@@ -242,7 +244,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &laterRec))
 	require.NoError(
 		t,
-		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptp, laterRec.Timestamp, laterRec.DeprecatedSpans),
+		verifyProtectionTimestampExistsOnSpans(ctx, tc, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans),
 	)
 
 	// Release the record that had succeeded and ensure that GC eventually
@@ -271,27 +273,32 @@ func TestProtectedTimestamps(t *testing.T) {
 	require.Equal(t, int(state.NumRecords), len(state.Records))
 }
 
+// verifyProtectionTimestampExistsOnSpans refreshes the PTS state in KV and
+// ensures a protection at the given protectionTimestamp exists for all the
+// supplied spans.
 func verifyProtectionTimestampExistsOnSpans(
 	ctx context.Context,
 	tc *testcluster.TestCluster,
-	provider protectedts.Provider,
-	pts hlc.Timestamp,
+	ptsReader spanconfig.ProtectedTSReader,
+	protectionTimestamp hlc.Timestamp,
 	spans roachpb.Spans,
 ) error {
-	if err := provider.Refresh(ctx, tc.Server(0).Clock().Now()); err != nil {
+	if err := spanconfigptsreader.TestingRefreshPTSState(
+		ctx, ptsReader, tc.Server(0).Clock().Now(),
+	); err != nil {
 		return err
 	}
 	for _, sp := range spans {
-		timestamps, _ := provider.GetProtectionTimestamps(ctx, sp)
+		timestamps, _ := ptsReader.GetProtectionTimestamps(ctx, sp)
 		found := false
 		for _, ts := range timestamps {
-			if ts.Equal(pts) {
+			if ts.Equal(protectionTimestamp) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			return errors.Newf("protection timestamp %s does not exist on span %s", pts, sp)
+			return errors.Newf("protection timestamp %s does not exist on span %s", protectionTimestamp, sp)
 		}
 	}
 	return nil

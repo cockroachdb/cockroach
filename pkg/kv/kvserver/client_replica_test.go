@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -3517,10 +3518,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 			t.Helper()
 			testutils.SucceedsSoon(t, func() error {
 				for i := 0; i < tc.NumServers(); i++ {
-					ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-					if ptp.Iterate(ctx, tableKey, tableKey, func(record *ptpb.Record) (wantMore bool) {
-						return false
-					}).Less(min) {
+					ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
+					_, asOf := ptsReader.GetProtectionTimestamps(ctx, tableSpan)
+					if asOf.Less(min) {
 						return errors.Errorf("not yet read")
 					}
 				}
@@ -3572,10 +3572,13 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}
 		refreshPastLeaseStart = func(t *testing.T) {
 			for i := 0; i < tc.NumServers(); i++ {
-				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+				ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				l, _ := r.GetLease()
-				require.NoError(t, ptp.Refresh(ctx, l.Start.ToTimestamp().Next()))
+				require.NoError(
+					t,
+					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, l.Start.ToTimestamp().Next()),
+				)
 				r.ReadProtectedTimestamps(ctx)
 			}
 		}
