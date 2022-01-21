@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -41,6 +42,10 @@ func DropView(b BuildCtx, n *tree.DropView) {
 		// Mutate the AST to have the fully resolved name from above, which will be
 		// used for both event logging and errors.
 		name.ObjectNamePrefix = prefix.NamePrefix()
+		// We don't support dropping temporary tables.
+		if view.IsTemporary() {
+			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary view"))
+		}
 		if view.MaterializedView() && !n.IsMaterialized {
 			panic(errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", view.GetName()),
 				"use the corresponding MATERIALIZED VIEW command"))
