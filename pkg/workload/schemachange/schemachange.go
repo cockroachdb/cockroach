@@ -137,7 +137,7 @@ func (s *schemaChange) Tables() []workload.Table {
 // Hooks implements the workload.Hookser interface.
 func (s *schemaChange) Hooks() workload.Hooks {
 	return workload.Hooks{
-		PostRun: func(_ time.Duration) error {
+		PostRun: func(_ context.Context, _ time.Duration) error {
 			return s.closeJSONLogFile()
 		},
 	}

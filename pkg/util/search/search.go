@@ -30,23 +30,27 @@ type Searcher interface {
 	// The following two methods are un-exported and are used by
 	// searchWithSearcher to provide a default implementation of Search.
 
-	// current returns the current value of the Searcher.
-	current() int
+	// Current returns the current value of the Searcher.
+	Current() int
 
-	// step updates the Searcher with the results of a single search step.
-	step(pass bool) (found bool)
+	// Step updates the Searcher with the results of a single search step.
+	Step(pass bool) (found bool)
+
+	// TryStep is just like step, but returns an error instead of panicing
+	// if preconditions fail.
+	TryStep(pass bool) (found bool, err error)
 }
 
 // Used to provide a default implementation of Searcher.Search.
 func searchWithSearcher(s Searcher, pred Predicate) (int, error) {
 	for {
-		pass, err := pred(s.current())
+		pass, err := pred(s.Current())
 		if err != nil {
 			return 0, err
 		}
-		found := s.step(pass)
+		found := s.Step(pass)
 		if found {
-			return s.current(), nil
+			return s.Current(), nil
 		}
 	}
 }
@@ -56,25 +60,25 @@ type searchSpace struct {
 	max int // min known failing
 }
 
-func (ss *searchSpace) bound(pass bool, cur, prec int) (bool, int) {
+func (ss *searchSpace) bound(pass bool, cur, prec int) (bool, int, error) {
 	if prec < 1 {
-		panic(errors.Errorf("precision must be >= 1; found %d", prec))
+		return false, 0, errors.Errorf("precision must be >= 1; found %d", prec)
 	}
 	if pass {
 		if cur >= ss.max {
-			panic(errors.Errorf("passed at index above max; max=%v, cur=%v", ss.max, cur))
+			return false, 0, errors.Errorf("passed at index above max; max=%v, cur=%v", ss.max, cur)
 		}
 		ss.min = cur
 	} else {
 		if cur <= ss.min {
-			panic(errors.Errorf("failed at index below min; min=%v, cur=%v", ss.min, cur))
+			return false, 0, errors.Errorf("failed at index below min; min=%v, cur=%v", ss.min, cur)
 		}
 		ss.max = cur
 	}
 	if ss.max-ss.min <= prec {
-		return true, mid(ss.min, ss.max)
+		return true, mid(ss.min, ss.max), nil
 	}
-	return false, 0
+	return false, 0, nil
 }
 
 type binarySearcher struct {
@@ -110,17 +114,29 @@ func (bs *binarySearcher) Search(pred Predicate) (int, error) {
 	return searchWithSearcher(bs, pred)
 }
 
-func (bs *binarySearcher) current() int { return bs.cur }
+func (bs *binarySearcher) Current() int { return bs.cur }
 
-func (bs *binarySearcher) step(pass bool) (found bool) {
-	found, val := bs.ss.bound(pass, bs.cur, bs.prec)
+func (bs *binarySearcher) Step(pass bool) (found bool) {
+	found, err := bs.TryStep(pass)
+	if err != nil {
+		panic(err)
+	}
+	return found
+}
+
+func (bs *binarySearcher) TryStep(pass bool) (found bool, err error) {
+	found, val, err := bs.ss.bound(pass, bs.cur, bs.prec)
+	if err != nil {
+		return false, err
+	}
+
 	if found {
 		bs.cur = val
-		return true
+		return true, nil
 	}
 
 	bs.cur = mid(bs.ss.min, bs.ss.max)
-	return false
+	return false, nil
 }
 
 type lineSearcher struct {
@@ -173,13 +189,25 @@ func (ls *lineSearcher) Search(pred Predicate) (int, error) {
 	return searchWithSearcher(ls, pred)
 }
 
-func (ls *lineSearcher) current() int { return ls.cur }
+func (ls *lineSearcher) Current() int { return ls.cur }
 
-func (ls *lineSearcher) step(pass bool) (found bool) {
-	found, val := ls.ss.bound(pass, ls.cur, ls.prec)
+func (ls *lineSearcher) Step(pass bool) (found bool) {
+	found, err := ls.TryStep(pass)
+	if err != nil {
+		panic(err)
+	}
+	return found
+}
+
+func (ls *lineSearcher) TryStep(pass bool) (found bool, err error) {
+	found, val, err := ls.ss.bound(pass, ls.cur, ls.prec)
+	if err != nil {
+		return false, err
+	}
+
 	if found {
 		ls.cur = val
-		return true
+		return true, nil
 	}
 
 	neg := 1
@@ -210,7 +238,7 @@ func (ls *lineSearcher) step(pass bool) (found bool) {
 	maxStep := ls.ss.max - ls.cur - 1
 	ls.stepSize = max(min(ls.stepSize, maxStep), minStep)
 	ls.cur = ls.cur + ls.stepSize
-	return false
+	return false, nil
 }
 
 func mid(a, b int) int {

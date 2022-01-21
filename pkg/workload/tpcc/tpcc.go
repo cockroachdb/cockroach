@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -60,7 +62,8 @@ type tpcc struct {
 	deprecatedFkIndexes bool
 	dbOverride          string
 
-	txInfos []txInfo
+	counters txCounters
+	txInfos  []txInfo
 	// deck contains indexes into the txInfos slice.
 	deck []int
 
@@ -99,6 +102,49 @@ type tpcc struct {
 		values [][]int
 	}
 	localsPool *sync.Pool
+
+	// findBest is a special mode indicating that we should continue rerunning
+	// workload until we find maximum performance.
+	adaptiveState struct {
+		// findBest is true if --find-best specified.
+		// All fields below ignored unless findBest is true.
+		findBest bool
+
+		signalCompletion func()        // Stops this round of benchmarking
+		duration         time.Duration // Duration as specified by --duration flag
+		rampDuration     time.Duration // Ramp duration as specified by --ramp flag.
+
+		// If we have been running for at least minDuration and the efficiency too low,
+		// we will abort current run and adjust active warehouse count accordingly.
+		minDuration       time.Duration
+		lastAdaptiveCheck time.Time
+
+		maxEfficiencyFound bool
+		maxWarehouseFound  bool
+
+		targetEff float64
+		searcher  search.Searcher
+	}
+}
+
+type runStat struct {
+	elapsed                                   float64
+	tpmC, eff, mean, p50, p90, p95, p99, p100 float64
+	warehouses                                int
+}
+
+func (rs runStat) String() string {
+	return fmt.Sprintf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f",
+		rs.elapsed,
+		rs.tpmC,
+		rs.eff,
+		rs.mean,
+		rs.p50,
+		rs.p90,
+		rs.p95,
+		rs.p99,
+		rs.p100,
+	)
 }
 
 type waitSetter struct {
@@ -181,6 +227,8 @@ var tpccMeta = workload.Meta{
 			`survival-goal`:            {RuntimeOnly: true},
 			`replicate-static-columns`: {RuntimeOnly: true},
 			`deprecated-fk-indexes`:    {RuntimeOnly: true},
+			`find-best`:                {RuntimeOnly: true},
+			`adaptive-min-duration`:    {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -213,6 +261,8 @@ var tpccMeta = workload.Meta{
 		g.flags.StringSliceVar(&g.multiRegionCfg.regions, "regions", []string{}, "Regions to use for multi-region partitioning. The first region is the PRIMARY REGION. Does not work with --zones.")
 		g.flags.Var(&g.multiRegionCfg.survivalGoal, "survival-goal", "Survival goal to use for multi-region setups. Allowed values: [zone, region].")
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
+		g.flags.BoolVar(&g.adaptiveState.findBest, "find-best", false, `Keep running workload, increasing active warehouse count, until max warehouse, and best warehouse values are found`)
+		g.flags.DurationVar(&g.adaptiveState.minDuration, "adaptive-min-duration", 5*time.Minute, "Run exploration phase for this amount of time.")
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
@@ -260,12 +310,142 @@ func (*tpcc) Meta() workload.Meta { return tpccMeta }
 // Flags implements the Flagser interface.
 func (w *tpcc) Flags() workload.Flags { return w.flags }
 
+func (w *tpcc) histToRunStats(startElapsed time.Duration, t histogram.Tick) runStat {
+	tpmC := float64(t.Cumulative.TotalCount()) / startElapsed.Seconds() * 60
+	return runStat{
+		elapsed:    startElapsed.Seconds(),
+		tpmC:       tpmC,
+		eff:        100 * tpmC / (SpecWarehouseFactor * float64(w.activeWarehouses)),
+		mean:       time.Duration(t.Cumulative.Mean()).Seconds() * 1000,
+		p50:        time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds() * 1000,
+		p90:        time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds() * 1000,
+		p95:        time.Duration(t.Cumulative.ValueAtQuantile(95)).Seconds() * 1000,
+		p99:        time.Duration(t.Cumulative.ValueAtQuantile(99)).Seconds() * 1000,
+		p100:       time.Duration(t.Cumulative.ValueAtQuantile(100)).Seconds() * 1000,
+		warehouses: w.activeWarehouses,
+	}
+}
+
+const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
+const adaptiveHeader = totalHeader + "___aWH"
+const newOrderName = `newOrder`
+
+const maxTPCCEffThreshold float64 = 95      // Efficiency threshold for the purpose of calculating max tpmC.
+const maxWarehouseEffThreshold float64 = 87 // Efficiency below this value considered failure.
+const effErrMargin float64 = 3
+
+// adaptiveTick is invoked by workload if tpcc runs under --find-best mode.
+// This function periodically analyzes results so far, and if they are not what
+// we expect them to be, the current workload run is aborted, and a new one with adjusted
+// active warehouse count is started.
+func (w *tpcc) adaptiveTick(startElapsed time.Duration, t histogram.Tick) {
+	// Only care about new order table for the purpose of efficiency and tpmC calculation.
+	if t.Name != newOrderName {
+		return
+	}
+
+	// We ran longer than what was requested -- time to stop this run.
+	if startElapsed > w.adaptiveState.duration+w.adaptiveState.rampDuration {
+		log.Infof(context.Background(), "Completing workload: time expired")
+		w.adaptiveState.signalCompletion()
+		return
+	}
+
+	// Not going to bother checking anything unless we ran for at least adaptive duration.
+	minRunTime := w.adaptiveState.minDuration
+	if minRunTime <= w.adaptiveState.rampDuration {
+		minRunTime = w.adaptiveState.rampDuration + time.Minute
+	}
+	if startElapsed < minRunTime {
+		return
+	}
+
+	// Don't care to recompute tpmC unless we ran for at least a minute since last check.
+	if timeutil.Since(w.adaptiveState.lastAdaptiveCheck) < time.Minute {
+		return
+	}
+
+	// Must have some data collected; we'll be checking 90th percentile
+	// below, so require at least 10 values.
+	if t.Cumulative.TotalCount() < 10 {
+		return
+	}
+
+	w.adaptiveState.lastAdaptiveCheck = timeutil.Now()
+
+	// Terminate this run if observed efficiency too low, or latency too high.
+	rs := w.histToRunStats(startElapsed, t)
+	if rs.eff < w.adaptiveState.targetEff-effErrMargin || rs.p90 > 10000 /* 10 sec */ {
+		fmt.Printf("Restarting run for active warehouse %d: eff=%f, p90(ms)=%f\n",
+			w.activeWarehouses, rs.eff, rs.p90)
+		w.adaptiveState.signalCompletion()
+		return
+	}
+
+	fmt.Println(adaptiveHeader)
+	fmt.Printf("%s %9d\n\n", rs, rs.warehouses)
+}
+
+func (w *tpcc) preRunConfiguration(retry bool) {
+	if w.numConns == 0 || retry {
+		// If we're not waiting, open up a connection for each worker. If we are
+		// waiting, we only use up to a set number of connections per warehouse.
+		// This isn't mandated by the spec, but opening a connection per worker
+		// when they each spend most of their time waiting is wasteful.
+		if w.waitFraction == 0 {
+			w.numConns = w.workers
+		} else {
+			w.numConns = w.activeWarehouses * numConnsPerWarehouse
+		}
+	}
+
+	if w.workers == 0 || retry {
+		w.workers = w.activeWarehouses * NumWorkersPerWarehouse
+	}
+
+	w.auditor = newAuditor(w.activeWarehouses)
+}
+
 // Hooks implements the Hookser interface.
 func (w *tpcc) Hooks() workload.Hooks {
+	var setSignalCompletion func(time.Duration, time.Duration, func()) error
+	var tickHook func(startElapsed time.Duration, t histogram.Tick)
+	if w.adaptiveState.findBest {
+		setSignalCompletion = func(duration time.Duration, rampDuration time.Duration, f func()) error {
+			if duration == 0 {
+				return errors.AssertionFailedf("adaptive mode requires --duration")
+			}
+			w.adaptiveState.duration = duration
+			w.adaptiveState.rampDuration = rampDuration
+			var signalOnce sync.Once
+			w.adaptiveState.signalCompletion = func() {
+				signalOnce.Do(f)
+			}
+			return nil
+		}
+		tickHook = w.adaptiveTick
+	}
+
 	return workload.Hooks{
 		Validate: func() error {
 			if w.warehouses < 1 {
 				return errors.Errorf(`--warehouses must be positive`)
+			}
+
+			if w.adaptiveState.findBest {
+				if w.activeWarehouses == 0 {
+					w.activeWarehouses = w.warehouses / 2
+				}
+				if w.activeWarehouses >= w.warehouses {
+					return errors.Errorf(`--active-warehouses should not be >= to --warehouses with --find-best mode`)
+				}
+
+				// We'll kick off search for max efficiency configuration.
+				w.adaptiveState.targetEff = maxTPCCEffThreshold
+				precision := int(math.Max(1.0, float64(w.warehouses/200)))
+				initStepSize := 2 * precision
+				w.adaptiveState.searcher = search.NewLineSearcher(1, w.warehouses, w.activeWarehouses, initStepSize, precision)
+				fmt.Printf("Starting adaptive workload from %d active warehouses\n", w.activeWarehouses)
 			}
 
 			if w.activeWarehouses > w.warehouses {
@@ -321,22 +501,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 
 			w.initNonUniformRandomConstants()
-
-			if w.workers == 0 {
-				w.workers = w.activeWarehouses * NumWorkersPerWarehouse
-			}
-
-			if w.numConns == 0 {
-				// If we're not waiting, open up a connection for each worker. If we are
-				// waiting, we only use up to a set number of connections per warehouse.
-				// This isn't mandated by the spec, but opening a connection per worker
-				// when they each spend most of their time waiting is wasteful.
-				if w.waitFraction == 0 {
-					w.numConns = w.workers
-				} else {
-					w.numConns = w.activeWarehouses * numConnsPerWarehouse
-				}
-			}
+			w.preRunConfiguration(false)
 
 			if w.waitFraction > 0 && w.workers != w.activeWarehouses*NumWorkersPerWarehouse {
 				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --workers=%d`,
@@ -346,8 +511,6 @@ func (w *tpcc) Hooks() workload.Hooks {
 			if w.serializable {
 				w.txOpts = pgx.TxOptions{IsoLevel: pgx.Serializable}
 			}
-
-			w.auditor = newAuditor(w.activeWarehouses)
 
 			// Create a partitioner to help us partition the warehouses. The base-case is
 			// where w.warehouses == w.activeWarehouses and w.partitions == 1.
@@ -482,28 +645,21 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 			return w.partitionAndScatterWithDB(db)
 		},
-		PostRun: func(startElapsed time.Duration) error {
+		PostRun: func(ctx context.Context, startElapsed time.Duration) error {
 			w.auditor.runChecks(w.localWarehouses)
-			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader)
 
-			const newOrderName = `newOrder`
+			var finalRunStat runStat
 			w.reg.Tick(func(t histogram.Tick) {
 				if newOrderName == t.Name {
-					tpmC := float64(t.Cumulative.TotalCount()) / startElapsed.Seconds() * 60
-					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
-						startElapsed.Seconds(),
-						tpmC,
-						100*tpmC/(SpecWarehouseFactor*float64(w.activeWarehouses)),
-						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
-						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
-						time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds()*1000,
-						time.Duration(t.Cumulative.ValueAtQuantile(95)).Seconds()*1000,
-						time.Duration(t.Cumulative.ValueAtQuantile(99)).Seconds()*1000,
-						time.Duration(t.Cumulative.ValueAtQuantile(100)).Seconds()*1000,
-					)
+					finalRunStat = w.histToRunStats(startElapsed, t)
+					fmt.Println(finalRunStat)
 				}
 			})
+
+			if w.adaptiveState.findBest {
+				return w.maybeRetryToFindBest(ctx, finalRunStat, startElapsed)
+			}
 			return nil
 		},
 		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
@@ -520,7 +676,95 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 			return nil
 		},
+		CompletionHook: setSignalCompletion,
+		TickHook:       tickHook,
 	}
+}
+
+func (w *tpcc) maybeRetryToFindBest(ctx context.Context, rs runStat, ranFor time.Duration) error {
+	runCompleted := ranFor >= (w.adaptiveState.duration + w.adaptiveState.rampDuration)
+
+	restartWorkload := func() error {
+		// Give VMs some time to catch a breath and recover.
+		if w.adaptiveState.rampDuration > 0 {
+			fmt.Printf("Waiting for %s for VMs to cool down after run\n", w.adaptiveState.rampDuration)
+			t := timeutil.NewTimer()
+			t.Reset(w.adaptiveState.rampDuration)
+			defer t.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-t.C:
+			}
+		}
+
+		oldActive := w.activeWarehouses
+		w.activeWarehouses = w.adaptiveState.searcher.Current()
+		w.preRunConfiguration(true)
+		fmt.Printf("Restarting TPCC run with active warehouse count adjusted from %d to %d\n",
+			oldActive, w.activeWarehouses)
+		return workload.ErrRetryWorkload
+	}
+
+	// resetSearcher resets linear searcher.
+	// When we find what we are looking for (max efficiency), we reset the searcher
+	// to search between current active warehouse count and max warehouse to find
+	// max warehouse.
+	resetSearcher := func() {
+		precision := int(math.Max(1.0, float64(w.warehouses/200)))
+		initStepSize := 2 * precision
+		maxWH := w.warehouses
+		minWH := w.adaptiveState.searcher.Current()
+		start := minWH + initStepSize
+		if start > maxWH {
+			start = minWH + 1
+		}
+		fmt.Printf("Resetting search to search [%d, %d) starting at %d\n",
+			minWH, maxWH, start)
+		w.adaptiveState.targetEff = maxWarehouseEffThreshold
+		w.adaptiveState.searcher = search.NewLineSearcher(minWH, maxWH, start, initStepSize, precision)
+	}
+
+	if runCompleted && rs.eff > maxTPCCEffThreshold {
+		// We are done looking for max efficiency.  Switch to finding max warehouse.
+		fmt.Println(adaptiveHeader + "__maxTPMC")
+		fmt.Printf("%s %9d\n", rs, w.activeWarehouses)
+		w.adaptiveState.maxEfficiencyFound = w.adaptiveState.searcher.Step(true)
+
+		// We found max efficiency candidate, onwards to max warehouse search.
+		if w.adaptiveState.maxEfficiencyFound {
+			resetSearcher()
+		}
+		return restartWorkload()
+	}
+
+	if !w.adaptiveState.maxEfficiencyFound {
+		// We haven't discovered max warehouse -- efficiency too low.
+		_, err := w.adaptiveState.searcher.TryStep(false)
+		if err != nil {
+			return errors.Wrap(err, "failed to update searcher")
+		}
+		return restartWorkload()
+	}
+
+	if runCompleted && rs.eff > maxWarehouseEffThreshold && rs.eff < maxTPCCEffThreshold+effErrMargin {
+		// We are done looking for max warehouse
+		// (note: we require eff > maxWarehouseEffThreshold; anything lower is a failed run).
+		fmt.Println(adaptiveHeader + "__maxWh")
+		fmt.Printf("%s %9d\n", rs, w.activeWarehouses)
+		w.adaptiveState.maxWarehouseFound = w.adaptiveState.searcher.Step(true)
+
+		if w.adaptiveState.maxWarehouseFound {
+			return nil
+		}
+	}
+
+	// Not done yet with max warehouse search.
+	_, err := w.adaptiveState.searcher.TryStep(false)
+	if err != nil {
+		return errors.Wrap(err, "failed to update searcher")
+	}
+	return restartWorkload()
 }
 
 // Tables implements the Generator interface.
@@ -738,7 +982,9 @@ func (w *tpcc) Ops(
 		}
 	}
 
-	counters := setupTPCCMetrics(reg.Registerer())
+	if w.counters == nil {
+		w.counters = setupTPCCMetrics(reg.Registerer())
+	}
 
 	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
 	if err != nil {
@@ -871,7 +1117,7 @@ func (w *tpcc) Ops(
 		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
-			worker, err := newWorker(ctx, w, db, reg.GetHandle(), counters, warehouse)
+			worker, err := newWorker(ctx, w, db, reg.GetHandle(), w.counters, warehouse)
 			if err == nil {
 				ql.WorkerFns[idx] = worker.run
 			}

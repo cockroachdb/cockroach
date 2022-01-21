@@ -188,28 +188,28 @@ func TestSearchSpace(t *testing.T) {
 func TestBinarySearcher(t *testing.T) {
 	// Looking for 66.
 	bs := NewBinarySearcher(0, 100, 1)
-	require.Equal(t, bs.current(), 50)
+	require.Equal(t, bs.Current(), 50)
 
-	require.Equal(t, bs.step(pass), false)
-	require.Equal(t, bs.current(), 75)
+	require.Equal(t, bs.Step(pass), false)
+	require.Equal(t, bs.Current(), 75)
 
-	require.Equal(t, bs.step(fail), false)
-	require.Equal(t, bs.current(), 62)
+	require.Equal(t, bs.Step(fail), false)
+	require.Equal(t, bs.Current(), 62)
 
-	require.Equal(t, bs.step(pass), false)
-	require.Equal(t, bs.current(), 68)
+	require.Equal(t, bs.Step(pass), false)
+	require.Equal(t, bs.Current(), 68)
 
-	require.Equal(t, bs.step(fail), false)
-	require.Equal(t, bs.current(), 65)
+	require.Equal(t, bs.Step(fail), false)
+	require.Equal(t, bs.Current(), 65)
 
-	require.Equal(t, bs.step(pass), false)
-	require.Equal(t, bs.current(), 66)
+	require.Equal(t, bs.Step(pass), false)
+	require.Equal(t, bs.Current(), 66)
 
-	require.Equal(t, bs.step(pass), false)
-	require.Equal(t, bs.current(), 67)
+	require.Equal(t, bs.Step(pass), false)
+	require.Equal(t, bs.Current(), 67)
 
-	require.Equal(t, bs.step(fail), true)
-	require.Equal(t, bs.current(), 66)
+	require.Equal(t, bs.Step(fail), true)
+	require.Equal(t, bs.Current(), 66)
 
 	// Looking for 25. Should result in 26 because of precision.
 	bs = NewBinarySearcher(0, 100, 3)
@@ -231,71 +231,71 @@ func TestBinarySearcher(t *testing.T) {
 func TestLineSearcher(t *testing.T) {
 	// Looking for 66.
 	ls := NewLineSearcher(0, 100, 20 /* start */, 2 /* stepSize */, 1)
-	require.Equal(t, ls.current(), 20)
+	require.Equal(t, ls.Current(), 20)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 22)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 22)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 26)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 26)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 34)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 34)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 50)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 50)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 82)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 82)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 66)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 66)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 74)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 74)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 70)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 70)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 68)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 68)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 67)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 67)
 
-	require.Equal(t, ls.step(fail), true)
-	require.Equal(t, ls.current(), 66)
+	require.Equal(t, ls.Step(fail), true)
+	require.Equal(t, ls.Current(), 66)
 
 	// Looking for 9.
 	ls = NewLineSearcher(0, 100, 71 /* start */, 4 /* stepSize */, 2)
-	require.Equal(t, ls.current(), 71)
+	require.Equal(t, ls.Current(), 71)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 67)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 67)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 59)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 59)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 43)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 43)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 11)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 11)
 
-	require.Equal(t, ls.step(fail), false)
-	require.Equal(t, ls.current(), 1)
+	require.Equal(t, ls.Step(fail), false)
+	require.Equal(t, ls.Current(), 1)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 6)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 6)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 8)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 8)
 
-	require.Equal(t, ls.step(pass), false)
-	require.Equal(t, ls.current(), 9)
+	require.Equal(t, ls.Step(pass), false)
+	require.Equal(t, ls.Current(), 9)
 
-	require.Equal(t, ls.step(pass), true)
-	require.Equal(t, ls.current(), 10)
+	require.Equal(t, ls.Step(pass), true)
+	require.Equal(t, ls.Current(), 10)
 
 	// Looking for 25. Should result in 26 because of precision.
 	ls = NewLineSearcher(0, 100, 67 /* start */, 2 /* stepSize */, 3)
