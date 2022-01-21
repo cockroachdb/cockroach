@@ -191,9 +191,12 @@ func TestProtectedTimestamps(t *testing.T) {
 	_, err = ptsWithDB.GetRecord(ctx, nil /* txn */, failedRec.ID.GetUUID())
 	require.NoError(t, err)
 
-	// Verify that it indeed did fail.
-	verifyErr := ptv.Verify(ctx, failedRec.ID.GetUUID())
-	require.Regexp(t, "failed to verify protection", verifyErr)
+	// First we refresh the cache to include the failed record and then refresh
+	// the cached protected timestamp state on the replica. The failed record
+	// should not affect the ability to GC (which is verified below).
+	ptp := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+	require.NoError(t, ptp.Refresh(ctx, tc.Server(0).Clock().Now()))
+	repl.ReadProtectedTimestamps(ctx)
 
 	// Add a new record that is after the old record.
 	laterRec := ptsRec

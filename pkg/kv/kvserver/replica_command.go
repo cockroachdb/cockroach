@@ -3223,34 +3223,22 @@ func (r *Replica) adminScatter(
 	}, nil
 }
 
+// TODO(arul): AdminVerifyProtectedTimestampRequest can entirely go away in
+// 22.2.
 func (r *Replica) adminVerifyProtectedTimestamp(
-	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
+	ctx context.Context, _ roachpb.AdminVerifyProtectedTimestampRequest,
 ) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
-	var doesNotApplyReason string
-	resp.Verified, doesNotApplyReason, err = r.protectedTimestampRecordApplies(ctx, &args)
-	if err != nil {
-		return resp, err
-	}
-
-	// In certain cases we do not want to return an error even if we failed to
-	// verify the protected ts record. This ensures that executeAdminBatch adds
-	// the response to the batch, thereby allowing us to aggregate the
-	// verification failures across all AdminVerifyProtectedTimestampRequests and
-	// construct a more informative error to show to the user.
-	if doesNotApplyReason != "" {
-		if !resp.Verified {
-			desc := r.Desc()
-			failedRange := roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{
-				RangeID:  int64(desc.GetRangeID()),
-				StartKey: desc.GetStartKey(),
-				EndKey:   desc.EndKey,
-				Reason:   doesNotApplyReason,
-			}
-			resp.VerificationFailedRanges = append(resp.VerificationFailedRanges, failedRange)
-			// TODO(adityamaru): This is here for compatibility with 20.2, remove in
-			// 21.2.
-			resp.DeprecatedFailedRanges = append(resp.DeprecatedFailedRanges, *r.Desc())
-		}
-	}
+	// AdminVerifyProtectedTimestampRequest is not supported starting from the
+	// 22.1 release. We expect nodes running a 22.1 binary to still service this
+	// request in a {21.2, 22.1} mixed version cluster. This can happen if the
+	// request is initiated on a 21.2 node and the leaseholder of the range it is
+	// trying to verify is on a 22.1 node.
+	//
+	// We simply return true without attempting to verify in such a case. This
+	// ensures upstream jobs (backups) don't fail as a result. It is okay to
+	// return true regardless even if the PTS record being verified does not apply
+	// as the failure mode is non-destructive. Infact, this is the reason we're
+	// no longer supporting Verification past 22.1.
+	resp.Verified = true
 	return resp, nil
 }

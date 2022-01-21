@@ -3471,6 +3471,17 @@ func TestStrictGCEnforcement(t *testing.T) {
 				r.ReadProtectedTimestamps(ctx)
 			}
 		}
+		refreshCacheAndUpdatePTSState = func(t *testing.T, nodeID roachpb.NodeID) {
+			for i := 0; i < tc.NumServers(); i++ {
+				if tc.Server(i).NodeID() != nodeID {
+					continue
+				}
+				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+				require.NoError(t, ptp.Refresh(ctx, tc.Server(i).Clock().Now()))
+				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
+				r.ReadProtectedTimestamps(ctx)
+			}
+		}
 	)
 
 	{
@@ -3524,13 +3535,15 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}))
 		assertScanRejected(t)
 
-		require.NoError(t, ptp.Verify(ctx, rec.ID.GetUUID()))
+		desc, err := tc.LookupRange(tableKey)
+		require.NoError(t, err)
+		target, err := tc.FindRangeLeaseHolder(desc, nil)
+		require.NoError(t, err)
+		refreshCacheAndUpdatePTSState(t, target.NodeID)
 		assertScanOk(t)
 
 		// Transfer the lease and demonstrate that the query succeeds because we're
 		// cautious in the face of lease transfers.
-		desc, err := tc.LookupRange(tableKey)
-		require.NoError(t, err)
 		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
 		assertScanOk(t)
 	})
