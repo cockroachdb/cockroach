@@ -103,6 +103,12 @@ type CatalogReader interface {
 
 	// MustReadDescriptor looks up a descriptor by ID.
 	MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor
+
+	// MustGetSchemasForDatabase gets schemas associated with
+	// a database.
+	MustGetSchemasForDatabase(
+		ctx context.Context, database catalog.DatabaseDescriptor,
+	) map[descpb.ID]string
 }
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
