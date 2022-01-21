@@ -17,6 +17,7 @@ import {
 } from "./statementsTable";
 import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
 import { calculateTotalWorkload } from "src/util";
+import { ActivateDiagnosticsModalRef } from "../statementsDiagnostics";
 
 const { statements } = statementsPagePropsFixture;
 
@@ -33,6 +34,34 @@ storiesOf("StatementsSortedTable", module)
         { "1": "gcp-europe-west1", "2": "gcp-us-east1", "3": "gcp-us-west1" },
         "statement",
         false,
+        false,
+        null,
+        React.createRef(),
+      )}
+      sortSetting={{
+        ascending: false,
+        columnTitle: "rowsRead",
+      }}
+      pagination={{
+        pageSize: 20,
+        current: 1,
+      }}
+    />
+  ))
+  .add("with data and VIEWACTIVITYREDACTED role", () => (
+    <StatementsSortedTable
+      className="statements-table"
+      data={statements}
+      columns={makeStatementsColumns(
+        statements,
+        "$ internal",
+        calculateTotalWorkload(statements),
+        { "1": "gcp-europe-west1", "2": "gcp-us-east1", "3": "gcp-us-west1" },
+        "statement",
+        false,
+        true,
+        null,
+        React.createRef(),
       )}
       sortSetting={{
         ascending: false,
