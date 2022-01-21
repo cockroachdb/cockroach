@@ -1,0 +1,38 @@
+{
+  "variables": {
+      "image_id": "teamcity-agent-{{timestamp}}",
+      "aws_access_key": "{{env `AWS_ACCESS_KEY`}}",
+      "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}"
+  },
+
+  "builders": [
+      {
+        "type": "amazon-ebs",
+        "access_key": "{{user `aws_access_key`}}",
+        "secret_key": "{{user `aws_secret_key`}}",
+        "region": "us-east-1",
+        "source_ami": "ami-070650c005cce4203",
+        "instance_type": "g5g.xlarge",
+        "ssh_username": "ubuntu",
+        "ami_name": "teamcity-arm-agent-{{timestamp}}",
+        "ssh_timeout": "10m",
+        "ami_block_device_mappings": {
+            "device_name": "/dev/sda1",
+            "volume_size": "120",
+            "volume_type": "gp2",
+            "delete_on_termination": true
+        },
+        "assume_role": {
+            "role_arn"    :  "arn:aws:iam::281041075329:role/PackerRole",
+            "session_name":  "PackerBuild-{{timestamp}}"
+        },
+        "vpc_id": "vpc-04f2f61ca45f606ff",
+        "subnet_id": "subnet-02ec752b9fab71d91"
+      }
+    ],
+  "provisioners": [{
+    "type": "shell",
+    "script": "teamcity-agent.sh",
+    "execute_command": "sudo sh -c '{{ .Vars }} {{ .Path }}'"
+  }]
+}
