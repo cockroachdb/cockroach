@@ -434,6 +434,10 @@ func (s *Streamer) Enqueue(
 	// requestsToServe, and the worker coordinator will then pick those batches
 	// up to execute asynchronously.
 	var totalReqsMemUsage int64
+	// Use a local variable for requestsToServe rather than
+	// s.mu.requestsToServe. This is needed in order for the worker coordinator
+	// to not pick up any work until we account for totalReqsMemUsage.
+	var requestsToServe []singleRangeBatch
 	// TODO(yuzefovich): in InOrder mode we need to treat the head-of-the-line
 	// request differently.
 	seekKey := rs.Key
@@ -492,7 +496,7 @@ func (s *Streamer) Enqueue(
 			sort.Sort(&r)
 		}
 
-		s.mu.requestsToServe = append(s.mu.requestsToServe, r)
+		requestsToServe = append(requestsToServe, r)
 
 		// Determine next seek key, taking potentially sparse requests into
 		// consideration.
@@ -531,8 +535,8 @@ func (s *Streamer) Enqueue(
 		return err
 	}
 
-	// TODO(yuzefovich): it might be better to notify the coordinator once
-	// one singleRangeBatch object has been appended to s.mu.requestsToServe.
+	// Memory reservation was approved, so the requests are good to go.
+	s.mu.requestsToServe = requestsToServe
 	s.coordinator.mu.hasWork.Signal()
 	return nil
 }
