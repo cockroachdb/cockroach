@@ -12,9 +12,11 @@ package kvstreamer
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sort"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -789,15 +791,17 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 		// There isn't enough budget at the moment. Check whether there are any
 		// requests in progress.
 		w.s.mu.Lock()
-		numRequestsInProgress := w.s.mu.numRequestsInFlight + w.s.mu.numUnreleasedResults
+		numRequestsInFlight := w.s.mu.numRequestsInFlight
+		numUnreleasedResults := w.s.mu.numUnreleasedResults
 		shouldExit = w.s.mu.err != nil || w.s.mu.done
 		w.s.mu.Unlock()
-		if numRequestsInProgress == 0 || shouldExit {
+		if (numRequestsInFlight == 0 && numUnreleasedResults == 0) || shouldExit {
 			// We either have a degenerate case when a single row is expected to
 			// exceed the budget or the worker coordinator should exit.
 			return shouldExit
 		}
 		// We have to wait for some budget.release() calls.
+		fmt.Printf("%s: before waiting: in flight %d, unreleased results %d\n", time.Now(), numRequestsInFlight, numUnreleasedResults)
 		w.s.budget.mu.waitForBudget.Wait()
 		// Check if the Streamer has been canceled or closed while we were
 		// waiting.
