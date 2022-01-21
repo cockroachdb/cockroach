@@ -8,6 +8,7 @@ import {
   Pagination,
   ResultsPerPageLabel,
   SortSetting,
+  Text
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
 import styles from "./hotRanges.module.styl";
@@ -37,9 +38,9 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
     {
       name: "rangeId",
       title: (
-        <Tooltip placement="bottom" title="Range ID">
+        <Text>
           Range ID
-        </Tooltip>
+        </Text>
       ),
       cell: (val: HotRange) => (
         <Link to={`/reports/range/${val.range_id}`}>{val.range_id}</Link>
@@ -49,7 +50,7 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
     {
       name: "qps",
       title: (
-        <Tooltip placement="bottom" title="QPS">
+        <Tooltip placement="bottom" title="The range throughput in queries per second (QPS).">
           QPS
         </Tooltip>
       ),
@@ -59,7 +60,7 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
     {
       name: "nodes",
       title: (
-        <Tooltip placement="bottom" title="Nodes">
+        <Tooltip placement="bottom" title="The node(s) that contain a range.">
           Nodes
         </Tooltip>
       ),
@@ -73,7 +74,7 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
     {
       name: "leasholder",
       title: (
-        <Tooltip placement="bottom" title="Leaseholder">
+        <Tooltip placement="bottom" title="The node that contains the range's leasholder.">
           Leaseholder
         </Tooltip>
       ),
@@ -83,9 +84,9 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
     {
       name: "database",
       title: (
-        <Tooltip placement="bottom" title="Database">
+        <Text>
           Database
-        </Tooltip>
+        </Text>
       ),
       cell: (val: HotRange) => <>{val.database_name}</>,
       sort: (val: HotRange) => val.database_name,
@@ -93,9 +94,9 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
     {
       name: "table",
       title: (
-        <Tooltip placement="bottom" title="Table">
+        <Text>
           Table
-        </Tooltip>
+        </Text>
       ),
       cell: (val: HotRange) => (
         <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
@@ -107,9 +108,9 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
     {
       name: "index",
       title: (
-        <Tooltip placement="bottom" title="Index">
+        <Text>
           Index
-        </Tooltip>
+        </Text>
       ),
       cell: (val: HotRange) => <>{val.index_name}</>,
       sort: (val: HotRange) => val.index_name,
