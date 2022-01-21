@@ -144,6 +144,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 		s.streamerInfo.Streamer.Init(
 			kvstreamer.OutOfOrder,
 			kvstreamer.Hints{UniqueRequests: true},
+			s.rf.maxKeysPerRow,
 		)
 	}
 }
@@ -455,23 +456,13 @@ func NewColIndexJoin(
 
 	useStreamer := row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings) && !spec.MaintainOrdering
 	if useStreamer {
-		// TODO(yuzefovich): remove this conditional once multiple column
-		// families are supported.
-		if maxKeysPerRow, err := tableArgs.desc.KeysPerRow(tableArgs.index.GetID()); err != nil {
-			return nil, err
-		} else if maxKeysPerRow > 1 {
-			// Currently, the streamer only supports cases with a single column
-			// family.
-			useStreamer = false
-		} else {
-			if streamerBudgetAcc == nil {
-				return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
-			}
-			// Keep the quarter of the memory limit for the output batch of the
-			// cFetcher, and we'll give the remaining three quarters to the
-			// streamer budget below.
-			memoryLimit = int64(math.Ceil(float64(memoryLimit) / 4.0))
+		if streamerBudgetAcc == nil {
+			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
 		}
+		// Keep the quarter of the memory limit for the output batch of the
+		// cFetcher, and we'll give the remaining three quarters to the streamer
+		// budget below.
+		memoryLimit = int64(math.Ceil(float64(memoryLimit) / 4.0))
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)

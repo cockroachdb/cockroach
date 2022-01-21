@@ -242,7 +242,8 @@ type cFetcher struct {
 
 	// maxKeysPerRow memoizes the maximum number of keys per row in the index
 	// we're fetching from. This is used to calculate the kvBatchFetcher's
-	// firstBatchLimit.
+	// firstBatchLimit as well as by the ColIndexJoin when it is using the
+	// Streamer API.
 	maxKeysPerRow int
 
 	// True if the index key must be decoded. This is only false if there are no
