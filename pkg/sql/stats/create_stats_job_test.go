@@ -106,18 +106,11 @@ func TestCreateStatsControlJob(t *testing.T) {
 		sqlDB.CheckQueryResults(t,
 			`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE d.t]`,
 			[][]string{})
-		opts := retry.Options{
-			InitialBackoff: 1 * time.Millisecond,
-			MaxBackoff:     time.Second,
-			Multiplier:     2,
-		}
-		if err := retry.WithMaxAttempts(context.Background(), opts, 10, func() error {
+
+		testutils.SucceedsSoon(t, func() error {
 			_, err := sqlDB.DB.ExecContext(context.Background(), `RESUME JOB $1`, jobID)
 			return err
-		}); err != nil {
-			t.Fatal(err)
-		}
-
+		})
 		jobutils.WaitForJob(t, sqlDB, jobID)
 
 		// Now the job should have succeeded in producing stats.
