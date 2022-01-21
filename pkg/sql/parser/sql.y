@@ -2244,7 +2244,7 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableSetNotNull{Column: tree.Name($3)}
   }
-| ALTER opt_column column_name ADD error
+| ALTER opt_column column_name ADD
   {
     return unimplemented(sqllex, "alter table alter column add")
   }
@@ -2299,7 +2299,7 @@ alter_table_cmd:
     }
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
-| ALTER CONSTRAINT constraint_name error { return unimplementedWithIssueDetail(sqllex, 31632, "alter constraint") }
+| ALTER CONSTRAINT constraint_name { return unimplementedWithIssueDetail(sqllex, 31632, "alter constraint") }
   // ALTER TABLE <name> INHERITS ....
 | INHERITS error
   {
@@ -3529,8 +3529,8 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnConstraint{Constraint:tree.Name($4), Table: $6.unresolvedObjectName(), Comment: $8.strPtr()}
   }
-| COMMENT ON EXTENSION error { return unimplemented(sqllex, "comment on extension") }
-| COMMENT ON FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "comment on function") }
+| COMMENT ON EXTENSION { return unimplemented(sqllex, "comment on extension") }
+| COMMENT ON FUNCTION { return unimplementedWithIssueDetail(sqllex, 17511, "comment on function") }
 
 comment_text:
   SCONST
@@ -3572,29 +3572,29 @@ create_extension_stmt:
 | CREATE EXTENSION name {
     $$.val = &tree.CreateExtension{Name: $3}
   }
-| CREATE EXTENSION IF NOT EXISTS name WITH error { return unimplemented(sqllex, "create extension if not exists with") }
+| CREATE EXTENSION IF NOT EXISTS name WITH { return unimplemented(sqllex, "create extension if not exists with") }
 | CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
 
 create_unsupported:
-  CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
-| CREATE AGGREGATE error { return unimplemented(sqllex, "create aggregate") }
-| CREATE CAST error { return unimplemented(sqllex, "create cast") }
-| CREATE CONSTRAINT TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create constraint") }
-| CREATE CONVERSION error { return unimplemented(sqllex, "create conversion") }
-| CREATE DEFAULT CONVERSION error { return unimplemented(sqllex, "create def conv") }
-| CREATE FOREIGN TABLE error { return unimplemented(sqllex, "create foreign table") }
-| CREATE FOREIGN DATA error { return unimplemented(sqllex, "create fdw") }
-| CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
-| CREATE OR REPLACE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
-| CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
-| CREATE OPERATOR error { return unimplementedWithIssue(sqllex, 65017) }
-| CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
-| CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
-| CREATE SERVER error { return unimplemented(sqllex, "create server") }
-| CREATE SUBSCRIPTION error { return unimplemented(sqllex, "create subscription") }
-| CREATE TABLESPACE error { return unimplementedWithIssueDetail(sqllex, 54113, "create tablespace") }
-| CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
-| CREATE TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create trigger") }
+  CREATE ACCESS METHOD { return unimplemented(sqllex, "create access method") }
+| CREATE AGGREGATE { return unimplemented(sqllex, "create aggregate") }
+| CREATE CAST { return unimplemented(sqllex, "create cast") }
+| CREATE CONSTRAINT TRIGGER { return unimplementedWithIssueDetail(sqllex, 28296, "create constraint") }
+| CREATE CONVERSION { return unimplemented(sqllex, "create conversion") }
+| CREATE DEFAULT CONVERSION { return unimplemented(sqllex, "create def conv") }
+| CREATE FOREIGN TABLE { return unimplemented(sqllex, "create foreign table") }
+| CREATE FOREIGN DATA { return unimplemented(sqllex, "create fdw") }
+| CREATE FUNCTION { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
+| CREATE OR REPLACE FUNCTION { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
+| CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
+| CREATE OPERATOR { return unimplementedWithIssue(sqllex, 65017) }
+| CREATE PUBLICATION { return unimplemented(sqllex, "create publication") }
+| CREATE opt_or_replace RULE { return unimplemented(sqllex, "create rule") }
+| CREATE SERVER { return unimplemented(sqllex, "create server") }
+| CREATE SUBSCRIPTION { return unimplemented(sqllex, "create subscription") }
+| CREATE TABLESPACE { return unimplementedWithIssueDetail(sqllex, 54113, "create tablespace") }
+| CREATE TEXT { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
+| CREATE TRIGGER { return unimplementedWithIssueDetail(sqllex, 28296, "create trigger") }
 
 opt_or_replace:
   OR REPLACE {}
@@ -3609,25 +3609,25 @@ opt_procedural:
 | /* EMPTY */ {}
 
 drop_unsupported:
-  DROP ACCESS METHOD error { return unimplemented(sqllex, "drop access method") }
-| DROP AGGREGATE error { return unimplemented(sqllex, "drop aggregate") }
-| DROP CAST error { return unimplemented(sqllex, "drop cast") }
-| DROP COLLATION error { return unimplemented(sqllex, "drop collation") }
-| DROP CONVERSION error { return unimplemented(sqllex, "drop conversion") }
-| DROP DOMAIN error { return unimplementedWithIssueDetail(sqllex, 27796, "drop") }
-| DROP EXTENSION IF EXISTS name error { return unimplemented(sqllex, "drop extension " + $5) }
-| DROP EXTENSION name error { return unimplemented(sqllex, "drop extension " + $3) }
-| DROP FOREIGN TABLE error { return unimplemented(sqllex, "drop foreign table") }
-| DROP FOREIGN DATA error { return unimplemented(sqllex, "drop fdw") }
-| DROP FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "drop function") }
-| DROP opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "drop language " + $4) }
-| DROP OPERATOR error { return unimplemented(sqllex, "drop operator") }
-| DROP PUBLICATION error { return unimplemented(sqllex, "drop publication") }
-| DROP RULE error { return unimplemented(sqllex, "drop rule") }
-| DROP SERVER error { return unimplemented(sqllex, "drop server") }
-| DROP SUBSCRIPTION error { return unimplemented(sqllex, "drop subscription") }
-| DROP TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
-| DROP TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "drop") }
+  DROP ACCESS METHOD { return unimplemented(sqllex, "drop access method") }
+| DROP AGGREGATE { return unimplemented(sqllex, "drop aggregate") }
+| DROP CAST { return unimplemented(sqllex, "drop cast") }
+| DROP COLLATION { return unimplemented(sqllex, "drop collation") }
+| DROP CONVERSION { return unimplemented(sqllex, "drop conversion") }
+| DROP DOMAIN { return unimplementedWithIssueDetail(sqllex, 27796, "drop") }
+| DROP EXTENSION IF EXISTS name { return unimplemented(sqllex, "drop extension " + $5) }
+| DROP EXTENSION name { return unimplemented(sqllex, "drop extension " + $3) }
+| DROP FOREIGN TABLE { return unimplemented(sqllex, "drop foreign table") }
+| DROP FOREIGN DATA { return unimplemented(sqllex, "drop fdw") }
+| DROP FUNCTION { return unimplementedWithIssueDetail(sqllex, 17511, "drop function") }
+| DROP opt_procedural LANGUAGE name { return unimplementedWithIssueDetail(sqllex, 17511, "drop language " + $4) }
+| DROP OPERATOR { return unimplemented(sqllex, "drop operator") }
+| DROP PUBLICATION { return unimplemented(sqllex, "drop publication") }
+| DROP RULE { return unimplemented(sqllex, "drop rule") }
+| DROP SERVER { return unimplemented(sqllex, "drop server") }
+| DROP SUBSCRIPTION { return unimplemented(sqllex, "drop subscription") }
+| DROP TEXT { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
+| DROP TRIGGER { return unimplementedWithIssueDetail(sqllex, 28296, "drop") }
 
 create_ddl_stmt:
   create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
@@ -3874,7 +3874,7 @@ delete_stmt:
 | opt_with_clause DELETE error // SHOW HELP: DELETE
 
 opt_using_clause:
-  USING from_list { return unimplementedWithIssueDetail(sqllex, 40963, "delete using") }
+  USING { return unimplementedWithIssueDetail(sqllex, 40963, "delete using") }
 | /* EMPTY */ { }
 
 
@@ -4604,7 +4604,7 @@ use_stmt:
 nonpreparable_set_stmt:
   set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
 | set_exprs_internal   { /* SKIP DOC */ }
-| SET CONSTRAINTS error { return unimplemented(sqllex, "set constraints") }
+| SET CONSTRAINTS { return unimplemented(sqllex, "set constraints") }
 
 // SET SESSION / SET LOCAL / SET CLUSTER SETTING
 preparable_set_stmt:
@@ -7437,7 +7437,7 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  AS typename                  { 
+  AS typename                  {
                                   // Valid option values must be integer types (ex. int2, bigint)
                                   parsedType := $2.colType()
                                   if parsedType.Family() != types.IntFamily {
@@ -7826,15 +7826,15 @@ create_type_stmt:
   }
 | CREATE TYPE error // SHOW HELP: CREATE TYPE
   // Record/Composite types.
-| CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
+| CREATE TYPE type_name AS '(' { return unimplementedWithIssue(sqllex, 27792) }
   // Range types.
-| CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssue(sqllex, 27791) }
+| CREATE TYPE type_name AS RANGE { return unimplementedWithIssue(sqllex, 27791) }
   // Base (primitive) types.
-| CREATE TYPE type_name '(' error         { return unimplementedWithIssueDetail(sqllex, 27793, "base") }
+| CREATE TYPE type_name '(' { return unimplementedWithIssueDetail(sqllex, 27793, "base") }
   // Shell types, gateway to define base types using the previous syntax.
-| CREATE TYPE type_name                   { return unimplementedWithIssueDetail(sqllex, 27793, "shell") }
+| CREATE TYPE type_name { return unimplementedWithIssueDetail(sqllex, 27793, "shell") }
   // Domain types.
-| CREATE DOMAIN type_name error           { return unimplementedWithIssueDetail(sqllex, 27796, "create") }
+| CREATE DOMAIN type_name { return unimplementedWithIssueDetail(sqllex, 27796, "create") }
 
 opt_enum_val_list:
   enum_val_list
@@ -9061,7 +9061,7 @@ insert_column_list:
 // be needed together with support for composite types (#27792).
 insert_column_item:
   column_name
-| column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
+| column_name '.' { return unimplementedWithIssue(sqllex, 27792) }
 
 on_conflict:
   ON CONFLICT DO NOTHING
@@ -9176,7 +9176,7 @@ single_set_clause:
   {
     $$.val = &tree.UpdateExpr{Names: tree.NameList{tree.Name($1)}, Expr: $3.expr()}
   }
-| column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
+| column_name '.' { return unimplementedWithIssue(sqllex, 27792) }
 
 multiple_set_clause:
   '(' insert_column_list ')' '=' in_expr
@@ -9827,9 +9827,9 @@ group_by_list:
 // rather than reducing the conflicting unreserved_keyword rule.
 group_by_item:
   a_expr { $$.val = $1.expr() }
-| ROLLUP '(' error { return unimplementedWithIssueDetail(sqllex, 46280, "rollup") }
-| CUBE '(' error { return unimplementedWithIssueDetail(sqllex, 46280, "cube") }
-| GROUPING SETS error { return unimplementedWithIssueDetail(sqllex, 46280, "grouping sets") }
+| ROLLUP '(' { return unimplementedWithIssueDetail(sqllex, 46280, "rollup") }
+| CUBE '(' { return unimplementedWithIssueDetail(sqllex, 46280, "cube") }
+| GROUPING SETS { return unimplementedWithIssueDetail(sqllex, 46280, "grouping sets") }
 
 having_clause:
   HAVING a_expr
@@ -10441,7 +10441,7 @@ typename:
       return setErr(sqllex, err)
     }
   }
-| simple_typename ARRAY '[' ICONST ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
+| simple_typename ARRAY '[' ICONST ']' '[' { return unimplementedWithIssue(sqllex, 32552) }
 | simple_typename ARRAY {
     var err error
     $$.val, err = arrayOf($1.typeReference(), nil)
@@ -10460,7 +10460,7 @@ opt_array_bounds:
   // TODO(justin): reintroduce multiple array bounds
   // opt_array_bounds '[' ']' { $$.val = append($1.int32s(), -1) }
   '[' ']' { $$.val = []int32{-1} }
-| '[' ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
+| '[' ']' '[' { return unimplementedWithIssue(sqllex, 32552) }
 | '[' ICONST ']'
   {
     /* SKIP DOC */
@@ -10470,7 +10470,7 @@ opt_array_bounds:
     }
     $$.val = []int32{bound}
   }
-| '[' ICONST ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
+| '[' ICONST ']' '[' { return unimplementedWithIssue(sqllex, 32552) }
 | /* EMPTY */ { $$.val = []int32(nil) }
 
 // general_type_name is a variant of type_or_function_name but does not
@@ -10551,8 +10551,8 @@ simple_typename:
 | bit_with_length
 | character_with_length
 | interval_type
-| POINT error { return unimplementedWithIssueDetail(sqllex, 21286, "point") } // needed or else it generates a syntax error.
-| POLYGON error { return unimplementedWithIssueDetail(sqllex, 21286, "polygon") } // needed or else it generates a syntax error.
+| POINT { return unimplementedWithIssueDetail(sqllex, 21286, "point") } // needed or else it generates a syntax error.
+| POLYGON { return unimplementedWithIssueDetail(sqllex, 21286, "polygon") } // needed or else it generates a syntax error.
 
 geo_shape_type:
   POINT { $$.val = geopb.ShapeType_Point }
@@ -11447,7 +11447,7 @@ a_expr:
   }
 // The UNIQUE predicate is a standard SQL feature but not yet implemented
 // in PostgreSQL (as of 10.5).
-| UNIQUE '(' error { return unimplemented(sqllex, "UNIQUE predicate") }
+| UNIQUE '(' { return unimplemented(sqllex, "UNIQUE predicate") }
 
 // Restricted expressions
 //
