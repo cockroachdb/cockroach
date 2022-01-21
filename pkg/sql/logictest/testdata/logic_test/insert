@@ -366,16 +366,14 @@ CREATE TABLE nocols()
 statement error INSERT has more expressions than target columns, 2 expressions for 0 targets
 INSERT INTO nocols VALUES (true, default)
 
-statement error at or near "k": syntax error: unimplemented
+statement error at or near "\.": syntax error: unimplemented
 INSERT INTO kv (kv.k) VALUES ('hello')
 
-statement error at or near "\*": syntax error: unimplemented
+statement error at or near "\.": syntax error: unimplemented
 INSERT INTO kv (k.*) VALUES ('hello')
 
-statement error at or near "v": syntax error: unimplemented
+statement error at or near "\.": syntax error: unimplemented
 INSERT INTO kv (k.v) VALUES ('hello')
-
-
 
 statement ok
 CREATE TABLE insert_t (x INT, v INT)

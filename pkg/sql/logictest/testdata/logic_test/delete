@@ -312,7 +312,7 @@ SELECT x, y, z FROM family
 1  1  NULL
 3  3  NULL
 
-statement error at or near "where": syntax error: unimplemented: this syntax
+statement error at or near "other_table": syntax error: unimplemented: this syntax
 DELETE FROM family USING family, other_table WHERE x=2
 
 # Verify that the fast path does its deletes at the expected timestamp.

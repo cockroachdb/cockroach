@@ -166,6 +166,29 @@ func (l *lexer) lastToken() sqlSymType {
 	return l.tokens[l.lastPos]
 }
 
+func (l *lexer) secondLastToken() sqlSymType {
+	if l.lastPos < 0 {
+		return sqlSymType{}
+	}
+
+	pos := l.lastPos - 1
+
+	// Should also never happen, but just in case.
+	if pos > len(l.tokens) {
+		return sqlSymType{
+			id:  0,
+			pos: int32(len(l.in)),
+			str: "EOF",
+		}
+	}
+
+	// Should never happen, but just in case.
+	if pos < 0 {
+		pos = 0
+	}
+	return l.tokens[pos]
+}
+
 // NewAnnotation returns a new annotation index.
 func (l *lexer) NewAnnotation() tree.AnnotationIdx {
 	l.numAnnotations++
@@ -262,6 +285,13 @@ func (l *lexer) populateErrorDetails() {
 			// "syntax error" is already prepended when the yacc-generated
 			// parser encounters a parsing error.
 			l.lastError = errors.Wrap(l.lastError, "syntax error")
+		}
+		// For unimplemented errors, use the token before (the second last token).
+		// This is an extra token is consumed when we return an unimplemented error
+		// in the grammar.
+		if err := l.lastError; pgerror.HasCandidateCode(err) &&
+			pgerror.GetPGCode(err) == pgcode.FeatureNotSupported {
+			lastTok = l.secondLastToken()
 		}
 		l.lastError = errors.Wrapf(l.lastError, "at or near \"%s\"", lastTok.str)
 	}

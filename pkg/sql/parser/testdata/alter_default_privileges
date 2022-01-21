@@ -50,10 +50,10 @@ error
 ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo
 ----
 ----
-at or near "to": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo
-                                                ^
+                                      ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -71,10 +71,10 @@ error
 ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo, bar
 ----
 ----
-at or near "to": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES GRANT ALL ON FUNCTIONS TO foo, bar
-                                                ^
+                                      ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -188,10 +188,10 @@ error
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON FUNCTIONS TO foo
 ----
 ----
-at or near "to": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT ALL ON FUNCTIONS TO foo
-                                                             ^
+                                                   ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -305,10 +305,10 @@ error
 ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo
 ----
 ----
-at or near "to": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo
-                                                            ^
+                                                  ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -422,10 +422,10 @@ error
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo
 ----
 ----
-at or near "to": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s GRANT ALL ON FUNCTIONS TO foo
-                                                                         ^
+                                                               ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -555,10 +555,10 @@ error
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM foo
 ----
 ----
-at or near "from": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM foo
-                                                 ^
+                                       ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -576,10 +576,10 @@ error
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM foo, bar
 ----
 ----
-at or near "from": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON FUNCTIONS FROM foo, bar
-                                                 ^
+                                       ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -693,10 +693,10 @@ error
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE ALL ON FUNCTIONS FROM foo
 ----
 ----
-at or near "from": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE ALL ON FUNCTIONS FROM foo
-                                                              ^
+                                                    ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -810,10 +810,10 @@ error
 ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE ALL ON FUNCTIONS FROM foo
 ----
 ----
-at or near "from": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES IN SCHEMA s REVOKE ALL ON FUNCTIONS FROM foo
-                                                             ^
+                                                   ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -927,10 +927,10 @@ error
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE ALL ON FUNCTIONS FROM foo
 ----
 ----
-at or near "from": syntax error: unimplemented: this syntax
+at or near "functions": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 ALTER DEFAULT PRIVILEGES FOR ROLE foo IN SCHEMA s REVOKE ALL ON FUNCTIONS FROM foo
-                                                                          ^
+                                                                ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
