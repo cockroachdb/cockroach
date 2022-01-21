@@ -106,6 +106,8 @@ type Hooks struct {
 	PostLoad func(*gosql.DB) error
 	// PostRun is called after workload run has ended, with the duration of the
 	// run. This is where any post-run special printing or validation can be done.
+	// PostRun may return a special sentinel error, ErrRetryWorkload to rerun entire
+	// workload, possibly after modifying workload configuration.
 	PostRun func(time.Duration) error
 	// CheckConsistency is called to run generator-specific consistency checks.
 	// These are expected to pass after the initial data load as well as after
@@ -114,6 +116,12 @@ type Hooks struct {
 	// Partition is used to run a partitioning step on the data created by the workload.
 	// TODO (rohany): migrate existing partitioning steps (such as tpcc's) into here.
 	Partition func(*gosql.DB) error
+	// CompletionHook can be set if the workload wants to control how and when it completes.
+	// The hook takes responsibility of invoking passed in function upon completion.
+	CompletionHook func(duration time.Duration, rampDuration time.Duration, completeWorkload func()) error
+	// TickHook invoked periodically with the time since the start of the benchmark,
+	// and current histogram tick.
+	TickHook func(startElapsed time.Duration, t histogram.Tick)
 }
 
 // Meta is used to register a Generator at init time and holds meta information
@@ -464,3 +472,7 @@ func ApproxDatumSize(x interface{}) int64 {
 		panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
 	}
 }
+
+// ErrRetryWorkload  is a special sentinel error that can bee returned by the PostRun hooks
+// to indicate that the entire workload ought to be retried.
+var ErrRetryWorkload = errors.New("retry workload")
