@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -36,6 +37,10 @@ func DropSequence(b BuildCtx, n *tree.DropSequence) {
 		// Mutate the AST to have the fully resolved name from above, which will be
 		// used for both event logging and errors.
 		name.ObjectNamePrefix = prefix.NamePrefix()
+		// We don't support dropping temporary tables.
+		if seq.IsTemporary() {
+			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary sequence"))
+		}
 		dropSequence(b, seq, n.DropBehavior)
 		b.IncrementSubWorkID()
 	}
