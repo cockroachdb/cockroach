@@ -57,12 +57,9 @@ func (d *RowDecoder) DecodeRow(
 	{
 		types := []*types.T{d.columns[0].GetType()}
 		nameRow := make([]rowenc.EncDatum, 1)
-		_, matches, _, err := rowenc.DecodeIndexKey(d.codec, types, nameRow, nil, kv.Key)
+		_, _, err := rowenc.DecodeIndexKey(d.codec, types, nameRow, nil, kv.Key)
 		if err != nil {
 			return "", RawValue{}, false, errors.Wrap(err, "failed to decode key")
-		}
-		if !matches {
-			return "", RawValue{}, false, errors.Errorf("unexpected non-settings KV with settings prefix: %v", kv.Key)
 		}
 		if err := nameRow[0].EnsureDecoded(types[0], &d.alloc); err != nil {
 			return "", RawValue{}, false, err

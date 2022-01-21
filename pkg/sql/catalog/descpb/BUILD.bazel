@@ -11,6 +11,7 @@ go_library(
         "default_privilege.go",
         "descriptor.go",
         "index.go",
+        "index_fetch.pb.go",
         "join_type.go",
         "locking.go",
         "privilege.go",
@@ -40,6 +41,8 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//gogoproto",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 
