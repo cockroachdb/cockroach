@@ -97,9 +97,9 @@ type Result struct {
 	// requests.
 	EnqueueKeysSatisfied []int
 	// memoryTok describes the memory reservation of this Result that needs to
-	// be released back to the budget when the Result is Release()'d.
+	// be released back to the Streamer's budget when the Result is Release()'d.
 	memoryTok struct {
-		budget    *budget
+		streamer  *Streamer
 		toRelease int64
 	}
 	// position tracks the ordinal among all originally enqueued requests that
@@ -131,8 +131,14 @@ type Hints struct {
 // Streamer internally does buffering and caching of Results - which also
 // contributes to the refcounts.
 func (r Result) Release(ctx context.Context) {
-	if r.memoryTok.budget != nil {
-		r.memoryTok.budget.release(ctx, r.memoryTok.toRelease)
+	if s := r.memoryTok.streamer; s != nil {
+		s.budget.mu.Lock()
+		defer s.budget.mu.Unlock()
+		s.budget.releaseLocked(ctx, r.memoryTok.toRelease)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.mu.numUnreleasedResults--
+		s.signalBudgetIfNoRequestsInProgressLocked()
 	}
 }
 
@@ -251,9 +257,13 @@ type Streamer struct {
 		// are currently being served asynchronously (i.e. those that have
 		// already left requestsToServe queue, but for which we haven't received
 		// the results yet).
-		// TODO(yuzefovich): check whether the contention on mu when accessing
-		// this field is sufficient to justify pulling it out into an atomic.
 		numRequestsInFlight int
+
+		// numUnreleasedResults tracks the number of Results that have already
+		// been created but haven't been Release()'d yet. This number includes
+		// those that are currently in 'results' in addition to those returned
+		// by GetResults() to the caller which the caller hasn't processed yet.
+		numUnreleasedResults int
 
 		// results are the results of already completed requests that haven't
 		// been returned by GetResults() yet.
@@ -639,17 +649,36 @@ func (s *Streamer) Close() {
 		// Unblock the coordinator in case it is waiting for more work.
 		s.mu.hasWork.Signal()
 		s.mu.Unlock()
+		// Unblock the coordinator in case it is waiting for the budget.
+		s.budget.mu.waitForBudget.Signal()
 	}
 	s.waitGroup.Wait()
 	*s = Streamer{}
 }
 
-// getNumRequestsInFlight returns the number of requests that are currently in
-// flight. This method should be called without holding the lock of s.
-func (s *Streamer) getNumRequestsInFlight() int {
+// getNumRequestsInProgress returns the number of requests that are currently
+// "in progress" - already issued requests that are in flight combined with the
+// number of unreleased results. This method should be called without holding
+// the lock of s.
+func (s *Streamer) getNumRequestsInProgress() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.numRequestsInFlight
+	return s.mu.numRequestsInFlight + s.mu.numUnreleasedResults
+}
+
+// signalBudgetIfNoRequestsInProgressLocked checks whether there are no requests
+// in progress and signals the budget's condition variable if so.
+//
+// We have to explicitly signal the condition variable to make sure that if the
+// budget doesn't get out of debt, the worker coordinator doesn't wait for any
+// other request to be completed / other result be released.
+//
+// The mutex of s must be held.
+func (s *Streamer) signalBudgetIfNoRequestsInProgressLocked() {
+	s.mu.AssertHeld()
+	if s.mu.numRequestsInFlight == 0 && s.mu.numUnreleasedResults == 0 {
+		s.budget.mu.waitForBudget.Signal()
+	}
 }
 
 // adjustNumRequestsInFlight updates the number of requests that are currently
@@ -658,6 +687,7 @@ func (s *Streamer) adjustNumRequestsInFlight(delta int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.numRequestsInFlight += delta
+	s.signalBudgetIfNoRequestsInProgressLocked()
 }
 
 // singleRangeBatch contains parts of the originally enqueued requests that have
@@ -730,18 +760,9 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			}
 		}
 
-		// Now wait until there is enough budget to at least receive one full
-		// response (but only if there are requests in flight - if there are
-		// none, then we might have a degenerate case when a single row is
-		// expected to exceed the budget).
-		// TODO(yuzefovich): consider using a multiple of avgResponseSize here.
-		for w.s.getNumRequestsInFlight() > 0 && w.s.budget.available() < avgResponseSize {
-			select {
-			case <-w.s.budget.waitCh:
-			case <-ctx.Done():
-				w.s.setError(ctx.Err())
-				return
-			}
+		shouldExit = w.waitUntilEnoughBudget(ctx, avgResponseSize)
+		if shouldExit {
+			return
 		}
 
 		err := w.issueRequestsForAsyncProcessing(ctx, requestsToServe, avgResponseSize)
@@ -801,11 +822,42 @@ func (w *workerCoordinator) getRequestsLocked() (
 	return requestsToServe, avgResponseSize, shouldExit
 }
 
+// waitUntilEnoughBudget waits until there is enough budget to at least receive
+// one full response.
+//
+// A boolean that indicates whether the coordinator should exit is returned.
+func (w *workerCoordinator) waitUntilEnoughBudget(
+	ctx context.Context, avgResponseSize int64,
+) (shouldExit bool) {
+	w.s.budget.mu.Lock()
+	defer w.s.budget.mu.Unlock()
+	// TODO(yuzefovich): consider using a multiple of avgResponseSize here.
+	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < avgResponseSize {
+		// There isn't enough budget at the moment. Check whether there are any
+		// requests in progress.
+		if w.s.getNumRequestsInProgress() == 0 {
+			// We have a degenerate case when a single row is expected to exceed
+			// the budget.
+			return false
+		}
+		// We have to wait for some budget.release() calls.
+		w.s.budget.mu.waitForBudget.Wait()
+		// Check if the Streamer has been canceled or closed while we were
+		// waiting.
+		if ctx.Err() != nil {
+			w.s.setError(ctx.Err())
+			return true
+		}
+	}
+	return false
+}
+
 // issueRequestsForAsyncProcessing iterates over the given requests and issues
 // them to be served asynchronously while there is enough budget available to
 // receive the responses. Once the budget is exhausted, no new requests are
-// issued, the only exception is made for the case when there are no other
-// requests in flight, and in that scenario, a single request will be issued.
+// issued, the only exception is made for the case when there are no requests in
+// progress (both requests in flight as well as unreleased results), and in that
+// scenario, a single request will be issued.
 //
 // It is assumed that requestsToServe is a prefix of w.s.mu.requestsToServe
 // (i.e. it is possible that some other requests have been appended to
@@ -825,16 +877,16 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
 
-	headOfLine := w.s.getNumRequestsInFlight() == 0
+	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
 	for numRequestsIssued < len(requestsToServe) && !budgetIsExhausted {
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		if availableBudget < avgResponseSize {
 			if !headOfLine {
 				// We don't have enough budget available to serve this request,
-				// and there are other requests in flight, so we'll wait for
+				// and there are other requests in progress, so we'll wait for
 				// some of them to finish.
-				break
+				return nil
 			}
 			budgetIsExhausted = true
 			if availableBudget < 1 {
@@ -871,7 +923,8 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// we're holding the budget's mutex. Thus, the error indicates that
 			// the root memory pool has been exhausted.
 			if !headOfLine {
-				// There are some requests in flight, so we'll let them finish.
+				// There are some requests in progress, so we'll let them
+				// finish / be released.
 				//
 				// This is opportunistic behavior where we're hoping that once
 				// other requests are fully processed (i.e. the corresponding
@@ -884,9 +937,9 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				// available RAM). Furthermore, if other queries are consuming
 				// all of the root memory pool limit, then the head-of-the-line
 				// request will notice it and will exit accordingly.
-				break
+				return nil
 			}
-			// We don't have any requests in flight, so we'll exit to be safe
+			// We don't have any requests in progress, so we'll exit to be safe
 			// (in order not to OOM the node). Most likely this occurs when
 			// there are concurrent memory-intensive queries which this Streamer
 			// has no control over.
@@ -932,11 +985,11 @@ func (w *workerCoordinator) asyncRequestCleanup() {
 // the memory reservation (according to the Result's footprint) that will be
 // returned back to the budget once Result.Release() is called.
 //
-// headOfLine indicates whether this request is the current head of the line.
-// Head-of-the-line requests are treated specially in a sense that they are
-// allowed to put the budget into debt. The caller is responsible for ensuring
-// that there is at most one asynchronous request with headOfLine=true at all
-// times.
+// headOfLine indicates whether this request is the current head of the line and
+// there are no unreleased Results. Head-of-the-line requests are treated
+// specially in a sense that they are allowed to put the budget into debt. The
+// caller is responsible for ensuring that there is at most one asynchronous
+// request with headOfLine=true at all times.
 func (w *workerCoordinator) performRequestAsync(
 	ctx context.Context, req singleRangeBatch, targetBytes int64, headOfLine bool,
 ) {
@@ -1028,7 +1081,7 @@ func (w *workerCoordinator) performRequestAsync(
 							EnqueueKeysSatisfied: []int{enqueueKey},
 							position:             req.positions[i],
 						}
-						result.memoryTok.budget = w.s.budget
+						result.memoryTok.streamer = w.s
 						result.memoryTok.toRelease = toRelease
 						memoryFootprintBytes += toRelease
 						results = append(results, result)
@@ -1046,7 +1099,7 @@ func (w *workerCoordinator) performRequestAsync(
 							EnqueueKeysSatisfied: []int{enqueueKey},
 							position:             req.positions[i],
 						}
-						result.memoryTok.budget = w.s.budget
+						result.memoryTok.streamer = w.s
 						result.memoryTok.toRelease = toRelease
 						result.ScanResp.ScanResponse = scan
 						// Complete field will be set below.
@@ -1205,6 +1258,7 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// partial one. Think more about this.
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
 	w.s.mu.numCompleteRequests += numCompleteResponses
+	w.s.mu.numUnreleasedResults += len(results)
 	// Store the results and non-blockingly notify the Streamer about them.
 	w.s.mu.results = append(w.s.mu.results, results...)
 	w.s.notifyGetResultsLocked()
