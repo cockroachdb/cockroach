@@ -184,7 +184,7 @@ func TestGrantOptionMigration(t *testing.T) {
 			clusterversion.ByKey(clusterversion.ValidateGrantOption).String())
 		require.NoError(t, err)
 
-		sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		err = sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 			// Avoid running validation on the descriptors.
 			descs, err := col.GetCatalogUnvalidated(ctx, txn)
 			if err != nil {
@@ -207,7 +207,6 @@ func TestGrantOptionMigration(t *testing.T) {
 			}
 			return nil
 		})
-
 		require.NoError(t, err)
 		tc.Stopper().Stop(ctx)
 	}

@@ -1,0 +1,16 @@
+# LogicTest: local-mixed-21.2-22.1
+
+statement ok
+CREATE TABLE t(a INT)
+
+statement error version 21.2-22 must be finalized to use grant options
+GRANT SELECT ON t TO testuser WITH GRANT OPTION
+
+statement error version 21.2-22 must be finalized to use grant options
+ALTER DEFAULT PRIVILEGES GRANT SELECT, INSERT ON TABLES TO testuser WITH GRANT OPTION
+
+statement error version 21.2-22 must be finalized to use grant options
+REVOKE GRANT OPTION FOR SELECT ON t FROM testuser
+
+statement error version 21.2-22 must be finalized to use grant options
+ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR INSERT, DELETE ON TABLES FROM testuser
