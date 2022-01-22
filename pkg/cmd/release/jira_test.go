@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/andygrunwald/go-jira"
+	"github.com/cockroachdb/cockroach/vendor/github.com/andygrunwald/go-jira"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,12 +27,22 @@ func TestGetIssueDetails(t *testing.T) {
 			id:                   "49848",
 			expectedKey:          "SREOPS-4037",
 			expectedSummary:      "Deploy v21.2.4 to release qualification cluster",
-			expectedCustomFields: map[string]string{customFieldHasSlaKey: customFieldHasSlaValue},
+			expectedCustomFields: map[string]string{customFieldHasSlaKey: "Yes"},
 		},
 		{
 			id:              "49841",
 			expectedKey:     "RE-68",
 			expectedSummary: "[JIRA integration] Auto-create/update SREOPS and release tracking issue ",
+		},
+		{
+			id:              "32815",
+			expectedKey:     "REL-3",
+			expectedSummary: "Test CRDB Release",
+			expectedCustomFields: map[string]string{
+				customFieldShaUrl:  "https://github.com/cockroachlabs/release-staging/commit/fdd672fed84323279f7070127f36cdbdc5c26b03",
+				customFieldTagUrl:  "https://github.com/cockroachlabs/release-staging/releases/tag/v22.1.0-alpha.00000000-2771-gfdd672fed8",
+				customFieldBuildId: "MyBuildId",
+			},
 		},
 	}
 
@@ -47,9 +60,76 @@ func TestGetIssueDetails(t *testing.T) {
 	}
 }
 
+// TestCreateReleaseTrackingIssue creates a new test tracking issue for the
+// Release project: https://cockroachlabs.atlassian.net/jira/software/c/projects/REL/boards/62
+// Note that we're not actively using this board yet, so feel free
+// to use this board/project to test away!!
+//
+// 1/23(celia) - I don't have full permission to the project. See:
+// - https://cockroachlabs.atlassian.net/browse/ATS-351
+// This method should once (as well as posting the custom fields)
+// once ATS-351 is done.
+func TestCreateReleaseTrackingIssue_DOES_NOT_WORK_YET(t *testing.T) {
+	username, password := getAuthUsernameAndPassword()
+	client, err := newJiraClient(username, password)
+	require.NoError(t, err)
+	setCustomFields := true
+	issue := createReleaseTrackingIssue(metadata{
+		Version:   "v21.2.4",
+		Tag:       "v21.2.3-144-g0c8df44947",
+		Branch:    "release-21.2",
+		SHA:       "fdd672fed84323279f7070127f36cdbdc5c26b03",
+		Timestamp: time.Now().String(),
+	},
+		setCustomFields,
+	)
+	createRealJiraIssue(t, client, issue)
+}
+
+// TestCreateTestREIssue_WORKS:
+// This tests the summary/description of
+// createReleaseTrackingIssue by posting it to
+// the RE project, for which we have permission.
+// Note that the RE project doesn't have all the
+// custom fields the REL project does, so we
+// shouldn't set those.
+func TestCreateTestREIssue_WORKS(t *testing.T) {
+	username, password := getAuthUsernameAndPassword()
+	client, err := newJiraClient(username, password)
+	require.NoError(t, err)
+
+	// Attempting to set the custom fields
+	// for the RE project will fail the post request,
+	// since the RE project doesn't have these custom
+	// fields, only the REL project.
+	setCustomFields := false
+
+	issue := createReleaseTrackingIssue(metadata{
+		Version:   "v21.2.4",
+		Tag:       "v21.2.3-144-g0c8df44947",
+		Branch:    "release-21.2",
+		SHA:       "fdd672fed84323279f7070127f36cdbdc5c26b03",
+		Timestamp: time.Now().String(),
+	},
+		setCustomFields,
+	)
+
+	// Before sending the post request, let's override
+	// the `REL` project with our test `RE` project.
+	issue.Fields.Project = jira.Project{
+		Key: "RE",
+	}
+
+	createRealJiraIssue(t, client, issue)
+}
+
 // TestCreateDeployToClusterIssue creates a new JIRA issue:
-// ** WARNING!! **: this creates a real SREOPS ticket, so
-// remember to cancel/delete the SREOPS ticket afterwards! :)
+// *******************************************************
+//                      WARNING!!
+// *******************************************************
+// This creates a real SREOPS ticket, so remember to
+// cancel/delete the SREOPS ticket afterwards! :)
+// *******************************************************
 func TestCreateDeployToClusterIssue(t *testing.T) {
 	testVersion := "v21.2.4"
 	testBuildId := "v21.2.3-144-g0c8df44947"
@@ -57,10 +137,27 @@ func TestCreateDeployToClusterIssue(t *testing.T) {
 	username, password := getAuthUsernameAndPassword()
 	client, err := newJiraClient(username, password)
 	require.NoError(t, err)
+	issue := createDeployToClusterIssue(metadata{
+		Version: testVersion,
+		Tag:     testBuildId,
+	})
+	createRealJiraIssue(t, client, issue)
+}
 
-	deployToClusterIssue := createDeployToClusterIssue(testVersion, testBuildId)
-
-	newIssue, _, err := client.client.Issue.Create(deployToClusterIssue)
+// createRealJiraIssue creates a **real** JIRA issue:
+// refer to the printed test output to get the url for the
+// newly-created ticket.
+// *******************************************************
+//                      WARNING!!
+// *******************************************************
+// If this is creating a ticket for an actively used
+// project, remember to cancel/delete the ticket
+// afterwards! :)
+// *******************************************************
+func createRealJiraIssue(t *testing.T, client *jiraClient, issue *jira.Issue) {
+	newIssue, resp, err := client.client.Issue.Create(issue)
+	// saving resp in case we need to inspect (e.g. get a 400)
+	require.NotEmpty(t, resp)
 	require.NoError(t, err)
 
 	// The only set values on a newIssue object are ID, Self, Key.
