@@ -39,7 +39,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 58
+const Version execinfrapb.DistSQLVersion = 59
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
@@ -50,6 +50,14 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 58
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 59 (MinAcceptedVersion: 58)
+  - final_regr_sxx, final_regr_sxy, and final_regr_syy aggregate functions were
+    introduced to support local and final aggregation of the corresponding
+    builtin functions. It would be unrecognized by a server running older
+    versions, hence the version bump. However, a server running v59 can still
+    process all plans from servers running v58, thus the MinAcceptedVersion is
+    kept at 58.
 
 - Version: 58 (MinAcceptedVersion: 58)
 	- TableReaderSpec now contains a specific list of column IDs and the internal

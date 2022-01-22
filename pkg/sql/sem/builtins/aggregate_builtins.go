@@ -183,6 +183,27 @@ var aggregates = map[string]builtinDefinition{
 		),
 	)),
 
+	"final_regr_sxx": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSXXAggregate,
+			"Calculates sum of squares of the independent variable in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_regr_sxy": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSXYAggregate,
+			"Calculates sum of products of independent times dependent variable in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_regr_syy": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSYYAggregate,
+			"Calculates sum of squares of the dependent variable in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
 	"transition_regression_aggregate": makePrivate(makeTransitionRegressionAggregateBuiltin()),
 
 	"covar_samp": makeRegressionAggregateBuiltin(
@@ -1147,6 +1168,9 @@ var _ tree.AggregateFunc = &regressionAccumulatorDecimalBase{}
 var _ tree.AggregateFunc = &finalRegressionAccumulatorDecimalBase{}
 var _ tree.AggregateFunc = &covarPopAggregate{}
 var _ tree.AggregateFunc = &finalCovarPopAggregate{}
+var _ tree.AggregateFunc = &finalRegrSXXAggregate{}
+var _ tree.AggregateFunc = &finalRegrSXYAggregate{}
+var _ tree.AggregateFunc = &finalRegrSYYAggregate{}
 var _ tree.AggregateFunc = &covarSampAggregate{}
 var _ tree.AggregateFunc = &regressionInterceptAggregate{}
 var _ tree.AggregateFunc = &regressionR2Aggregate{}
@@ -2102,6 +2126,33 @@ func (a *regressionAccumulatorDecimalBase) covarPopLastStage() (tree.Datum, erro
 	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
+// regrSXXLastStage computes sum of squares of the independent variable from the
+// precalculated transition values.
+func (a *regressionAccumulatorDecimalBase) regrSXXLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+	return mapToDFloat(&a.sxx, a.ed.Err())
+}
+
+// regrSXYLastStage computes sum of products of independent times dependent
+// variable from the precalculated transition values.
+func (a *regressionAccumulatorDecimalBase) regrSXYLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+	return mapToDFloat(&a.sxy, a.ed.Err())
+}
+
+// regrSYYLastStage computes sum of squares of the dependent variable from the
+// precalculated transition values.
+func (a *regressionAccumulatorDecimalBase) regrSYYLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+	return mapToDFloat(&a.syy, a.ed.Err())
+}
+
 type finalRegressionAccumulatorDecimalBase struct {
 	regressionAccumulatorDecimalBase
 	otherTransitionValues [regrFieldsTotal]*apd.Decimal
@@ -2353,6 +2404,67 @@ func (a *finalCovarPopAggregate) Result() (tree.Datum, error) {
 	return a.covarPopLastStage()
 }
 
+// finalRegrSXXAggregate represents sum of squares of the independent variable.
+type finalRegrSXXAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegrSXXAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegrSXXAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegrSXXAggregate) Result() (tree.Datum, error) {
+	return a.regrSXXLastStage()
+}
+
+// finalRegrSXYAggregate represents sum of products of independent
+// times dependent variable.
+type finalRegrSXYAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegrSXYAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegrSXYAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegrSXYAggregate) Result() (tree.Datum, error) {
+	return a.regrSXYLastStage()
+}
+
+// finalRegrSYYAggregate represents sum of squares of the dependent variable.
+type finalRegrSYYAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegrSYYAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegrSYYAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegrSYYAggregate) Result() (tree.Datum, error) {
+	return a.regrSYYLastStage()
+}
+
 // covarSampAggregate represents sample covariance.
 type covarSampAggregate struct {
 	regressionAccumulatorDecimalBase
@@ -2533,10 +2645,7 @@ func newRegressionSXXAggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionSXXAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
-	return mapToDFloat(&a.sxx, a.ed.Err())
+	return a.regrSXXLastStage()
 }
 
 // regressionSXYAggregate represents sum of products of independent
@@ -2555,10 +2664,7 @@ func newRegressionSXYAggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionSXYAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
-	return mapToDFloat(&a.sxy, a.ed.Err())
+	return a.regrSXYLastStage()
 }
 
 // regressionSYYAggregate represents sum of squares of the dependent variable.
@@ -2576,10 +2682,7 @@ func newRegressionSYYAggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionSYYAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
-	return mapToDFloat(&a.syy, a.ed.Err())
+	return a.regrSYYLastStage()
 }
 
 // regressionCountAggregate calculates number of input rows in which both

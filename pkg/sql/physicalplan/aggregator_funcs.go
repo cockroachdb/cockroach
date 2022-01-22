@@ -338,4 +338,34 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 			},
 		},
 	},
+
+	execinfrapb.RegrSxx: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalRegrSxx,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.RegrSxy: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalRegrSxy,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.RegrSyy: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalRegrSyy,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
 }
