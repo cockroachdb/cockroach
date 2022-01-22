@@ -1,5 +1,4 @@
 # LogicTest: 5node
-# cluster-opt: disable-span-configs
 
 statement ok
 CREATE TABLE geo_table(
@@ -107,7 +106,7 @@ start_key             end_key               replicas  lease_holder
 NULL                  /1152921574000000000  {1}       1
 /1152921574000000000  NULL                  {2}       2
 
-# Distributed.
+# Distributed. TODO(treilly): This claims to be distributed, but it isn't. What gives?
 query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
@@ -176,8 +175,9 @@ start_key             end_key               replicas  lease_holder
 NULL                  /1152921574000000000  {2}       2
 /1152921574000000000  NULL                  {2}       2
 
-# Filtering is placed at node 2.
-query T
+# Filtering is placed at node 2. We need a retry here to account for possibly
+# stale dist sender caches.
+query T retry
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
@@ -205,6 +205,9 @@ vectorized: true
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlN9v2jAQx9_3V1j3UtBcsJ3QrX6iP9ItE4UuMG3VjKqM3LqoYGe2mZgq_vcppGtLK9LGD4Y7-3OX71e2b8H9noOE6NvF4CgektZpPJ6MPw_aZBwNopMJuSFnyeicXKO58umPOZKvH6MkIs5f5dqjdTjzrrV3_mUwiS9G8XDSaomOIKIj2pS0gg4jQYe123tSfohG59EkuaRlrUWbjJLTKCHHl-QGKGiT4TBdoAP5HThQEDClUFgzQ-eMLdO3m01xtgLJKOS6WPoyPaUwMxZB3oLP_RxBwtDsm6LbAwoZ-jSfb7atKZilf4CcT68R5MGaPirM6wtPSgMSTDO0XbZVHu796ZfqrnKd4QoonJj5cqGdJDeVbKAwLtIy0VVwrNTqZ6bUijOlVuylCfabMlwBSXVGAkaM_4XWwS4beBMbYv0HrcfsLJ97tGi7fNuL_-vRqrDEaNLnkrhSNXE-tV5uVATvekoxwZRi7KUJCOqsKVaKf6KewmjpJenznT6IJj58Mrm-Ow1i12kobL5I7d-H1rQvdnYPmnS_dz_Y7l3l5dMbyjgLWTXE3S9nvPpzeHR4PxgPn8UPO7fG-_BZvCcfX_S-aL_C87CJ6rGxHm033Nbc5293lu9tlX_h6UjQFUY7fNXbwdZTCphdY_U8ObO0M7ywZrZpU4WjDbdJZOh8tXpQBbGulsoPfAzzWljUw6IWDurhoBYO6-GwFu7Vw71amD2Bp-s3_wIAAP__EGcZAQ==
 
 # Filtering is at gateway node since the filter is not distributable.
+#
+# TODO(treilly): What the text above claims does not square with the figure
+# generated below.
 query T
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
@@ -236,7 +239,22 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlF9v2jwUxu_fT
 statement ok
 SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
 
-query T
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+----
+start_key             end_key               replicas  lease_holder
+NULL                  /1152921574000000000  {2}       2
+/1152921574000000000  NULL                  {2}       2
+
+query ITTTI colnames,rowsort
+SELECT range_id, start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE geo_table]
+----
+range_id  start_key  end_key  replicas  lease_holder
+43        NULL       NULL     {2}       2
+
+# We should see a distributed execution (though need to retry to purge possibly
+# stale dist sender caches).
+query T retry
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE geom && 'POINT(3.0 3.0)'::geometry
 ----
@@ -260,7 +278,7 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlFFv0zAQx9_5FNa9dJO81U5aQH4qjAyCura0lQDhagr1UaKldrAdFFT1u6MksK2dmq55sHRn_-78_8uXDbhfGQiIvkyGb-IROXsXz-azT8NzMouG0dWc3JHr6fiGrNDc-uR7huTzh2gaVfGayIKx4GWzks5kHI_mZ-ElI-ElO-8I8T4a30Tz6VegoI3CUbJGB-IbcKAQwIJCbs0SnTO2Sm_qQ7EqQTAKqc4LX6UXFJbGIogN-NRnCAJG5sLk3R5QUOiTNKuPbSmYwj9AzicrBNHf0keFeXvheSVwiolC22U75eFe_6BSfptqhSVQuDJZsdZOkDtaWwIUZnlSJboS3kpZ_lBSlpxJWbJjC1ycynAJJNGKhIwY_xOtg0M28FNsiPVvtB7VdZp5tGi7fNeL__tRmVtiNBlwQVylmjifWC9qFeGrvpQsYFIydmwBglqdilXi99RTGBdekAE_6ENwig8fTar_vYbg0GvIbbpO7J-H1nQQHOwentL93v1wt3eTF2QQ7M0f44yzp9_r3pO4I3aG85hpvZ1rHxnOKbrcaIfPmk62XVBAtcLmB-BMYZc4sWZZt2nCcc3VCYXON7v9Joh1s1Vd8DHMW-GgHQ5a4bAdDlvhXjvca4XZHrzYvvgbAAD__-uIzaE=
 
-query T
+query T retry
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom
 ----
@@ -284,7 +302,7 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk99v2jAQx9_3V1j3Qiu5wk5gm_zEaFONiUEHSEOaUZXhG4sa7Mx2pkyI_31Ksv6gHaHJg6W7y-fO3698O3C_UhAQLW_GH0YTcnY1mi_mX8bnZB6No8sFuSPXs-lnskFz6-PvKZKvH6NZRDqMM85efu97L-KOEMPpMrgiMmcseFufZcMtUNBG4STeogPxDThQCGBFIbNmjc4ZW6Z31U8jVYBgFBKd5b5MryisjUUQO_CJTxEETMyFybo9oKDQx0la_banYHL_CDkfbxBEf0-fNObNjRel8hnGCm2XHbSHB2MGpaLbRCssgMKlSfOtdoLc0Xup8ywuE10JQymLH0rKgjMpC3bqgIu2DJdAYq1IyIjxP9E6OGYDb2PDSP9G61FdJ6lHi7bLD724r0dFZonRZMAFcaVq4nxsvahUhO_6UrKAScnYqQMIatUWK8U_U09hmntBBvyoD0EbHz6ZRP97DcGx15DZZBvbP4-j6SA4Oj1sM_3B_fBwdp0XpDOcLs9CEtKQhOcd8d_tGwSv8KR3cKsTuzdDlxnt8FXLx_YrCqg2WO-3M7ld440162pMHU4rrkoodL6u9utgpOtSecGnMG-Eg2Y4aITDZjhshHvNcK8RZs_g1f7N3wAAAP__-TrK3A==
 
-query T
+query T retry
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom
 ----
@@ -308,7 +326,7 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlGFv2jwQx98_n8K6N7SSC3YS9Eh-xdaFLhOFLiBt04yqjNxY1GBntpkyIfbZpySjBSRCsRRHd_bPl_9fvmzA_sxBQPj5YfQmGpOrd9F0Nv04uibTcBTezsgTGcaTe7JE_eiSbzmST-_DOCSdUTQOp7M4Gt9d8S4jvMso6XdZ9Vx3hLgLJ_fhLP5C_lToCigoneI4WaEF8RU4UPBgTqEweoHWalOlN_WmKC1BMAqZKtauSs8pLLRBEBtwmcsRBIz1jS56AVBI0SVZXm_bUtBr9wJZlywRRH9L9w7m7QfPKo0xJimaHjs4Hp4tGFSKHjOVYgkUbnW-XikryBPdSZ0WSZXoSXgrZfk9lbLkTMqSnZvg5lKGSyCJSonvEe1-oLFwygZ-iQ2R-oXGYTrMcocGTY8ferFbD8vCEK3IgAtiK9XEusQ4Uavw_-9LyTwmJWPnJiCo0kuxSvyRegqTtRNkwE_64F3iwwedqX-3wTt1GwqTrRLz-6U0HXgnq_uXVH923z-s3eQF6TDOPNaM3XtvDJk_bIt5ELDjuCMOenfgvcLR4EDTmc6N0RZaWXxV67LtnAKmS2z-DlavzQIfjF7UZZpwUnN1IkXrmtV-E0SqWao-cB_mrbDXDnutsN8O-61w0A4HrTA7gufb__4GAAD__zWM0xs=
 
-query T
+query T retry
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
 ----
