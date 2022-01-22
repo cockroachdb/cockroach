@@ -921,20 +921,21 @@ func (p *Provider) runInstance(
 	if p.IAMProfile != "" {
 		args = append(args, "--iam-instance-profile", "Name="+p.IAMProfile)
 	}
-
+	// Make a local copy of providerOpts.EBSVolumes to prevent data races
+	ebsVolumes := providerOpts.EBSVolumes
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
 	if !opts.SSDOpts.UseLocalSSD {
-		if len(providerOpts.EBSVolumes) == 0 && providerOpts.DefaultEBSVolume.Disk.VolumeType == "" {
+		if len(ebsVolumes) == 0 && providerOpts.DefaultEBSVolume.Disk.VolumeType == "" {
 			providerOpts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
 			providerOpts.DefaultEBSVolume.Disk.DeleteOnTermination = true
 		}
 
 		if providerOpts.DefaultEBSVolume.Disk.VolumeType != "" {
 			// Add default volume to the list of volumes we'll setup.
-			v := providerOpts.EBSVolumes.newVolume()
+			v := ebsVolumes.newVolume()
 			v.Disk = providerOpts.DefaultEBSVolume.Disk
 			v.Disk.DeleteOnTermination = true
-			providerOpts.EBSVolumes = append(providerOpts.EBSVolumes, v)
+			ebsVolumes = append(ebsVolumes, v)
 		}
 	}
 
@@ -946,9 +947,9 @@ func (p *Provider) runInstance(
 			DeleteOnTermination: true,
 		},
 	}
-	providerOpts.EBSVolumes = append(providerOpts.EBSVolumes, osDiskVolume)
+	ebsVolumes = append(ebsVolumes, osDiskVolume)
 
-	mapping, err := json.Marshal(providerOpts.EBSVolumes)
+	mapping, err := json.Marshal(ebsVolumes)
 	if err != nil {
 		return err
 	}
