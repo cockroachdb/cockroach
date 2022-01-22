@@ -84,9 +84,9 @@ func (s *Scanner) Cleanup() {
 }
 
 func (s *Scanner) allocBytes(length int) []byte {
-	if len(s.bytesPrealloc) >= length {
+	if cap(s.bytesPrealloc) >= length {
 		res := s.bytesPrealloc[:length:length]
-		s.bytesPrealloc = s.bytesPrealloc[length:]
+		s.bytesPrealloc = s.bytesPrealloc[length:length]
 		return res
 	}
 	return make([]byte, length)
