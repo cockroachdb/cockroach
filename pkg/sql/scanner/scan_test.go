@@ -149,3 +149,31 @@ func TestLastLexicalToken(t *testing.T) {
 		})
 	}
 }
+
+func TestScannerBuffer(t *testing.T) {
+	scanner := makeScanner("pretty long initial query string")
+
+	// get one buffer and return it
+	initialBuffer := scanner.buffer()
+	b := append(initialBuffer, []byte("abc")...)
+	s := scanner.finishString(b)
+	require.Equal(t, "abc", s)
+
+	// append some bytes with allocBytes()
+	b = scanner.allocBytes(4)
+	copy(b, []byte("defg"))
+	require.Equal(t, []byte("abcdefg"), initialBuffer[:7])
+
+	// append other bytes with buffer()+finishString()
+	b = scanner.buffer()
+	b = append(b, []byte("hi")...)
+	s = scanner.finishString(b)
+	require.Equal(t, "hi", s)
+	require.Equal(t, []byte("abcdefghi"), initialBuffer[:9])
+}
+
+func makeScanner(str string) Scanner {
+	var s Scanner
+	s.Init(str)
+	return s
+}
