@@ -133,6 +133,25 @@ func publicSchemaMigrationTest(t *testing.T, ctx context.Context, numTables int)
 
 	require.Equal(t, typArrParentSchemaID, defaultDBPublicSchemaID)
 
+	// Verify that the public role has the correct permissions on the public schema.
+	for _, expectedPrivType := range []string{"CREATE", "USAGE"} {
+		var privType string
+		err = db.QueryRow(`
+SELECT privilege_type FROM [SHOW GRANTS ON SCHEMA defaultdb.public]
+WHERE grantee = 'public' AND privilege_type = $1`,
+			expectedPrivType).
+			Scan(&privType)
+		require.NoError(t, err)
+		require.Equal(t, expectedPrivType, privType)
+		err = db.QueryRow(`
+SELECT privilege_type FROM [SHOW GRANTS ON SCHEMA postgres.public]
+WHERE grantee = 'public' AND privilege_type = $1`,
+			expectedPrivType).
+			Scan(&privType)
+		require.NoError(t, err)
+		require.Equal(t, expectedPrivType, privType)
+	}
+
 	_, err = db.Exec(`INSERT INTO t VALUES (4)`)
 	require.NoError(t, err)
 

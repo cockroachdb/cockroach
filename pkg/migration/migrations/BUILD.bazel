@@ -37,6 +37,7 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/util/log",
