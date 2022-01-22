@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,4 +149,32 @@ func TestLastLexicalToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestScannerBuffer(t *testing.T) {
+	scanner := makeScanner("pretty long initial query string")
+
+	// get one buffer and return it
+	initialBuffer := scanner.buffer()
+	b := append(initialBuffer, []byte("abc")...)
+	s := scanner.finishString(b)
+	assert.Equal(t, "abc", s)
+
+	// append some bytes with allocBytes()
+	b = scanner.allocBytes(4)
+	copy(b, []byte("defg"))
+	assert.Equal(t, []byte("abcdefg"), initialBuffer[:7])
+
+	// append other bytes with buffer()+finishString()
+	b = scanner.buffer()
+	b = append(b, []byte("hi")...)
+	s = scanner.finishString(b)
+	assert.Equal(t, "hi", s)
+	assert.Equal(t, []byte("abcdefghi"), initialBuffer[:9])
+}
+
+func makeScanner(str string) Scanner {
+	var s Scanner
+	s.Init(str)
+	return s
 }
