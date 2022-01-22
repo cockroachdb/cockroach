@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -107,6 +108,13 @@ func createPublicSchemaDescriptor(
 
 	publicSchemaDesc, _, err := sql.CreateSchemaDescriptorWithPrivileges(
 		ctx, d.DB, d.Codec, desc, tree.PublicSchema, security.AdminRoleName(), security.AdminRoleName(), true, /* allocateID */
+	)
+	// The public role has hardcoded privileges; see comment in
+	// maybeCreatePublicSchemaWithDescriptor.
+	publicSchemaDesc.Privileges.Grant(
+		security.PublicRoleName(),
+		privilege.List{privilege.CREATE, privilege.USAGE},
+		false, /* withGrantOption */
 	)
 	if err != nil {
 		return err
