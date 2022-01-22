@@ -69,11 +69,15 @@ func (s *spanInner) SetVerbose(to bool) {
 	s.crdb.SetVerbose(to)
 }
 
-func (s *spanInner) GetRecording(recType RecordingType) Recording {
+// GetRecording returns the span's recording.
+//
+// finishing indicates whether s is in the process of finishing. If it isn't,
+// the recording will include an "_unfinished" tag.
+func (s *spanInner) GetRecording(recType RecordingType, finishing bool) Recording {
 	if s.isNoop() {
 		return nil
 	}
-	return s.crdb.GetRecording(recType)
+	return s.crdb.GetRecording(recType, finishing)
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
@@ -81,17 +85,12 @@ func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 }
 
 func (s *spanInner) Finish() {
-	if s == nil {
-		return
-	}
-	if s.isNoop() {
+	if s == nil || s.isNoop() {
 		return
 	}
 
 	if !s.crdb.finish() {
-		// The span was already finished. External spans and net/trace are not
-		// always forgiving about spans getting finished twice, but it may happen so
-		// let's be resilient to it.
+		// Short-circuit because netTr.Finish does not tolerate double-finish.
 		return
 	}
 
