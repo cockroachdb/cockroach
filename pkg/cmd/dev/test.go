@@ -210,7 +210,10 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		}
 		stressCmdArgs = append(stressCmdArgs, stressArgs)
 		args = append(args, "--run_under",
-			fmt.Sprintf("%s %s", stressTarget, strings.Join(stressCmdArgs, " ")))
+			// NB: Run with -bazel, which propagates `TEST_TMPDIR` to `TMPDIR`,
+			// and -shardable-artifacts set such that we can merge the XML output
+			// files.
+			fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' %s", stressTarget, getDevBin(), strings.Join(stressCmdArgs, " ")))
 	}
 
 	if filter != "" {
