@@ -49,13 +49,18 @@ type crdbSpan struct {
 	// tag's key to a user.
 	logTags *logtags.Buffer
 
-	// Locking rules: if locking both a parent and a child, the parent must be
-	// locked first. In practice, children don't take the parent's lock.
-	mu crdbSpanMu
+	// Locking rules:
+	// - If locking both a parent and a child, the parent must be locked first. In
+	// practice, children don't take the parent's lock.
+	// - The active spans registry's lock must be acquired before this lock.
+	mu struct {
+		syncutil.Mutex
+		crdbSpanMu
+	}
 }
 
 type childRef struct {
-	*crdbSpan
+	spanRef
 	// collectRecording is set if this child's recording should be included in the
 	// parent's recording. This is usually the case, except for children created
 	// with the WithDetachedRecording() option.
@@ -63,8 +68,6 @@ type childRef struct {
 }
 
 type crdbSpanMu struct {
-	syncutil.Mutex
-
 	// goroutineID is the ID of the goroutine that created this span, or the goroutine that
 	// subsequently adopted it through Span.UpdateGoroutineIDToCurrent()).
 	goroutineID uint64
@@ -75,9 +78,15 @@ type crdbSpanMu struct {
 	// Note that parent is mutable; a span can start by having a parent but then,
 	// if the parent finishes before the child does (which is uncommon), the
 	// child's parent is set to nil.
-	parent *crdbSpan
+	//
+	// While parent is set, this child is holding a reference in the parent's
+	// reference counter. The parent's ref count is decremented when this child
+	// Finish()es, or otherwise when this pointer is nil'ed (i.e. on parent
+	// Finish()).
+	parent spanRef
 
 	finished bool
+
 	// duration is initialized to -1 and set on Finish().
 	duration time.Duration
 
@@ -94,36 +103,7 @@ type crdbSpanMu struct {
 	// The spans are not maintained in a particular order.
 	openChildren []childRef
 
-	recording struct {
-		// recordingType is the recording type of the ongoing recording, if any.
-		// Its 'load' method may be called without holding the surrounding mutex,
-		// but its 'swap' method requires the mutex.
-		recordingType atomicRecordingType
-
-		logs sizeLimitedBuffer // of *tracingpb.LogRecords
-		// structured accumulates StructuredRecord's. It will contain the events
-		// recorded on this span, and also the ones recorded on children that
-		// finished while this parent span's recording was not verbose.
-		structured sizeLimitedBuffer
-
-		// dropped is true if the span has capped out it's memory limits for
-		// logs and structured events, and has had to drop some. It's used to
-		// annotate recordings with the _dropped tag, when applicable.
-		dropped bool
-
-		// finishedChildren contains the recordings of finished children (and
-		// grandchildren recursively). This includes remote child span recordings
-		// that were manually imported, as well as recordings from local children
-		// that Finish()ed.
-		//
-		// Only child spans that finished while this span was in the
-		// RecordingVerbose mode are included here. For children finished while this
-		// span is not in RecordingVerbose, only their structured events are copied
-		// to structured above.
-		//
-		// The spans are not maintained in a particular order.
-		finishedChildren []tracingpb.RecordedSpan
-	}
+	recording recordingState
 
 	// tags are only captured when recording. These are tags that have been
 	// added to this Span, and will be appended to the tags in logTags when
@@ -134,6 +114,37 @@ type crdbSpanMu struct {
 	tags []attribute.KeyValue
 }
 
+type recordingState struct {
+	// recordingType is the recording type of the ongoing recording, if any.
+	// Its 'load' method may be called without holding the surrounding mutex,
+	// but its 'swap' method requires the mutex.
+	recordingType atomicRecordingType
+
+	logs sizeLimitedBuffer // of *tracingpb.LogRecords
+	// structured accumulates StructuredRecord's. It will contain the events
+	// recorded on this span, and also the ones recorded on children that
+	// finished while this parent span's recording was not verbose.
+	structured sizeLimitedBuffer
+
+	// dropped is true if the span has capped out it's memory limits for
+	// logs and structured events, and has had to drop some. It's used to
+	// annotate recordings with the _dropped tag, when applicable.
+	dropped bool
+
+	// finishedChildren contains the recordings of finished children (and
+	// grandchildren recursively). This includes remote child span recordings
+	// that were manually imported, as well as recordings from local children
+	// that Finish()ed.
+	//
+	// Only child spans that finished while this span was in the
+	// RecordingVerbose mode are included here. For children finished while this
+	// span is not in RecordingVerbose, only their structured events are copied
+	// to structured above.
+	//
+	// The spans are not maintained in a particular order.
+	finishedChildren []tracingpb.RecordedSpan
+}
+
 // makeSizeLimitedBuffer creates a sizeLimitedBuffer.
 //
 // scratch, if not nil, represents pre-allocated space that the Buffer takes
@@ -141,43 +152,62 @@ type crdbSpanMu struct {
 // included elements and available capacity.
 func makeSizeLimitedBuffer(limit int64, scratch []interface{}) sizeLimitedBuffer {
 	return sizeLimitedBuffer{
-		limit:  limit,
-		Buffer: ring.MakeBuffer(scratch),
+		bytesLimit: limit,
+		Buffer:     ring.MakeBuffer(scratch),
 	}
 }
 
+// sizeLimitedBuffer is a wrapper on top of ring.Buffer that keeps track of the
+// memory size of its elements.
 type sizeLimitedBuffer struct {
 	ring.Buffer
-	size  int64 // in bytes
-	limit int64 // in bytes
+	bytesSize  int64
+	bytesLimit int64
+}
+
+// Discard zeroes out *buf. If nobody else is referencing the backing storage
+// for the buffer, or any of the elements, then this makes the backing storage
+// is made available for GC.
+//
+// Note that Discard does not modify the backing storage (i.e. it does not nil
+// out the elements). So, if anyone still has a reference to the storage, then
+// the elements cannot be GCed.
+func (buf *sizeLimitedBuffer) Discard() {
+	*buf = sizeLimitedBuffer{}
 }
 
 // finish marks the span as finished. Further operations on the span are not
 // allowed. Returns false if the span was already finished.
 //
-// TODO(andrei): The intention is for a span to be available for reuse (e.g.
-// through a sync.Pool) after finish(), although we're not currently taking
-// advantage of this. I think there might be users that collect a span's
-// recording after finish(), which should be illegal. For now, use-after-finish
-// is generally tolerated - and that's also why this method returns false when
-// called a second time.
+// Calling finish() a second time is illegal, as is any use-after-finish().
+// Still, the Tracer can be configured to tolerate such uses. If the Tracer was
+// configured to not tolerate use-after-Finish, we would have crashed before
+// calling this.
 func (s *crdbSpan) finish() bool {
-	var children []*crdbSpan
-	var parent *crdbSpan
-	var needRegistryChange bool
+	// Finishing involves the following steps:
+	// 1) Take the lock and capture a reference to the parent.
+	// 2) Operate on the parent outside of the lock.
+	// 3) Take the lock again, operate on the children under the lock, and also
+	//    capture references to the children for further operations outside of the
+	//    lock.
+	// 4) Insert the children into the active spans registry outside of the lock.
+	//
+	// We could reorder things such that the lock is only taken once, but it
+	// results in more awkward code because operating on the s' parent expects to
+	// find s' children in place, to collect their recordings.
+
+	var parent spanRef
+	var hasParent bool
 	{
 		s.mu.Lock()
 		if s.mu.finished {
-			// Already finished.
+			// Already finished (or at least in the process of finish()ing). This
+			// check ensures that only one caller performs cleanup for this span. We
+			// don't want the span to be re-allocated while finish() is running.
 			s.mu.Unlock()
 			return false
 		}
 		s.mu.finished = true
-		// If the span is not part of the registry now, it never will be. So, we'll
-		// need to remove it from the registry only if it currently does not have a
-		// parent. We'll also need to manipulate the registry if there are open
-		// children (they'll need to be added to the registry).
-		needRegistryChange = s.mu.parent == nil || len(s.mu.openChildren) > 0
 
 		if s.recordingType() != RecordingOff {
 			duration := timeutil.Since(s.startTime)
@@ -187,26 +217,62 @@ func (s *crdbSpan) finish() bool {
 			s.mu.duration = duration
 		}
 
-		// Shallow-copy the children so they can be processed outside the lock.
-		children = make([]*crdbSpan, len(s.mu.openChildren))
-		for i, c := range s.mu.openChildren {
-			children[i] = c.crdbSpan
+		// If there is a parent, we'll operate on the parent below, outside the
+		// child's lock, as per the lock ordering convention between parents and
+		// children. The parent might get Finish()ed by the time we call
+		// parent.childFinished(s) on it below; that's OK because we're going to
+		// hold on taking a reference in the parent's reference counter. Notice that
+		// we move the reference out of s.mu.parent; leaving it there would not work
+		// because s.mu.parent can be released by s.parentFinished() after we drop
+		// our lock.
+		//
+		// If there is no parent, we avoid releasing and then immediately
+		// re-acquiring the lock, as a performance optimization.
+		parent = s.mu.parent.move()
+		hasParent = !parent.empty()
+		if hasParent {
+			s.mu.Unlock()
+		}
+	}
+
+	// Operate on the parent outside the child (our current receiver) lock.
+	// childFinished() might call back into the child and acquire the child's
+	// lock.
+	if hasParent {
+		parent.Span.i.crdb.childFinished(s)
+		parent.release()
+	}
+
+	// Operate on children.
+	var children []spanRef
+	var needRegistryChange bool
+	{
+		// Re-acquire the lock if we dropped it above.
+		if hasParent {
+			s.mu.Lock()
 		}
 
-		// We'll operate on the parent outside of the child's lock.
-		parent = s.mu.parent
+		// If the span is not part of the registry now, it never will be. So, we'll
+		// need to remove it from the registry only if it currently does not have a
+		// parent. We'll also need to manipulate the registry if there are open
+		// children (they'll need to be added to the registry).
+		needRegistryChange = !hasParent || len(s.mu.openChildren) > 0
 
+		// Deal with the orphaned children - make them roots. We call into the
+		// children while holding the parent's lock. As per the span locking
+		// convention, that's OK (but the reverse isn't).
+		//
+		// We also shallow-copy the children for operating on them outside the lock.
+		children = make([]spanRef, len(s.mu.openChildren))
+		for i, c := range s.mu.openChildren {
+			c.parentFinished()
+			// Move ownership of the child reference, and also nil out the pointer to
+			// the child, making it available for GC.
+			children[i] = c.spanRef.move()
+		}
 		s.mu.Unlock()
 	}
 
-	if parent != nil {
-		parent.childFinished(s)
-	}
-
-	// Deal with the orphaned children - make them roots.
-	for _, c := range children {
-		c.parentFinished()
-	}
 	if needRegistryChange {
 		// Atomically replace s in the registry with all of its still-open children.
 		s.tracer.activeSpansRegistry.swap(s.spanID, children)
@@ -248,19 +314,29 @@ func (s *crdbSpan) TraceID() tracingpb.TraceID {
 	return s.traceID
 }
 
-// GetRecording is part of the RegistrySpan interface.
-func (s *crdbSpan) GetRecording(recType RecordingType) Recording {
-	return s.getRecordingImpl(recType, false /* includeDetachedChildren */)
+// GetRecording returns the span's recording.
+//
+// finishing indicates whether s is in the process of finishing. If it isn't,
+// the recording will include an "_unfinished" tag.
+func (s *crdbSpan) GetRecording(recType RecordingType, finishing bool) Recording {
+	return s.getRecordingImpl(recType, false /* includeDetachedChildren */, finishing)
 }
 
+// GetFullRecording is part of the RegistrySpan interface.
 func (s *crdbSpan) GetFullRecording(recType RecordingType) Recording {
-	return s.getRecordingImpl(recType, true /* includeDetachedChildren */)
+	return s.getRecordingImpl(recType, true /* includeDetachedChildren */, false /* finishing */)
 }
 
-func (s *crdbSpan) getRecordingImpl(recType RecordingType, includeDetachedChildren bool) Recording {
+// getRecordingImpl returns the span's recording.
+//
+// finishing indicates whether s is in the process of finishing. If it isn't,
+// the recording will include an "_unfinished" tag.
+func (s *crdbSpan) getRecordingImpl(
+	recType RecordingType, includeDetachedChildren bool, finishing bool,
+) Recording {
 	switch recType {
 	case RecordingVerbose:
-		return s.getVerboseRecording(includeDetachedChildren)
+		return s.getVerboseRecording(includeDetachedChildren, finishing)
 	case RecordingStructured:
 		return s.getStructuredRecording(includeDetachedChildren)
 	case RecordingOff:
@@ -271,7 +347,10 @@ func (s *crdbSpan) getRecordingImpl(recType RecordingType, includeDetachedChildr
 }
 
 // getVerboseRecording returns the Span's recording, including its children.
-func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool) Recording {
+//
+// finishing indicates whether s is in the process of finishing. If it isn't,
+// the recording will include an "_unfinished" tag.
+func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing bool) Recording {
 	if s == nil {
 		return nil // noop span
 	}
@@ -280,12 +359,13 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool) Recording {
 	// The capacity here is approximate since we don't know how many
 	// grandchildren there are.
 	result := make(Recording, 0, 1+len(s.mu.openChildren)+len(s.mu.recording.finishedChildren))
-	result = append(result, s.getRecordingNoChildrenLocked(RecordingVerbose))
+	result = append(result, s.getRecordingNoChildrenLocked(RecordingVerbose, finishing))
 	result = append(result, s.mu.recording.finishedChildren...)
 
 	for _, child := range s.mu.openChildren {
 		if child.collectRecording || includeDetachedChildren {
-			result = append(result, child.getVerboseRecording(includeDetachedChildren)...)
+			sp := child.Span.i.crdb
+			result = append(result, sp.getVerboseRecording(includeDetachedChildren, false /* finishing */)...)
 		}
 	}
 	s.mu.Unlock()
@@ -319,7 +399,8 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 	}
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
-			buffer = c.getStructuredEventsRecursively(buffer, includeDetachedChildren)
+			sp := c.Span.i.crdb
+			buffer = sp.getStructuredEventsRecursively(buffer, includeDetachedChildren)
 		}
 	}
 
@@ -328,7 +409,10 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 		return nil
 	}
 
-	res := s.getRecordingNoChildrenLocked(RecordingOff)
+	res := s.getRecordingNoChildrenLocked(
+		RecordingStructured,
+		false, // finishing - since we're only asking for the structured recording, the argument doesn't matter
+	)
 	// If necessary, grow res.StructuredRecords to have space for buffer.
 	var reservedSpace []tracingpb.StructuredRecord
 	if cap(res.StructuredRecords)-len(res.StructuredRecords) < len(buffer) {
@@ -470,21 +554,21 @@ func (s *crdbSpan) recordInternal(payload memorySizable, buffer *sizeLimitedBuff
 
 func (s *crdbSpan) recordInternalLocked(payload memorySizable, buffer *sizeLimitedBuffer) {
 	size := int64(payload.MemorySize())
-	if size > buffer.limit {
+	if size > buffer.bytesLimit {
 		// The incoming payload alone blows past the memory limit. Let's just
 		// drop it.
 		s.mu.recording.dropped = true
 		return
 	}
 
-	buffer.size += size
-	if buffer.size > buffer.limit {
+	buffer.bytesSize += size
+	if buffer.bytesSize > buffer.bytesLimit {
 		s.mu.recording.dropped = true
 	}
-	for buffer.size > buffer.limit {
+	for buffer.bytesSize > buffer.bytesLimit {
 		first := buffer.GetFirst().(memorySizable)
 		buffer.RemoveFirst()
-		buffer.size -= int64(first.MemorySize())
+		buffer.bytesSize -= int64(first.MemorySize())
 	}
 	buffer.AddLast(payload)
 }
@@ -499,7 +583,8 @@ func (s *crdbSpan) getStructuredEventsRecursively(
 	buffer = s.getStructuredEventsLocked(buffer)
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
-			buffer = c.getStructuredEventsRecursively(buffer, includeDetachedChildren)
+			sp := c.Span.i.crdb
+			buffer = sp.getStructuredEventsRecursively(buffer, includeDetachedChildren)
 		}
 	}
 	for _, c := range s.mu.recording.finishedChildren {
@@ -527,8 +612,11 @@ func (s *crdbSpan) getStructuredEventsLocked(
 // The tags are included in the result only if recordingType==RecordingVerbose.
 // This is a performance optimization as stringifying the tag values can be
 // expensive.
+//
+// finishing indicates whether s is in the process of finishing. If it isn't,
+// the recording will include an "_unfinished" tag.
 func (s *crdbSpan) getRecordingNoChildrenLocked(
-	recordingType RecordingType,
+	recordingType RecordingType, finishing bool,
 ) tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
 		TraceID:        s.traceID,
@@ -568,7 +656,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	// more.
 	wantTags := recordingType == RecordingVerbose
 	if wantTags {
-		if !s.mu.finished {
+		if !finishing && !s.mu.finished {
 			addTag("_unfinished", "1")
 		}
 		addTag("_verbose", "1")
@@ -615,7 +703,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 // The adding fails if the receiver has already Finish()ed. This should never
 // happen, since using a Span after Finish() is illegal. But still, we
 // defensively return false.
-func (s *crdbSpan) addChildLocked(child *crdbSpan, collectChildRec bool) bool {
+func (s *crdbSpan) addChildLocked(child *Span, collectChildRec bool) bool {
 	s.mu.AssertHeld()
 
 	if s.mu.finished {
@@ -624,39 +712,55 @@ func (s *crdbSpan) addChildLocked(child *crdbSpan, collectChildRec bool) bool {
 
 	s.mu.openChildren = append(
 		s.mu.openChildren,
-		childRef{crdbSpan: child, collectRecording: collectChildRec},
+		childRef{spanRef: makeSpanRef(child), collectRecording: collectChildRec},
 	)
 	return true
 }
 
 // childFinished is called when a child is Finish()ed. Depending on the
 // receiver's recording mode, the child is atomically removed and replaced it
-// with its recording. This allows the child span to be reused (since the parent
-// no longer references it).
+// with its recording.
 //
 // child is the child span that just finished.
 func (s *crdbSpan) childFinished(child *crdbSpan) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.mu.finished {
+		return
+	}
+
 	var childIdx int
 	found := false
 	for i, c := range s.mu.openChildren {
-		if c.crdbSpan == child {
+		sp := c.Span.i.crdb
+		if sp == child {
 			childIdx = i
 			found = true
 			break
 		}
 	}
 	if !found {
+		// The child is expected to be found. In particular, this parent span is not
+		// supposed to be reused while children are holding a reference to it
+		// (courtesy of the parent's reference counter).
 		panic("child not present in parent")
 	}
 
 	collectChildRec := s.mu.openChildren[childIdx].collectRecording
+	// Drop the child's reference.
+	if s.mu.openChildren[childIdx].decRef() {
+		// We're going to use the child below, so we don't want it to be
+		// re-allocated yet. It shouldn't be re-allocated, because each span holds a
+		// reference to itself that's only dropped at the end of Span.Finish() (and
+		// the child at this point is in the middle of its Finish() call).
+		panic(fmt.Sprintf("span's reference count unexpectedly dropped to zero: %s", child.operation))
+	}
 
 	// Unlink the child.
 	l := len(s.mu.openChildren)
 	s.mu.openChildren[childIdx] = s.mu.openChildren[l-1]
-	s.mu.openChildren[l-1].crdbSpan = nil // Make the child available to GC.
+	s.mu.openChildren[l-1] = childRef{}
 	s.mu.openChildren = s.mu.openChildren[:l-1]
 
 	// Collect the child's recording.
@@ -672,7 +776,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 	case RecordingOff:
 		panic("should have been handled above")
 	case RecordingVerbose:
-		rec = child.GetRecording(RecordingVerbose)
+		rec = child.GetRecording(RecordingVerbose, false /* finishing - the child is already finished */)
 		if len(s.mu.recording.finishedChildren)+len(rec) <= maxRecordedSpansPerTrace {
 			verbose = true
 			break
@@ -701,10 +805,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 func (s *crdbSpan) parentFinished() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.mu.finished {
-		return
-	}
-	s.mu.parent = nil
+	s.mu.parent.release()
 }
 
 // SetVerbose is part of the RegistrySpan interface.

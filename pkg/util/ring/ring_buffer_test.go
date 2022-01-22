@@ -14,22 +14,23 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
-const maxCount = 100
-
-func testRingBuffer(t *testing.T, count int) {
+func TestRingBuffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const operationCount = 100
 	var buffer Buffer
-	naiveBuffer := make([]interface{}, 0, count)
-	for elementIdx := 0; elementIdx < count; elementIdx++ {
-		switch rand.Intn(4) {
+	naiveBuffer := make([]interface{}, 0, operationCount)
+	for i := 0; i < operationCount; i++ {
+		switch rand.Intn(5) {
 		case 0:
-			buffer.AddFirst(elementIdx)
-			naiveBuffer = append([]interface{}{elementIdx}, naiveBuffer...)
+			buffer.AddFirst(i)
+			naiveBuffer = append([]interface{}{i}, naiveBuffer...)
 		case 1:
-			buffer.AddLast(elementIdx)
-			naiveBuffer = append(naiveBuffer, elementIdx)
+			buffer.AddLast(i)
+			naiveBuffer = append(naiveBuffer, i)
 		case 2:
 			if len(naiveBuffer) > 0 {
 				buffer.RemoveFirst()
@@ -42,32 +43,23 @@ func testRingBuffer(t *testing.T, count int) {
 				buffer.RemoveLast()
 				naiveBuffer = naiveBuffer[:len(naiveBuffer)-1]
 			}
+		case 4:
+			// If there's extra capacity, resize to trim it.
+			require.LessOrEqual(t, len(naiveBuffer), buffer.Cap())
+			spareCap := buffer.Cap() - len(naiveBuffer)
+			if spareCap > 0 {
+				buffer.Resize(len(naiveBuffer) + rand.Intn(spareCap))
+			}
 		default:
 			t.Fatal("unexpected")
 		}
 
-		require.Equal(t, len(naiveBuffer), buffer.Len())
-		for pos, el := range naiveBuffer {
-			res := buffer.Get(pos)
-			require.Equal(t, el, res)
-		}
-		if len(naiveBuffer) > 0 {
-			require.Equal(t, naiveBuffer[0], buffer.GetFirst())
-			require.Equal(t, naiveBuffer[len(naiveBuffer)-1], buffer.GetLast())
-		}
-	}
-}
-
-func TestRingBuffer(t *testing.T) {
-	for count := 1; count <= maxCount; count++ {
-		t.Run("Parallel", func(t *testing.T) {
-			t.Parallel() // SAFE FOR TESTING
-			testRingBuffer(t, count)
-		})
+		require.Equal(t, naiveBuffer, buffer.all())
 	}
 }
 
 func TestRingBufferCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	var b Buffer
 
 	require.Panics(t, func() { b.Reserve(-1) })
@@ -116,4 +108,8 @@ func TestRingBufferCapacity(t *testing.T) {
 	b.Reserve(0)
 	require.Equal(t, 0, b.Len())
 	require.Equal(t, 9, b.Cap())
+
+	b.Resize(3)
+	require.Equal(t, 0, b.Len())
+	require.Equal(t, 3, b.Cap())
 }
