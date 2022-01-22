@@ -12,6 +12,8 @@
 // that must also be accessible from other packages.
 package rowinfra
 
+import "github.com/cockroachdb/cockroach/pkg/util"
+
 // RowLimit represents a response limit expressed in terms of number of result
 // rows. RowLimits get ultimately converted to KeyLimits and are translated into
 // BatchRequest.MaxSpanRequestKeys.
@@ -40,4 +42,8 @@ const ProductionKVBatchSize KeyLimit = 100000
 
 // DefaultBatchBytesLimit is the maximum number of bytes a scan request can
 // return.
-const DefaultBatchBytesLimit BytesLimit = 10 << 20 // 10 MB
+var DefaultBatchBytesLimit = BytesLimit(util.ConstantWithMetamorphicTestValue(
+	"default-batch-bytes-limit",
+	10<<20, /* defaultValue, 10 MB */
+	1,      /* metamorphicValue */
+))

@@ -5,4 +5,5 @@ go_library(
     srcs = ["base.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/rowinfra",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util"],
 )
