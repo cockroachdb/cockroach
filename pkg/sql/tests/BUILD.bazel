@@ -28,11 +28,11 @@ go_test(
     name = "tests_test",
     size = "large",
     srcs = [
+        "autocommit_extended_protocol_test.go",
         "bank_test.go",
         "enum_test.go",
         "hash_sharded_test.go",
         "impure_builtin_test.go",
-        "insert_fast_path_test.go",
         "inverted_index_test.go",
         "kv_test.go",
         "main_test.go",

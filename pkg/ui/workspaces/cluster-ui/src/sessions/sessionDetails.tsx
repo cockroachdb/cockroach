@@ -95,7 +95,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
   static defaultProps = {
-    uiConfig: { showGatewayNodeLink: true, showTerminateActions: true },
+    uiConfig: { showGatewayNodeLink: true },
     isTenant: false,
   };
 
@@ -135,13 +135,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
       sessionError,
       cancelSession,
       cancelQuery,
-      uiConfig,
       onTerminateSessionClick,
       onTerminateStatementClick,
     } = this.props;
     const session = this.props.session?.session;
-    const showActionButtons =
-      !!session && !sessionError && uiConfig?.showTerminateActions;
+    const showActionButtons = !!session && !sessionError;
     return (
       <div className={cx("sessions-details")}>
         <Helmet title={`Details | ${sessionID} | Sessions`} />

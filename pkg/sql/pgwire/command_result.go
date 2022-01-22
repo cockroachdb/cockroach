@@ -119,7 +119,12 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if r.err != nil {
 		r.conn.bufferErr(ctx, r.err)
-		return
+		// Sync is the only client message that results in ReadyForQuery, and it
+		// must *always* result in ReadyForQuery, even if there are errors during
+		// Sync.
+		if r.typ != readyForQuery {
+			return
+		}
 	}
 
 	for _, notice := range r.buffer.notices {
