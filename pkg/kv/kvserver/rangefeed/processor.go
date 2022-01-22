@@ -265,9 +265,11 @@ func (p *Processor) run(
 			// Publish an updated filter that includes the new registration.
 			p.filterResC <- p.reg.NewFilter()
 
-			// Immediately publish a checkpoint event to the registry. This will be
-			// the first event published to this registration after its initial
-			// catch-up scan completes.
+			// Immediately publish a checkpoint event to the registry. This will be the first event
+			// published to this registration after its initial catch-up scan completes. The resolved
+			// timestamp might be empty but the checkpoint event is still useful to indicate that the
+			// catch-up scan has completed. This allows clients to rely on stronger ordering semantics
+			// once they observe the first checkpoint event.
 			r.publish(p.newCheckpointEvent())
 
 			// Run an output loop for the registry.
