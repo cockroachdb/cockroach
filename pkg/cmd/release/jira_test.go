@@ -2,97 +2,84 @@ package release
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
-	"github.com/andygrunwald/go-jira"
 	"github.com/stretchr/testify/require"
 )
 
-const baseUrl = "https://cockroachlabs.atlassian.net/"
+// TestGetIssueDetails fetches details for example tickets.
+// To see all available data from jira.Issue for a `jiraIssueKey`, go to:
+// - https://cockroachlabs.atlassian.net/rest/api/2/issue/{jiraIssueKey}
+// To see custom field details [for all org custom fields], go to:
+// - https://cockroachlabs.atlassian.net/rest/api/2/field
+func TestGetIssueDetails(t *testing.T) {
+	testIssues := []struct {
+		id                   string
+		expectedKey          string
+		expectedSummary      string
+		expectedCustomFields map[string]string
+	}{
+		{
+			id:                   "49848",
+			expectedKey:          "SREOPS-4037",
+			expectedSummary:      "Deploy v21.2.4 to release qualification cluster",
+			expectedCustomFields: map[string]string{customFieldHasSlaKey: customFieldHasSlaValue},
+		},
+		{
+			id:              "49841",
+			expectedKey:     "RE-68",
+			expectedSummary: "[JIRA integration] Auto-create/update SREOPS and release tracking issue ",
+		},
+	}
 
-type issueDetails struct {
-	Id          string
-	Key         string
-	TypeName    string
-	ProjectKey  string
-	Summary     string
-	Description string
+	username, password := getAuthUsernameAndPassword()
+	client, err := newJiraClient(username, password)
+	require.NoError(t, err)
+	for _, test := range testIssues {
+		details, err := client.GetIssueDetails(test.id)
+		require.NoError(t, err)
+		require.Equal(t, test.expectedKey, details.Key)
+		require.Equal(t, test.expectedSummary, details.Summary)
+		for key, expectedValue := range test.expectedCustomFields {
+			require.Equal(t, expectedValue, details.CustomFields[key])
+		}
+	}
 }
 
-func TestGetIssue(t *testing.T) {
-	// https://cockroachlabs.atlassian.net/rest/api/2/issue/RE-68
-	testIssueId := "49841"
-	details, err := getIssueDetails(testIssueId)
-	require.NoError(t, err)
-	fmt.Printf("issue: %+v\n", details)
-}
+// TestCreateDeployToClusterIssue creates a new JIRA issue:
+// ** WARNING!! **: this creates a real SREOPS ticket, so
+// remember to cancel/delete the SREOPS ticket afterwards! :)
+func TestCreateDeployToClusterIssue(t *testing.T) {
+	testVersion := "v21.2.4"
+	testBuildId := "v21.2.3-144-g0c8df44947"
 
-func TestPostToJIRA(t *testing.T) {
-	client, err := getClient()
-	require.NoError(t, err)
-	newIssue := createNewIssue(&issueDetails{
-		ProjectKey:  "RE",
-		TypeName:    "Bug",
-		Summary:     "TEST: post via go-jira",
-		Description: "@celia is testing JIRA post via github.com/andygrunwald/go-jira",
-	})
-	issue, _, err := client.Issue.Create(newIssue)
+	username, password := getAuthUsernameAndPassword()
+	client, err := newJiraClient(username, password)
 	require.NoError(t, err)
 
-	// The only set values on issue object are ID, Self, Key.
-	fmt.Printf("New Issue Key: %s\n", issue.Key)
+	deployToClusterIssue := createDeployToClusterIssue(testVersion, testBuildId)
+
+	newIssue, _, err := client.client.Issue.Create(deployToClusterIssue)
+	require.NoError(t, err)
+
+	// The only set values on a newIssue object are ID, Self, Key.
+	fmt.Printf("New Issue Key: %s\n", newIssue.Key)
 
 	// We'll need to make another get all to fetch additional field values
-	details, err := getIssueDetails(issue.ID)
+	details, err := client.GetIssueDetails(newIssue.ID)
 	require.NoError(t, err)
-	fmt.Printf("issue: %+v\n", details)
 
-	fmt.Printf("%s: %+v\n", details.Key, details.Summary)
+	fmt.Printf("%s: %s\n", details.Key, details.Summary)
 	fmt.Printf("Type: %s\n", details.TypeName)
 	fmt.Printf("URL: https://cockroachlabs.atlassian.net/browse/%s\n", details.Key)
 }
 
-func createNewIssue(details *issueDetails) *jira.Issue {
-	var newIssue jira.Issue
-	newIssue.Fields = &jira.IssueFields{}
-	newIssue.Fields.Project = jira.Project{
-		Key: details.ProjectKey,
+func getAuthUsernameAndPassword() (string, string) {
+	username := os.Getenv("JIRA_AUTH_USERNAME")  // e.g. your-email@cockroachlabs.com
+	password := os.Getenv("JIRA_AUTH_API_TOKEN") // to generate, goto: https://id.atlassian.com/manage-profile/security/api-tokens
+	if username == "" || password == "" {
+		panic("Both JIRA_AUTH_USERNAME and JIRA_AUTH_API_TOKEN must be set")
 	}
-	newIssue.Fields.Type = jira.IssueType{
-		Name: details.TypeName,
-	}
-	newIssue.Fields.Summary = details.Summary
-	newIssue.Fields.Description = details.Description
-	return &newIssue
-}
-
-func getIssueDetails(issueId string)  (*issueDetails, error) {
-	client, err := getClient()
-	if err != nil {
-		return nil, err
-	}
-	issue, _, err := client.Issue.Get(issueId, nil)
-	if err != nil {
-		return nil, err
-	}
-	return &issueDetails{
-		Id:          issue.ID,
-		Key:         issue.Key,
-		TypeName:    issue.Fields.Type.Name,
-		ProjectKey:  issue.Fields.Project.Name,
-		Summary:     issue.Fields.Summary,
-		Description: issue.Fields.Description,
-	}, nil
-}
-
-func getClient() (*jira.Client, error) {
-	tp := jira.BasicAuthTransport{
-		Username: testUsername,
-		Password: testApiToken, // to generate, goto: https://id.atlassian.com/manage-profile/security/api-tokens
-	}
-	client, err := jira.NewClient(tp.Client(), baseUrl)
-	if err != nil {
-		return nil, err
-	}
-	return client, nil
+	return username, password
 }
