@@ -77,6 +77,7 @@ func (*AlterTableSetVisible) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionByTable) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
+func (*AlterTableSetStorageParams) alterTableCmd()   {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -95,6 +96,7 @@ var _ AlterTableCmd = &AlterTableSetVisible{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionByTable{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
+var _ AlterTableCmd = &AlterTableSetStorageParams{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -602,6 +604,24 @@ func (node *AlterTableInjectStats) TelemetryCounter() telemetry.Counter {
 func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 	ctx.WriteString(" INJECT STATISTICS ")
 	ctx.FormatNode(node.Stats)
+}
+
+// AlterTableSetStorageParams represents a ALTER TABLE SET command.
+type AlterTableSetStorageParams struct {
+	StorageParams StorageParams
+}
+
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterTableSetStorageParams) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounter("set_storage_param")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetStorageParams) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SET (")
+	ctx.FormatNode(&node.StorageParams)
+	ctx.WriteString(")")
 }
 
 // AlterTableLocality represents an ALTER TABLE LOCALITY command.
