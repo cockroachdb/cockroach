@@ -2106,3 +2106,26 @@ ALTER TABLE colsource ADD COLUMN customer_id UUID  REFERENCES colref(id), ADD CO
 
 statement ok
 COMMIT
+
+subtest storage_params
+
+statement ok
+CREATE TABLE storage_param_table()
+
+statement error pgcode 22023 invalid storage parameter "foo"
+ALTER TABLE storage_param_table SET (foo=100)
+
+statement error parameter "fillfactor" requires a float value
+ALTER TABLE storage_param_table SET (fillfactor=true)
+
+statement error unimplemented: storage parameter "toast_tuple_target"
+ALTER TABLE storage_param_table SET (toast_tuple_target=100)
+
+query T noticetrace
+ALTER TABLE storage_param_table SET (fillfactor=99.9, autovacuum_enabled = off)
+----
+NOTICE: storage parameter "fillfactor" is ignored
+NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
+
+statement error parameter "autovacuum_enabled" requires a Boolean value
+ALTER TABLE storage_param_table SET (autovacuum_enabled='11')
