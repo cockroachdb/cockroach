@@ -262,7 +262,7 @@ func makeIndexDescriptor(
 		return nil, err
 	}
 
-	if err := paramparse.ApplyStorageParameters(
+	if err := paramparse.SetStorageParameters(
 		params.ctx,
 		params.p.SemaCtx(),
 		params.EvalContext(),
