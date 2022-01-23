@@ -3322,7 +3322,8 @@ func TestChangefeedDescription(t *testing.T) {
 	sqlDB.QueryRow(t,
 		`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
 	).Scan(&description)
-	expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + sink.String() +
+	redactedSink := strings.Replace(sink.String(), security.RootUser, `redacted`, 1)
+	expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + redactedSink +
 		`' WITH envelope = 'wrapped', updated`
 	require.Equal(t, expected, description)
 }
