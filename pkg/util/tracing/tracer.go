@@ -177,7 +177,12 @@ var debugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFT
 
 // reuseSpans controls whether spans can be re-allocated after they've been
 // Finish()ed. See Tracer.spanReusePercent for details.
-var reuseSpans = buildutil.CrdbTestBuild ||
+//
+// Span reuse is incompatible with the deadlock detector because, with reuse,
+// the span mutexes end up being reused and locked repeatedly in random order on
+// the same goroutine. This erroneously looks like a potential deadlock to the
+// detector.
+var reuseSpans = (buildutil.CrdbTestBuild && !syncutil.DeadlockEnabled) ||
 	envutil.EnvOrDefaultBool("COCKROACH_REUSE_TRACING_SPANS", false)
 
 // detectSpanRefLeaks enables the detection of Span reference leaks - i.e.
