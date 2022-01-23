@@ -3135,7 +3135,7 @@ import_format:
 alter_unsupported_stmt:
   ALTER FUNCTION error
   {
-    return unimplemented(sqllex, "alter function")
+    return unimplementedWithIssueDetail(sqllex, 17511, "alter function")
   }
 | ALTER DOMAIN error
   {
@@ -3143,7 +3143,7 @@ alter_unsupported_stmt:
   }
 | ALTER AGGREGATE error
   {
-    return unimplemented(sqllex, "alter aggregate")
+    return unimplementedWithIssueDetail(sqllex, 74775, "alter aggregate")
   }
 
 // %Help: IMPORT - load data from file in a distributed manner
@@ -3529,7 +3529,7 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnConstraint{Constraint:tree.Name($4), Table: $6.unresolvedObjectName(), Comment: $8.strPtr()}
   }
-| COMMENT ON EXTENSION error { return unimplemented(sqllex, "comment on extension") }
+| COMMENT ON EXTENSION error { return unimplementedWithIssueDetail(sqllex, 74777, "comment on extension") }
 | COMMENT ON FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "comment on function") }
 
 comment_text:
@@ -3572,12 +3572,18 @@ create_extension_stmt:
 | CREATE EXTENSION name {
     $$.val = &tree.CreateExtension{Name: $3}
   }
-| CREATE EXTENSION IF NOT EXISTS name WITH error { return unimplemented(sqllex, "create extension if not exists with") }
+| CREATE EXTENSION IF NOT EXISTS name WITH error
+  {
+    return unimplementedWithIssueDetail(sqllex, 74777, "create extension if not exists with")
+  }
+| CREATE EXTENSION name WITH error {
+    return unimplementedWithIssueDetail(sqllex, 74777, "create extension with")
+  }
 | CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
 
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
-| CREATE AGGREGATE error { return unimplemented(sqllex, "create aggregate") }
+| CREATE AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "create aggregate") }
 | CREATE CAST error { return unimplemented(sqllex, "create cast") }
 | CREATE CONSTRAINT TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create constraint") }
 | CREATE CONVERSION error { return unimplemented(sqllex, "create conversion") }
@@ -3610,13 +3616,13 @@ opt_procedural:
 
 drop_unsupported:
   DROP ACCESS METHOD error { return unimplemented(sqllex, "drop access method") }
-| DROP AGGREGATE error { return unimplemented(sqllex, "drop aggregate") }
+| DROP AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "drop aggregate") }
 | DROP CAST error { return unimplemented(sqllex, "drop cast") }
 | DROP COLLATION error { return unimplemented(sqllex, "drop collation") }
 | DROP CONVERSION error { return unimplemented(sqllex, "drop conversion") }
 | DROP DOMAIN error { return unimplementedWithIssueDetail(sqllex, 27796, "drop") }
-| DROP EXTENSION IF EXISTS name error { return unimplemented(sqllex, "drop extension " + $5) }
-| DROP EXTENSION name error { return unimplemented(sqllex, "drop extension " + $3) }
+| DROP EXTENSION IF EXISTS name error { return unimplementedWithIssueDetail(sqllex, 74777, "drop extension if exists") }
+| DROP EXTENSION name error { return unimplementedWithIssueDetail(sqllex, 74777, "drop extension") }
 | DROP FOREIGN TABLE error { return unimplemented(sqllex, "drop foreign table") }
 | DROP FOREIGN DATA error { return unimplemented(sqllex, "drop fdw") }
 | DROP FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "drop function") }
@@ -4421,7 +4427,7 @@ grant_stmt:
   }
 | GRANT privileges ON SEQUENCE error
   {
-    return unimplemented(sqllex, "grant privileges on sequence")
+    return unimplementedWithIssueDetail(sqllex, 74780, "grant privileges on sequence")
   }
 | GRANT error // SHOW HELP: GRANT
 
