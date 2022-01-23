@@ -1106,6 +1106,14 @@ ALTER TABLE t EXPERIMENTAL_AUDIT SET OFF -- fully parenthesized
 ALTER TABLE t EXPERIMENTAL_AUDIT SET OFF -- literals removed
 ALTER TABLE _ EXPERIMENTAL_AUDIT SET OFF -- identifiers removed
 
+parse
+ALTER TABLE t SET (fillfactor = 100, autovacuum_enabled = false)
+----
+ALTER TABLE t SET (fillfactor = 100, autovacuum_enabled = false)
+ALTER TABLE t SET (fillfactor = (100), autovacuum_enabled = (false)) -- fully parenthesized
+ALTER TABLE t SET (fillfactor = _, autovacuum_enabled = _) -- literals removed
+ALTER TABLE _ SET (_ = 100, _ = false) -- identifiers removed
+
 error
 ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
 ----
