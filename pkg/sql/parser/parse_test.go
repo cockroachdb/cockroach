@@ -395,14 +395,20 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
 
+		{`COMMENT ON EXTENSION a`, 74777, `comment on extension`, ``},
 		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
-		{`CREATE AGGREGATE a`, 0, `create aggregate`, ``},
+		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
+		{`ALTER FUNCTION a`, 17511, `alter function`, ``},
+
+		{`CREATE AGGREGATE a`, 74775, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
 		{`CREATE CONVERSION a`, 0, `create conversion`, ``},
 		{`CREATE DEFAULT CONVERSION a`, 0, `create def conv`, ``},
+		{`CREATE EXTENSION a WITH schema = 'public'`, 74777, `create extension with`, ``},
+		{`CREATE EXTENSION IF NOT EXISTS a WITH schema = 'public'`, 74777, `create extension if not exists with`, ``},
 		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`, ``},
 		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`, ``},
 		{`CREATE FUNCTION a`, 17511, `create`, ``},
@@ -418,12 +424,13 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TRIGGER a`, 28296, `create`, ``},
 
 		{`DROP ACCESS METHOD a`, 0, `drop access method`, ``},
-		{`DROP AGGREGATE a`, 0, `drop aggregate`, ``},
+		{`DROP AGGREGATE a`, 74775, `drop aggregate`, ``},
 		{`DROP CAST a`, 0, `drop cast`, ``},
 		{`DROP COLLATION a`, 0, `drop collation`, ``},
 		{`DROP CONVERSION a`, 0, `drop conversion`, ``},
 		{`DROP DOMAIN a`, 27796, `drop`, ``},
-		{`DROP EXTENSION a`, 0, `drop extension a`, ``},
+		{`DROP EXTENSION a`, 74777, `drop extension`, ``},
+		{`DROP EXTENSION IF EXISTS a`, 74777, `drop extension if exists`, ``},
 		{`DROP FOREIGN TABLE a`, 0, `drop foreign table`, ``},
 		{`DROP FOREIGN DATA WRAPPER a`, 0, `drop fdw`, ``},
 		{`DROP FUNCTION a`, 17511, `drop `, ``},
@@ -557,6 +564,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``},
 		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},
 		{`UPDATE Foo SET x.y = z`, 27792, ``, ``},
+
+		{`GRANT SELECT ON SEQUENCE a`, 74780, `grant privileges on sequence`, ``},
 
 		{`REINDEX INDEX a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
 		{`REINDEX INDEX CONCURRENTLY a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
