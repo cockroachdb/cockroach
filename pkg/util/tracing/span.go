@@ -163,6 +163,8 @@ func (sp *Span) IsNoop() bool {
 //
 // Exported methods on Span are supposed to call this and short-circuit if true
 // is returrned.
+//
+// Note that a nil or no-op span will return true.
 func (sp *Span) detectUseAfterFinish() bool {
 	if sp == nil {
 		return true
@@ -173,7 +175,7 @@ func (sp *Span) detectUseAfterFinish() bool {
 	alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
 	// In test builds, we panic on span use after Finish. This is in preparation
 	// of span pooling, at which point use-after-Finish would become corruption.
-	if alreadyFinished && sp.Tracer().PanicOnUseAfterFinish() {
+	if alreadyFinished && sp.i.tracer.PanicOnUseAfterFinish() {
 		var finishStack string
 		if sp.finishStack == "" {
 			finishStack = "<stack not captured. Set debugUseAfterFinish>"
@@ -223,6 +225,7 @@ func (sp *Span) decRef() bool {
 
 // Tracer exports the tracer this span was created using.
 func (sp *Span) Tracer() *Tracer {
+	sp.detectUseAfterFinish()
 	return sp.i.Tracer()
 }
 
@@ -235,6 +238,7 @@ func (sp *Span) Redactable() bool {
 	if sp == nil || sp.i.isNoop() {
 		return false
 	}
+	sp.detectUseAfterFinish()
 	return sp.Tracer().Redactable()
 }
 
@@ -358,12 +362,13 @@ func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 }
 
 // Meta returns the information which needs to be propagated across process
-// boundaries in order to derive child spans from this Span. This may return
-// nil, which is a valid input to WithRemoteParent, if the Span has been
-// optimized out.
+// boundaries in order to derive child spans from this Span. This may return a
+// zero SpanMeta, which is a valid input to WithRemoteParent, if the Span has
+// been optimized out.
 func (sp *Span) Meta() SpanMeta {
-	// It shouldn't be done in practice, but it is allowed to call Meta on
-	// a finished span.
+	if sp.detectUseAfterFinish() {
+		return SpanMeta{}
+	}
 	return sp.i.Meta()
 }
 
@@ -391,6 +396,9 @@ func (sp *Span) SetVerbose(to bool) {
 
 // RecordingType returns the range's current recording mode.
 func (sp *Span) RecordingType() RecordingType {
+	if sp.detectUseAfterFinish() {
+		return RecordingOff
+	}
 	return sp.i.RecordingType()
 }
 
@@ -442,6 +450,9 @@ func (sp *Span) SetTag(key string, value attribute.Value) {
 
 // TraceID retrieves a span's trace ID.
 func (sp *Span) TraceID() tracingpb.TraceID {
+	if sp.detectUseAfterFinish() {
+		return 0
+	}
 	return sp.i.TraceID()
 }
 
@@ -454,6 +465,7 @@ func (sp *Span) OperationName() string {
 	if sp.IsNoop() {
 		return "noop"
 	}
+	sp.detectUseAfterFinish()
 	return sp.i.crdb.operation
 }
 
@@ -461,6 +473,9 @@ func (sp *Span) OperationName() string {
 // that case, trying to create a child span will result in the would-be child
 // being a root span.
 func (sp *Span) IsSterile() bool {
+	if sp.detectUseAfterFinish() {
+		return true
+	}
 	return sp.i.sterile
 }
 
