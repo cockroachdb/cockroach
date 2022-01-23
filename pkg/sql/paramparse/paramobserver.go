@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ApplyStorageParameters applies given storage parameters with the
+// SetStorageParameters sets the given storage parameters using the
 // given observer.
-func ApplyStorageParameters(
+func SetStorageParameters(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
@@ -55,18 +55,17 @@ func ApplyStorageParameters(
 			return err
 		}
 
-		// Apply the param.
-		if err := paramObserver.Apply(evalCtx, key, datum); err != nil {
+		if err := paramObserver.onSet(evalCtx, key, datum); err != nil {
 			return err
 		}
 	}
-	return paramObserver.RunPostChecks()
+	return paramObserver.runPostChecks()
 }
 
 // StorageParamObserver applies a storage parameter to an underlying item.
 type StorageParamObserver interface {
-	Apply(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
-	RunPostChecks() error
+	onSet(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	runPostChecks() error
 }
 
 // TableStorageParamObserver observes storage parameters for tables.
@@ -74,57 +73,50 @@ type TableStorageParamObserver struct{}
 
 var _ StorageParamObserver = (*TableStorageParamObserver)(nil)
 
-func applyFillFactorStorageParam(evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-	val, err := DatumAsFloat(evalCtx, key, datum)
-	if err != nil {
-		return err
-	}
-	if val < 0 || val > 100 {
-		return pgerror.Newf(pgcode.InvalidParameterValue, "%q must be between 0 and 100", key)
-	}
-	if evalCtx != nil {
-		evalCtx.ClientNoticeSender.BufferClientNotice(
-			evalCtx.Context,
-			pgnotice.Newf("storage parameter %q is ignored", key),
-		)
-	}
+// runPostChecks implements the StorageParamObserver interface.
+func (po *TableStorageParamObserver) runPostChecks() error {
 	return nil
 }
 
-// RunPostChecks implements the StorageParamObserver interface.
-func (a *TableStorageParamObserver) RunPostChecks() error {
-	return nil
+type tableParam struct {
+	onSet func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
 }
 
-// Apply implements the StorageParamObserver interface.
-func (a *TableStorageParamObserver) Apply(
-	evalCtx *tree.EvalContext, key string, datum tree.Datum,
-) error {
-	switch key {
-	case `fillfactor`:
-		return applyFillFactorStorageParam(evalCtx, key, datum)
-	case `autovacuum_enabled`:
-		var boolVal bool
-		if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
-			boolVal, err = ParseBoolVar(key, stringVal)
-			if err != nil {
-				return err
+var tableParams = map[string]tableParam{
+	`fillfactor`: {
+		onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			return setFillFactorStorageParam(evalCtx, key, datum)
+		},
+	},
+	`autovacuum_enabled`: {
+		onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			var boolVal bool
+			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+				boolVal, err = ParseBoolVar(key, stringVal)
+				if err != nil {
+					return err
+				}
+			} else {
+				s, err := GetSingleBool(key, datum)
+				if err != nil {
+					return err
+				}
+				boolVal = bool(*s)
 			}
-		} else {
-			s, err := GetSingleBool(key, datum)
-			if err != nil {
-				return err
+			if !boolVal && evalCtx != nil {
+				evalCtx.ClientNoticeSender.BufferClientNotice(
+					evalCtx.Context,
+					pgnotice.Newf(`storage parameter "%s = %s" is ignored`, key, datum.String()),
+				)
 			}
-			boolVal = bool(*s)
-		}
-		if !boolVal && evalCtx != nil {
-			evalCtx.ClientNoticeSender.BufferClientNotice(
-				evalCtx.Context,
-				pgnotice.Newf(`storage parameter "%s = %s" is ignored`, key, datum.String()),
-			)
-		}
-		return nil
-	case `toast_tuple_target`,
+			return nil
+		},
+	},
+}
+
+func init() {
+	for _, param := range []string{
+		`toast_tuple_target`,
 		`parallel_workers`,
 		`toast.autovacuum_enabled`,
 		`autovacuum_vacuum_threshold`,
@@ -150,10 +142,41 @@ func (a *TableStorageParamObserver) Apply(
 		`toast.autovacuum_multixact_freeze_table_age`,
 		`log_autovacuum_min_duration`,
 		`toast.log_autovacuum_min_duration`,
-		`user_catalog_table`:
-		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
+		`user_catalog_table`,
+	} {
+		tableParams[param] = tableParam{
+			onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+				return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
+			},
+		}
+	}
+}
+
+// onSet implements the StorageParamObserver interface.
+func (po *TableStorageParamObserver) onSet(
+	evalCtx *tree.EvalContext, key string, datum tree.Datum,
+) error {
+	if p, ok := tableParams[key]; ok {
+		return p.onSet(po, evalCtx, key, datum)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+}
+
+func setFillFactorStorageParam(evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+	val, err := DatumAsFloat(evalCtx, key, datum)
+	if err != nil {
+		return err
+	}
+	if val < 0 || val > 100 {
+		return pgerror.Newf(pgcode.InvalidParameterValue, "%q must be between 0 and 100", key)
+	}
+	if evalCtx != nil {
+		evalCtx.ClientNoticeSender.BufferClientNotice(
+			evalCtx.Context,
+			pgnotice.Newf("storage parameter %q is ignored", key),
+		)
+	}
+	return nil
 }
 
 // IndexStorageParamObserver observes storage parameters for indexes.
@@ -174,10 +197,10 @@ func getS2ConfigFromIndex(indexDesc *descpb.IndexDescriptor) *geoindex.S2Config 
 	return s2Config
 }
 
-func (a *IndexStorageParamObserver) applyS2ConfigSetting(
+func (po *IndexStorageParamObserver) applyS2ConfigSetting(
 	evalCtx *tree.EvalContext, key string, expr tree.Datum, min int64, max int64,
 ) error {
-	s2Config := getS2ConfigFromIndex(a.IndexDesc)
+	s2Config := getS2ConfigFromIndex(po.IndexDesc)
 	if s2Config == nil {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
@@ -211,10 +234,10 @@ func (a *IndexStorageParamObserver) applyS2ConfigSetting(
 	return nil
 }
 
-func (a *IndexStorageParamObserver) applyGeometryIndexSetting(
+func (po *IndexStorageParamObserver) applyGeometryIndexSetting(
 	evalCtx *tree.EvalContext, key string, expr tree.Datum,
 ) error {
-	if a.IndexDesc.GeoConfig.S2Geometry == nil {
+	if po.IndexDesc.GeoConfig.S2Geometry == nil {
 		return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be applied to GEOMETRY spatial indexes", key)
 	}
 	val, err := DatumAsFloat(evalCtx, key, expr)
@@ -223,34 +246,34 @@ func (a *IndexStorageParamObserver) applyGeometryIndexSetting(
 	}
 	switch key {
 	case `geometry_min_x`:
-		a.IndexDesc.GeoConfig.S2Geometry.MinX = val
+		po.IndexDesc.GeoConfig.S2Geometry.MinX = val
 	case `geometry_max_x`:
-		a.IndexDesc.GeoConfig.S2Geometry.MaxX = val
+		po.IndexDesc.GeoConfig.S2Geometry.MaxX = val
 	case `geometry_min_y`:
-		a.IndexDesc.GeoConfig.S2Geometry.MinY = val
+		po.IndexDesc.GeoConfig.S2Geometry.MinY = val
 	case `geometry_max_y`:
-		a.IndexDesc.GeoConfig.S2Geometry.MaxY = val
+		po.IndexDesc.GeoConfig.S2Geometry.MaxY = val
 	default:
 		return pgerror.Newf(pgcode.InvalidParameterValue, "unknown key: %q", key)
 	}
 	return nil
 }
 
-// Apply implements the StorageParamObserver interface.
-func (a *IndexStorageParamObserver) Apply(
+// onSet implements the StorageParamObserver interface.
+func (po *IndexStorageParamObserver) onSet(
 	evalCtx *tree.EvalContext, key string, expr tree.Datum,
 ) error {
 	switch key {
 	case `fillfactor`:
-		return applyFillFactorStorageParam(evalCtx, key, expr)
+		return setFillFactorStorageParam(evalCtx, key, expr)
 	case `s2_max_level`:
-		return a.applyS2ConfigSetting(evalCtx, key, expr, 0, 30)
+		return po.applyS2ConfigSetting(evalCtx, key, expr, 0, 30)
 	case `s2_level_mod`:
-		return a.applyS2ConfigSetting(evalCtx, key, expr, 1, 3)
+		return po.applyS2ConfigSetting(evalCtx, key, expr, 1, 3)
 	case `s2_max_cells`:
-		return a.applyS2ConfigSetting(evalCtx, key, expr, 1, 32)
+		return po.applyS2ConfigSetting(evalCtx, key, expr, 1, 32)
 	case `geometry_min_x`, `geometry_max_x`, `geometry_min_y`, `geometry_max_y`:
-		return a.applyGeometryIndexSetting(evalCtx, key, expr)
+		return po.applyGeometryIndexSetting(evalCtx, key, expr)
 	case `vacuum_cleanup_index_scale_factor`,
 		`buffering`,
 		`fastupdate`,
@@ -262,9 +285,9 @@ func (a *IndexStorageParamObserver) Apply(
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
 
-// RunPostChecks implements the StorageParamObserver interface.
-func (a *IndexStorageParamObserver) RunPostChecks() error {
-	s2Config := getS2ConfigFromIndex(a.IndexDesc)
+// runPostChecks implements the StorageParamObserver interface.
+func (po *IndexStorageParamObserver) runPostChecks() error {
+	s2Config := getS2ConfigFromIndex(po.IndexDesc)
 	if s2Config != nil {
 		if (s2Config.MaxLevel)%s2Config.LevelMod != 0 {
 			return pgerror.Newf(
@@ -276,7 +299,7 @@ func (a *IndexStorageParamObserver) RunPostChecks() error {
 		}
 	}
 
-	if cfg := a.IndexDesc.GeoConfig.S2Geometry; cfg != nil {
+	if cfg := po.IndexDesc.GeoConfig.S2Geometry; cfg != nil {
 		if cfg.MaxX <= cfg.MinX {
 			return pgerror.Newf(
 				pgcode.InvalidParameterValue,
