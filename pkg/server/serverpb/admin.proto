@@ -399,13 +399,14 @@ message DrainRequest {
   // shutdown for an explanation of the interaction between the two.
   // do_drain is also implied by a non-nil deprecated_probe_indicator.
   bool do_drain = 4;
-
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   // For compatibility with v21.2 nodes, an empty node_id is
   // interpreted as "local". This behavior might be removed
   // in subsequent versions.
   string node_id = 5;
+  // When true, more detailed information is logged during the range lease drain phase.
+  bool verbose = 6;
 }
 
 // DrainResponse is the response to a successful DrainRequest.
