@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -773,8 +774,14 @@ If problems persist, please see %s.`
 			// preventing progress. If the operator wants to expedite
 			// the shutdown, they will need to make it ungraceful
 			// via a 2nd signal.
-			for {
-				remaining, _, err := s.Drain(drainCtx)
+			var (
+				remaining     = uint64(math.MaxUint64)
+				prevRemaining = uint64(math.MaxUint64)
+				verbose       = false
+			)
+
+			for ; ; prevRemaining = remaining {
+				remaining, _, err = s.Drain(drainCtx, verbose)
 				if err != nil {
 					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
 					break
@@ -783,6 +790,14 @@ If problems persist, please see %s.`
 					// No more work to do.
 					break
 				}
+
+				// If range lease transfer stalls or the number of
+				// remaining leases somehow increases, verbosity is set
+				// to help with troubleshooting.
+				if remaining >= prevRemaining {
+					verbose = true
+				}
+
 				// Avoid a busy wait with high CPU usage if the server replies
 				// with an incomplete drain too quickly.
 				time.Sleep(200 * time.Millisecond)
