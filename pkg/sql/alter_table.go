@@ -967,7 +967,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableSetStorageParams:
-			if err := paramparse.ApplyStorageParameters(
+			if err := paramparse.SetStorageParameters(
 				params.ctx,
 				params.p.SemaCtx(),
 				params.EvalContext(),
