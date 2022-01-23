@@ -201,18 +201,19 @@ func (p *PrivilegeDescriptor) Grant(
 	user security.SQLUsername, privList privilege.List, withGrantOption bool,
 ) {
 	userPriv := p.FindOrCreateUser(user)
-	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) && privilege.ALL.IsSetIn(userPriv.Privileges) {
-		// User already has 'ALL' privilege: no-op.
-		// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
-		// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
-		return
-	}
-
-	if privilege.ALL.IsSetIn(userPriv.Privileges) && !withGrantOption {
-		// A user can hold all privileges but not all grant options.
-		// If a user holds all privileges but withGrantOption is False,
-		// there is nothing left to be done
-		return
+	if privilege.ALL.IsSetIn(userPriv.Privileges) {
+		if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
+			// User already has 'ALL' privilege: no-op.
+			// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
+			// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
+			return
+		}
+		if !withGrantOption {
+			// A user can hold all privileges but not all grant options.
+			// If a user holds all privileges but withGrantOption is False,
+			// there is nothing left to be done
+			return
+		}
 	}
 
 	bits := privList.ToBitField()
@@ -230,9 +231,7 @@ func (p *PrivilegeDescriptor) Grant(
 	if withGrantOption {
 		userPriv.WithGrantOption |= bits
 	}
-	if !privilege.ALL.IsSetIn(userPriv.Privileges) {
-		userPriv.Privileges |= bits
-	}
+	userPriv.Privileges |= bits
 }
 
 // Revoke removes privileges from this descriptor for a given list of users.
@@ -434,26 +433,24 @@ func (p PrivilegeDescriptor) IsValidPrivilegesForObjectType(
 	return true, UserPrivileges{}, 0
 }
 
-// UserPrivilegeString is a pair of strings describing the
-// privileges for a given user.
-type UserPrivilegeString struct {
+// UserPrivilege represents a User and its Privileges
+type UserPrivilege struct {
 	User       security.SQLUsername
-	Privileges []string
-}
-
-// PrivilegeString returns a string of comma-separted privilege names.
-func (u UserPrivilegeString) PrivilegeString() string {
-	return strings.Join(u.Privileges, ",")
+	Privileges []privilege.Privilege
 }
 
 // Show returns the list of {username, privileges} sorted by username.
 // 'privileges' is a string of comma-separated sorted privilege names.
-func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivilegeString {
-	ret := make([]UserPrivilegeString, 0, len(p.Users))
+func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivilege {
+	ret := make([]UserPrivilege, 0, len(p.Users))
 	for _, userPriv := range p.Users {
-		ret = append(ret, UserPrivilegeString{
+		privileges := privilege.PrivilegesFromBitFields(userPriv.Privileges, userPriv.WithGrantOption, objectType)
+		sort.Slice(privileges, func(i, j int) bool {
+			return strings.Compare(privileges[i].Kind.String(), privileges[j].Kind.String()) < 0
+		})
+		ret = append(ret, UserPrivilege{
 			User:       userPriv.User(),
-			Privileges: privilege.ListFromBitField(userPriv.Privileges, objectType).SortedNames(),
+			Privileges: privileges,
 		})
 	}
 	return ret

@@ -21,14 +21,14 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA public GRANT SELECT ON TABL
 statement ok
 CREATE TABLE t1()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t1
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t1          admin      ALL
-test           public       t1          root       ALL
-test           public       t1          testuser   ALL
-test           public       t1          testuser2  SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t1          admin      ALL             false
+test           public       t1          root       ALL             false
+test           public       t1          testuser   ALL             false
+test           public       t1          testuser2  SELECT          false
 
 # When creating an object, take the union of the default privileges on
 # the schema and the database.
@@ -39,15 +39,15 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT INSERT ON TABLES TO testuser2
 statement ok
 CREATE TABLE t2()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t2
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t2          admin      ALL
-test           public       t2          root       ALL
-test           public       t2          testuser   ALL
-test           public       t2          testuser2  INSERT
-test           public       t2          testuser2  SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t2          admin      ALL             false
+test           public       t2          root       ALL             false
+test           public       t2          testuser   ALL             false
+test           public       t2          testuser2  INSERT          false
+test           public       t2          testuser2  SELECT          false
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT ALL ON TABLES TO testuser2
@@ -55,14 +55,14 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT ALL ON TABLES TO testuser2
 statement ok
 CREATE TABLE t3()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t3
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t3          admin      ALL
-test           public       t3          root       ALL
-test           public       t3          testuser   ALL
-test           public       t3          testuser2  ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t3          admin      ALL             false
+test           public       t3          root       ALL             false
+test           public       t3          testuser   ALL             false
+test           public       t3          testuser2  ALL             true
 
 # Revoke default privileges in schema.
 statement ok
@@ -71,14 +71,14 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser2
 statement ok
 CREATE TABLE t4()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t4
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t4          admin      ALL
-test           public       t4          root       ALL
-test           public       t4          testuser   ALL
-test           public       t4          testuser2  SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t4          admin      ALL             false
+test           public       t4          root       ALL             false
+test           public       t4          testuser   ALL             false
+test           public       t4          testuser2  SELECT          false
 
 # Multiple schemas.
 statement ok
@@ -94,23 +94,23 @@ statement ok
 CREATE TABLE public.t5();
 CREATE TABLE s.t6();
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON public.t5
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t5          admin      ALL
-test           public       t5          root       ALL
-test           public       t5          testuser   ALL
-test           public       t5          testuser2  ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t5          admin      ALL             false
+test           public       t5          root       ALL             false
+test           public       t5          testuser   ALL             false
+test           public       t5          testuser2  ALL             true
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON s.t6
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           s            t6          admin      ALL
-test           s            t6          root       ALL
-test           s            t6          testuser   ALL
-test           s            t6          testuser2  ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           s            t6          admin      ALL             false
+test           s            t6          root       ALL             false
+test           s            t6          testuser   ALL             false
+test           s            t6          testuser2  ALL             true
 
 # In schema for all roles.
 user root
@@ -125,23 +125,23 @@ statement ok
 CREATE TABLE public.t7();
 CREATE TABLE s.t8();
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON public.t7
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t7          admin      ALL
-test           public       t7          root       ALL
-test           public       t7          testuser   ALL
-test           public       t7          testuser2  SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t7          admin      ALL             false
+test           public       t7          root       ALL             false
+test           public       t7          testuser   ALL             false
+test           public       t7          testuser2  SELECT          false
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON s.t8
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           s            t8          admin      ALL
-test           s            t8          root       ALL
-test           s            t8          testuser   ALL
-test           s            t8          testuser2  SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           s            t8          admin      ALL             false
+test           s            t8          root       ALL             false
+test           s            t8          testuser   ALL             false
+test           s            t8          testuser2  SELECT          false
 
 # Switch user to root, since we defined it on FOR ALL ROLES, the privileges
 # should be the same on tables we create.
@@ -152,23 +152,23 @@ statement ok
 CREATE TABLE public.t9();
 CREATE TABLE s.t10();
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON public.t9
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t9          admin      ALL
-test           public       t9          root       ALL
-test           public       t9          testuser   CREATE
-test           public       t9          testuser2  SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t9          admin      ALL             false
+test           public       t9          root       ALL             false
+test           public       t9          testuser   CREATE          false
+test           public       t9          testuser2  SELECT          false
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON s.t10
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           s            t10         admin      ALL
-test           s            t10         root       ALL
-test           s            t10         testuser   CREATE
-test           s            t10         testuser2  SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           s            t10         admin      ALL             false
+test           s            t10         root       ALL             false
+test           s            t10         testuser   CREATE          false
+test           s            t10         testuser2  SELECT          false
 
 # Revoking default privileges for the user creating the object is valid.
 user testuser
@@ -180,14 +180,14 @@ CREATE TABLE t11()
 
 # Note that testuser still has CREATE because testuser has CREATE on the parent
 # database.
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t11
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t11         admin      ALL
-test           public       t11         root       ALL
-test           public       t11         testuser   CREATE
-test           public       t11         testuser2  SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t11         admin      ALL             false
+test           public       t11         root       ALL             false
+test           public       t11         testuser   CREATE          false
+test           public       t11         testuser2  SELECT          false
 
 # Default privileges for schemas have no defaults - no privileges are defined
 # initially.
@@ -203,10 +203,10 @@ CREATE TABLE s2.t12()
 
 # Note that testuser still has CREATE because testuser has CREATE on the parent
 # database.
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON s2.t12
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           s2           t12         admin     ALL
-test           s2           t12         root      ALL
-test           s2           t12         testuser  CREATE
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           s2           t12         admin     ALL             false
+test           s2           t12         root      ALL             false
+test           s2           t12         testuser  CREATE          false
