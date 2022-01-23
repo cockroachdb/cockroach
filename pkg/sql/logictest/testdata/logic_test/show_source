@@ -184,14 +184,14 @@ postgres       root   NULL            {}       NULL
 system         node   NULL            {}       NULL
 test           root   NULL            {}       NULL
 
-query TTTTT colnames,rowsort
+query TTTTTB colnames,rowsort
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
-database_name  schema_name  table_name  grantee  privilege_type
-system         public       descriptor  admin    GRANT
-system         public       descriptor  admin    SELECT
-system         public       descriptor  root     GRANT
-system         public       descriptor  root     SELECT
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+system         public       descriptor  admin    GRANT           false
+system         public       descriptor  admin    SELECT          false
+system         public       descriptor  root     GRANT           false
+system         public       descriptor  root     SELECT          false
 
 query TTBITTBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
