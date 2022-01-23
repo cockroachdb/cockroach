@@ -251,11 +251,11 @@ func (sp *Span) finishInternal() {
 	if sp == nil || sp.IsNoop() || sp.detectUseAfterFinish() {
 		return
 	}
-	atomic.StoreInt32(&sp.finished, 1)
-	sp.i.Finish()
 	if sp.Tracer().debugUseAfterFinish {
 		sp.finishStack = string(debug.Stack())
 	}
+	atomic.StoreInt32(&sp.finished, 1)
+	sp.i.Finish()
 	// Release the reference that the span held to itself. Unless we're racing
 	// with the finishing of the parent or one of the children, this one will be
 	// the last reference, and the span will be made available for re-allocation.
