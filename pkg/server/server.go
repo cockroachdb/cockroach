@@ -2134,9 +2134,10 @@ func ConfigureGRPCGateway(
 }
 
 func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
+	var deferError func(error)
 	{
 		var defErr error
-		deferError := func(err error) {
+		deferError = func(err error) {
 			log.Infof(ctx, "%v", err)
 			defErr = errors.CombineErrors(defErr, err)
 		}
@@ -2157,6 +2158,8 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 
 	// Best effort at disabling the timeseries of the local node.
 	ts.TimeseriesStorageEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+	ts.Resolution10sStorageTTL.Override(ctx, &s.ClusterSettings().SV, 999999*time.Hour)
+	ts.Resolution30mStorageTTL.Override(ctx, &s.ClusterSettings().SV, 999999*time.Hour)
 
 	// Suppress writing of node statuses for the local node (n1). If it wrote one,
 	// and the imported data also contains n1 but with a different set of stores,
