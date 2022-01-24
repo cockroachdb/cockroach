@@ -1533,7 +1533,77 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				objID = tree.NewDOid(tree.MustBeDInt(objID))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 			case keys.ConstraintCommentType:
-				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				// FIXME: fetch the schema and database
+				tableDesc, err := p.Descriptors().GetImmutableTableByID(
+					ctx,
+					p.txn,
+					descpb.ID(tree.MustBeDInt(objID)),
+					tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
+				if err != nil {
+					return err
+				}
+				schema, err := p.Descriptors().GetImmutableSchemaByID(
+					ctx,
+					p.txn,
+					tableDesc.GetParentSchemaID(),
+					tree.CommonLookupFlags{
+						Required: true,
+					})
+				if err != nil {
+					return err
+				}
+				constraints, err := tableDesc.GetConstraintInfo()
+				if err != nil {
+					return err
+				}
+				var constraint descpb.ConstraintDetail
+				for _, constraintToCheck := range constraints {
+					if constraintToCheck.ConstraintID == descpb.ConstraintID(tree.MustBeDInt(objSubID)) {
+						constraint = constraintToCheck
+						break
+					}
+				}
+				hasher := makeOidHasher()
+				var oid *tree.DOid
+				if constraint.CheckConstraint != nil {
+					oid = hasher.CheckConstraintOid(
+						dbContext.GetID(),
+						schema.GetName(),
+						tableDesc.GetID(),
+						constraint.CheckConstraint)
+				} else if constraint.FK != nil {
+					oid = hasher.ForeignKeyConstraintOid(
+						dbContext.GetID(),
+						schema.GetName(),
+						tableDesc.GetID(),
+						constraint.FK,
+					)
+				} else if constraint.UniqueWithoutIndexConstraint != nil {
+					oid = hasher.UniqueWithoutIndexConstraintOid(
+						dbContext.GetID(),
+						schema.GetName(),
+						tableDesc.GetID(),
+						constraint.UniqueWithoutIndexConstraint,
+					)
+				} else if constraint.Index != nil {
+					if constraint.Index.ID == tableDesc.GetPrimaryIndexID() {
+						oid = hasher.PrimaryKeyConstraintOid(
+							dbContext.GetID(),
+							schema.GetName(),
+							tableDesc.GetID(),
+							constraint.Index,
+						)
+					} else {
+						oid = hasher.UniqueConstraintOid(
+							dbContext.GetID(),
+							schema.GetName(),
+							tableDesc.GetID(),
+							constraint.Index.ID,
+						)
+					}
+
+				}
+				objID = oid
 				objSubID = tree.DZero
 				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
 			case keys.IndexCommentType:

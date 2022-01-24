@@ -70,6 +70,8 @@ const (
 	ConstraintType
 	// ConstraintOrdinal is the ordinal of the constraints
 	ConstraintOrdinal
+	// ConstraintID is the ID of a constraint
+	ConstraintID
 )
 
 var t = reflect.TypeOf
@@ -240,8 +242,7 @@ var Schema = rel.MustSchema("screl",
 	),
 	rel.EntityMapping(t((*scpb.ConstraintComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(Name, "ConstraintName"),
-		rel.EntityAttr(ConstraintType, "ConstraintType"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
 	),
 )
 

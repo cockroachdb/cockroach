@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -252,10 +251,10 @@ type CommentUpdater interface {
 	DeleteDescriptorComment(id int64, subID int64, commentType keys.CommentType) error
 
 	//UpsertConstraintComment upserts a comment associated with a constraint.
-	UpsertConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintName string, constraintType scpb.ConstraintType, comment string) error
+	UpsertConstraintComment(desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string) error
 
 	//DeleteConstraintComment deletes a comment associated with a constraint.
-	DeleteConstraintComment(desc catalog.TableDescriptor, schemaName string, constraintName string, constraintType scpb.ConstraintType) error
+	DeleteConstraintComment(desc catalog.TableDescriptor, constraintID descpb.ConstraintID) error
 }
 
 // CommentUpdaterFactory is used to construct a CommentUpdater for a given

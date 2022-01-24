@@ -402,7 +402,6 @@ message ColumnComment {
 message ConstraintComment {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  string constraint_name = 2;
-  ConstraintType constraint_type = 3;
-  string comment = 4;
+  uint32 constraint_id =2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ConstraintID"];
+  string comment = 3;
 }
