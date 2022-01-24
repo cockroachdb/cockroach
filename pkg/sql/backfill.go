@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1941,9 +1942,14 @@ func (sc *SchemaChanger) backfillIndexes(
 	addedIndexes []descpb.IndexID,
 	temporaryIndexes []descpb.IndexID,
 ) error {
-	// If temporary indexes is empty, we want a new-style backfill
-	writeAtRequestTimestamp := len(temporaryIndexes) != 0
+	if err := sc.consistencyCheckBackfillingIndexes(ctx, addedIndexes, temporaryIndexes); err != nil {
+		return err
+	}
 
+	// If temporary indexes is non-empty, we want a MVCC-compliant
+	// backfill. If it is empty, we assume this is an older schema
+	// change using the non-MVCC-compliant flow.
+	writeAtRequestTimestamp := len(temporaryIndexes) != 0
 	log.Infof(ctx, "backfilling %d indexes: %v (writeAtRequestTimestamp: %v)", len(addingSpans), addingSpans, writeAtRequestTimestamp)
 
 	// Split off a new range for each new index span. But only do so for the
@@ -1974,7 +1980,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			fn()
 		}
 
-		// Step backfilled adding indexes from BACKFILLING to
+		// Steps backfilled adding indexes from BACKFILLING to
 		// DELETE_AND_WRITE_ONLY.
 		if err := sc.RunStateMachineAfterIndexBackfill(ctx); err != nil {
 			return err
@@ -1988,7 +1994,7 @@ func (sc *SchemaChanger) backfillIndexes(
 			fn()
 		}
 
-		if err := sc.stepThroughTemporaryIndexDrop(ctx); err != nil {
+		if err := sc.runStateMachineAfterTempIndexMerge(ctx); err != nil {
 			return err
 		}
 	}
@@ -1999,6 +2005,39 @@ func (sc *SchemaChanger) backfillIndexes(
 
 	log.Info(ctx, "finished backfilling indexes")
 	return sc.validateIndexes(ctx)
+}
+
+func (sc *SchemaChanger) consistencyCheckBackfillingIndexes(
+	ctx context.Context, addedIndexes []descpb.IndexID, temporaryIndexes []descpb.IndexID,
+) error {
+	// If we don't have any temporary indexes, we aren't doing an
+	// MVCC-compliant backfill. So the below checks aren't
+	// necessary.
+	if len(temporaryIndexes) == 0 {
+		return nil
+	}
+
+	// If we are doing an MVCC-compliant backfill, we expect 1
+	// temporary index for every added index. It would nice to
+	// make this an assertion, but right now this can happen if a
+	// schema change happens concurrent with a cluster version
+	// upgrade.
+	if len(temporaryIndexes) != len(addedIndexes) {
+		return errors.Newf("expected %d temporary index, but found %d; schema change may have been constructed during cluster version upgrade",
+			len(addedIndexes),
+			len(temporaryIndexes))
+	}
+
+	// If we have temporary indexes but mvcc compliant backfills
+	// aren't actually supported, we can't possibly succeed
+	// because we don't know if new nodes are respecting any of
+	// the required state of the indexes.
+	settings := sc.execCfg.Settings
+	mvccCompliantBackfillSupported := settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) && tabledesc.UseMVCCCompliantIndexCreation.Get(&settings.SV)
+	if !mvccCompliantBackfillSupported {
+		return errors.Newf("schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
+	}
+	return nil
 }
 
 func (sc *SchemaChanger) mergeFromTemporaryIndex(
@@ -2038,12 +2077,11 @@ func isTemporaryIndex(idx catalog.Index) bool {
 	return idx.IndexDesc().UseDeletePreservingEncoding
 }
 
-// stepThroughTemporaryIndexDrop looks takes any temporary index that
-// is currently in DELETE_AND_WRITE_ONLY and steps it to DELETE_ONLY.
-//
-// Further (ugh), it alos sets ForcePut on any adding indexes to false
-// as they should all be backfilled and merged at this point.
-func (sc *SchemaChanger) stepThroughTemporaryIndexDrop(ctx context.Context) error {
+// runStateMachineAfterTempIndexMerge steps any DELETE_AND_WRITE_ONLY
+// temporary indexes to DELETE_ONLY and changes their direction to
+// DROP. Further, it sets ForcePut to false on any Adding indexes.  is
+// currently in and steps it to DELETE_ONLY
+func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context) error {
 	var runStatus jobs.RunningStatus
 	return sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
@@ -2062,11 +2100,11 @@ func (sc *SchemaChanger) stepThroughTemporaryIndexDrop(ctx context.Context) erro
 			}
 			idx := m.AsIndex()
 			if idx == nil {
-				// Don't touch anything but indexes
+				// Don't touch anything but indexes.
 				continue
 			}
 
-			// Set ForcePut to false now that the merge is complete
+			// Set ForcePut to false now that the merge is complete.
 			if !isTemporaryIndex(idx) && m.Adding() {
 				idx.IndexDesc().ForcePut = false
 			}

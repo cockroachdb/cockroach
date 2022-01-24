@@ -2049,7 +2049,7 @@ func (desc *Mutable) AddIndexMutation(
 	direction descpb.DescriptorMutation_Direction,
 	settings *cluster.Settings,
 ) error {
-	if !settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) || !UseMVCCCompliantIndexCreation.Get(&settings.SV) {
+	if !settings.Version.IsActive(ctx, clusterversion.MVCCIndexBackfiller) || !UseMVCCCompliantIndexCreation.Get(&settings.SV) {
 		return desc.DeprecatedAddIndexMutation(idx, direction)
 	}
 
