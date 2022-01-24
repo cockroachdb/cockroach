@@ -1961,33 +1961,17 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []struct {
-		stmt                 string
-		formattedStmt        string
-		fingerprint          string
-		formattedFingerprint string
+		stmt          string
+		fingerprinted string
 	}{
+		{stmt: `CREATE DATABASE roachblog`},
+		{stmt: `SET database = roachblog`},
+		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
 		{
-			stmt:          `CREATE DATABASE roachblog`,
-			formattedStmt: "CREATE DATABASE roachblog\n",
+			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
 		},
-		{
-			stmt:          `SET database = roachblog`,
-			formattedStmt: "SET database = roachblog\n",
-		},
-		{
-			stmt:          `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`,
-			formattedStmt: "CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)\n",
-		},
-		{
-			stmt:                 `INSERT INTO posts VALUES (1, 'foo')`,
-			formattedStmt:        "INSERT INTO posts VALUES (1, 'foo')\n",
-			fingerprint:          `INSERT INTO posts VALUES (_, '_')`,
-			formattedFingerprint: "INSERT INTO posts VALUES (_, '_')\n",
-		},
-		{
-			stmt:          `SELECT * FROM posts`,
-			formattedStmt: "SELECT * FROM posts\n",
-		},
+		{stmt: `SELECT * FROM posts`},
 	}
 
 	for _, stmt := range statements {
@@ -2044,9 +2028,9 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 
 	var expectedStatements []string
 	for _, stmt := range statements {
-		var expectedStmt = stmt.formattedStmt
-		if stmt.fingerprint != "" {
-			expectedStmt = stmt.formattedFingerprint
+		var expectedStmt = stmt.stmt
+		if stmt.fingerprinted != "" {
+			expectedStmt = stmt.fingerprinted
 		}
 		expectedStatements = append(expectedStatements, expectedStmt)
 	}
