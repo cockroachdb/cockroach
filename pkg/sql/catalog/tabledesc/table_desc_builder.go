@@ -221,6 +221,7 @@ func maybeFillInDescriptor(
 		privilege.Table,
 		desc.GetName(),
 	)
+	changes.UpgradedConstraintIDs = maybeAddConstraintIDs(desc)
 	return changes
 }
 
@@ -594,4 +595,49 @@ func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
 	return true
+}
+
+// maybeAddConstraintIDs ensures that all constraints have an ID associated with
+// them.
+func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
+	initialConstraintID := desc.NextConstraintID
+	if desc.NextConstraintID == 0 {
+		desc.NextConstraintID = 1
+	}
+	// Loop over all constraints and assign constraint IDs.
+	if desc.PrimaryIndex.ConstraintID == 0 {
+		desc.PrimaryIndex.ConstraintID = desc.GetNextConstraintID()
+		desc.NextConstraintID++
+	}
+	for _, idx := range desc.Indexes {
+		if idx.Unique && idx.ConstraintID == 0 {
+			idx.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	for _, check := range desc.Checks {
+		if check.ConstraintID == 0 {
+			check.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	for _, fk := range desc.InboundFKs {
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	for _, fk := range desc.OutboundFKs {
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	for _, unique := range desc.UniqueWithoutIndexConstraints {
+		if unique.ConstraintID == 0 {
+			unique.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	return desc.NextConstraintID != initialConstraintID
 }

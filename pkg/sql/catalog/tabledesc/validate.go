@@ -346,6 +346,11 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
+	if err := desc.validateConstraints(); err != nil {
+		vea.Report(err)
+		return
+	}
+
 	mutationsHaveErrs := false
 	for _, m := range desc.Mutations {
 		if err := validateMutation(&m); err != nil {
@@ -493,6 +498,19 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 		}
 		return nil
 	})
+}
+
+func (desc *wrapper) validateConstraints() error {
+	constraints, err := desc.GetConstraintInfo()
+	if err != nil {
+		return err
+	}
+	for _, constraint := range constraints {
+		if constraint.ConstraintID == 0 {
+			return errors.AssertionFailedf("constraint id was missing for constraint: %v", constraint)
+		}
+	}
+	return nil
 }
 
 func (desc *wrapper) validateColumns(
