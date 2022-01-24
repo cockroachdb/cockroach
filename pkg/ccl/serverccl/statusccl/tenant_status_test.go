@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -116,35 +115,19 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	tenantStatusServer := tenant.StatusServer().(serverpb.SQLStatusServer)
 
 	type testCase struct {
-		stmt                 string
-		formattedStmt        string
-		fingerprint          string
-		formattedFingerprint string
+		stmt        string
+		fingerprint string
 	}
 
 	testCaseTenant := []testCase{
+		{stmt: `CREATE DATABASE roachblog_t`},
+		{stmt: `SET database = roachblog_t`},
+		{stmt: `CREATE TABLE posts_t (id INT8 PRIMARY KEY, body STRING)`},
 		{
-			stmt:          `CREATE DATABASE roachblog_t`,
-			formattedStmt: "CREATE DATABASE roachblog_t\n",
+			stmt:        `INSERT INTO posts_t VALUES (1, 'foo')`,
+			fingerprint: `INSERT INTO posts_t VALUES (_, '_')`,
 		},
-		{
-			stmt:          `SET database = roachblog_t`,
-			formattedStmt: "SET database = roachblog_t\n",
-		},
-		{
-			stmt:          `CREATE TABLE posts_t (id INT8 PRIMARY KEY, body STRING)`,
-			formattedStmt: "CREATE TABLE posts_t (id INT8 PRIMARY KEY, body STRING)\n",
-		},
-		{
-			stmt:                 `INSERT INTO posts_t VALUES (1, 'foo')`,
-			fingerprint:          `INSERT INTO posts_t VALUES (_, '_')`,
-			formattedStmt:        "INSERT INTO posts_t VALUES (1, 'foo')\n",
-			formattedFingerprint: "INSERT INTO posts_t VALUES (_, '_')\n",
-		},
-		{
-			stmt:          `SELECT * FROM posts_t`,
-			formattedStmt: "SELECT * FROM posts_t\n",
-		},
+		{stmt: `SELECT * FROM posts_t`},
 	}
 
 	for _, stmt := range testCaseTenant {
@@ -156,28 +139,14 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	require.NoError(t, err)
 
 	testCaseNonTenant := []testCase{
+		{stmt: `CREATE DATABASE roachblog_nt`},
+		{stmt: `SET database = roachblog_nt`},
+		{stmt: `CREATE TABLE posts_nt (id INT8 PRIMARY KEY, body STRING)`},
 		{
-			stmt:          `CREATE DATABASE roachblog_nt`,
-			formattedStmt: "CREATE DATABASE roachblog_nt\n",
+			stmt:        `INSERT INTO posts_nt VALUES (1, 'foo')`,
+			fingerprint: `INSERT INTO posts_nt VALUES (_, '_')`,
 		},
-		{
-			stmt:          `SET database = roachblog_nt`,
-			formattedStmt: "SET database = roachblog_nt\n",
-		},
-		{
-			stmt:          `CREATE TABLE posts_nt (id INT8 PRIMARY KEY, body STRING)`,
-			formattedStmt: "CREATE TABLE posts_nt (id INT8 PRIMARY KEY, body STRING)\n",
-		},
-		{
-			stmt:                 `INSERT INTO posts_nt VALUES (1, 'foo')`,
-			fingerprint:          `INSERT INTO posts_nt VALUES (_, '_')`,
-			formattedStmt:        "INSERT INTO posts_nt VALUES (1, 'foo')\n",
-			formattedFingerprint: "INSERT INTO posts_nt VALUES (_, '_')\n",
-		},
-		{
-			stmt:          `SELECT * FROM posts_nt`,
-			formattedStmt: "SELECT * FROM posts_nt\n",
-		},
+		{stmt: `SELECT * FROM posts_nt`},
 	}
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
@@ -230,22 +199,14 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	err = serverutils.GetJSONProto(nonTenant, path, &nonTenantCombinedStats)
 	require.NoError(t, err)
 
-	checkStatements := func(t *testing.T, tc []testCase, actual *serverpb.StatementsResponse, combined bool) {
+	checkStatements := func(t *testing.T, tc []testCase, actual *serverpb.StatementsResponse) {
 		t.Helper()
 		var expectedStatements []string
 		for _, stmt := range tc {
 			var expectedStmt = stmt.stmt
-			if combined {
-				expectedStmt = stmt.formattedStmt
-			}
 			if stmt.fingerprint != "" {
-				if combined {
-					expectedStmt = stmt.formattedFingerprint
-				} else {
-					expectedStmt = stmt.fingerprint
-				}
+				expectedStmt = stmt.fingerprint
 			}
-
 			expectedStatements = append(expectedStatements, expectedStmt)
 		}
 
@@ -272,14 +233,14 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 	// First we verify that we have expected stats from tenants.
 	t.Run("tenant-stats", func(t *testing.T) {
-		checkStatements(t, testCaseTenant, tenantStats, false)
-		checkStatements(t, testCaseTenant, tenantCombinedStats, true)
+		checkStatements(t, testCaseTenant, tenantStats)
+		checkStatements(t, testCaseTenant, tenantCombinedStats)
 	})
 
 	// Now we verify the non tenant stats are what we expected.
 	t.Run("non-tenant-stats", func(t *testing.T) {
-		checkStatements(t, testCaseNonTenant, &nonTenantStats, false)
-		checkStatements(t, testCaseNonTenant, &nonTenantCombinedStats, true)
+		checkStatements(t, testCaseNonTenant, &nonTenantStats)
+		checkStatements(t, testCaseNonTenant, &nonTenantCombinedStats)
 	})
 
 	// Now we verify that tenant and non-tenant have no visibility into each other's stats.
@@ -313,29 +274,10 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 func testResetSQLStatsRPCForTenant(
 	ctx context.Context, t *testing.T, testHelper *tenantTestHelper,
 ) {
-
-	type testCase struct {
-		stmt          string
-		formattedStmt string
-	}
-	stmts := []testCase{
-		{
-			stmt:          "SELECT 1",
-			formattedStmt: "SELECT 1\n",
-		},
-		{
-			stmt:          "SELECT 1, 1",
-			formattedStmt: "SELECT 1, 1\n",
-		},
-		{
-			stmt:          "SELECT 1, 1, 1",
-			formattedStmt: "SELECT 1, 1\n",
-		},
-	}
-
-	var expectedStatements []string
-	for _, tc := range stmts {
-		expectedStatements = append(expectedStatements, tc.formattedStmt)
+	stmts := []string{
+		"SELECT 1",
+		"SELECT 1, 1",
+		"SELECT 1, 1, 1",
 	}
 
 	testCluster := testHelper.testCluster()
@@ -365,8 +307,8 @@ func testResetSQLStatsRPCForTenant(
 			}()
 
 			for _, stmt := range stmts {
-				testCluster.tenantConn(randomServer).Exec(t, stmt.stmt)
-				controlCluster.tenantConn(randomServer).Exec(t, stmt.stmt)
+				testCluster.tenantConn(randomServer).Exec(t, stmt)
+				controlCluster.tenantConn(randomServer).Exec(t, stmt)
 			}
 
 			if flushed {
@@ -383,7 +325,7 @@ func testResetSQLStatsRPCForTenant(
 
 			require.NotEqual(t, 0, len(statsPreReset.Statements),
 				"expected to find stats for at least one statement, but found: %d", len(statsPreReset.Statements))
-			ensureExpectedStmtFingerprintExistsInRPCResponse(t, expectedStatements, statsPreReset, "test")
+			ensureExpectedStmtFingerprintExistsInRPCResponse(t, stmts, statsPreReset, "test")
 
 			_, err = status.ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{
 				ResetPersistedStats: true,
@@ -420,7 +362,7 @@ func testResetSQLStatsRPCForTenant(
 				})
 			require.NoError(t, err)
 
-			ensureExpectedStmtFingerprintExistsInRPCResponse(t, expectedStatements, statsFromControlCluster, "control")
+			ensureExpectedStmtFingerprintExistsInRPCResponse(t, stmts, statsFromControlCluster, "control")
 		})
 	}
 }
@@ -607,10 +549,10 @@ SET DATABASE=test_db1;
 SELECT * FROM test;
 `)
 
-	getCreateStmtQuery := fmt.Sprintf(`
-		SELECT prettify_statement(indexdef, %d, %d, %d)
-		FROM pg_catalog.pg_indexes
-		WHERE tablename = 'test' AND indexname = $1`, tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase)
+	getCreateStmtQuery := `
+SELECT indexdef
+FROM pg_catalog.pg_indexes
+WHERE tablename = 'test' AND indexname = $1`
 
 	// Get index usage stats and assert expected results.
 	resp := getTableIndexStats(testHelper, "test_db1")
