@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -128,6 +129,7 @@ var validationMap = []struct {
 			"NewSchemaChangeJobID":          {status: iSolemnlySwearThisFieldIsValidated},
 			"RowLevelTTL":                   {status: iSolemnlySwearThisFieldIsValidated},
 			"ExcludeDataFromBackup":         {status: thisFieldReferencesNoObjects},
+			"NextConstraintID":              {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -167,6 +169,7 @@ var validationMap = []struct {
 			"GeoConfig":                   {status: thisFieldReferencesNoObjects},
 			"Predicate":                   {status: iSolemnlySwearThisFieldIsValidated},
 			"UseDeletePreservingEncoding": {status: thisFieldReferencesNoObjects},
+			"ConstraintID":                {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -215,16 +218,18 @@ var validationMap = []struct {
 			"OnDelete":          {status: thisFieldReferencesNoObjects},
 			"OnUpdate":          {status: thisFieldReferencesNoObjects},
 			"Match":             {status: thisFieldReferencesNoObjects},
+			"ConstraintID":      {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
 		obj: descpb.UniqueWithoutIndexConstraint{},
 		fieldMap: map[string]validationStatusInfo{
-			"TableID":   {status: iSolemnlySwearThisFieldIsValidated},
-			"ColumnIDs": {status: iSolemnlySwearThisFieldIsValidated},
-			"Name":      {status: thisFieldReferencesNoObjects},
-			"Validity":  {status: thisFieldReferencesNoObjects},
-			"Predicate": {status: iSolemnlySwearThisFieldIsValidated},
+			"TableID":      {status: iSolemnlySwearThisFieldIsValidated},
+			"ColumnIDs":    {status: iSolemnlySwearThisFieldIsValidated},
+			"Name":         {status: thisFieldReferencesNoObjects},
+			"Validity":     {status: thisFieldReferencesNoObjects},
+			"Predicate":    {status: iSolemnlySwearThisFieldIsValidated},
+			"ConstraintID": {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -982,10 +987,12 @@ func TestValidateTableDesc(t *testing.T) {
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.LatestPrimaryIndexDescriptorVersion,
 					ForeignKey:          descpb.ForeignKeyReference{Table: 123, Index: 456},
+					ConstraintID:        1,
 				},
-				NextColumnID: 2,
-				NextFamilyID: 1,
-				NextIndexID:  2,
+				NextColumnID:     2,
+				NextFamilyID:     1,
+				NextIndexID:      2,
+				NextConstraintID: 2,
 			}},
 		{`at least one of LIST or RANGE partitioning must be used`,
 			// Verify that validatePartitioning is hooked up. The rest of these
@@ -1176,6 +1183,7 @@ func TestValidateTableDesc(t *testing.T) {
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
 				},
 				Indexes: []descpb.IndexDescriptor{
 					{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
@@ -1190,9 +1198,10 @@ func TestValidateTableDesc(t *testing.T) {
 						ColumnNames: []string{"c1", "c2"},
 					},
 				},
-				NextColumnID: 4,
-				NextFamilyID: 1,
-				NextIndexID:  3,
+				NextColumnID:     4,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
 			}},
 		{"",
 			descpb.TableDescriptor{
@@ -1214,6 +1223,7 @@ func TestValidateTableDesc(t *testing.T) {
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 					EncodingType:        descpb.PrimaryIndexEncoding,
+					ConstraintID:        1,
 				},
 				Indexes: []descpb.IndexDescriptor{
 					{ID: 2, Name: "sec", KeyColumnIDs: []descpb.ColumnID{2},
@@ -1240,6 +1250,7 @@ func TestValidateTableDesc(t *testing.T) {
 								KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 								Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 								EncodingType:        descpb.PrimaryIndexEncoding,
+								ConstraintID:        1,
 							},
 						},
 						Direction: descpb.DescriptorMutation_ADD,
@@ -1270,10 +1281,11 @@ func TestValidateTableDesc(t *testing.T) {
 						State:     descpb.DescriptorMutation_DELETE_ONLY,
 					},
 				},
-				NextColumnID: 4,
-				NextFamilyID: 1,
-				NextIndexID:  5,
-				Privileges:   descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				NextColumnID:     4,
+				NextFamilyID:     1,
+				NextIndexID:      5,
+				NextConstraintID: 2,
+				Privileges:       descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			}},
 		{`index "sec" cannot store virtual column "c3"`,
 			descpb.TableDescriptor{
@@ -2448,6 +2460,121 @@ func TestValidatePartitioning(t *testing.T) {
 		t.Run(test.err, func(t *testing.T) {
 			desc := NewBuilder(&test.desc).BuildImmutableTable()
 			err := ValidatePartitioning(desc)
+			if !testutils.IsError(err, test.err) {
+				t.Errorf(`%d: got "%v" expected "%v"`, i, err, test.err)
+			}
+		})
+	}
+}
+
+func TestValidateConstraintID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		err  string
+		desc descpb.TableDescriptor
+	}{
+		{`constraint id was missing for constraint: PRIMARY KEY with name primary`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, Name: "primary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				Privileges: descpb.NewPrivilegeDescriptor(
+					security.PublicRoleName(),
+					privilege.SchemaPrivileges,
+					privilege.List{},
+					security.RootUserName()),
+			}},
+		{`constraint id was missing for constraint: UNIQUE with name secondary`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{
+						ID: 1, Name: "secondary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Unique:              true,
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				Privileges: descpb.NewPrivilegeDescriptor(
+					security.PublicRoleName(),
+					privilege.SchemaPrivileges,
+					privilege.List{},
+					security.RootUserName()),
+			}},
+		{`constraint id was missing for constraint: UNIQUE with name bad`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				UniqueWithoutIndexConstraints: []descpb.UniqueWithoutIndexConstraint{
+					{Name: "bad"},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				Privileges: descpb.NewPrivilegeDescriptor(
+					security.PublicRoleName(),
+					privilege.SchemaPrivileges,
+					privilege.List{},
+					security.RootUserName()),
+			}},
+		{`constraint id was missing for constraint: CHECK with name bad`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				Checks: []*descpb.TableDescriptor_CheckConstraint{
+					{Name: "bad"},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				Privileges: descpb.NewPrivilegeDescriptor(
+					security.PublicRoleName(),
+					privilege.SchemaPrivileges,
+					privilege.List{},
+					security.RootUserName()),
+			}},
+	}
+	for i, test := range tests {
+		t.Run(test.err, func(t *testing.T) {
+			desc := NewBuilder(&test.desc).BuildImmutableTable()
+			err := ValidateConstraints(desc)
 			if !testutils.IsError(err, test.err) {
 				t.Errorf(`%d: got "%v" expected "%v"`, i, err, test.err)
 			}

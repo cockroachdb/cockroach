@@ -81,7 +81,7 @@ func TestDoctorZipDir(t *testing.T) {
 	})
 
 	t.Run("deprecated doctor zipdir with verbose", func(t *testing.T) {
-		out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip --verbose")
+		out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip 21.1 --verbose")
 		if err != nil {
 			t.Fatal(err)
 		}

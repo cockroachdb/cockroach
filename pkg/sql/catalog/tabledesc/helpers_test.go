@@ -11,6 +11,7 @@
 package tabledesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
@@ -22,6 +23,27 @@ func ValidatePartitioning(immI catalog.TableDescriptor) error {
 		return errors.Errorf("expected immutable descriptor")
 	}
 	return imm.validatePartitioning()
+}
+
+// noopValidationErrorAccumulator implements catalog.ValidationErrorAccumulator
+type noopValidationErrorAccumulator struct {
+}
+
+// Report implements catalog.ValidationErrorAccumulator
+func (*noopValidationErrorAccumulator) Report(err error) {
+}
+
+// IsActive implements catalog.ValidationErrorAccumulator
+func (*noopValidationErrorAccumulator) IsActive(version clusterversion.Key) bool {
+	return true
+}
+
+func ValidateConstraints(immI catalog.TableDescriptor) error {
+	imm, ok := immI.(*immutable)
+	if !ok {
+		return errors.Errorf("expected immutable descriptor")
+	}
+	return imm.validateConstraintIDs(&noopValidationErrorAccumulator{})
 }
 
 func GetPostDeserializationChanges(

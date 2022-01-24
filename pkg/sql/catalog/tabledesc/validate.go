@@ -11,6 +11,9 @@
 package tabledesc
 
 import (
+	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -519,12 +522,14 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Only validate column families, constraints, and indexes if this is
 	// actually a table, not if it's just a view.
 	if desc.IsPhysicalTable() {
+
 		newErrs := []error{
 			desc.validateColumnFamilies(columnIDs),
 			desc.validateCheckConstraints(columnIDs),
 			desc.validateUniqueWithoutIndexConstraints(columnIDs),
 			desc.validateTableIndexes(columnNames),
 			desc.validatePartitioning(),
+			desc.validateConstraintIDs(vea),
 		}
 		hasErrs := false
 		for _, err := range newErrs {
@@ -643,6 +648,35 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 		}
 		return nil
 	})
+}
+
+func (desc *wrapper) validateConstraintIDs(vea catalog.ValidationErrorAccumulator) error {
+	if !vea.IsActive(clusterversion.RemoveIncompatibleDatabasePrivileges) {
+		return nil
+	}
+	if !desc.IsTable() {
+		return nil
+	}
+	constraints, err := desc.GetConstraintInfo()
+	if err != nil {
+		return err
+	}
+	// Sort the names to get deterministic behaviour, since
+	// constraints are stored in a map.
+	orderedNames := make([]string, 0, len(constraints))
+	for name := range constraints {
+		orderedNames = append(orderedNames, name)
+	}
+	sort.Strings(orderedNames)
+	for _, name := range orderedNames {
+		constraint := constraints[name]
+		if constraint.ConstraintID == 0 {
+			return errors.AssertionFailedf("constraint id was missing for constraint: %s with name %s",
+				constraint.Kind,
+				name)
+		}
+	}
+	return nil
 }
 
 func (desc *wrapper) validateColumns(
