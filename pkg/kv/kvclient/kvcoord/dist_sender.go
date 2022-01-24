@@ -1736,56 +1736,100 @@ func fillSkippedResponses(
 		scratchBA.Requests[0].MustSetInner(req)
 		br.Responses[i] = scratchBA.CreateReply().Responses[0]
 	}
-	// Set the ResumeSpan for future batch requests.
+
+	// Set or correct the ResumeSpan as necessary.
 	isReverse := ba.IsReverse()
 	for i, resp := range br.Responses {
 		req := ba.Requests[i].GetInner()
-		if !roachpb.IsRange(req) {
-			continue
-		}
 		hdr := resp.GetInner().Header()
-		origSpan := req.Header().Span()
-		if isReverse {
-			if hdr.ResumeSpan != nil {
-				// The ResumeSpan.Key might be set to the StartKey of a range;
-				// correctly set it to the Key of the original request span.
-				hdr.ResumeSpan.Key = origSpan.Key
-			} else if roachpb.RKey(origSpan.Key).Less(nextKey) {
-				// Some keys have yet to be processed.
-				hdr.ResumeSpan = new(roachpb.Span)
-				*hdr.ResumeSpan = origSpan
-				if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
-					// The original span has been partially processed.
-					hdr.ResumeSpan.EndKey = nextKey.AsRawKey()
-				}
-			}
-		} else {
-			if hdr.ResumeSpan != nil {
-				// The ResumeSpan.EndKey might be set to the EndKey of a range because
-				// that's what a store will set it to when the limit is reached; it
-				// doesn't know any better). In that case, we correct it to the EndKey
-				// of the original request span. Note that this doesn't touch
-				// ResumeSpan.Key, which is really the important part of the ResumeSpan.
-				hdr.ResumeSpan.EndKey = origSpan.EndKey
-			} else {
-				// The request might have been fully satisfied, in which case it doesn't
-				// need a ResumeSpan, or it might not have. Figure out if we're in the
-				// latter case.
-				if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
-					// Some keys have yet to be processed.
-					hdr.ResumeSpan = new(roachpb.Span)
-					*hdr.ResumeSpan = origSpan
-					if roachpb.RKey(origSpan.Key).Less(nextKey) {
-						// The original span has been partially processed.
-						hdr.ResumeSpan.Key = nextKey.AsRawKey()
-					}
-				}
-			}
-		}
+		maybeSetResumeSpan(req, &hdr, nextKey, isReverse)
 		if hdr.ResumeSpan != nil {
 			hdr.ResumeReason = resumeReason
 		}
 		br.Responses[i].GetInner().SetHeader(hdr)
+	}
+}
+
+// maybeSetResumeSpan sets or corrects the ResumeSpan in the response header, if
+// necessary.
+//
+// nextKey is the first key that was not processed.
+func maybeSetResumeSpan(
+	req roachpb.Request, hdr *roachpb.ResponseHeader, nextKey roachpb.RKey, isReverse bool,
+) {
+	if _, ok := req.(*roachpb.GetRequest); ok {
+		// This is a Get request. There are three possibilities:
+		//
+		//  1. The request was completed. In this case we don't want a ResumeSpan.
+		//
+		//  2. The request was not completed but it was part of a request that made
+		//     it to a kvserver (i.e. it was part of the last range we operated on).
+		//     In this case the ResumeSpan should be set by the kvserver and we can
+		//     leave it alone.
+		//
+		//  3. The request was not completed and was not sent to a kvserver (it was
+		//     beyond the last range we operated on). In this case we need to set
+		//     the ResumeSpan here.
+		if hdr.ResumeSpan != nil {
+			// Case 2.
+			return
+		}
+		key := req.Header().Span().Key
+		if isReverse {
+			if !nextKey.Less(roachpb.RKey(key)) {
+				// key <= nextKey, so this request was not completed (case 3).
+				hdr.ResumeSpan = &roachpb.Span{Key: key}
+			}
+		} else {
+			if !roachpb.RKey(key).Less(nextKey) {
+				// key >= nextKey, so this request was not completed (case 3).
+				hdr.ResumeSpan = &roachpb.Span{Key: key}
+			}
+		}
+		return
+	}
+
+	if !roachpb.IsRange(req) {
+		return
+	}
+
+	origSpan := req.Header().Span()
+	if isReverse {
+		if hdr.ResumeSpan != nil {
+			// The ResumeSpan.Key might be set to the StartKey of a range;
+			// correctly set it to the Key of the original request span.
+			hdr.ResumeSpan.Key = origSpan.Key
+		} else if roachpb.RKey(origSpan.Key).Less(nextKey) {
+			// Some keys have yet to be processed.
+			hdr.ResumeSpan = new(roachpb.Span)
+			*hdr.ResumeSpan = origSpan
+			if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
+				// The original span has been partially processed.
+				hdr.ResumeSpan.EndKey = nextKey.AsRawKey()
+			}
+		}
+	} else {
+		if hdr.ResumeSpan != nil {
+			// The ResumeSpan.EndKey might be set to the EndKey of a range because
+			// that's what a store will set it to when the limit is reached; it
+			// doesn't know any better). In that case, we correct it to the EndKey
+			// of the original request span. Note that this doesn't touch
+			// ResumeSpan.Key, which is really the important part of the ResumeSpan.
+			hdr.ResumeSpan.EndKey = origSpan.EndKey
+		} else {
+			// The request might have been fully satisfied, in which case it doesn't
+			// need a ResumeSpan, or it might not have. Figure out if we're in the
+			// latter case.
+			if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
+				// Some keys have yet to be processed.
+				hdr.ResumeSpan = new(roachpb.Span)
+				*hdr.ResumeSpan = origSpan
+				if roachpb.RKey(origSpan.Key).Less(nextKey) {
+					// The original span has been partially processed.
+					hdr.ResumeSpan.Key = nextKey.AsRawKey()
+				}
+			}
+		}
 	}
 }
 
