@@ -93,6 +93,11 @@ message ForeignKeyConstraint {
 
   // These fields were used for foreign keys until 20.1.
   reserved 10, 11, 12, 13;
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints.
+  optional uint32 constraint_id = 14 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 }
 
 // UniqueWithoutIndexConstraint is the representation of a unique constraint
@@ -111,6 +116,11 @@ message UniqueWithoutIndexConstraint {
   // unique constraint with Predicate as the expression. Columns are referred to
   // in the expression by their name.
   optional string predicate = 5 [(gogoproto.nullable) = false];
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints.
+  optional uint32 constraint_id = 6 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
@@ -512,6 +522,12 @@ message IndexDescriptor {
   // index backfiller
   // docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
   optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints, which is only set for primary keys and unique secondary
+  // indexes.
+  optional uint32 constraint_id = 33 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
@@ -936,6 +952,10 @@ message TableDescriptor {
     // of SHOW CREATE TABLE. We no longer them in order to make the output to be
     // round-trippable, but we still set this field for now. See #68031.
     optional bool hidden = 7 [(gogoproto.nullable) = false];
+    // Used within the table descriptor to uniquely identify individual
+    // constraints.
+    optional uint32 constraint_id = 8 [(gogoproto.customname) = "ConstraintID",
+      (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
   }
 
   repeated CheckConstraint checks = 20;
@@ -1155,6 +1175,10 @@ message TableDescriptor {
   // This means that all indexes implicitly inherit all partitioning
   // from the PARTITION ALL BY clause.
   optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
+
+  // Constraint ID for the next constraint.
+  optional uint32 next_constraint_id = 47 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "NextConstraintID", (gogoproto.casttype) = "ConstraintID"];
 }
 
 // SurvivalGoal is the survival goal for a database.

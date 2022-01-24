@@ -504,6 +504,9 @@ type TableDescriptor interface {
 	// GetNextColumnID returns the next unused column ID for this table. Column
 	// IDs are unique per table, but not unique globally.
 	GetNextColumnID() descpb.ColumnID
+	// GetNextConstraintID returns the next unused constraint ID for this table.
+	// Constraint ID's are unique per table, but not unique globally.
+	GetNextConstraintID() descpb.ConstraintID
 	// CheckConstraintUsesColumn returns whether the check constraint uses the
 	// specified column.
 	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
