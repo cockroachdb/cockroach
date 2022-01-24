@@ -2175,7 +2175,7 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 		if n == 0 {
 			return nil
 		}
-		if n < 100 && !force {
+		if n < 10000 && !force {
 			return nil
 		}
 		err := s.db.Run(ctx, b)
@@ -2235,6 +2235,14 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 	storeToNode := map[roachpb.StoreID]roachpb.NodeID{}
 	if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
 		return err
+	}
+
+	// Stores can be ignored by mapping them to node zero.
+	for store, node := range storeToNode {
+		if node == 0 {
+			delete(storeToNode, store)
+			delete(storeIDs, fmt.Sprint(store))
+		}
 	}
 
 	fakeStatuses, err := makeFakeNodeStatuses(storeToNode)
