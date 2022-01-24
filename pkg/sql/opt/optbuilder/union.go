@@ -153,15 +153,20 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 	}
 
 	if left.Equivalent(right) {
-		// Do a best-effort attempt to determine which type is "larger".
-		if left.Width() > right.Width() {
-			return left
-		}
+		// In the default case, use the left type.
+		src, tgt := right, left
 		if left.Width() < right.Width() {
-			return right
+			// If the right type is "larger", use it.
+			src, tgt = left, right
 		}
-		// In other cases, use the left type.
-		return left
+		if _, ok := tree.LookupCastVolatility(src, tgt, nil /* sessionData */); !ok {
+			// Error if no cast exists from src to tgt.
+			panic(pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"%v types %s and %s cannot be matched", clauseTag, left, right,
+			))
+		}
+		return tgt
 	}
 	leftFam, rightFam := left.Family(), right.Family()
 
@@ -189,7 +194,7 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 		return right
 	}
 
-	// TODO(radu): Postgres has more encompassing rules:
+	// TODO(#75103): Postgres has more encompassing rules:
 	// http://www.postgresql.org/docs/12/static/typeconv-union-case.html
 	panic(pgerror.Newf(
 		pgcode.DatatypeMismatch,
@@ -198,7 +203,9 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 }
 
 // addCasts adds a projection to a scope, adding casts as necessary so that the
-// resulting columns have the given types.
+// resulting columns have the given types. This function assumes that there is a
+// valid cast from the column types in dst.cols to the corresponding types in
+// outTypes.
 func (b *Builder) addCasts(dst *scope, outTypes []*types.T) *scope {
 	expr := dst.expr.(memo.RelExpr)
 	dstCols := dst.cols
