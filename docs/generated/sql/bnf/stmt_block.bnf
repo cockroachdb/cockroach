@@ -2684,6 +2684,7 @@ alter_table_cmd ::=
 	| 'EXPERIMENTAL_AUDIT' 'SET' audit_mode
 	| partition_by_table
 	| 'SET' '(' storage_parameter_list ')'
+	| 'RESET' '(' storage_parameter_key_list ')'
 
 var_set_list ::=
 	( var_name '=' 'COPY' 'FROM' 'PARENT' | var_name '=' var_value ) ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*
@@ -2778,8 +2779,7 @@ partition_by_inner ::=
 	| 'NOTHING'
 
 storage_parameter ::=
-	name '=' var_value
-	| 'SCONST' '=' var_value
+	storage_parameter_key '=' var_value
 
 table_elem ::=
 	column_def
@@ -2978,6 +2978,9 @@ audit_mode ::=
 	'READ' 'WRITE'
 	| 'OFF'
 
+storage_parameter_key_list ::=
+	( storage_parameter_key ) ( ( ',' storage_parameter_key ) )*
+
 partition_by_index ::=
 	partition_by
 
@@ -3064,6 +3067,10 @@ list_partitions ::=
 
 range_partitions ::=
 	( range_partition ) ( ( ',' range_partition ) )*
+
+storage_parameter_key ::=
+	name
+	| 'SCONST'
 
 index_def ::=
 	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause

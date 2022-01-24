@@ -1114,6 +1114,22 @@ ALTER TABLE t SET (fillfactor = (100), autovacuum_enabled = (false)) -- fully pa
 ALTER TABLE t SET (fillfactor = _, autovacuum_enabled = _) -- literals removed
 ALTER TABLE _ SET (_ = 100, _ = false) -- identifiers removed
 
+parse
+ALTER TABLE t RESET (fillfactor)
+----
+ALTER TABLE t RESET (fillfactor)
+ALTER TABLE t RESET (fillfactor) -- fully parenthesized
+ALTER TABLE t RESET (fillfactor) -- literals removed
+ALTER TABLE _ RESET (_) -- identifiers removed
+
+parse
+ALTER TABLE t RESET (fillfactor, autovacuum_enabled)
+----
+ALTER TABLE t RESET (fillfactor, autovacuum_enabled)
+ALTER TABLE t RESET (fillfactor, autovacuum_enabled) -- fully parenthesized
+ALTER TABLE t RESET (fillfactor, autovacuum_enabled) -- literals removed
+ALTER TABLE _ RESET (_, _) -- identifiers removed
+
 error
 ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
 ----
