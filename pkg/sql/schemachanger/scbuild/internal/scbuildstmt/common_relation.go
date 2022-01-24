@@ -403,10 +403,9 @@ func decomposeTableDescToElements(
 				enqueue(b, targetStatus, indexName)
 				if targetStatus == scpb.Status_ABSENT {
 					enqueue(b, targetStatus, &scpb.ConstraintComment{
-						ConstraintType: scpb.ConstraintType_PrimaryKey,
-						ConstraintName: index.GetName(),
-						TableID:        tbl.GetID(),
-						Comment:        scpb.PlaceHolderComment,
+						ConstraintID: index.GetConstraintID(),
+						TableID:      tbl.GetID(),
+						Comment:      scpb.PlaceHolderComment,
 					})
 				}
 
@@ -416,10 +415,9 @@ func decomposeTableDescToElements(
 				enqueue(b, targetStatus, indexName)
 				if targetStatus == scpb.Status_ABSENT && secondaryIndex.Unique {
 					enqueue(b, targetStatus, &scpb.ConstraintComment{
-						ConstraintType: scpb.ConstraintType_PrimaryKey,
-						ConstraintName: index.GetName(),
-						TableID:        tbl.GetID(),
-						Comment:        scpb.PlaceHolderComment,
+						ConstraintID: index.GetConstraintID(),
+						TableID:      tbl.GetID(),
+						Comment:      scpb.PlaceHolderComment,
 					})
 				}
 			}
@@ -485,10 +483,9 @@ func decomposeTableDescToElements(
 		})
 		if targetStatus == scpb.Status_ABSENT {
 			enqueue(b, targetStatus, &scpb.ConstraintComment{
-				ConstraintType: scpb.ConstraintType_UniqueWithoutIndex,
-				ConstraintName: constraint.Name,
-				TableID:        tbl.GetID(),
-				Comment:        scpb.PlaceHolderComment,
+				ConstraintID: constraint.ConstraintID,
+				TableID:      tbl.GetID(),
+				Comment:      scpb.PlaceHolderComment,
 			})
 		}
 	}
@@ -519,10 +516,9 @@ func decomposeTableDescToElements(
 		})
 		if targetStatus == scpb.Status_ABSENT {
 			enqueue(b, targetStatus, &scpb.ConstraintComment{
-				ConstraintType: scpb.ConstraintType_Check,
-				ConstraintName: constraint.Name,
-				TableID:        tbl.GetID(),
-				Comment:        scpb.PlaceHolderComment,
+				ConstraintID: constraint.ConstraintID,
+				TableID:      tbl.GetID(),
+				Comment:      scpb.PlaceHolderComment,
 			})
 		}
 	}
@@ -530,10 +526,9 @@ func decomposeTableDescToElements(
 	for _, fk := range tbl.AllActiveAndInactiveForeignKeys() {
 		if targetStatus == scpb.Status_ABSENT {
 			enqueue(b, targetStatus, &scpb.ConstraintComment{
-				ConstraintType: scpb.ConstraintType_FK,
-				ConstraintName: fk.Name,
-				TableID:        tbl.GetID(),
-				Comment:        scpb.PlaceHolderComment,
+				ConstraintID: fk.ConstraintID,
+				TableID:      tbl.GetID(),
+				Comment:      scpb.PlaceHolderComment,
 			})
 		}
 	}

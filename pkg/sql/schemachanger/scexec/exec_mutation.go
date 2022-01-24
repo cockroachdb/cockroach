@@ -155,12 +155,12 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	for _, comment := range mvs.constraintCommentsToUpdate {
 		if len(comment.comment) > 0 {
 			if err := commentUpdater.UpsertConstraintComment(
-				comment.tbl, comment.schemaName, comment.constraintName, comment.constraintType, comment.comment); err != nil {
+				comment.tbl, comment.constraintID, comment.comment); err != nil {
 				return err
 			}
 		} else {
 			if err := commentUpdater.DeleteConstraintComment(
-				comment.tbl, comment.schemaName, comment.constraintName, comment.constraintType); err != nil {
+				comment.tbl, comment.constraintID); err != nil {
 				return err
 			}
 		}
@@ -279,11 +279,9 @@ type mutationVisitorState struct {
 }
 
 type constraintCommentToUpdate struct {
-	tbl            catalog.TableDescriptor
-	schemaName     string
-	constraintName string
-	constraintType scpb.ConstraintType
-	comment        string
+	tbl          catalog.TableDescriptor
+	constraintID descpb.ConstraintID
+	comment      string
 }
 
 type commentToUpdate struct {
@@ -367,19 +365,12 @@ func (mvs *mutationVisitorState) DeleteComment(
 func (mvs *mutationVisitorState) DeleteConstraintComment(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraintName string,
-	constraintType scpb.ConstraintType,
+	constraintID descpb.ConstraintID,
 ) error {
-	schema, err := mvs.c.MustReadImmutableDescriptor(ctx, tbl.GetParentSchemaID())
-	if err != nil {
-		return err
-	}
 	mvs.constraintCommentsToUpdate = append(mvs.constraintCommentsToUpdate,
 		constraintCommentToUpdate{
-			tbl:            tbl,
-			schemaName:     schema.GetName(),
-			constraintName: constraintName,
-			constraintType: constraintType,
+			tbl:          tbl,
+			constraintID: constraintID,
 		})
 	return nil
 }
