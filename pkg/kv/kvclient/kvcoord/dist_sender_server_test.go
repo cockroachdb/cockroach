@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -998,6 +999,222 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 					t.Errorf("expected key %q; got %q", keys[0], key)
 				}
 			}
+		})
+	}
+}
+
+// TestMultiRangeScanWithPagination tests that specifying MaxSpanResultKeys
+// and/or TargetBytes to break up result sets works properly, even across
+// ranges.
+func TestMultiRangeScanWithPagination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keys := func(strs ...string) []roachpb.Key {
+		r := make([]roachpb.Key, len(strs))
+		for i, s := range strs {
+			r[i] = roachpb.Key(s)
+		}
+		return r
+	}
+
+	scan := func(startKey, endKey string) roachpb.Span {
+		return roachpb.Span{
+			Key:    roachpb.Key(startKey),
+			EndKey: roachpb.Key(endKey).Next(),
+		}
+	}
+
+	get := func(key string) roachpb.Span {
+		return roachpb.Span{
+			Key: roachpb.Key(key),
+		}
+	}
+
+	// Each testcase defines range split keys, a set of keys, and a set of
+	// operations (scans / gets) that together should return all the keys in
+	// order.
+	testCases := []struct {
+		splitKeys []roachpb.Key
+		keys      []roachpb.Key
+		// An operation is either a Scan or a Get, depending if the span EndKey is
+		// set.
+		operations []roachpb.Span
+	}{
+		{
+			splitKeys:  keys(),
+			keys:       keys("a", "j", "z"),
+			operations: []roachpb.Span{scan("a", "z")},
+		},
+
+		{
+			splitKeys:  keys("m"),
+			keys:       keys("a", "z"),
+			operations: []roachpb.Span{scan("a", "z")},
+		},
+
+		{
+			splitKeys:  keys("h", "q"),
+			keys:       keys("b", "f", "k", "r", "w", "y"),
+			operations: []roachpb.Span{scan("b", "y")},
+		},
+
+		{
+			splitKeys:  keys("h", "q"),
+			keys:       keys("b", "f", "k", "r", "w", "y"),
+			operations: []roachpb.Span{scan("b", "k"), scan("p", "z")},
+		},
+
+		{
+			// This test mixes Scans and Gets, used to make sure that the ResumeSpan
+			// is set correctly for Gets that were not performed (see #74736).
+			splitKeys:  keys("c", "f"),
+			keys:       keys("a", "b", "c", "d", "e", "f", "g", "h", "i"),
+			operations: []roachpb.Span{scan("a", "d"), get("d1"), get("e"), scan("f", "h"), get("i")},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			ctx := context.Background()
+			s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			tds := db.NonTransactionalSender()
+
+			for _, sk := range tc.splitKeys {
+				if err := db.AdminSplit(ctx, sk, hlc.MaxTimestamp /* expirationTime */); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			for _, k := range tc.keys {
+				put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
+				if _, err := kv.SendWrapped(ctx, tds, put); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// The maximum TargetBytes to use in this test. We use the bytes in
+			// all kvs in this test case as a ceiling. Nothing interesting
+			// happens above this.
+			var maxTargetBytes int64
+			{
+				scan := roachpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next(), false)
+				resp, pErr := kv.SendWrapped(ctx, tds, scan)
+				require.Nil(t, pErr)
+				require.Nil(t, resp.Header().ResumeSpan)
+				require.EqualValues(t, len(tc.keys), resp.Header().NumKeys)
+				maxTargetBytes = resp.Header().NumBytes
+			}
+
+			testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+				// In 21.2, we don't support mixing Gets and ReverseScans (see #71376).
+				// Disable that combination.
+				if reverse {
+					for _, span := range tc.operations {
+						if span.EndKey == nil {
+							skip.IgnoreLint(t, "Get and ReverseScans are not supported in 21.2 (see #71376)")
+						}
+					}
+				}
+
+				// Iterate through MaxSpanRequestKeys=1..n and TargetBytes=1..m
+				// and (where n and m are chosen to reveal the full result set
+				// in one page). At each(*) combination, paginate both the
+				// forward and reverse scan and make sure we get the right
+				// result.
+				//
+				// (*) we don't increase the limits when there's only one page,
+				// but short circuit to something more interesting instead.
+				msrq := int64(1)
+				for targetBytes := int64(1); ; targetBytes++ {
+					var numPages int
+					t.Run(fmt.Sprintf("targetBytes=%d,maxSpanRequestKeys=%d", targetBytes, msrq), func(t *testing.T) {
+
+						// Paginate.
+						operations := tc.operations
+						if reverse {
+							operations = make([]roachpb.Span, len(operations))
+							for i := range operations {
+								operations[i] = tc.operations[len(operations)-i-1]
+							}
+						}
+						var keys []roachpb.Key
+						for {
+							numPages++
+
+							// Build the batch.
+							var ba roachpb.BatchRequest
+							for _, span := range operations {
+								var req roachpb.Request
+								switch {
+								case span.EndKey == nil:
+									req = roachpb.NewGet(span.Key, false /* forUpdate */)
+								case reverse:
+									req = roachpb.NewReverseScan(span.Key, span.EndKey, false /* forUpdate */)
+								default:
+									req = roachpb.NewScan(span.Key, span.EndKey, false /* forUpdate */)
+								}
+								ba.Add(req)
+							}
+
+							ba.Header.TargetBytes = targetBytes
+							ba.Header.MaxSpanRequestKeys = msrq
+							br, pErr := tds.Send(ctx, ba)
+							require.Nil(t, pErr)
+							for i := range operations {
+								resp := br.Responses[i]
+								if getResp := resp.GetGet(); getResp != nil {
+									if getResp.Value != nil {
+										keys = append(keys, operations[i].Key)
+									}
+									continue
+								}
+								var rows []roachpb.KeyValue
+								if reverse {
+									rows = resp.GetReverseScan().Rows
+								} else {
+									rows = resp.GetScan().Rows
+								}
+								for _, kv := range rows {
+									keys = append(keys, kv.Key)
+								}
+							}
+							operations = nil
+							for _, resp := range br.Responses {
+								if resumeSpan := resp.GetInner().Header().ResumeSpan; resumeSpan != nil {
+									operations = append(operations, *resumeSpan)
+								}
+							}
+							if len(operations) == 0 {
+								// Done with this pagination.
+								break
+							}
+						}
+						if reverse {
+							for i, n := 0, len(keys); i < n-i-1; i++ {
+								keys[i], keys[n-i-1] = keys[n-i-1], keys[i]
+							}
+						}
+						require.Equal(t, tc.keys, keys)
+						if targetBytes == 1 || msrq < int64(len(tc.keys)) {
+							// Definitely more than one page in this case.
+							require.Greater(t, numPages, 1)
+						}
+						if targetBytes >= maxTargetBytes && msrq >= int64(len(tc.keys)) {
+							// Definitely one page if limits are larger than result set.
+							require.Equal(t, 1, numPages)
+						}
+					})
+					if targetBytes >= maxTargetBytes || numPages == 1 {
+						if msrq >= int64(len(tc.keys)) {
+							return
+						}
+						targetBytes = 0
+						msrq++
+					}
+				}
+			})
 		})
 	}
 }
