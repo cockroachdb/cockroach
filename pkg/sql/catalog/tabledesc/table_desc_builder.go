@@ -221,6 +221,7 @@ func maybeFillInDescriptor(
 		privilege.Table,
 		desc.GetName(),
 	)
+	changes.UpgradedConstraintIDs = maybeAddConstraintIDs(desc)
 	return changes
 }
 
@@ -351,7 +352,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				OnDelete:            ref.OnDelete,
 				OnUpdate:            ref.OnUpdate,
 				Match:               ref.Match,
+				ConstraintID:        desc.GetNextConstraintID(),
 			}
+			desc.NextConstraintID++
 			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
 		}
 		changed = true
@@ -594,4 +597,76 @@ func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
 	return true
+}
+
+// maybeAddConstraintIDs ensures that all constraints have an ID associated with
+// them.
+func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
+	initialConstraintID := desc.NextConstraintID
+	// Maps index IDs to indexes for one which have
+	// a constraint ID assigned.
+	constraintIndexes := make(map[descpb.IndexID]*descpb.IndexDescriptor)
+	if desc.NextConstraintID == 0 {
+		desc.NextConstraintID = 1
+	}
+	// Loop over all constraints and assign constraint IDs.
+	if desc.PrimaryIndex.ConstraintID == 0 {
+		desc.PrimaryIndex.ConstraintID = desc.GetNextConstraintID()
+		desc.NextConstraintID++
+		constraintIndexes[desc.PrimaryIndex.ID] = &desc.PrimaryIndex
+	}
+	for _, idx := range desc.Indexes {
+		if idx.Unique && idx.ConstraintID == 0 {
+			idx.ConstraintID = desc.GetNextConstraintID()
+			constraintIndexes[idx.ID] = &idx
+			desc.NextConstraintID++
+		}
+	}
+	for _, check := range desc.Checks {
+		if check.ConstraintID == 0 {
+			check.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	for _, fk := range desc.InboundFKs {
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	for _, fk := range desc.OutboundFKs {
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	for _, unique := range desc.UniqueWithoutIndexConstraints {
+		if unique.ConstraintID == 0 {
+			unique.ConstraintID = desc.GetNextConstraintID()
+			desc.NextConstraintID++
+		}
+	}
+	// Update mutations to add the constraint ID. In the case of a PK swap
+	// we may need to maintain the same constraint ID.
+	for _, mutation := range desc.GetMutations() {
+		if idx := mutation.GetIndex(); idx != nil &&
+			mutation.Direction == descpb.DescriptorMutation_ADD &&
+			idx.Unique {
+			idx.ConstraintID = desc.GetNextConstraintID()
+			constraintIndexes[idx.ID] = idx
+			desc.NextConstraintID++
+		} else if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
+			for idx := range pkSwap.NewIndexes {
+				oldIdx, firstOk := constraintIndexes[pkSwap.OldIndexes[idx]]
+				newIdx := constraintIndexes[pkSwap.NewIndexes[idx]]
+				if !firstOk {
+					continue
+				}
+				newIdx.ConstraintID = oldIdx.ConstraintID
+			}
+
+		}
+
+	}
+	return desc.NextConstraintID != initialConstraintID
 }
