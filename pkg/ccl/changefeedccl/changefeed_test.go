@@ -4037,6 +4037,7 @@ func TestChangefeedTelemetry(t *testing.T) {
 // Regression test for #41694.
 func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 75080, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// TODO(yevgeniy): Rework this test.  It's too brittle.
