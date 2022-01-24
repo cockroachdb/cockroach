@@ -87,10 +87,11 @@ const (
 // TODO(ajwerner): Lift this up a level of abstraction next to the
 // Immutable and have it store those for the ReferencedTable.
 type ConstraintDetail struct {
-	Kind        ConstraintType
-	Columns     []string
-	Details     string
-	Unvalidated bool
+	Kind         ConstraintType
+	ConstraintID ConstraintID
+	Columns      []string
+	Details      string
+	Unvalidated  bool
 
 	// Only populated for PK and Unique Constraints with an index.
 	Index *IndexDescriptor

@@ -168,7 +168,9 @@ func (p *planner) AlterPrimaryKey(
 		EncodingType:      descpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
 		Version:           descpb.LatestNonPrimaryIndexDescriptorVersion,
+		ConstraintID:      tableDesc.GetNextConstraintID(),
 	}
+	tableDesc.NextConstraintID++
 
 	// If the new index is requested to be sharded, set up the index descriptor
 	// to be sharded, and add the new shard column if it is missing.

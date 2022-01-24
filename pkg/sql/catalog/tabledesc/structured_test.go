@@ -113,7 +113,9 @@ func TestAllocateIDs(t *testing.T) {
 			StoreColumnIDs:   descpb.ColumnIDs{3},
 			StoreColumnNames: []string{"c"},
 			EncodingType:     descpb.PrimaryIndexEncoding,
-			Version:          descpb.LatestPrimaryIndexDescriptorVersion},
+			Version:          descpb.LatestPrimaryIndexDescriptorVersion,
+			ConstraintID:     1,
+		},
 		Indexes: []descpb.IndexDescriptor{
 			{ID: 2, Name: "d", KeyColumnIDs: []descpb.ColumnID{2, 1}, KeyColumnNames: []string{"b", "a"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC,
@@ -128,12 +130,13 @@ func TestAllocateIDs(t *testing.T) {
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion},
 		},
-		Privileges:     descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
-		NextColumnID:   4,
-		NextFamilyID:   1,
-		NextIndexID:    5,
-		NextMutationID: 1,
-		FormatVersion:  descpb.InterleavedFormatVersion,
+		Privileges:       descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		NextColumnID:     4,
+		NextFamilyID:     1,
+		NextIndexID:      5,
+		NextMutationID:   1,
+		NextConstraintID: 2,
+		FormatVersion:    descpb.InterleavedFormatVersion,
 	}).BuildCreatedMutableTable()
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")
@@ -346,13 +349,14 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 				},
 			},
 			upgraded: &descpb.TableDescriptor{
-				FormatVersion: descpb.InterleavedFormatVersion,
-				ID:            51,
-				Name:          "tbl",
-				ParentID:      52,
-				NextColumnID:  3,
-				NextFamilyID:  1,
-				NextIndexID:   2,
+				FormatVersion:    descpb.InterleavedFormatVersion,
+				ID:               51,
+				Name:             "tbl",
+				ParentID:         52,
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      2,
+				NextConstraintID: 2,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 					{ID: 2, Name: "bar"},
@@ -373,6 +377,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+					ConstraintID:        1,
 				},
 				Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 			},
@@ -380,13 +385,14 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 		{ // 2
 			// This test case is defined to be a no-op.
 			desc: descpb.TableDescriptor{
-				FormatVersion: descpb.InterleavedFormatVersion,
-				ID:            51,
-				Name:          "tbl",
-				ParentID:      52,
-				NextColumnID:  3,
-				NextFamilyID:  1,
-				NextIndexID:   3,
+				FormatVersion:    descpb.InterleavedFormatVersion,
+				ID:               51,
+				Name:             "tbl",
+				ParentID:         52,
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 					{ID: 2, Name: "bar"},
@@ -407,6 +413,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					ConstraintID:        1,
 				},
 				Indexes: []descpb.IndexDescriptor{
 					{
@@ -427,12 +434,13 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			// In this case we expect validation to fail owing to a violation of
 			// assumptions for this secondary index's descriptor format version.
 			desc: descpb.TableDescriptor{
-				FormatVersion: descpb.BaseFormatVersion,
-				ID:            51,
-				Name:          "tbl",
-				ParentID:      52,
-				NextColumnID:  3,
-				NextIndexID:   3,
+				FormatVersion:    descpb.BaseFormatVersion,
+				ID:               51,
+				Name:             "tbl",
+				ParentID:         52,
+				NextColumnID:     3,
+				NextIndexID:      3,
+				NextConstraintID: 2,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 					{ID: 2, Name: "bar"},
@@ -444,6 +452,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					ConstraintID:        1,
 				},
 				Indexes: []descpb.IndexDescriptor{
 					{
@@ -463,12 +472,13 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			// This test case is much like the first but more complex and with more
 			// indexes. All three should be upgraded to the latest format version.
 			desc: descpb.TableDescriptor{
-				FormatVersion: descpb.BaseFormatVersion,
-				ID:            51,
-				Name:          "tbl",
-				ParentID:      52,
-				NextColumnID:  3,
-				NextIndexID:   4,
+				FormatVersion:    descpb.BaseFormatVersion,
+				ID:               51,
+				Name:             "tbl",
+				ParentID:         52,
+				NextColumnID:     3,
+				NextIndexID:      4,
+				NextConstraintID: 2,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 					{ID: 2, Name: "bar"},
@@ -480,6 +490,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					ConstraintID:        1,
 				},
 				Indexes: []descpb.IndexDescriptor{
 					{
@@ -501,13 +512,14 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 				},
 			},
 			upgraded: &descpb.TableDescriptor{
-				FormatVersion: descpb.InterleavedFormatVersion,
-				ID:            51,
-				Name:          "tbl",
-				ParentID:      52,
-				NextColumnID:  3,
-				NextFamilyID:  1,
-				NextIndexID:   4,
+				FormatVersion:    descpb.InterleavedFormatVersion,
+				ID:               51,
+				Name:             "tbl",
+				ParentID:         52,
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      4,
+				NextConstraintID: 2,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 					{ID: 2, Name: "bar"},
@@ -528,6 +540,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+					ConstraintID:        1,
 				},
 				Indexes: []descpb.IndexDescriptor{
 					{
@@ -594,8 +607,9 @@ func TestUnvalidateConstraints(t *testing.T) {
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
-		Name:     "test",
-		ParentID: descpb.ID(1),
+		Name:             "test",
+		ParentID:         descpb.ID(1),
+		NextConstraintID: 2,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "a", Type: types.Int},
 			{Name: "b", Type: types.Int},
@@ -608,6 +622,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 				Name:              "fk",
 				ReferencedTableID: descpb.ID(1),
 				Validity:          descpb.ConstraintValidity_Validated,
+				ConstraintID:      1,
 			},
 		},
 	}).BuildCreatedMutableTable()
