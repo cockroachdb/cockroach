@@ -2134,9 +2134,17 @@ func ConfigureGRPCGateway(
 }
 
 func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
-	deferError := func(err error) {
-		log.Infof(ctx, "%v", err)
-		returnErr = errors.CombineErrors(returnErr, err)
+	{
+		var defErr error
+		deferError := func(err error) {
+			log.Infof(ctx, "%v", err)
+			defErr = errors.CombineErrors(defErr, err)
+		}
+		defer func() {
+			if returnErr == nil {
+				returnErr = defErr
+			}
+		}()
 	}
 	knobs, _ := s.cfg.TestingKnobs.Server.(*TestingKnobs)
 	if knobs == nil {
