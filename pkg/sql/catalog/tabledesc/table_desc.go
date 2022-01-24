@@ -60,7 +60,8 @@ func (desc *wrapper) HasPostDeserializationChanges() bool {
 		desc.postDeserializationChanges.UpgradedFormatVersion ||
 		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
 		desc.postDeserializationChanges.UpgradedNamespaceName ||
-		desc.postDeserializationChanges.UpgradedPrivileges
+		desc.postDeserializationChanges.UpgradedPrivileges ||
+		desc.postDeserializationChanges.UpgradedConstraintIDs
 }
 
 // ActiveChecks implements the TableDescriptor interface.
