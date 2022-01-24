@@ -48,7 +48,7 @@ case "${cmd}" in
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 
     # wait a bit to let gcloud create the instance before retrying
-    sleep 30s
+    sleep 30
     # Retry while vm and sshd start up.
     retry gcloud compute ssh "${NAME}" --command=true
 
