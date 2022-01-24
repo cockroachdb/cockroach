@@ -292,8 +292,8 @@ isAdmin  BOOL    false  NULL  ·  {primary}                                     
 query TTT
 SHOW GRANTS ON DATABASE system
 ----
-system  admin  GRANT
-system  root   GRANT
+system  admin  CONNECT
+system  root   CONNECT
 
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.

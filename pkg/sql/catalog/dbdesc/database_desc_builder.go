@@ -11,6 +11,9 @@
 package dbdesc
 
 import (
+	"fmt"
+	"runtime/debug"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -56,7 +59,30 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
 func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
+	if ddb.original.GetName() == "test" {
+		fmt.Println("RunPostDeserializationChanges")
+		debug.PrintStack()
+		for _, user := range ddb.original.Privileges.Users {
+			fmt.Println(user.User(), user.Privileges)
+		}
+	}
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+
+	createdDefaultPrivileges := false
+	removedIncompatibleDatabasePrivs := false
+	// Skip converting incompatible privileges to default privileges on the
+	// system database and let MaybeFixPrivileges handle it instead as we do not
+	// want any default privileges on the system database.
+	if ddb.original.GetID() != keys.SystemDatabaseID {
+		if ddb.maybeModified.DefaultPrivileges == nil {
+			ddb.maybeModified.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+			createdDefaultPrivileges = true
+		}
+
+		removedIncompatibleDatabasePrivs = maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
+			ddb.maybeModified.Privileges, ddb.maybeModified.DefaultPrivileges,
+		)
+	}
 
 	privsChanged := catprivilege.MaybeFixPrivileges(
 		&ddb.maybeModified.Privileges,
@@ -66,7 +92,8 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
 		ddb.maybeModified.GetName())
 	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(ddb.maybeModified.Privileges)
-	ddb.changed = privsChanged || removedSelfEntryInSchemas || addedGrantOptions
+	ddb.changed = privsChanged || removedSelfEntryInSchemas || addedGrantOptions ||
+		removedIncompatibleDatabasePrivs || createdDefaultPrivileges
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
@@ -74,6 +101,40 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 	_ func(id descpb.ID) catalog.Descriptor,
 ) error {
 	return nil
+}
+
+func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
+	privileges *descpb.PrivilegeDescriptor, defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+) (hasChanged bool) {
+	var pgIncompatibleDBPrivileges = privilege.List{
+		privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE,
+	}
+
+	for i, user := range privileges.Users {
+		incompatiblePrivileges := user.Privileges & pgIncompatibleDBPrivileges.ToBitField()
+
+		if incompatiblePrivileges == 0 {
+			continue
+		}
+
+		hasChanged = true
+
+		// XOR to remove incompatible privileges.
+		user.Privileges ^= incompatiblePrivileges
+
+		privileges.Users[i] = user
+
+		// Convert the incompatible privileges to default privileges.
+		role := defaultPrivileges.FindOrCreateUser(descpb.DefaultPrivilegesRole{ForAllRoles: true})
+		tableDefaultPrivilegesForAllRoles := role.DefaultPrivilegesPerObject[tree.Tables]
+
+		defaultPrivilegesForUser := tableDefaultPrivilegesForAllRoles.FindOrCreateUser(user.User())
+		defaultPrivilegesForUser.Privileges |= incompatiblePrivileges
+
+		role.DefaultPrivilegesPerObject[tree.Tables] = tableDefaultPrivilegesForAllRoles
+	}
+
+	return hasChanged
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.

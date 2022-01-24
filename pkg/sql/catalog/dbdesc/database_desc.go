@@ -251,6 +251,12 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(fmt.Errorf("invalid database ID %d", desc.GetID()))
 	}
 
+	if desc.GetName() == "test" {
+		for _, user := range desc.Privileges.Users {
+			fmt.Println(user, privilege.PrivilegesFromBitFields(user.Privileges, 0, privilege.ObjectType(privilege.Any)))
+		}
+	}
+
 	// Validate the privilege descriptor.
 	vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Database))
 	// The DefaultPrivilegeDescriptor may be nil.
