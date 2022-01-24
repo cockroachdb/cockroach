@@ -224,6 +224,7 @@ func maybeFillInDescriptor(
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(desc.Privileges)
 	changes.UpgradedPrivileges = fixedPrivileges || addedGrantOptions
 	changes.RemovedDuplicateIDsInRefs = maybeRemoveDuplicateIDsInRefs(desc)
+	changes.AddedConstraintIDs = maybeAddConstraintIDs(desc)
 	return changes
 }
 
@@ -354,7 +355,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				OnDelete:            ref.OnDelete,
 				OnUpdate:            ref.OnUpdate,
 				Match:               ref.Match,
+				ConstraintID:        desc.GetNextConstraintID(),
 			}
+			desc.NextConstraintID++
 			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
 		}
 		changed = true
@@ -412,6 +415,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					OnDelete:            forwardFK.OnDelete,
 					OnUpdate:            forwardFK.OnUpdate,
 					Match:               forwardFK.Match,
+					ConstraintID:        desc.GetNextConstraintID(),
 				}
 			} else {
 				// We have an old (not upgraded yet) table, with a matching forward
@@ -427,8 +431,10 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					OnDelete:            originIndex.ForeignKey.OnDelete,
 					OnUpdate:            originIndex.ForeignKey.OnUpdate,
 					Match:               originIndex.ForeignKey.Match,
+					ConstraintID:        desc.GetNextConstraintID(),
 				}
 			}
+			desc.NextConstraintID++
 			desc.InboundFKs = append(desc.InboundFKs, inFK)
 		}
 		changed = true
@@ -649,4 +655,87 @@ func cleanedIDs(input []descpb.ID) []descpb.ID {
 		return nil
 	}
 	return s
+}
+
+// maybeAddConstraintIDs ensures that all constraints have an ID associated with
+// them.
+func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
+	// Only assign constraint IDs to physical tables.
+	if !desc.IsTable() {
+		return false
+	}
+	initialConstraintID := desc.NextConstraintID
+	// Maps index IDs to indexes for one which have
+	// a constraint ID assigned.
+	constraintIndexes := make(map[descpb.IndexID]*descpb.IndexDescriptor)
+	if desc.NextConstraintID == 0 {
+		desc.NextConstraintID = 1
+	}
+	nextConstraintID := func() descpb.ConstraintID {
+		id := desc.GetNextConstraintID()
+		desc.NextConstraintID++
+		return id
+	}
+	// Loop over all constraints and assign constraint IDs.
+	if desc.PrimaryIndex.ConstraintID == 0 {
+		desc.PrimaryIndex.ConstraintID = nextConstraintID()
+		constraintIndexes[desc.PrimaryIndex.ID] = &desc.PrimaryIndex
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.Unique && idx.ConstraintID == 0 {
+			idx.ConstraintID = nextConstraintID()
+			constraintIndexes[idx.ID] = idx
+		}
+	}
+	for i := range desc.Checks {
+		check := desc.Checks[i]
+		if check.ConstraintID == 0 {
+			check.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.InboundFKs {
+		fk := &desc.InboundFKs[i]
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.OutboundFKs {
+		fk := desc.OutboundFKs[i]
+		if fk.ConstraintID == 0 {
+			fk.ConstraintID = nextConstraintID()
+		}
+	}
+	for i := range desc.UniqueWithoutIndexConstraints {
+		unique := desc.UniqueWithoutIndexConstraints[i]
+		if unique.ConstraintID == 0 {
+			unique.ConstraintID = nextConstraintID()
+		}
+	}
+	// Update mutations to add the constraint ID. In the case of a PK swap
+	// we may need to maintain the same constraint ID.
+	for _, mutation := range desc.GetMutations() {
+		if idx := mutation.GetIndex(); idx != nil &&
+			mutation.Direction == descpb.DescriptorMutation_ADD &&
+			idx.Unique {
+			idx.ConstraintID = nextConstraintID()
+			constraintIndexes[idx.ID] = idx
+		} else if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
+			for idx := range pkSwap.NewIndexes {
+				oldIdx, firstOk := constraintIndexes[pkSwap.OldIndexes[idx]]
+				newIdx := constraintIndexes[pkSwap.NewIndexes[idx]]
+				if !firstOk {
+					continue
+				}
+				newIdx.ConstraintID = oldIdx.ConstraintID
+			}
+		} else if constraint := mutation.GetConstraint(); constraint != nil {
+			nextID := nextConstraintID()
+			constraint.UniqueWithoutIndexConstraint.ConstraintID = nextID
+			constraint.ForeignKey.ConstraintID = nextID
+			constraint.Check.ConstraintID = nextID
+		}
+
+	}
+	return desc.NextConstraintID != initialConstraintID
 }
