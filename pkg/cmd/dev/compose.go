@@ -12,26 +12,25 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
 
-func makeAcceptanceCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
-	acceptanceCmd := &cobra.Command{
-		Use:     "acceptance",
-		Short:   "Run acceptance tests",
-		Long:    "Run acceptance tests.",
-		Example: "dev acceptance",
+func makeComposeCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
+	composeCmd := &cobra.Command{
+		Use:     "compose",
+		Short:   "Run compose tests",
+		Long:    "Run compose tests.",
+		Example: "dev compose",
 		Args:    cobra.ExactArgs(0),
 		RunE:    runE,
 	}
-	addCommonBuildFlags(acceptanceCmd)
-	addCommonTestFlags(acceptanceCmd)
-	return acceptanceCmd
+	addCommonBuildFlags(composeCmd)
+	addCommonTestFlags(composeCmd)
+	return composeCmd
 }
 
-func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
+func (d *dev) compose(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	var (
 		filter  = mustGetFlagString(cmd, filterFlag)
@@ -39,18 +38,8 @@ func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 		timeout = mustGetFlagDuration(cmd, timeoutFlag)
 	)
 
-	workspace, err := d.getWorkspace(ctx)
-	if err != nil {
-		return err
-	}
-	logDir := filepath.Join(workspace, "artifacts", "acceptance")
-	err = d.os.MkdirAll(logDir)
-	if err != nil {
-		return err
-	}
-
 	var args []string
-	args = append(args, "run", "//pkg/acceptance:acceptance_test", "--config=test")
+	args = append(args, "run", "//pkg/compose:compose_test", "--config=test")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
@@ -64,8 +53,6 @@ func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 	if timeout > 0 {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
-	args = append(args, fmt.Sprintf("--test_arg=-l=%s", logDir))
-	args = append(args, "--test_env=TZ=America/New_York")
 
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
