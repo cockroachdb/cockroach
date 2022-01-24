@@ -39,15 +39,15 @@ Examining 37 descriptors and 42 namespace entries...
   ParentID   0, ParentSchemaID  0: database "postgres" (51): processed
   ParentID  52, ParentSchemaID 29: relation "users" (53): referenced database ID 52: referenced descriptor not found
   ParentID  52, ParentSchemaID 29: relation "users" (53): processed
-  ParentID  52, ParentSchemaID 29: relation "vehicles" (54): referenced database ID 52: referenced descriptor not found
+  ParentID  52, ParentSchemaID 29: relation "vehicles" (54): constraint id was missing for constraint: FOREIGN KEY with name fk_city_ref_users
   ParentID  52, ParentSchemaID 29: relation "vehicles" (54): processed
-  ParentID  52, ParentSchemaID 29: relation "rides" (55): referenced database ID 52: referenced descriptor not found
+  ParentID  52, ParentSchemaID 29: relation "rides" (55): constraint id was missing for constraint: FOREIGN KEY with name fk_city_ref_users
   ParentID  52, ParentSchemaID 29: relation "rides" (55): processed
-  ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): referenced database ID 52: referenced descriptor not found
+  ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): constraint id was missing for constraint: FOREIGN KEY with name fk_city_ref_rides
   ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): processed
   ParentID  52, ParentSchemaID 29: relation "promo_codes" (57): referenced database ID 52: referenced descriptor not found
   ParentID  52, ParentSchemaID 29: relation "promo_codes" (57): processed
-  ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): referenced database ID 52: referenced descriptor not found
+  ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): constraint id was missing for constraint: FOREIGN KEY with name fk_city_ref_users
   ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): processed
   ParentID   0, ParentSchemaID  0: namespace entry "defaultdb" (50): processed
   ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): descriptor not found

@@ -258,8 +258,7 @@ ColumnComment :  Comment
 object ConstraintComment
 
 ConstraintComment :  TableID
-ConstraintComment :  ConstraintName
-ConstraintComment :  ConstraintType
+ConstraintComment :  ConstraintID
 ConstraintComment :  Comment
 
 Table <|-- Column
