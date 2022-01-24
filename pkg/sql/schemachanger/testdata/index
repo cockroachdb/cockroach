@@ -22,6 +22,7 @@ upsert descriptor #54
   +  mutations:
   +  - direction: ADD
   +    index:
+  +      constraintId: 2
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -46,6 +47,8 @@ upsert descriptor #54
      name: t
   +  newSchemaChangeJobId: "1"
      nextColumnId: 3
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
   +  nextIndexId: 3
@@ -92,7 +95,8 @@ upsert descriptor #54
      formatVersion: 3
      id: 54
   +  indexes:
-  +  - createdExplicitly: true
+  +  - constraintId: 2
+  +    createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
   +    id: 2
@@ -115,6 +119,7 @@ upsert descriptor #54
   -  mutations:
   -  - direction: ADD
   -    index:
+  -      constraintId: 2
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}
@@ -139,7 +144,7 @@ upsert descriptor #54
      name: t
   -  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextFamilyId: 1
+     nextConstraintId: 3
   ...
        time: {}
      unexposedParentSchemaId: 51
