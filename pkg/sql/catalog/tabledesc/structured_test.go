@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
@@ -55,8 +56,8 @@ func TestAllocateIDs(t *testing.T) {
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
-		ParentID: descpb.ID(keys.TestingUserDescID(0)),
-		ID:       descpb.ID(keys.TestingUserDescID(1)),
+		ParentID: descpb.ID(bootstrap.TestingUserDescID(0)),
+		ID:       descpb.ID(bootstrap.TestingUserDescID(1)),
 		Name:     "foo",
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "a", Type: types.Int},
@@ -87,8 +88,8 @@ func TestAllocateIDs(t *testing.T) {
 	}
 
 	expected := NewBuilder(&descpb.TableDescriptor{
-		ParentID: descpb.ID(keys.TestingUserDescID(0)),
-		ID:       descpb.ID(keys.TestingUserDescID(1)),
+		ParentID: descpb.ID(bootstrap.TestingUserDescID(0)),
+		ID:       descpb.ID(bootstrap.TestingUserDescID(1)),
 		Version:  1,
 		Name:     "foo",
 		Columns: []descpb.ColumnDescriptor{

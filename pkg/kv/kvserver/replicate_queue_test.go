@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -78,7 +79,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	const newRanges = 10
 	trackedRanges := map[roachpb.RangeID]struct{}{}
 	for i := uint32(0); i < newRanges; i++ {
-		tableID := keys.TestingUserDescID(i)
+		tableID := bootstrap.TestingUserDescID(i)
 		splitKey := keys.SystemSQLCodec.TablePrefix(tableID)
 		// Retry the splits on descriptor errors which are likely as the replicate
 		// queue is already hard at work.

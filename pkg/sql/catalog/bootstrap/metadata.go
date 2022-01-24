@@ -402,3 +402,15 @@ func BootstrappedSystemIDChecker() keys.SystemIDChecker {
 	ms := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 	return bootstrappedSystemIDChecker{MetadataSchema: ms}
 }
+
+// TestingUserDescID is a convenience function which returns a user ID offset
+// from the minimum value allowed in a simple unit test setting.
+func TestingUserDescID(offset uint32) uint32 {
+	return keys.MinUserDescriptorID(BootstrappedSystemIDChecker()) + offset
+}
+
+// TestingUserTableDataMin is a convenience function which returns the first
+// user table data key in a simple unit test setting.
+func TestingUserTableDataMin() roachpb.Key {
+	return keys.SystemSQLCodec.TablePrefix(TestingUserDescID(0))
+}

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -491,8 +490,7 @@ func createStatsRequestFilter(
 			if idChecker.Load() != nil {
 				c = idChecker.Load().(keys.SystemIDChecker)
 			}
-			if tableID > 0 && tableID < 100 && c != nil &&
-				!catalog.IsSystemID(c, descpb.ID(uint32(tableID))) {
+			if tableID > 0 && tableID < 100 && c != nil && !c.IsSystemID(uint32(tableID)) {
 				// Read from the channel twice to allow jobutils.RunJob to complete
 				// even though there is only one ScanRequest.
 				<-*allowProgressIota

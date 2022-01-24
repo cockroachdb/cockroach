@@ -1744,7 +1744,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					if idChecker.Load() == nil {
 						return
 					}
-					if catalog.IsSystemID(idChecker.Load().(keys.SystemIDChecker), id) {
+					if idChecker.Load().(keys.SystemIDChecker).IsSystemID(uint32(id)) {
 						return
 					}
 					mu.Lock()
@@ -1755,7 +1755,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					if idChecker.Load() == nil {
 						return
 					}
-					if !catalog.IsSystemID(idChecker.Load().(keys.SystemIDChecker), id) {
+					if !idChecker.Load().(keys.SystemIDChecker).IsSystemID(uint32(id)) {
 						atomic.AddInt32(&testAcquisitionBlockCount, 1)
 					}
 				},

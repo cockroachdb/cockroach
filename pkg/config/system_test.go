@@ -381,7 +381,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	baseSql, _ /* splits */ := schema.GetInitialValues()
 	// Real system tables plus some user stuff.
 	kvs, _ /* splits */ := schema.GetInitialValues()
-	start := keys.TestingUserDescID(0)
+	start := bootstrap.TestingUserDescID(0)
 	userSQL := append(kvs, descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real system tables and partitioned user tables.
 	var subzoneSQL = make([]roachpb.KeyValue, len(userSQL))
@@ -483,7 +483,7 @@ func TestComputeSplitKeyTenantBoundaries(t *testing.T) {
 	schema := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	)
-	minKey := tkey(keys.TestingUserDescID(0))
+	minKey := tkey(bootstrap.TestingUserDescID(0))
 
 	// Real system tenant only.
 	baseSql, _ /* splits */ := schema.GetInitialValues()
@@ -600,15 +600,15 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{tkey(keys.LivenessRangesID), keys.SystemDatabaseID},
 
 		// User tables should refer to themselves.
-		{tkey(keys.TestingUserDescID(0)), config.SystemTenantObjectID(keys.TestingUserDescID(0))},
-		{tkey(keys.TestingUserDescID(22)), config.SystemTenantObjectID(keys.TestingUserDescID(22))},
+		{tkey(bootstrap.TestingUserDescID(0)), config.SystemTenantObjectID(bootstrap.TestingUserDescID(0))},
+		{tkey(bootstrap.TestingUserDescID(22)), config.SystemTenantObjectID(bootstrap.TestingUserDescID(22))},
 		{roachpb.RKeyMax, keys.RootNamespaceID},
 
 		// Secondary tenant tables should refer to the TenantsRangesID.
-		{tenantTkey(5, keys.TestingUserDescID(0)), keys.TenantsRangesID},
-		{tenantTkey(5, keys.TestingUserDescID(22)), keys.TenantsRangesID},
-		{tenantTkey(10, keys.TestingUserDescID(0)), keys.TenantsRangesID},
-		{tenantTkey(10, keys.TestingUserDescID(22)), keys.TenantsRangesID},
+		{tenantTkey(5, bootstrap.TestingUserDescID(0)), keys.TenantsRangesID},
+		{tenantTkey(5, bootstrap.TestingUserDescID(22)), keys.TenantsRangesID},
+		{tenantTkey(10, bootstrap.TestingUserDescID(0)), keys.TenantsRangesID},
+		{tenantTkey(10, bootstrap.TestingUserDescID(22)), keys.TenantsRangesID},
 	}
 
 	originalZoneConfigHook := config.ZoneConfigHook
