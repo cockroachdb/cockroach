@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -2429,7 +2430,7 @@ func (s *adminServer) DataDistribution(
 		defer acct.Close(txnCtx)
 
 		kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
-			Key:    keys.SystemSQLCodec.TablePrefix(keys.MinUserDescriptorID(s.server.sqlServer.execCfg.SystemIDChecker)),
+			Key:    keys.SystemSQLCodec.TablePrefix(catalogkeys.MinUserDescriptorID(s.server.sqlServer.execCfg.SystemIDChecker)),
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {

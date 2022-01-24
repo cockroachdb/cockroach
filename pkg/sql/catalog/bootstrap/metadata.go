@@ -126,7 +126,9 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// objects.
 	{
 		value := roachpb.Value{}
-		value.SetInt(int64(catalogkeys.MinUserDescriptorID(bootstrappedSystemIDChecker{ms})))
+		value.SetInt(int64(catalogkeys.MinUserDescriptorID(&catalog.SystemIDChecker{
+			SystemIDChecker: &bootstrappedSystemIDChecker{ms},
+		})))
 		add(ms.codec.DescIDSequenceKey(), value)
 	}
 
@@ -398,9 +400,11 @@ func (b bootstrappedSystemIDChecker) IsSystemID(id uint32) bool {
 
 // BootstrappedSystemIDChecker constructs a keys.SystemIDChecker which is valid
 // for a bootstrapped cluster.
-func BootstrappedSystemIDChecker() keys.SystemIDChecker {
+func BootstrappedSystemIDChecker() *catalog.SystemIDChecker {
 	ms := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-	return bootstrappedSystemIDChecker{MetadataSchema: ms}
+	return &catalog.SystemIDChecker{
+		SystemIDChecker: &bootstrappedSystemIDChecker{MetadataSchema: ms},
+	}
 }
 
 // TestingUserDescID is a convenience function which returns a user ID offset

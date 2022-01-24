@@ -1140,7 +1140,7 @@ func NewStore(
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender: cfg.ClosedTimestampSender,
 		systemRangeStartUpperBound: keys.SystemSQLCodec.TablePrefix(
-			keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker()),
+			keys.DeprecatedMinUserDescriptorID(keys.DeprecatedSystemIDChecker()),
 		),
 	}
 	if cfg.RPCContext != nil {

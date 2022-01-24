@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -123,7 +124,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		tc.Servers[0].DB(),
 		zonepb.DefaultZoneConfigRef(),
 		zonepb.DefaultSystemZoneConfigRef(),
-		tc.Servers[0].SystemIDChecker().(keys.SystemIDChecker),
+		tc.Servers[0].SystemIDChecker().(*catalog.SystemIDChecker),
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -38,7 +38,7 @@ var DefaultUserDBs = []string{
 
 // MinUserDescriptorID returns the smallest possible non-system descriptor ID
 // after a cluster is bootstrapped.
-func MinUserDescriptorID(idChecker keys.SystemIDChecker) uint32 {
+func MinUserDescriptorID(idChecker *catalog.SystemIDChecker) uint32 {
 	id := uint32(keys.MaxSystemConfigDescID + 1)
 	for idChecker.IsSystemID(id) {
 		id++
@@ -48,7 +48,7 @@ func MinUserDescriptorID(idChecker keys.SystemIDChecker) uint32 {
 
 // MinNonDefaultUserDescriptorID returns the smallest possible user-created
 // descriptor ID after a cluster is bootstrapped.
-func MinNonDefaultUserDescriptorID(idChecker keys.SystemIDChecker) uint32 {
+func MinNonDefaultUserDescriptorID(idChecker *catalog.SystemIDChecker) uint32 {
 	// Each default DB comes with a public schema descriptor.
 	numDefaultDescs := len(DefaultUserDBs) * 2
 	return MinUserDescriptorID(idChecker) + uint32(numDefaultDescs)

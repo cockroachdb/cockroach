@@ -749,7 +749,9 @@ func isSchemaEmpty(
 	return true, nil
 }
 
-func getTempSystemDBID(details jobspb.RestoreDetails, idChecker keys.SystemIDChecker) descpb.ID {
+func getTempSystemDBID(
+	details jobspb.RestoreDetails, idChecker *catalog.SystemIDChecker,
+) descpb.ID {
 	tempSystemDBID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(idChecker))
 	for id := range details.DescriptorRewrites {
 		if id > tempSystemDBID {

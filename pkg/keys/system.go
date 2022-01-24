@@ -39,9 +39,9 @@ func (d deprecatedSystemIDChecker) IsSystemID(id uint32) bool {
 
 var _ SystemIDChecker = (*deprecatedSystemIDChecker)(nil)
 
-// MinUserDescriptorID returns the smallest possible non-system descriptor ID
-// after a cluster is bootstrapped.
-func MinUserDescriptorID(idChecker SystemIDChecker) uint32 {
+// DeprecatedMinUserDescriptorID returns the smallest possible non-system
+// descriptor ID after a cluster is bootstrapped.
+func DeprecatedMinUserDescriptorID(idChecker SystemIDChecker) uint32 {
 	id := uint32(MaxSystemConfigDescID + 1)
 	for idChecker.IsSystemID(id) {
 		id++

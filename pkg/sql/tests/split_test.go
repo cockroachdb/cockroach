@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -81,7 +82,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		kvDB,
 		&s.(*server.TestServer).Cfg.DefaultZoneConfig,
 		&s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
-		s.(*server.TestServer).SystemIDChecker().(keys.SystemIDChecker))
+		s.(*server.TestServer).SystemIDChecker().(*catalog.SystemIDChecker))
 	if err != nil {
 		t.Fatal(err)
 	}

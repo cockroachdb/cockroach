@@ -10,15 +10,7 @@
 
 package catalog
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-)
-
-// IsSystemID returns true if the ID is part of the system database.
-func IsSystemID(c keys.SystemIDChecker, id descpb.ID) bool {
-	return c.IsSystemID(uint32(id))
-}
+import "github.com/cockroachdb/cockroach/pkg/keys"
 
 // SystemIDChecker is a higher-level interface above the keys.SystemIDChecker.
 // See the comments on that interface for semantics.

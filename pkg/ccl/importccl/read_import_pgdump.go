@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -447,7 +446,7 @@ func resolvePostgresFKs(
 // data. Thus, we pessimistically wait till all the verification steps in the
 // IMPORT have been completed after which we rewrite the descriptor IDs with
 // "real" unique IDs.
-func getNextPlaceholderDescID(idChecker keys.SystemIDChecker) descpb.ID {
+func getNextPlaceholderDescID(idChecker *catalog.SystemIDChecker) descpb.ID {
 	if placeholderID == 0 {
 		placeholderID = descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(idChecker) + 2)
 	}

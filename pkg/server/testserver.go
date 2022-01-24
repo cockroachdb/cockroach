@@ -743,7 +743,7 @@ func ExpectedInitialRangeCount(
 	db *kv.DB,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
-	idChecker keys.SystemIDChecker,
+	idChecker *catalog.SystemIDChecker,
 ) (int, error) {
 	descriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
 		context.Background(), db, keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig,
@@ -758,7 +758,7 @@ func ExpectedInitialRangeCount(
 	// the span does not have an associated descriptor.
 	maxSystemDescriptorID := descriptorIDs[0]
 	for _, descID := range descriptorIDs {
-		if descID > maxSystemDescriptorID && catalog.IsSystemID(idChecker, descID) {
+		if descID > maxSystemDescriptorID && idChecker.IsSystemID(uint32(descID)) {
 			maxSystemDescriptorID = descID
 		}
 	}

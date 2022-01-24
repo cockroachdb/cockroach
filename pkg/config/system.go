@@ -586,7 +586,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 		if splitKey := findSplitKey(startID, endID); splitKey != nil {
 			return splitKey
 		}
-		startID = SystemTenantObjectID(keys.MinUserDescriptorID(idChecker))
+		startID = SystemTenantObjectID(keys.DeprecatedMinUserDescriptorID(idChecker))
 	}
 
 	// Find the split key in the system tenant's user space.
