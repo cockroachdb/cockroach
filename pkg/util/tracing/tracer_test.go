@@ -718,6 +718,7 @@ func TestChildNeedsSameTracerAsParent(t *testing.T) {
 // one.
 func TestSpanReuse(t *testing.T) {
 	skip.UnderRace(t, "sync.Pool seems to be emptied very frequently under race, making the test unreliable")
+	skip.UnderDeadlock(t, "span reuse triggers false-positives in the deadlock detector")
 	ctx := context.Background()
 	tr := NewTracerWithOpt(ctx,
 		// Ask the tracer to always reuse spans, overriding the testing's
