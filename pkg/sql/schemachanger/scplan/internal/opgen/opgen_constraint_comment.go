@@ -30,9 +30,8 @@ func init() {
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.ConstraintComment) scop.Op {
 					return &scop.RemoveConstraintComment{
-						TableID:        this.TableID,
-						ConstraintType: this.ConstraintType,
-						ConstraintName: this.ConstraintName,
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
 					}
 				}),
 			),

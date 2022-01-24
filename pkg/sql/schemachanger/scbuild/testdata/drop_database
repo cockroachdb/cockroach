@@ -188,19 +188,17 @@ DROP DATABASE db1 CASCADE
     columnId: 3
     name: val
     tableId: 60
-- [[ConstraintComment:{DescID: 59, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 59, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    constraintName: t1_pkey
-    constraintType: PrimaryKey
+    constraintId: 1
     tableId: 59
-- [[ConstraintComment:{DescID: 60, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 60, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    constraintName: t1_pkey
-    constraintType: PrimaryKey
+    constraintId: 1
     tableId: 60
 - [[Database:{DescID: 54}, ABSENT], PUBLIC]
   details:
