@@ -18,7 +18,6 @@ import { analyticsSaga } from "./analyticsSagas";
 import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
 import { indexUsageStatsSaga } from "./indexUsageStats";
-import { hotRangesSaga } from "./hotRanges/hotRangesSagas";
 
 export default function* rootSaga() {
   yield all([
@@ -30,6 +29,5 @@ export default function* rootSaga() {
     fork(sessionsSaga),
     fork(sqlStatsSaga),
     fork(indexUsageStatsSaga),
-    fork(hotRangesSaga),
   ]);
 }

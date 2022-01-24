@@ -4,5 +4,5 @@ import { AdminUIState } from "../state";
 
 export const selectHotRanges = createSelector(
   identity,
-  (state: AdminUIState) => state.hotRanges,
+  (state: AdminUIState) => state.cachedData.hotranges,
 );

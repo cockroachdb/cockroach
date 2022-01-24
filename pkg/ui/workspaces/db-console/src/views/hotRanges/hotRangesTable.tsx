@@ -15,7 +15,7 @@ import styles from "./hotRanges.module.styl";
 
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);
-type HotRange = cockroach.server.serverpb.HotRangesResponseV2.HotRange;
+type HotRange = cockroach.server.serverpb.HotRangesResponseV2.IHotRange;
 interface HotRangesTableProps {
   hotRangesList: HotRange[];
   lastUpdate: string;
