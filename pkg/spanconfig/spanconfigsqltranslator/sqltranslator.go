@@ -278,6 +278,10 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		ptsStateReader.getProtectionPoliciesForSchemaObject(desc.GetID()),
 		ptsStateReader.getProtectionPoliciesForSchemaObject(desc.GetParentID())...)
 
+	// Set whether the table's row data has been marked to be excluded from
+	// backups.
+	tableSpanConfig.ExcludeDataFromBackup = desc.(catalog.TableDescriptor).GetExcludeDataFromBackup()
+
 	entries := make([]roachpb.SpanConfigEntry, 0)
 	if desc.GetID() == keys.DescriptorTableID {
 		// We have some special handling for `system.descriptor` on account of
@@ -379,9 +383,10 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 
 		// Add an entry for the subzone.
 		subzoneSpanConfig := zone.Subzones[zone.SubzoneSpans[i].SubzoneIndex].Config.AsSpanConfig()
-		// Copy the ProtectionPolicies that apply to the table's SpanConfig onto its
+		// Copy relevant fields that apply to the table's SpanConfig onto its
 		// SubzoneSpanConfig.
 		subzoneSpanConfig.GCPolicy.ProtectionPolicies = tableSpanConfig.GCPolicy.ProtectionPolicies[:]
+		subzoneSpanConfig.ExcludeDataFromBackup = tableSpanConfig.ExcludeDataFromBackup
 		if isSystemDesc { // same as above
 			subzoneSpanConfig.RangefeedEnabled = true
 			subzoneSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
