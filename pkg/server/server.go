@@ -2201,17 +2201,18 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 	}
 	defer f.Close()
 
+	const yamlMappingHelp = `need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at ` +
+		`a YAML file that maps StoreID to NodeID. For example, if s1 is on n1 and s2 is on n5:\n\n1: 1\n2:5`
 	if knobs.ImportTimeseriesMappingFile == "" {
-		return errors.Errorf("need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at " +
-			"a YAML file that maps StoreID to NodeID. For example, if s1 is on n1 and s2 is on n5:\n\n1: 1\n2:5")
+		return errors.New(yamlMappingHelp)
 	}
 	mapBytes, err := ioutil.ReadFile(knobs.ImportTimeseriesMappingFile)
 	if err != nil {
-		return err
+		return errors.Wrap(err, yamlMappingHelp)
 	}
 	storeToNode := map[roachpb.StoreID]roachpb.NodeID{}
 	if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
-		return err
+		return errors.Wrapf(err, "while decoding %s", knobs.ImportTimeseriesMappingFile)
 	}
 
 	b := &kv.Batch{}
