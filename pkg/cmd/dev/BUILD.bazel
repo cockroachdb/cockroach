@@ -7,6 +7,7 @@ go_library(
         "bench.go",
         "build.go",
         "builder.go",
+        "compose.go",
         "dev.go",
         "doctor.go",
         "generate.go",

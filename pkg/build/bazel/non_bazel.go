@@ -21,6 +21,11 @@ func BuiltWithBazel() bool {
 	return false
 }
 
+// FindBinary is not implemented.
+func FindBinary(pkg, name string) (string, bool) {
+	panic("not build with Bazel")
+}
+
 // Runfile is not implemented.
 func Runfile(string) (string, error) {
 	panic("not built with Bazel")
