@@ -25,16 +25,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SourceDir is an enumeration of possible output locations.
-type SourceDir int
-
-const (
-	// Represents `bazel-testlogs`.
-	testlogsSourceDir SourceDir = iota
-	// Represents `bazel-bin`.
-	binSourceDir
-)
-
 // fileMetadata captures the relevant stats associated with a given file
 // on-disk. This is used for caching.
 type fileMetadata struct {
@@ -132,10 +122,13 @@ func (w watcher) Watch() error {
 // The "test artifacts" are the test.log (which is copied verbatim) and test.xml
 // (which we need to munge a little bit before copying).
 func (w watcher) stageTestArtifacts(phase Phase) error {
+	targetToRelDir := func(target string) string {
+		return strings.ReplaceAll(strings.TrimPrefix(target, "//"), ":", "/")
+	}
 	for _, test := range w.info.tests {
 		// relDir is the directory under bazel-testlogs where the test
 		// output files can be found.
-		relDir := strings.ReplaceAll(strings.TrimPrefix(test, "//"), ":", "/")
+		relDir := targetToRelDir(test)
 		for _, tup := range []struct {
 			relPath string
 			stagefn func(srcContent []byte, outFile io.Writer) error
@@ -145,8 +138,24 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 			{path.Join(relDir, "test.xml"), bazelutil.MungeTestXML},
 			{path.Join(relDir, "*", "test.xml"), bazelutil.MungeTestXML},
 		} {
-			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0644, phase,
+			err := w.maybeStageArtifact(w.info.testlogsDir, tup.relPath, 0644, phase,
 				tup.stagefn)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// go_transition_tests have their own special log directory.
+	for test, transitionTestLogsDir := range w.info.transitionTests {
+		relDir := targetToRelDir(test)
+		for _, tup := range []struct {
+			relPath string
+			stagefn func(srcContent []byte, outFile io.Writer) error
+		}{
+			{path.Join(relDir, "test.log"), copyContentTo},
+			{path.Join(relDir, "test.xml"), bazelutil.MungeTestXML},
+		} {
+			err := w.maybeStageArtifact(transitionTestLogsDir, tup.relPath, 0644, phase, tup.stagefn)
 			if err != nil {
 				return err
 			}
@@ -162,7 +171,7 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 func (w watcher) stageBinaryArtifacts() error {
 	for _, bin := range w.info.goBinaries {
 		relBinPath := bazelutil.OutputOfBinaryRule(bin, usingCrossWindowsConfig())
-		err := w.maybeStageArtifact(binSourceDir, relBinPath, 0755, finalizePhase,
+		err := w.maybeStageArtifact(w.info.binDir, relBinPath, 0755, finalizePhase,
 			copyContentTo)
 		if err != nil {
 			return err
@@ -179,7 +188,7 @@ func (w watcher) stageBinaryArtifacts() error {
 			return err
 		}
 		for _, relBinPath := range outs {
-			err := w.maybeStageArtifact(binSourceDir, relBinPath, 0644, finalizePhase, copyContentTo)
+			err := w.maybeStageArtifact(w.info.binDir, relBinPath, 0644, finalizePhase, copyContentTo)
 			if err != nil {
 				return err
 			}
@@ -202,7 +211,7 @@ func (w watcher) stageBinaryArtifacts() error {
 				fmt.Sprintf("c-deps/libgeos/lib/libgeos_c.%s", ext),
 				fmt.Sprintf("c-deps/libgeos/lib/libgeos.%s", ext),
 			} {
-				err := w.maybeStageArtifact(binSourceDir, relBinPath, 0644, finalizePhase, copyContentTo)
+				err := w.maybeStageArtifact(w.info.binDir, relBinPath, 0644, finalizePhase, copyContentTo)
 				if err != nil {
 					return err
 				}
@@ -296,22 +305,12 @@ func (w *cancelableWriter) Close() error {
 // w.maybeStageArtifact(testlogsSourceDir, "pkg/server/server_test/*/test.log",
 //                      0644, incrementalUpdatePhase, copycontentTo)
 func (w watcher) maybeStageArtifact(
-	root SourceDir,
+	rootPath string,
 	pattern string,
 	perm os.FileMode,
 	phase Phase,
 	stagefn func(srcContent []byte, outFile io.Writer) error,
 ) error {
-	var rootPath string
-	var artifactsSubdir string
-	switch root {
-	case testlogsSourceDir:
-		rootPath = w.info.testlogsDir
-		artifactsSubdir = "bazel-testlogs"
-	case binSourceDir:
-		rootPath = w.info.binDir
-		artifactsSubdir = "bazel-bin"
-	}
 	stage := func(srcPath, destPath string) error {
 		contents, err := ioutil.ReadFile(srcPath)
 		if err != nil {
@@ -348,6 +347,10 @@ func (w watcher) maybeStageArtifact(
 		relPath, err := filepath.Rel(rootPath, srcPath)
 		if err != nil {
 			return err
+		}
+		artifactsSubdir := filepath.Base(rootPath)
+		if !strings.HasPrefix(artifactsSubdir, "bazel") {
+			artifactsSubdir = "bazel-" + artifactsSubdir
 		}
 		destPath := path.Join(artifactsDir, artifactsSubdir, relPath)
 
