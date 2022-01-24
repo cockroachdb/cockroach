@@ -2133,13 +2133,32 @@ func ConfigureGRPCGateway(
 	return gwMux, gwCtx, conn, nil
 }
 
-func maybeImportTS(ctx context.Context, s *Server) error {
+func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
+	deferError := func(err error) {
+		returnErr = errors.CombineErrors(returnErr, err)
+	}
 	knobs, _ := s.cfg.TestingKnobs.Server.(*TestingKnobs)
 	if knobs == nil {
 		return nil
 	}
 	tsImport := knobs.ImportTimeseriesFile
 	if tsImport == "" {
+		return nil
+	}
+
+	// Best effort at disabling the timeseries of the local node.
+	ts.TimeseriesStorageEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+
+	// Suppress writing of node statuses for the local node (n1). If it wrote one,
+	// and the imported data also contains n1 but with a different set of stores,
+	// we'd effectively clobber the timeseries display for n1 (which relies on the
+	// store statuses to map the store timeseries to the node under which they
+	// fall). An alternative to this is setting a FirstStoreID and FirstNodeID that
+	// is not in use in the data set to import.
+	s.node.suppressNodeStatus.Set(true)
+
+	if tsImport == "-" {
+		// YOLO mode to look at timeseries after previous import error.
 		return nil
 	}
 
@@ -2151,23 +2170,24 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 		return errors.New("cannot import timeseries into an existing cluster or a multi-{store,node} cluster")
 	}
 
-	// Also do a best effort at disabling the timeseries of the local node to cause
-	// confusion.
-	ts.TimeseriesStorageEnabled.Override(ctx, &s.ClusterSettings().SV, false)
-
-	// Suppress writing of node statuses for the local node (n1). If it wrote one,
-	// and the imported data also contains n1 but with a different set of stores,
-	// we'd effectively clobber the timeseries display for n1 (which relies on the
-	// store statuses to map the store timeseries to the node under which they
-	// fall). An alternative to this is setting a FirstStoreID and FirstNodeID that
-	// is not in use in the data set to import.
-	s.node.suppressNodeStatus.Set(true)
-
 	f, err := os.Open(tsImport)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
+	if knobs.ImportTimeseriesMappingFile == "" {
+		return errors.Errorf("need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at " +
+			"a YAML file that maps StoreID to NodeID. For example, if s1 is on n1 and s2 is on n5:\n\n1: 1\n2:5")
+	}
+	mapBytes, err := ioutil.ReadFile(knobs.ImportTimeseriesMappingFile)
+	if err != nil {
+		return err
+	}
+	storeToNode := map[roachpb.StoreID]roachpb.NodeID{}
+	if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
+		return err
+	}
 
 	b := &kv.Batch{}
 	var n int
@@ -2205,14 +2225,16 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 
 		name, source, _, _, err := ts.DecodeDataKey(v.Key)
 		if err != nil {
-			return err
+			deferError(err)
+			continue
 		}
 		if strings.HasPrefix(name, "cr.node.") {
 			nodeIDs[source] = struct{}{}
 		} else if strings.HasPrefix(name, "cr.store.") {
 			storeIDs[source] = struct{}{}
 		} else {
-			return errors.Errorf("unknown metric %s", name)
+			deferError(errors.Errorf("unknown metric %s", name))
+			continue
 		}
 
 		p := roachpb.NewPut(v.Key, v.Value)
@@ -2224,36 +2246,12 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 		}
 	}
 
-	if knobs.ImportTimeseriesMappingFile == "" {
-		return errors.Errorf("need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at " +
-			"a YAML file that maps StoreID to NodeID. For example, if s1 is on n1 and s2 is on n5:\n\n1: 1\n2:5")
-	}
-	mapBytes, err := ioutil.ReadFile(knobs.ImportTimeseriesMappingFile)
-	if err != nil {
-		return err
-	}
-	storeToNode := map[roachpb.StoreID]roachpb.NodeID{}
-	if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
-		return err
-	}
-
-	// Stores can be ignored by mapping them to node zero.
-	for store, node := range storeToNode {
-		if node == 0 {
-			delete(storeToNode, store)
-			delete(storeIDs, fmt.Sprint(store))
-		}
-	}
-
-	fakeStatuses, err := makeFakeNodeStatuses(storeToNode)
-	if err != nil {
-		return err
-	}
+	fakeStatuses := makeFakeNodeStatuses(storeToNode)
 	if err := checkFakeStatuses(fakeStatuses, storeIDs); err != nil {
-		return errors.Wrapf(err, "please provide an updated mapping file %s", knobs.ImportTimeseriesMappingFile)
+		deferError(errors.Wrapf(err, "consider updating the mapping file %s", knobs.ImportTimeseriesMappingFile))
 	}
 
-	// All checks passed, write the statuses.
+	// Write the statuses.
 	for _, status := range fakeStatuses {
 		key := keys.NodeStatusKey(status.Desc.NodeID)
 		if err := s.db.PutInline(ctx, key, &status); err != nil {
@@ -2264,9 +2262,7 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 	return nil
 }
 
-func makeFakeNodeStatuses(
-	storeToNode map[roachpb.StoreID]roachpb.NodeID,
-) ([]statuspb.NodeStatus, error) {
+func makeFakeNodeStatuses(storeToNode map[roachpb.StoreID]roachpb.NodeID) []statuspb.NodeStatus {
 	var sl []statuspb.NodeStatus
 	nodeToStore := map[roachpb.NodeID][]roachpb.StoreID{}
 	for sid, nid := range storeToNode {
@@ -2294,7 +2290,7 @@ func makeFakeNodeStatuses(
 	sort.Slice(sl, func(i, j int) bool {
 		return sl[i].Desc.NodeID < sl[j].Desc.NodeID
 	})
-	return sl, nil
+	return sl
 }
 
 func checkFakeStatuses(fakeStatuses []statuspb.NodeStatus, storeIDs map[string]struct{}) error {
