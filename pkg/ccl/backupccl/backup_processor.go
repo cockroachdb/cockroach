@@ -451,6 +451,17 @@ func runBackupProcessor(
 						if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
 							return errors.Wrap(exportRequestErr, "export request timeout")
 						}
+						// BatchTimestampBeforeGCError is returned if the ExportRequest
+						// attempts to read below the range's GC threshold.
+						if batchTimestampBeforeGCError, ok := pErr.GetDetail().(*roachpb.BatchTimestampBeforeGCError); ok {
+							// If the range we are exporting is marked to be excluded from
+							// backup, it is safe to ignore the error. It is likely that the
+							// table has been configured with a low GC TTL, and so the data
+							// the backup is targeting has already been gc'ed.
+							if batchTimestampBeforeGCError.DataExcludedFromBackup {
+								continue
+							}
+						}
 						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}
 
