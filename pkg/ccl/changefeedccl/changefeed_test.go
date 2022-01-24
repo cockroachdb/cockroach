@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -3542,7 +3543,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 	var (
 		ctx      = context.Background()
 		userSpan = roachpb.Span{
-			Key:    keys.TestingUserTableDataMin(),
+			Key:    bootstrap.TestingUserTableDataMin(),
 			EndKey: keys.TableDataMax,
 		}
 		done               = make(chan struct{})

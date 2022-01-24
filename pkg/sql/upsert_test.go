@@ -17,10 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -46,7 +46,7 @@ func TestUpsertFastPath(t *testing.T) {
 	var scans uint64
 	var endTxn uint64
 	filter := func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
-		if bytes.Compare(filterArgs.Req.Header().Key, keys.TestingUserTableDataMin()) >= 0 {
+		if bytes.Compare(filterArgs.Req.Header().Key, bootstrap.TestingUserTableDataMin()) >= 0 {
 			switch filterArgs.Req.Method() {
 			case roachpb.Scan:
 				atomic.AddUint64(&scans, 1)

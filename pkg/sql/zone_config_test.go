@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -37,7 +38,7 @@ import (
 )
 
 var configID = descpb.ID(1)
-var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(keys.TestingUserDescID(0)))
+var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(bootstrap.TestingUserDescID(0)))
 
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
@@ -648,7 +649,7 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.TestingUserDescID(0)))
+		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))
 		_, err := cfg.GetZoneConfigForKey(key)
 		if err != nil {
 			b.Fatal(err)

@@ -95,7 +95,7 @@ func TestInitialKeys(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e := i, int64(keys.TestingUserDescID(0)); a != e {
+		if a, e := i, int64(bootstrap.TestingUserDescID(0)); a != e {
 			t.Fatalf("Expected next descriptor ID to be %d, was %d", e, a)
 		}
 	})

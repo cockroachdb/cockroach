@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -90,9 +91,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				sqlDB.Exec(t, "ALTER TABLE my_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 				sqlDB.Exec(t, "ALTER TABLE my_other_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 			}
-			myDBID := descpb.ID(keys.TestingUserDescID(2))
-			myTableID := descpb.ID(keys.TestingUserDescID(3))
-			myOtherTableID := descpb.ID(keys.TestingUserDescID(4))
+			myDBID := descpb.ID(bootstrap.TestingUserDescID(2))
+			myTableID := descpb.ID(bootstrap.TestingUserDescID(3))
+			myOtherTableID := descpb.ID(bootstrap.TestingUserDescID(4))
 
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -741,7 +742,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}
 		// Split the range so that the RHS is not a system range and thus will
 		// respect the rangefeed_enabled cluster setting.
-		startKey := keys.TestingUserTableDataMin()
+		startKey := bootstrap.TestingUserTableDataMin()
 		tc.SplitRangeOrFatal(t, startKey)
 
 		rightRangeID := store.LookupReplica(roachpb.RKey(startKey)).RangeID
