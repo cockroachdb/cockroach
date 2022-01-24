@@ -135,10 +135,16 @@ func (p *planner) maybeSetupConstraintForShard(
 func makeIndexDescriptor(
 	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
+	// Since we mutate the columns below, we make copies of them
+	// here so that on retry we do not attempt to validate the
+	// mutated columns.
+	columns := make(tree.IndexElemList, len(n.Columns))
+	copy(columns, n.Columns)
+
 	// Ensure that the columns we want to index are accessible before trying to
 	// create the index. This must be checked before inaccessible columns are
 	// created for expression indexes in replaceExpressionElemsWithVirtualCols.
-	if err := validateColumnsAreAccessible(tableDesc, n.Columns); err != nil {
+	if err := validateColumnsAreAccessible(tableDesc, columns); err != nil {
 		return nil, err
 	}
 
@@ -153,7 +159,7 @@ func makeIndexDescriptor(
 		params.ctx,
 		tableDesc,
 		tn,
-		n.Columns,
+		columns,
 		n.Inverted,
 		false, /* isNewTable */
 		params.p.SemaCtx(),
@@ -165,7 +171,7 @@ func makeIndexDescriptor(
 
 	// Ensure that the columns we want to index exist before trying to create the
 	// index.
-	if err := validateIndexColumnsExist(tableDesc, n.Columns); err != nil {
+	if err := validateIndexColumnsExist(tableDesc, columns); err != nil {
 		return nil, err
 	}
 
@@ -198,7 +204,7 @@ func makeIndexDescriptor(
 		}
 
 		indexDesc.Type = descpb.IndexDescriptor_INVERTED
-		column, err := tableDesc.FindColumnWithName(n.Columns[len(n.Columns)-1].Column)
+		column, err := tableDesc.FindColumnWithName(columns[len(columns)-1].Column)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +219,7 @@ func makeIndexDescriptor(
 			indexDesc.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
 		}
 	}
-	columns := n.Columns
+
 	if n.Sharded != nil {
 		if n.PartitionByIndex.ContainsPartitions() {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
@@ -226,7 +232,7 @@ func makeIndexDescriptor(
 			params.EvalContext(),
 			&params.p.semaCtx,
 			params.SessionData().HashShardedIndexesEnabled,
-			n.Columns,
+			columns,
 			n.Sharded.ShardBuckets,
 			tableDesc,
 			&indexDesc,
