@@ -662,6 +662,7 @@ var repairedDescriptor = fmt.Sprintf(`'{
     "nextFamilyId": 1,
     "nextIndexId": 2,
     "nextMutationId": 1,
+    "nextConstraintId": 2,
     "parentId": %d,
     "primaryIndex": {
       "encodingType": 1,
@@ -672,7 +673,8 @@ var repairedDescriptor = fmt.Sprintf(`'{
       "name": "primary",
       "type": "FORWARD",
       "unique": true,
-      "version": 4
+      "version": 4,
+			"constraintId": 1
     },
     "privileges": {
       "owner_proto": "root",
@@ -781,6 +783,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(%d, crdb_internal.json_to_pb('cock
     "nextFamilyId": 1,
     "nextIndexId": 2,
     "nextMutationId": 1,
+		"nextConstraintId": 2,
     "parentId": %d,
     "primaryIndex": {
       "encodingType": 1,
@@ -791,7 +794,8 @@ SELECT crdb_internal.unsafe_upsert_descriptor(%d, crdb_internal.json_to_pb('cock
       "name": "primary",
       "type": "FORWARD",
       "unique": true,
-      "version": 4
+      "version": 4,
+			"constraintId": 1
     },
     "privileges": {
       "owner_proto": "admin",

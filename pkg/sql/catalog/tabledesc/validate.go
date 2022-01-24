@@ -374,6 +374,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			desc.validateUniqueWithoutIndexConstraints(columnIDs),
 			desc.validateTableIndexes(columnNames),
 			desc.validatePartitioning(),
+			desc.validateConstraints(),
 		}
 		hasErrs := false
 		for _, err := range newErrs {
@@ -493,6 +494,24 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 		}
 		return nil
 	})
+}
+
+func (desc *wrapper) validateConstraints() error {
+	if !desc.IsTable() {
+		return nil
+	}
+	constraints, err := desc.GetConstraintInfo()
+	if err != nil {
+		return err
+	}
+	for name, constraint := range constraints {
+		if constraint.ConstraintID == 0 {
+			return errors.AssertionFailedf("constraint id was missing for constraint: %s with name %s",
+				constraint.Kind,
+				name)
+		}
+	}
+	return nil
 }
 
 func (desc *wrapper) validateColumns(

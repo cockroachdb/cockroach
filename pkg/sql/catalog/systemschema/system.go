@@ -727,7 +727,10 @@ func systemTable(
 		Indexes:                 indexes[1:],
 		FormatVersion:           descpb.InterleavedFormatVersion,
 		NextMutationID:          1,
+		NextConstraintID:        1,
 	}
+	tbl.PrimaryIndex.ConstraintID = tbl.NextConstraintID
+	tbl.NextConstraintID++
 	for _, col := range columns {
 		if tbl.NextColumnID <= col.ID {
 			tbl.NextColumnID = col.ID + 1
@@ -738,9 +741,14 @@ func systemTable(
 			tbl.NextFamilyID = fam.ID + 1
 		}
 	}
-	for _, idx := range indexes {
+	for i, idx := range indexes {
 		if tbl.NextIndexID <= idx.ID {
 			tbl.NextIndexID = idx.ID + 1
+		}
+		// Only assigned constraint IDs to unique non-primary indexes.
+		if idx.Unique && i > 1 {
+			tbl.Indexes[i-1].ConstraintID = tbl.NextConstraintID
+			tbl.NextConstraintID++
 		}
 	}
 	return tbl
@@ -952,6 +960,8 @@ var (
 			tbl.NextFamilyID = 0
 			tbl.NextIndexID = 0
 			tbl.NextMutationID = 0
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
 		},
 	)
 

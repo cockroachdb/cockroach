@@ -34,3 +34,9 @@ type IndexID uint32
 
 // SafeValue implements the redact.SafeValue interface.
 func (IndexID) SafeValue() {}
+
+// ConstraintID is a custom type for TableDeascriptor constraint IDs.
+type ConstraintID uint32
+
+// SafeValue implements the redact.SafeValue interface.
+func (ConstraintID) SafeValue() {}
