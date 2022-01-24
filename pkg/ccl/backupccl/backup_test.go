@@ -757,6 +757,9 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, $3)", collections...)
+
 	// The flavors of BACKUP and RESTORE which automatically resolve the right
 	// directory to read/write data to, have URIs with the resolved path written
 	// to the job description.
@@ -783,6 +786,10 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				resolvedCollectionURIs[0], resolvedCollectionURIs[1],
 				resolvedCollectionURIs[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
+				resolvedSubdirURIs[0], resolvedSubdirURIs[1],
+				resolvedSubdirURIs[2])},
+			// and again from LATEST IN...
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				resolvedSubdirURIs[0], resolvedSubdirURIs[1],
 				resolvedSubdirURIs[2])},

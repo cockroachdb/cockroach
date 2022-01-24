@@ -247,26 +247,11 @@ func resolveBackupCollection(
 	var chosenSuffix string
 	collectionURI := defaultURI
 	if appendToLatest {
-		collection, err := makeCloudStorage(ctx, collectionURI, user)
+		latest, err := readLatestFile(ctx, collectionURI, makeCloudStorage, user)
 		if err != nil {
 			return "", "", err
 		}
-		defer collection.Close()
-		latestFile, err := collection.ReadFile(ctx, latestFileName)
-		if err != nil {
-			if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
-				return "", "", pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
-			}
-			return "", "", pgerror.WithCandidateCode(err, pgcode.Io)
-		}
-		latest, err := ioutil.ReadAll(latestFile)
-		if err != nil {
-			return "", "", err
-		}
-		if len(latest) == 0 {
-			return "", "", errors.Errorf("malformed LATEST file")
-		}
-		chosenSuffix = string(latest)
+		chosenSuffix = latest
 	} else if subdir != "" {
 		// User has specified a subdir via `BACKUP INTO 'subdir' IN...`.
 		chosenSuffix = strings.TrimPrefix(subdir, "/")
@@ -275,4 +260,32 @@ func resolveBackupCollection(
 		chosenSuffix = endTime.GoTime().Format(dateBasedIntoFolderName)
 	}
 	return collectionURI, chosenSuffix, nil
+}
+
+func readLatestFile(
+	ctx context.Context,
+	collectionURI string,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	user security.SQLUsername,
+) (string, error) {
+	collection, err := makeCloudStorage(ctx, collectionURI, user)
+	if err != nil {
+		return "", err
+	}
+	defer collection.Close()
+	latestFile, err := collection.ReadFile(ctx, latestFileName)
+	if err != nil {
+		if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+			return "", pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
+		}
+		return "", pgerror.WithCandidateCode(err, pgcode.Io)
+	}
+	latest, err := ioutil.ReadAll(latestFile)
+	if err != nil {
+		return "", err
+	}
+	if len(latest) == 0 {
+		return "", errors.Errorf("malformed LATEST file")
+	}
+	return string(latest), nil
 }
