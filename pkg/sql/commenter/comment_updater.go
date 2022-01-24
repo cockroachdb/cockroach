@@ -149,30 +149,16 @@ func (cu commentUpdater) oidFromConstraint(
 // UpsertConstraintComment implements scexec.CommentUpdater.
 func (cu commentUpdater) UpsertConstraintComment(
 	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
+	constraintID descpb.ConstraintID,
 	comment string,
 ) error {
-	oid := cu.oidFromConstraint(desc, schemaName, constraintName, constraintType)
-	// Constraint was not found.
-	if oid == nil {
-		return nil
-	}
-	return cu.UpsertDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType, comment)
+	return cu.UpsertDescriptorComment(int64(desc.GetID()), int64(constraintID), keys.ConstraintCommentType, comment)
 }
 
 // DeleteConstraintComment implements scexec.CommentUpdater.
 func (cu commentUpdater) DeleteConstraintComment(
 	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
+	constraintID descpb.ConstraintID,
 ) error {
-	oid := cu.oidFromConstraint(desc, schemaName, constraintName, constraintType)
-	// Constraint was not found.
-	if oid == nil {
-		return nil
-	}
-	return cu.DeleteDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType)
+	return cu.DeleteDescriptorComment(int64(desc.GetID()), int64(constraintID), keys.ConstraintCommentType)
 }

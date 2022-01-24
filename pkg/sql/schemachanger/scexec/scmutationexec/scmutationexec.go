@@ -86,8 +86,7 @@ type MutationVisitorStateUpdater interface {
 	DeleteConstraintComment(
 		ctx context.Context,
 		tbl catalog.TableDescriptor,
-		constraintName string,
-		constraintType scpb.ConstraintType,
+		constraintID descpb.ConstraintID,
 	) error
 
 	// AddNewGCJobForTable enqueues a GC job for the given table.
@@ -774,10 +773,12 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 		CompositeColumnIDs:  op.CompositeColumnIDs,
 		CreatedExplicitly:   true,
 		EncodingType:        encodingType,
+		ConstraintID:        tbl.GetNextConstraintID(),
 	}
 	if op.ShardedDescriptor != nil {
 		idx.Sharded = *op.ShardedDescriptor
 	}
+	tbl.NextConstraintID++
 	return enqueueAddIndexMutation(tbl, idx)
 }
 
@@ -1067,7 +1068,7 @@ func (m *visitor) RemoveConstraintComment(
 	if err != nil {
 		return err
 	}
-	return m.s.DeleteConstraintComment(ctx, tbl.(catalog.TableDescriptor), op.ConstraintName, op.ConstraintType)
+	return m.s.DeleteConstraintComment(ctx, tbl.(catalog.TableDescriptor), op.ConstraintID)
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)

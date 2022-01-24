@@ -68,7 +68,7 @@ delete comment for descriptor #58 of type TableCommentType
 delete comment for descriptor #58 of type ColumnCommentType
 delete comment for descriptor #58 of type ColumnCommentType
 delete comment for descriptor #58 of type IndexCommentType
-delete comment for constraint on #58, name: t_pkey, type: PrimaryKey
+delete comment for constraint on #58, constraint id: 1
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 4 MutationType ops
@@ -81,7 +81,7 @@ upsert descriptor #58
      name: t
   +  newSchemaChangeJobId: "1"
      nextColumnId: 4
-     nextFamilyId: 1
+     nextConstraintId: 2
   ...
      replacementOf:
        time: {}
@@ -105,7 +105,7 @@ upsert descriptor #58
      name: t
   -  newSchemaChangeJobId: "1"
      nextColumnId: 4
-     nextFamilyId: 1
+     nextConstraintId: 2
   ...
      state: DROP
      unexposedParentSchemaId: 57
@@ -281,8 +281,8 @@ delete comment for descriptor #71 of type TableCommentType
 delete comment for descriptor #74 of type TableCommentType
 delete comment for descriptor #63 of type SchemaCommentType
 delete comment for descriptor #61 of type DatabaseCommentType
-delete comment for constraint on #67, name: t1_pkey, type: PrimaryKey
-delete comment for constraint on #66, name: t1_pkey, type: PrimaryKey
+delete comment for constraint on #67, constraint id: 1
+delete comment for constraint on #66, constraint id: 1
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 56 MutationType ops
@@ -402,7 +402,7 @@ upsert descriptor #66
      name: t1
   +  newSchemaChangeJobId: "1"
      nextColumnId: 4
-     nextFamilyId: 1
+     nextConstraintId: 2
   ...
      replacementOf:
        time: {}
@@ -434,7 +434,7 @@ upsert descriptor #67
      name: t1
   +  newSchemaChangeJobId: "1"
      nextColumnId: 4
-     nextFamilyId: 1
+     nextConstraintId: 2
   ...
      replacementOf:
        time: {}
@@ -461,7 +461,7 @@ upsert descriptor #68
      name: v1
   +  newSchemaChangeJobId: "1"
      nextColumnId: 2
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      replacementOf:
        time: {}
@@ -491,7 +491,7 @@ upsert descriptor #69
      name: v2
   +  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      replacementOf:
        time: {}
@@ -513,7 +513,7 @@ upsert descriptor #70
      name: v3
   +  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      replacementOf:
        time: {}
@@ -539,7 +539,7 @@ upsert descriptor #71
      name: v4
   +  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      replacementOf:
        time: {}
@@ -581,7 +581,7 @@ upsert descriptor #74
      name: v5
   +  newSchemaChangeJobId: "1"
      nextColumnId: 4
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      replacementOf:
        time: {}
@@ -639,7 +639,7 @@ upsert descriptor #66
      name: t1
   -  newSchemaChangeJobId: "1"
      nextColumnId: 4
-     nextFamilyId: 1
+     nextConstraintId: 2
   ...
      state: DROP
      unexposedParentSchemaId: 63
@@ -651,7 +651,7 @@ upsert descriptor #67
      name: t1
   -  newSchemaChangeJobId: "1"
      nextColumnId: 4
-     nextFamilyId: 1
+     nextConstraintId: 2
   ...
      state: DROP
      unexposedParentSchemaId: 62
@@ -663,7 +663,7 @@ upsert descriptor #68
      name: v1
   -  newSchemaChangeJobId: "1"
      nextColumnId: 2
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      state: DROP
      unexposedParentSchemaId: 63
@@ -676,7 +676,7 @@ upsert descriptor #69
      name: v2
   -  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      state: DROP
      unexposedParentSchemaId: 63
@@ -689,7 +689,7 @@ upsert descriptor #70
      name: v3
   -  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      state: DROP
      unexposedParentSchemaId: 63
@@ -702,7 +702,7 @@ upsert descriptor #71
      name: v4
   -  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      state: DROP
      unexposedParentSchemaId: 63
@@ -715,7 +715,7 @@ upsert descriptor #74
      name: v5
   -  newSchemaChangeJobId: "1"
      nextColumnId: 4
-     nextMutationId: 1
+     nextConstraintId: 1
   ...
      state: DROP
      unexposedParentSchemaId: 63

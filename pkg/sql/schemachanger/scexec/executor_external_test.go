@@ -178,6 +178,7 @@ CREATE TABLE db.t (
 		KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 			descpb.IndexDescriptor_ASC,
 		},
+		ConstraintID: 2,
 	}
 	for _, tc := range []testCase{
 		{
@@ -186,6 +187,7 @@ CREATE TABLE db.t (
 			exp: makeTable(func(mutable *tabledesc.Mutable) {
 				mutable.MaybeIncrementVersion()
 				mutable.NextIndexID++
+				mutable.NextConstraintID++
 				mutable.Mutations = append(mutable.Mutations, descpb.DescriptorMutation{
 					Descriptor_: &descpb.DescriptorMutation_Index{
 						Index: &indexToAdd,

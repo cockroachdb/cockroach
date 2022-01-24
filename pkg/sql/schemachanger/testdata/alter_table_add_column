@@ -45,6 +45,7 @@ upsert descriptor #56
   +    state: DELETE_ONLY
   +  - direction: ADD
   +    index:
+  +      constraintId: 2
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
@@ -70,8 +71,10 @@ upsert descriptor #56
   +    state: DELETE_ONLY
      name: tbl
   -  nextColumnId: 2
+  -  nextConstraintId: 2
   +  newSchemaChangeJobId: "1"
   +  nextColumnId: 3
+  +  nextConstraintId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
   +  nextIndexId: 3
@@ -159,7 +162,9 @@ upsert descriptor #56
   -  - direction: ADD
   +  - direction: DROP
        index:
+  -      constraintId: 2
   -      createdExplicitly: true
+  +      constraintId: 1
          encodingType: 1
          foreignKey: {}
          geoConfig: {}
@@ -183,6 +188,8 @@ upsert descriptor #56
   ...
      parentId: 54
      primaryIndex:
+  -    constraintId: 1
+  +    constraintId: 2
   +    createdExplicitly: true
        encodingType: 1
        foreignKey: {}
@@ -236,6 +243,7 @@ upsert descriptor #56
   -  mutations:
   -  - direction: DROP
   -    index:
+  -      constraintId: 1
   -      encodingType: 1
   -      foreignKey: {}
   -      geoConfig: {}
@@ -258,7 +266,7 @@ upsert descriptor #56
      name: tbl
   -  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextFamilyId: 1
+     nextConstraintId: 3
   ...
        time: {}
      unexposedParentSchemaId: 55
