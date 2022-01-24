@@ -78,7 +78,7 @@ var (
 			tableKey.Name = string(r)
 			m[tableKey] = privilege.ReadData
 		}
-		m[descpb.NameInfo{Name: catconstants.SystemDatabaseName}] = privilege.ReadData
+		m[descpb.NameInfo{Name: catconstants.SystemDatabaseName}] = privilege.List{privilege.CONNECT}
 		return m
 	}()
 )

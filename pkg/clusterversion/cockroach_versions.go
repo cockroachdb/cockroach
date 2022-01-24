@@ -251,6 +251,9 @@ const (
 	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
 	// in secondary tenants.
 	EnableProtectedTimestampsForTenant
+	// RemoveIncompatibleDatabasePrivileges adds the migration which guarantees that
+	// databases do not have incompatible privileges
+	RemoveIncompatibleDatabasePrivileges
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -386,6 +389,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableProtectedTimestampsForTenant,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
+	},
+	{
+		Key:     RemoveIncompatibleDatabasePrivileges,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
 	},
 
 	// *************************************************

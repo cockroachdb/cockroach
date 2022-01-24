@@ -58,6 +58,14 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
 
+	if ddb.maybeModified.DefaultPrivileges == nil {
+		ddb.maybeModified.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+	}
+
+	ddb.changed = maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
+		ddb.maybeModified.Privileges, ddb.maybeModified.DefaultPrivileges,
+	)
+
 	privsChanged := catprivilege.MaybeFixPrivileges(
 		&ddb.maybeModified.Privileges,
 		descpb.InvalidID,
@@ -67,6 +75,8 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
 	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(ddb.maybeModified.Privileges)
 	ddb.changed = privsChanged || removedSelfEntryInSchemas || addedGrantOptions
+
+	ddb.changed = ddb.changed || privsChanged
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
@@ -74,6 +84,40 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 	_ func(id descpb.ID) catalog.Descriptor,
 ) error {
 	return nil
+}
+
+func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
+	privileges *descpb.PrivilegeDescriptor, defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+) (hasChanged bool) {
+	var pgIncompatibleDBPrivileges = privilege.List{
+		privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE,
+	}
+
+	for i, user := range privileges.Users {
+		incompatiblePrivileges := user.Privileges & pgIncompatibleDBPrivileges.ToBitField()
+
+		if incompatiblePrivileges == 0 {
+			continue
+		}
+
+		hasChanged = true
+
+		// XOR to remove incompatible privileges.
+		user.Privileges ^= incompatiblePrivileges
+
+		privileges.Users[i] = user
+
+		// Convert the incompatible privileges to default privileges.
+		role := defaultPrivileges.FindOrCreateUser(descpb.DefaultPrivilegesRole{ForAllRoles: true})
+		tableDefaultPrivilegesForAllRoles := role.DefaultPrivilegesPerObject[tree.Tables]
+
+		defaultPrivilegesForUser := tableDefaultPrivilegesForAllRoles.FindOrCreateUser(user.User())
+		defaultPrivilegesForUser.Privileges |= incompatiblePrivileges
+
+		role.DefaultPrivilegesPerObject[tree.Tables] = tableDefaultPrivilegesForAllRoles
+	}
+
+	return hasChanged
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
