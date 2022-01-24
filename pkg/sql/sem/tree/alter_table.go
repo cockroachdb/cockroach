@@ -78,6 +78,7 @@ func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionByTable) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
 func (*AlterTableSetStorageParams) alterTableCmd()   {}
+func (*AlterTableResetStorageParams) alterTableCmd() {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -97,6 +98,7 @@ var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionByTable{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
 var _ AlterTableCmd = &AlterTableSetStorageParams{}
+var _ AlterTableCmd = &AlterTableResetStorageParams{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -621,6 +623,24 @@ func (node *AlterTableSetStorageParams) TelemetryCounter() telemetry.Counter {
 func (node *AlterTableSetStorageParams) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SET (")
 	ctx.FormatNode(&node.StorageParams)
+	ctx.WriteString(")")
+}
+
+// AlterTableResetStorageParams represents a ALTER TABLE RESET command.
+type AlterTableResetStorageParams struct {
+	Params NameList
+}
+
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterTableResetStorageParams) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounter("set_storage_param")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableResetStorageParams) Format(ctx *FmtCtx) {
+	ctx.WriteString(" RESET (")
+	ctx.FormatNode(&node.Params)
 	ctx.WriteString(")")
 }
 

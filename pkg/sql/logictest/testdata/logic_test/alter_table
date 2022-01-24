@@ -2171,3 +2171,9 @@ NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
 
 statement error parameter "autovacuum_enabled" requires a Boolean value
 ALTER TABLE storage_param_table SET (autovacuum_enabled='11')
+
+statement error pgcode 22023 invalid storage parameter "foo"
+ALTER TABLE storage_param_table RESET (foo)
+
+statement ok
+ALTER TABLE storage_param_table RESET (fillfactor, toast_tuple_target)

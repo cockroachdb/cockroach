@@ -62,9 +62,26 @@ func SetStorageParameters(
 	return paramObserver.runPostChecks()
 }
 
+// ResetStorageParameters sets the given storage parameters using the
+// given observer.
+func ResetStorageParameters(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	params tree.NameList,
+	paramObserver StorageParamObserver,
+) error {
+	for _, p := range params {
+		if err := paramObserver.onReset(evalCtx, string(p)); err != nil {
+			return err
+		}
+	}
+	return paramObserver.runPostChecks()
+}
+
 // StorageParamObserver applies a storage parameter to an underlying item.
 type StorageParamObserver interface {
 	onSet(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	onReset(evalCtx *tree.EvalContext, key string) error
 	runPostChecks() error
 }
 
@@ -79,13 +96,18 @@ func (po *TableStorageParamObserver) runPostChecks() error {
 }
 
 type tableParam struct {
-	onSet func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	onSet   func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	onReset func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error
 }
 
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
 		onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			return setFillFactorStorageParam(evalCtx, key, datum)
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			// Operation is a no-op so do nothing.
+			return nil
 		},
 	},
 	`autovacuum_enabled`: {
@@ -109,6 +131,10 @@ var tableParams = map[string]tableParam{
 					pgnotice.Newf(`storage parameter "%s = %s" is ignored`, key, datum.String()),
 				)
 			}
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			// Operation is a no-op so do nothing.
 			return nil
 		},
 	},
@@ -148,6 +174,9 @@ func init() {
 			onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 				return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 			},
+			onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+				return nil
+			},
 		}
 	}
 }
@@ -158,6 +187,14 @@ func (po *TableStorageParamObserver) onSet(
 ) error {
 	if p, ok := tableParams[key]; ok {
 		return p.onSet(po, evalCtx, key, datum)
+	}
+	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+}
+
+// onReset implements the StorageParamObserver interface.
+func (po *TableStorageParamObserver) onReset(evalCtx *tree.EvalContext, key string) error {
+	if p, ok := tableParams[key]; ok {
+		return p.onReset(po, evalCtx, key)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
@@ -283,6 +320,11 @@ func (po *IndexStorageParamObserver) onSet(
 		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+}
+
+// onReset implements the StorageParameterObserver interface.
+func (po *IndexStorageParamObserver) onReset(evalCtx *tree.EvalContext, key string) error {
+	return errors.AssertionFailedf("non-implemented codepath")
 }
 
 // runPostChecks implements the StorageParamObserver interface.
