@@ -320,7 +320,10 @@ func (desc *wrapper) collectConstraintInfo(
 					indexName = mutation.GetPrimaryKeySwap().NewPrimaryIndexName
 				}
 			}
-			detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypePK}
+			detail := descpb.ConstraintDetail{
+				Kind:         descpb.ConstraintTypePK,
+				ConstraintID: index.ConstraintID,
+			}
 			detail.Columns = index.KeyColumnNames
 			detail.Index = index
 			info[indexName] = detail
@@ -329,7 +332,10 @@ func (desc *wrapper) collectConstraintInfo(
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
 			}
-			detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeUnique}
+			detail := descpb.ConstraintDetail{
+				Kind:         descpb.ConstraintTypeUnique,
+				ConstraintID: index.ConstraintID,
+			}
 			detail.Columns = index.KeyColumnNames
 			detail.Index = index
 			info[index.Name] = detail
@@ -343,7 +349,10 @@ func (desc *wrapper) collectConstraintInfo(
 			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", uc.Name)
 		}
-		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeUnique}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeUnique,
+			ConstraintID: uc.ConstraintID,
+		}
 		// Constraints in the Validating state are considered Unvalidated for this
 		// purpose.
 		detail.Unvalidated = uc.Validity != descpb.ConstraintValidity_Validated
@@ -362,7 +371,10 @@ func (desc *wrapper) collectConstraintInfo(
 			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", fk.Name)
 		}
-		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeFK}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeFK,
+			ConstraintID: fk.ConstraintID,
+		}
 		// Constraints in the Validating state are considered Unvalidated for this
 		// purpose.
 		detail.Unvalidated = fk.Validity != descpb.ConstraintValidity_Validated
@@ -395,7 +407,10 @@ func (desc *wrapper) collectConstraintInfo(
 			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", c.Name)
 		}
-		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeCheck}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeCheck,
+			ConstraintID: c.ConstraintID,
+		}
 		// Constraints in the Validating state are considered Unvalidated for this
 		// purpose.
 		detail.Unvalidated = c.Validity != descpb.ConstraintValidity_Validated
