@@ -279,6 +279,9 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 		}
 		diffs = append(diffs, fmt.Sprintf("pts=[%s]", strings.Join(timestamps, " ")))
 	}
+	if conf.ExcludeDataFromBackup != defaultConf.ExcludeDataFromBackup {
+		diffs = append(diffs, fmt.Sprintf("exclude_data_from_backup=%v", conf.ExcludeDataFromBackup))
+	}
 
 	return strings.Join(diffs, " ")
 }

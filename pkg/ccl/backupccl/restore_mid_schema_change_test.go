@@ -255,8 +255,8 @@ func restoreMidSchemaChange(
 		if isClusterRestore {
 			restoreQuery = "RESTORE from $1"
 		}
-		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", LocalFoo))
-		sqlDB.Exec(t, restoreQuery, LocalFoo)
+		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", localFoo))
+		sqlDB.Exec(t, restoreQuery, localFoo)
 		// Wait for all jobs to terminate. Some may fail since we don't restore
 		// adding spans.
 		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})

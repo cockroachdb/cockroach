@@ -85,8 +85,8 @@ database_name = 'rand' AND schema_name = 'public'`)
 	// Now that we've created our random tables, backup and restore the whole DB
 	// and compare all table descriptors for equality.
 
-	dbBackup := LocalFoo + "wholedb"
-	tablesBackup := LocalFoo + "alltables"
+	dbBackup := localFoo + "wholedb"
+	tablesBackup := localFoo + "alltables"
 	dbBackups := []string{dbBackup, tablesBackup}
 
 	if err := verifyBackupRestoreStatementResult(
@@ -136,7 +136,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 
 	for i, combo := range tableNameCombos {
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb; CREATE DATABASE restoredb")
-		backupTarget := fmt.Sprintf("%s%d", LocalFoo, i)
+		backupTarget := fmt.Sprintf("%s%d", localFoo, i)
 		if len(combo) == 0 {
 			continue
 		}
