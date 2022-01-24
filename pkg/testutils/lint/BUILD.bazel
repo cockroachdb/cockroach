@@ -21,6 +21,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":lint"],
     gotags = ["lint"],
+    tags = ["integration"],
     visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
         "//pkg/build/bazel",
