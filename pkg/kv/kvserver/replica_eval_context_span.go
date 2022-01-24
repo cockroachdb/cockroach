@@ -165,6 +165,12 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 	return rec.i.GetGCThreshold()
 }
 
+// ExcludeReplicaFromBackup returns whether the replica is to be excluded from a
+// backup.
+func (rec SpanSetReplicaEvalContext) ExcludeReplicaFromBackup() bool {
+	return rec.i.ExcludeReplicaFromBackup()
+}
+
 // String implements Stringer.
 func (rec SpanSetReplicaEvalContext) String() string {
 	return rec.i.String()

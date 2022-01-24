@@ -164,6 +164,14 @@ message SpanConfig {
   // RangefeedEnabled determines whether rangefeeds are enabled over the
   // specific range.
   bool rangefeed_enabled = 10;
+
+  // ExcludeDataFromBackup specifies if the table's row data has been marked to
+  // be excluded from a backup targeting this table. This information is used
+  // when ExportRequests issued by backups are being serviced in KV, to decide
+  // whether or not to send back any row data.
+  bool exclude_data_from_backup = 11;
+
+  // Next ID: 12
 }
 
 // SpanConfigEntry ties a span to its corresponding config.

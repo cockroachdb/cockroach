@@ -484,6 +484,10 @@ message IntegerOverflowError {
 message BatchTimestampBeforeGCError {
   optional util.hlc.Timestamp Timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
+  // ExcludeDataFromBackup is set to true if the request is targeting a range
+  // that has been marked as excluded from a backup via
+  // `ALTER TABLE ... SET (exclude_data_from_backup = true)`.
+  optional bool exclude_data_from_backup = 3 [(gogoproto.nullable) = false];
 }
 
 // A MVCCHistoryMutationError indicates that MVCC history was unexpectedly

@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -9213,4 +9214,266 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 		sqlDB.Exec(t, "DROP DATABASE trad_fkdb;")
 		sqlDB.Exec(t, "DROP DATABASE inc_fkdb;")
 	}
+}
+
+func TestExcludeDataFromBackupAndRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, sqlDB, iodir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
+					SpanConfig: &spanconfig.TestingKnobs{
+						SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
+					},
+				},
+			},
+		})
+	defer cleanupFn()
+
+	_, restoreDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, iodir, InitManualReplication,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
+				},
+			},
+		})
+	defer cleanup()
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+
+	conn := tc.ServerConn(0)
+	waitForTableSplit := func(tableName string) {
+		testutils.SucceedsSoon(t, func() error {
+			count := 0
+			if err := conn.QueryRow(
+				"SELECT count(*) "+
+					"FROM crdb_internal.ranges_no_leases "+
+					"WHERE table_name = $1 "+
+					"AND database_name = current_database()",
+				tableName).Scan(&count); err != nil {
+				return err
+			}
+			if count == 0 {
+				return errors.New("waiting for table split")
+			}
+			return nil
+		})
+	}
+
+	getTableStartKey := func() roachpb.Key {
+		row := conn.QueryRow(
+			"SELECT start_key "+
+				"FROM crdb_internal.ranges_no_leases "+
+				"WHERE table_name = $1 "+
+				"AND database_name = current_database() "+
+				"ORDER BY start_key ASC "+
+				"LIMIT 1",
+			"foo")
+
+		var startKey roachpb.Key
+		require.NoError(t, row.Scan(&startKey))
+		return startKey
+	}
+
+	getStoreAndReplica := func() (*kvserver.Store, *kvserver.Replica) {
+		startKey := getTableStartKey()
+		// Okay great now we have a key and can go find replicas and stores and what not.
+		r := tc.LookupRangeOrFatal(t, startKey)
+		l, _, err := tc.FindRangeLease(r, nil)
+		require.NoError(t, err)
+
+		lhServer := tc.Server(int(l.Replica.NodeID) - 1)
+		return getFirstStoreReplica(t, lhServer, startKey)
+	}
+
+	waitForExcludeDataFromBackup := func() {
+		testutils.SucceedsSoon(t, func() error {
+			_, r := getStoreAndReplica()
+			if !r.ExcludeReplicaFromBackup() {
+				return errors.New("waiting for exclude_data_from_backup to be applied")
+			}
+			return nil
+		})
+	}
+
+	sqlDB.Exec(t, `CREATE TABLE data.foo (id INT, INDEX bar(id))`)
+	sqlDB.Exec(t, `INSERT INTO data.foo select * from generate_series(1,10)`)
+
+	// Create another table.
+	sqlDB.Exec(t, `CREATE TABLE data.bar (id INT, INDEX bar(id))`)
+	sqlDB.Exec(t, `INSERT INTO data.bar select * from generate_series(1,10)`)
+
+	// Set foo to exclude_data_from_backup and back it up. The ExportRequest
+	// should be a noop and backup no data.
+	sqlDB.Exec(t, `ALTER TABLE data.foo SET (exclude_data_from_backup = true)`)
+	waitForTableSplit("foo")
+	waitForTableSplit("bar")
+	waitForExcludeDataFromBackup()
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
+
+	restoreDB.Exec(t, `RESTORE DATABASE data FROM $1`, LocalFoo)
+	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.foo`), 0)
+	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.bar`), 10)
+}
+
+// TestExportRequestBelowGCThresholdOnDataExcludedFromBackup tests that a
+// `BatchTimestampBeforeGCError` on an ExportRequest targeting a table that has
+// been marked as excluded from backup, does not cause the backup to fail.
+func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	localExternalDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	args := base.TestClusterArgs{}
+	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		DisableGCQueue:            true,
+		DisableLastProcessedCheck: true,
+	}
+	args.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	args.ServerArgs.ExternalIODir = localExternalDir
+	tc := testcluster.StartTestCluster(t, 3, args)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	for _, server := range tc.Servers {
+		registry := server.JobRegistry().(*jobs.Registry)
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeBackup: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*backupResumer)
+				r.testingKnobs.ignoreProtectedTimestamps = true
+				return r
+			},
+		}
+	}
+	conn := tc.ServerConn(0)
+	_, err := conn.Exec("CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+	require.NoError(t, err)
+
+	_, err = conn.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
+	require.NoError(t, err)
+
+	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
+	require.NoError(t, err)
+
+	const tableRangeMaxBytes = 1 << 18
+	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING "+
+		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
+	require.NoError(t, err)
+
+	rRand, _ := randutil.NewTestRand()
+	upsertUntilBackpressure := func() {
+		for {
+			_, err := conn.Exec("UPSERT INTO foo VALUES (1, $1)",
+				randutil.RandBytes(rRand, 1<<15))
+			if testutils.IsError(err, "backpressure") {
+				break
+			}
+			require.NoError(t, err)
+		}
+	}
+	const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
+	processedRegexp := regexp.MustCompile(processedPattern)
+
+	waitForTableSplit := func() {
+		testutils.SucceedsSoon(t, func() error {
+			count := 0
+			if err := conn.QueryRow(
+				"SELECT count(*) "+
+					"FROM crdb_internal.ranges_no_leases "+
+					"WHERE table_name = $1 "+
+					"AND database_name = current_database()",
+				"foo").Scan(&count); err != nil {
+				return err
+			}
+			if count == 0 {
+				return errors.New("waiting for table split")
+			}
+			return nil
+		})
+	}
+
+	getTableStartKey := func() roachpb.Key {
+		row := conn.QueryRow(
+			"SELECT start_key "+
+				"FROM crdb_internal.ranges_no_leases "+
+				"WHERE table_name = $1 "+
+				"AND database_name = current_database() "+
+				"ORDER BY start_key ASC "+
+				"LIMIT 1",
+			"foo")
+
+		var startKey roachpb.Key
+		require.NoError(t, row.Scan(&startKey))
+		return startKey
+	}
+
+	getStoreAndReplica := func() (*kvserver.Store, *kvserver.Replica) {
+		startKey := getTableStartKey()
+		// Okay great now we have a key and can go find replicas and stores and what not.
+		r := tc.LookupRangeOrFatal(t, startKey)
+		l, _, err := tc.FindRangeLease(r, nil)
+		require.NoError(t, err)
+
+		lhServer := tc.Server(int(l.Replica.NodeID) - 1)
+		return getFirstStoreReplica(t, lhServer, startKey)
+	}
+
+	waitForExcludeDataFromBackup := func() {
+		testutils.SucceedsSoon(t, func() error {
+			_, r := getStoreAndReplica()
+			if !r.ExcludeReplicaFromBackup() {
+				return errors.New("waiting for exclude_data_from_backup to be applied")
+			}
+			return nil
+		})
+	}
+
+	waitForRangeMaxBytes := func(maxBytes int64) {
+		testutils.SucceedsSoon(t, func() error {
+			_, r := getStoreAndReplica()
+			if r.GetMaxBytes() != maxBytes {
+				return errors.New("waiting for range_max_bytes to be applied")
+			}
+			return nil
+		})
+	}
+
+	gcSoon := func() {
+		testutils.SucceedsSoon(t, func() error {
+			upsertUntilBackpressure()
+			s, repl := getStoreAndReplica()
+			trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, false)
+			require.NoError(t, err)
+			if !processedRegexp.MatchString(trace.String()) {
+				return errors.Errorf("%q does not match %q", trace.String(), processedRegexp)
+			}
+			return nil
+		})
+	}
+
+	waitForTableSplit()
+	waitForRangeMaxBytes(tableRangeMaxBytes)
+
+	var tsBefore string
+	require.NoError(t, conn.QueryRow("SELECT cluster_logical_timestamp()").Scan(&tsBefore))
+	gcSoon()
+
+	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), LocalFoo)
+	testutils.IsError(err, "must be after replica GC threshold")
+
+	_, err = conn.Exec(`ALTER TABLE foo SET (exclude_data_from_backup = true)`)
+	require.NoError(t, err)
+	waitForExcludeDataFromBackup()
+
+	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), LocalFoo)
+	require.NoError(t, err)
 }
