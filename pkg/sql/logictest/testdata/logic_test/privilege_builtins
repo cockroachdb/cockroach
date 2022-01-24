@@ -352,7 +352,7 @@ SELECT has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'syst
        has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'system'), 'TEMPORARY'),
        has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'system'), 'TEMP')
 ----
-false  false  false  false
+false  true  false  false
 
 query BBBB
 SELECT has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'test'), 'CREATE'),
@@ -372,7 +372,7 @@ SELECT has_database_privilege('system', '  CrEaTe      '),
        has_database_privilege('system', 'TEMP'),
        has_database_privilege('system', '  CrEaTe      ,CONNECT')
 ----
-false  false  false  false  false
+false  true  false  false  true
 
 query BBBBB
 SELECT has_database_privilege('test', '  CrEaTe      '),
@@ -413,6 +413,7 @@ SELECT datname FROM pg_database WHERE has_database_privilege(datname, 'CONNECT')
 ----
 defaultdb
 postgres
+system
 test
 
 query T

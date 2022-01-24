@@ -995,8 +995,8 @@ other_db       testuser  DROP            NO
 postgres       admin     ALL             YES
 postgres       public    CONNECT         NO
 postgres       root      ALL             YES
-system         admin     GRANT           YES
-system         root      GRANT           YES
+system         admin     CONNECT         YES
+system         root      CONNECT         YES
 test           admin     ALL             YES
 test           public    CONNECT         NO
 test           root      ALL             YES
@@ -1022,8 +1022,8 @@ other_db       testuser  DROP            NO
 postgres       admin     ALL             YES
 postgres       public    CONNECT         NO
 postgres       root      ALL             YES
-system         admin     GRANT           YES
-system         root      GRANT           YES
+system         admin     CONNECT         YES
+system         root      CONNECT         YES
 test           admin     ALL             YES
 test           public    CONNECT         NO
 test           root      ALL             YES
