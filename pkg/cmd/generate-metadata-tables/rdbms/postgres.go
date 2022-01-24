@@ -32,11 +32,11 @@ const getServerVersion = `SELECT current_setting('server_version');`
 var unimplementedEquivalencies = map[oid.Oid]oid.Oid{
 	// These types only exists in information_schema.
 	// cardinal_number in postgres is an INT4 but we already implemented columns as INT8.
-	oid.Oid(13438): oid.T_int8,        // cardinal_number
-	oid.Oid(13450): oid.T_text,        // yes_or_no
-	oid.Oid(13441): oid.T_text,        // character_data
-	oid.Oid(13443): oid.T_text,        // sql_identifier
-	oid.Oid(13448): oid.T_timestamptz, // time_stamp
+	oid.Oid(12653): oid.T_int8,        // cardinal_number
+	oid.Oid(12665): oid.T_text,        // yes_or_no
+	oid.Oid(12656): oid.T_text,        // character_data
+	oid.Oid(12658): oid.T_text,        // sql_identifier
+	oid.Oid(12663): oid.T_timestamptz, // time_stamp
 
 	// pg_catalog
 	oid.Oid(2277): oid.T__text, // anyarray

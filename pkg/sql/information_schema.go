@@ -1548,153 +1548,9 @@ var informationSchemaSessionVariables = virtualSchemaTable{
 	},
 }
 
-var informationSchemaDomainConstraintsTable = virtualSchemaTable{
-	comment: "domain_constraints was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaDomainConstraints,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaUdtPrivilegesTable = virtualSchemaTable{
-	comment: "udt_privileges was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaUdtPrivileges,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaCheckConstraintRoutineUsageTable = virtualSchemaTable{
-	comment: "check_constraint_routine_usage was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaCheckConstraintRoutineUsage,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaRoleColumnGrantsTable = virtualSchemaTable{
-	comment: "role_column_grants was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaRoleColumnGrants,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaTriggeredUpdateColumnsTable = virtualSchemaTable{
-	comment: "triggered_update_columns was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaTriggeredUpdateColumns,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaForeignTablesTable = virtualSchemaTable{
-	comment: "foreign_tables was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaForeignTables,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaUsagePrivilegesTable = virtualSchemaTable{
-	comment: "usage_privileges was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaUsagePrivileges,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaUserMappingsTable = virtualSchemaTable{
-	comment: "user_mappings was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaUserMappings,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaRoleUdtGrantsTable = virtualSchemaTable{
-	comment: "role_udt_grants was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaRoleUdtGrants,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaViewColumnUsageTable = virtualSchemaTable{
-	comment: "view_column_usage was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaViewColumnUsage,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaForeignDataWrapperOptionsTable = virtualSchemaTable{
-	comment: "foreign_data_wrapper_options was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaForeignDataWrapperOptions,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaViewTableUsageTable = virtualSchemaTable{
-	comment: "view_table_usage was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaViewTableUsage,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaSQLPartsTable = virtualSchemaTable{
-	comment: "sql_parts was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaSQLParts,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaRoleUsageGrantsTable = virtualSchemaTable{
-	comment: "role_usage_grants was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaRoleUsageGrants,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaDataTypePrivilegesTable = virtualSchemaTable{
-	comment: "data_type_privileges was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaDataTypePrivileges,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaSQLImplementationInfoTable = virtualSchemaTable{
-	comment: "sql_implementation_info was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaSQLImplementationInfo,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaForeignTableOptionsTable = virtualSchemaTable{
-	comment: "foreign_table_options was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaForeignTableOptions,
+var informationSchemaRoutinePrivilegesTable = virtualSchemaTable{
+	comment: "routine_privileges was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoutinePrivileges,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1710,6 +1566,60 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
+var informationSchemaElementTypesTable = virtualSchemaTable{
+	comment: "element_types was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaElementTypes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaRoleUdtGrantsTable = virtualSchemaTable{
+	comment: "role_udt_grants was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoleUdtGrants,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaColumnOptionsTable = virtualSchemaTable{
+	comment: "column_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaForeignDataWrapperOptionsTable = virtualSchemaTable{
+	comment: "foreign_data_wrapper_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignDataWrapperOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTransformsTable = virtualSchemaTable{
+	comment: "transforms was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTransforms,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaViewColumnUsageTable = virtualSchemaTable{
+	comment: "view_column_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaViewColumnUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
 var informationSchemaInformationSchemaCatalogNameTable = virtualSchemaTable{
 	comment: "information_schema_catalog_name was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaInformationSchemaCatalogName,
@@ -1719,18 +1629,27 @@ var informationSchemaInformationSchemaCatalogNameTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
-var informationSchemaUserDefinedTypesTable = virtualSchemaTable{
-	comment: "user_defined_types was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaUserDefinedTypes,
+var informationSchemaForeignTablesTable = virtualSchemaTable{
+	comment: "foreign_tables was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignTables,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 	unimplemented: true,
 }
 
-var informationSchemaForeignServerOptionsTable = virtualSchemaTable{
-	comment: "foreign_server_options was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaForeignServerOptions,
+var informationSchemaViewRoutineUsageTable = virtualSchemaTable{
+	comment: "view_routine_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaViewRoutineUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaRoleColumnGrantsTable = virtualSchemaTable{
+	comment: "role_column_grants was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoleColumnGrants,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1746,45 +1665,27 @@ var informationSchemaAttributesTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
-var informationSchemaUserMappingOptionsTable = virtualSchemaTable{
-	comment: "user_mapping_options was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaUserMappingOptions,
+var informationSchemaDomainConstraintsTable = virtualSchemaTable{
+	comment: "domain_constraints was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaDomainConstraints,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 	unimplemented: true,
 }
 
-var informationSchemaColumnColumnUsageTable = virtualSchemaTable{
-	comment: "column_column_usage was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaColumnColumnUsage,
+var informationSchemaUserMappingsTable = virtualSchemaTable{
+	comment: "user_mappings was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUserMappings,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 	unimplemented: true,
 }
 
-var informationSchemaDomainUdtUsageTable = virtualSchemaTable{
-	comment: "domain_udt_usage was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaDomainUdtUsage,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaDomainsTable = virtualSchemaTable{
-	comment: "domains was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaDomains,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaViewRoutineUsageTable = virtualSchemaTable{
-	comment: "view_routine_usage was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaViewRoutineUsage,
+var informationSchemaCheckConstraintRoutineUsageTable = virtualSchemaTable{
+	comment: "check_constraint_routine_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaCheckConstraintRoutineUsage,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1809,18 +1710,9 @@ var informationSchemaForeignDataWrappersTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
-var informationSchemaSQLFeaturesTable = virtualSchemaTable{
-	comment: "sql_features was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaSQLFeatures,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaTransformsTable = virtualSchemaTable{
-	comment: "transforms was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaTransforms,
+var informationSchemaColumnColumnUsageTable = virtualSchemaTable{
+	comment: "column_column_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaColumnColumnUsage,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1836,63 +1728,36 @@ var informationSchemaSQLSizingTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
-var informationSchemaElementTypesTable = virtualSchemaTable{
-	comment: "element_types was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaElementTypes,
+var informationSchemaUsagePrivilegesTable = virtualSchemaTable{
+	comment: "usage_privileges was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUsagePrivileges,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 	unimplemented: true,
 }
 
-var informationSchemaRoutinePrivilegesTable = virtualSchemaTable{
-	comment: "routine_privileges was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaRoutinePrivileges,
+var informationSchemaDomainsTable = virtualSchemaTable{
+	comment: "domains was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaDomains,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 	unimplemented: true,
 }
 
-var informationSchemaConstraintTableUsageTable = virtualSchemaTable{
-	comment: "constraint_table_usage was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaConstraintTableUsage,
+var informationSchemaSQLImplementationInfoTable = virtualSchemaTable{
+	comment: "sql_implementation_info was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSQLImplementationInfo,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 	unimplemented: true,
 }
 
-var informationSchemaColumnOptionsTable = virtualSchemaTable{
-	comment: "column_options was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaColumnOptions,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaForeignServersTable = virtualSchemaTable{
-	comment: "foreign_servers was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaForeignServers,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaTriggersTable = virtualSchemaTable{
-	comment: "triggers was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaTriggers,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
-	},
-	unimplemented: true,
-}
-
-var informationSchemaResourceGroupsTable = virtualSchemaTable{
-	comment: "resource_groups was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaResourceGroups,
+var informationSchemaUdtPrivilegesTable = virtualSchemaTable{
+	comment: "udt_privileges was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUdtPrivileges,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1917,6 +1782,33 @@ var informationSchemaTablespacesExtensionsTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
+var informationSchemaResourceGroupsTable = virtualSchemaTable{
+	comment: "resource_groups was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaResourceGroups,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaForeignServerOptionsTable = virtualSchemaTable{
+	comment: "foreign_server_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignServerOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaStUnitsOfMeasureTable = virtualSchemaTable{
+	comment: "st_units_of_measure was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaStUnitsOfMeasure,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
 var informationSchemaSchemataExtensionsTable = virtualSchemaTable{
 	comment: "schemata_extensions was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaSchemataExtensions,
@@ -1935,9 +1827,27 @@ var informationSchemaColumnStatisticsTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
-var informationSchemaStUnitsOfMeasureTable = virtualSchemaTable{
-	comment: "st_units_of_measure was created for compatibility and is currently unimplemented",
-	schema:  vtable.InformationSchemaStUnitsOfMeasure,
+var informationSchemaConstraintTableUsageTable = virtualSchemaTable{
+	comment: "constraint_table_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaConstraintTableUsage,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaDataTypePrivilegesTable = virtualSchemaTable{
+	comment: "data_type_privileges was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaDataTypePrivileges,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaRoleUsageGrantsTable = virtualSchemaTable{
+	comment: "role_usage_grants was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaRoleUsageGrants,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1962,9 +1872,27 @@ var informationSchemaEnginesTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
+var informationSchemaForeignTableOptionsTable = virtualSchemaTable{
+	comment: "foreign_table_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignTableOptions,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
 var informationSchemaEventsTable = virtualSchemaTable{
 	comment: "events was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaEvents,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaDomainUdtUsageTable = virtualSchemaTable{
+	comment: "domain_udt_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaDomainUdtUsage,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -1983,6 +1911,15 @@ var informationSchemaUserAttributesTable = virtualSchemaTable{
 var informationSchemaKeywordsTable = virtualSchemaTable{
 	comment: "keywords was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaKeywords,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaUserMappingOptionsTable = virtualSchemaTable{
+	comment: "user_mapping_options was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUserMappingOptions,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -2016,9 +1953,36 @@ var informationSchemaColumnsExtensionsTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
+var informationSchemaUserDefinedTypesTable = virtualSchemaTable{
+	comment: "user_defined_types was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaUserDefinedTypes,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaSQLFeaturesTable = virtualSchemaTable{
+	comment: "sql_features was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSQLFeatures,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
 var informationSchemaStGeometryColumnsTable = virtualSchemaTable{
 	comment: "st_geometry_columns was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaStGeometryColumns,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaSQLPartsTable = virtualSchemaTable{
+	comment: "sql_parts was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaSQLParts,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -2052,6 +2016,33 @@ var informationSchemaProcesslistTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
+var informationSchemaForeignServersTable = virtualSchemaTable{
+	comment: "foreign_servers was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaForeignServers,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTriggeredUpdateColumnsTable = virtualSchemaTable{
+	comment: "triggered_update_columns was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTriggeredUpdateColumns,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaTriggersTable = virtualSchemaTable{
+	comment: "triggers was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTriggers,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
 var informationSchemaTablesExtensionsTable = virtualSchemaTable{
 	comment: "tables_extensions was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaTablesExtensions,
@@ -2073,6 +2064,15 @@ var informationSchemaProfilingTable = virtualSchemaTable{
 var informationSchemaTablespacesTable = virtualSchemaTable{
 	comment: "tablespaces was created for compatibility and is currently unimplemented",
 	schema:  vtable.InformationSchemaTablespaces,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+	unimplemented: true,
+}
+
+var informationSchemaViewTableUsageTable = virtualSchemaTable{
+	comment: "view_table_usage was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaViewTableUsage,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
