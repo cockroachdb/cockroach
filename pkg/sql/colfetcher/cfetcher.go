@@ -1435,29 +1435,9 @@ func (rf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
 func (rf *cFetcher) convertFetchError(ctx context.Context, err error) error {
-	err = row.ConvertFetchError(ctx, rf, err)
+	err = row.ConvertFetchError(ctx, rf.table.desc, err)
 	err = colexecerror.NewStorageError(err)
 	return err
-}
-
-// KeyToDesc implements the KeyToDescTranslator interface. The implementation is
-// used by convertFetchError.
-func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
-	if len(key) < rf.table.knownPrefixLength {
-		return nil, false
-	}
-	nIndexCols := rf.table.index.NumKeyColumns() + rf.table.index.NumKeySuffixColumns()
-	tableKeyVals := make([]rowenc.EncDatum, nIndexCols)
-	_, _, err := rowenc.DecodeKeyVals(
-		rf.table.keyValTypes,
-		tableKeyVals,
-		rf.table.indexColumnDirs,
-		key[rf.table.knownPrefixLength:],
-	)
-	if err != nil {
-		return nil, false
-	}
-	return rf.table.desc, true
 }
 
 // getBytesRead returns the number of bytes read by the cFetcher throughout its
