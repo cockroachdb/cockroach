@@ -11,6 +11,8 @@
 package tabledesc
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -536,6 +538,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if hasErrs {
 			return
 		}
+		desc.validateConstraintIDs(vea)
 	}
 
 	// Ensure that mutations cannot be queued if a primary key change or
@@ -643,6 +646,36 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 		}
 		return nil
 	})
+}
+
+func (desc *wrapper) validateConstraintIDs(vea catalog.ValidationErrorAccumulator) {
+	if !vea.IsActive(ConstraintIDsAddedToTableDescsVersion) {
+		return
+	}
+	if !desc.IsTable() {
+		return
+	}
+	constraints, err := desc.GetConstraintInfo()
+	if err != nil {
+		vea.Report(err)
+		return
+	}
+	// Sort the names to get deterministic behaviour, since
+	// constraints are stored in a map.
+	orderedNames := make([]string, 0, len(constraints))
+	for name := range constraints {
+		orderedNames = append(orderedNames, name)
+	}
+	sort.Strings(orderedNames)
+	for _, name := range orderedNames {
+		constraint := constraints[name]
+		if constraint.ConstraintID == 0 {
+			vea.Report(errors.AssertionFailedf("constraint id was missing for constraint: %s with name %q",
+				constraint.Kind,
+				name))
+
+		}
+	}
 }
 
 func (desc *wrapper) validateColumns(
