@@ -161,28 +161,25 @@ export const selectApps = createSelector(
     }
 
     let sawBlank = false;
-    let sawInternal = false;
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
       (statement: ICollectedStatementStatistics) => {
         if (
-          state.data.internal_app_name_prefix &&
-          statement.key.key_data.app.startsWith(
-            state.data.internal_app_name_prefix,
-          )
+          (state.data.internal_app_name_prefix &&
+            !statement.key.key_data.app.startsWith(
+              state.data.internal_app_name_prefix,
+            )) ||
+          state.data.internal_app_name_prefix == undefined
         ) {
-          sawInternal = true;
-        } else if (statement.key.key_data.app) {
-          apps[statement.key.key_data.app] = true;
-        } else {
-          sawBlank = true;
+          if (statement.key.key_data.app) {
+            apps[statement.key.key_data.app] = true;
+          } else {
+            sawBlank = true;
+          }
         }
       },
     );
-    return []
-      .concat(sawInternal ? [state.data.internal_app_name_prefix] : [])
-      .concat(sawBlank ? ["(unset)"] : [])
-      .concat(Object.keys(apps));
+    return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
   },
 );
 

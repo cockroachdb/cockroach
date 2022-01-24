@@ -61,28 +61,25 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
   }
 
   let sawBlank = false;
-  let sawInternal = false;
   const apps: { [app: string]: boolean } = {};
   sqlStatsState.data.statements.forEach(
     (statement: ICollectedStatementStatistics) => {
       if (
-        sqlStatsState.data.internal_app_name_prefix &&
-        statement.key.key_data.app.startsWith(
-          sqlStatsState.data.internal_app_name_prefix,
-        )
+        (sqlStatsState.data.internal_app_name_prefix &&
+          !statement.key.key_data.app.startsWith(
+            sqlStatsState.data.internal_app_name_prefix,
+          )) ||
+        sqlStatsState.data.internal_app_name_prefix == undefined
       ) {
-        sawInternal = true;
-      } else if (statement.key.key_data.app) {
-        apps[statement.key.key_data.app] = true;
-      } else {
-        sawBlank = true;
+        if (statement.key.key_data.app) {
+          apps[statement.key.key_data.app] = true;
+        } else {
+          sawBlank = true;
+        }
       }
     },
   );
-  return []
-    .concat(sawInternal ? [sqlStatsState.data.internal_app_name_prefix] : [])
-    .concat(sawBlank ? ["(unset)"] : [])
-    .concat(Object.keys(apps));
+  return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
 });
 
 // selectDatabases returns the array of all databases with statement statistics present

@@ -39,14 +39,13 @@ export const getTrxAppFilterOptions = (
   transactions: Transaction[],
   prefix: string,
 ): string[] => {
-  const defaultAppFilters = [prefix];
   const uniqueAppNames = new Set(
     transactions
       .filter(t => !t.stats_data.app.startsWith(prefix))
       .map(t => (t.stats_data.app ? t.stats_data.app : "(unset)")),
   );
 
-  return defaultAppFilters.concat(Array.from(uniqueAppNames));
+  return Array.from(uniqueAppNames);
 };
 
 export const collectStatementsText = (statements: Statement[]): string =>
