@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1423,6 +1424,11 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(ctx context.Context) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
 		fn()
 	}
+
+	if err := sc.preSplitHashShardedIndexRanges(ctx); err != nil {
+		return err
+	}
+
 	// Run through mutation state machine before backfill.
 	if err := sc.RunStateMachineBeforeBackfill(ctx); err != nil {
 		return err
@@ -1931,6 +1937,14 @@ type SchemaChangerTestingKnobs struct {
 	// TwoVersionLeaseViolation is called whenever a schema change transaction is
 	// unable to commit because it is violating the two version lease invariant.
 	TwoVersionLeaseViolation func()
+
+	// RunBeforeHashShardedIndexRangePreSplit is called before pre-splitting index
+	// ranges for hash sharded index.
+	RunBeforeHashShardedIndexRangePreSplit func(tbl *tabledesc.Mutable, kbDB *kv.DB, codec keys.SQLCodec) error
+
+	// RunAfterHashShardedIndexRangePreSplit is called after index ranges
+	// pre-splitting is done for hash sharded index.
+	RunAfterHashShardedIndexRangePreSplit func(tbl *tabledesc.Mutable, kbDB *kv.DB, codec keys.SQLCodec) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -2514,6 +2528,78 @@ func (sc *SchemaChanger) getDependentMutationsJobs(
 		}
 	}
 	return dependentJobs, nil
+}
+
+func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) error {
+	if err := sc.txn(ctx, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
+		tableDesc, err := descsCol.GetMutableTableByID(
+			ctx, txn, sc.descID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					IncludeOffline: true,
+					IncludeDropped: true,
+				},
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		if fn := sc.testingKnobs.RunBeforeHashShardedIndexRangePreSplit; fn != nil {
+			if err := fn(tableDesc, sc.db, sc.execCfg.Codec); err != nil {
+				return err
+			}
+		}
+
+		for _, m := range tableDesc.AllMutations() {
+			if m.MutationID() != sc.mutationID {
+				// Mutations are applied in a FIFO order. Only apply the first set of
+				// mutations if they have the mutation ID we're looking for.
+				break
+			}
+
+			if idx := m.AsIndex(); m.Adding() && m.DeleteOnly() && idx != nil {
+				if idx.IsSharded() {
+					splitAtShards := calculateSplitAtShards(maxHashShardedIndexRangePreSplit.Get(&sc.settings.SV), idx.GetSharded().ShardBuckets)
+					for _, shard := range splitAtShards {
+						keyPrefix := sc.execCfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(idx.GetID()))
+						splitKey := encoding.EncodeVarintAscending(keyPrefix, shard)
+						if err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+
+		if fn := sc.testingKnobs.RunAfterHashShardedIndexRangePreSplit; fn != nil {
+			if err := fn(tableDesc, sc.db, sc.execCfg.Codec); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// calculateSplitAtShards returns a slice of min(maxSplit, shardBucketCount)
+// shard numbers. Shard numbers are sampled with a fix step within
+// [0, shardBucketCount) range.
+func calculateSplitAtShards(maxSplit int64, shardBucketCount int32) []int64 {
+	splitCount := int(math.Min(float64(maxSplit), float64(shardBucketCount)))
+	step := float64(shardBucketCount) / float64(splitCount)
+	splitAtShards := make([]int64, splitCount)
+	for i := 0; i < splitCount; i++ {
+		splitAtShards[i] = int64(math.Floor(float64(i) * step))
+	}
+	return splitAtShards
 }
 
 // isCurrentMutationDiscarded returns if the current column mutation is made irrelevant
