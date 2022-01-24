@@ -669,3 +669,31 @@ ALTER TABLE table58683_1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_
 CREATE TABLE table58683_2 (col2 BOOL);
 ALTER TABLE table58683_2 EXPERIMENTAL_RELOCATE SELECT ARRAY[2], 2;
 SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.tableoid)::INT8 GROUP BY col2 HAVING bool_and(col2);
+
+# Regression test for #74736 - missing Get results when:
+#  - multiple ranges are involved, but the scan is not distributed; and
+#  - we need to paginate; and
+#  - the cardinality of the scan is more than ParallelScanResultThreshold.
+statement ok
+CREATE TABLE table74736 (k INT PRIMARY KEY, blob STRING);
+ALTER TABLE table74736 SPLIT AT VALUES (1000000);
+ALTER TABLE table74736 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 1000000);
+INSERT INTO table74736 SELECT x * 10000, repeat('a', 200000) FROM generate_series(1, 130) AS g(x);
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE table74736]
+----
+start_key  end_key   replicas  lease_holder
+NULL       /1000000  {1}       1
+/1000000   NULL      {2}       2
+
+statement ok
+SET DISTSQL = OFF
+
+query II
+SELECT count(*), sum_int(length(blob)) FROM table74736 WHERE (k >= 1 AND k <= 900000) OR k = 1200000 OR k = 1250000;
+----
+92  18400000
+
+statement ok
+SET DISTSQL = ON

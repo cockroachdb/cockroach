@@ -1244,16 +1244,69 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 func TestMultiRangeScanWithPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	keys := func(strs ...string) []roachpb.Key {
+		r := make([]roachpb.Key, len(strs))
+		for i, s := range strs {
+			r[i] = roachpb.Key(s)
+		}
+		return r
+	}
+
+	scan := func(startKey, endKey string) roachpb.Span {
+		return roachpb.Span{
+			Key:    roachpb.Key(startKey),
+			EndKey: roachpb.Key(endKey).Next(),
+		}
+	}
+
+	get := func(key string) roachpb.Span {
+		return roachpb.Span{
+			Key: roachpb.Key(key),
+		}
+	}
+
+	// Each testcase defines range split keys, a set of keys, and a set of
+	// operations (scans / gets) that together should return all the keys in
+	// order.
 	testCases := []struct {
 		splitKeys []roachpb.Key
 		keys      []roachpb.Key
+		// An operation is either a Scan or a Get, depending if the span EndKey is
+		// set.
+		operations []roachpb.Span
 	}{
-		{[]roachpb.Key{}, []roachpb.Key{roachpb.Key("a"), roachpb.Key("j"), roachpb.Key("z")}},
-		{[]roachpb.Key{roachpb.Key("m")},
-			[]roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}},
-		{[]roachpb.Key{roachpb.Key("h"), roachpb.Key("q")},
-			[]roachpb.Key{roachpb.Key("b"), roachpb.Key("f"), roachpb.Key("k"),
-				roachpb.Key("r"), roachpb.Key("w"), roachpb.Key("y")}},
+		{
+			splitKeys:  keys(),
+			keys:       keys("a", "j", "z"),
+			operations: []roachpb.Span{scan("a", "z")},
+		},
+
+		{
+			splitKeys:  keys("m"),
+			keys:       keys("a", "z"),
+			operations: []roachpb.Span{scan("a", "z")},
+		},
+
+		{
+			splitKeys:  keys("h", "q"),
+			keys:       keys("b", "f", "k", "r", "w", "y"),
+			operations: []roachpb.Span{scan("b", "y")},
+		},
+
+		{
+			splitKeys:  keys("h", "q"),
+			keys:       keys("b", "f", "k", "r", "w", "y"),
+			operations: []roachpb.Span{scan("b", "k"), scan("p", "z")},
+		},
+
+		{
+			// This test mixes Scans and Gets, used to make sure that the ResumeSpan
+			// is set correctly for Gets that were not performed (see #74736).
+			splitKeys:  keys("c", "f"),
+			keys:       keys("a", "b", "c", "d", "e", "f", "g", "h", "i"),
+			operations: []roachpb.Span{scan("a", "d"), get("d1"), get("e"), scan("f", "h"), get("i")},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1303,39 +1356,64 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 					for targetBytes := int64(1); ; targetBytes++ {
 						var numPages int
 						t.Run(fmt.Sprintf("targetBytes=%d,maxSpanRequestKeys=%d", targetBytes, msrq), func(t *testing.T) {
-							req := func(span roachpb.Span) roachpb.Request {
-								if reverse {
-									return roachpb.NewReverseScan(span.Key, span.EndKey, false)
-								}
-								return roachpb.NewScan(span.Key, span.EndKey, false)
-							}
+
 							// Paginate.
-							resumeSpan := &roachpb.Span{Key: tc.keys[0], EndKey: tc.keys[len(tc.keys)-1].Next()}
+							operations := tc.operations
+							if reverse {
+								operations = make([]roachpb.Span, len(operations))
+								for i := range operations {
+									operations[i] = tc.operations[len(operations)-i-1]
+								}
+							}
 							var keys []roachpb.Key
 							for {
 								numPages++
-								scan := req(*resumeSpan)
+
+								// Build the batch.
 								var ba roachpb.BatchRequest
-								ba.Add(scan)
+								for _, span := range operations {
+									var req roachpb.Request
+									switch {
+									case span.EndKey == nil:
+										req = roachpb.NewGet(span.Key, false /* forUpdate */)
+									case reverse:
+										req = roachpb.NewReverseScan(span.Key, span.EndKey, false /* forUpdate */)
+									default:
+										req = roachpb.NewScan(span.Key, span.EndKey, false /* forUpdate */)
+									}
+									ba.Add(req)
+								}
+
 								ba.Header.TargetBytes = targetBytes
 								ba.Header.MaxSpanRequestKeys = msrq
 								ba.Header.ReturnOnRangeBoundary = returnOnRangeBoundary
 								br, pErr := tds.Send(ctx, ba)
 								require.Nil(t, pErr)
-								var rows []roachpb.KeyValue
-								if reverse {
-									rows = br.Responses[0].GetReverseScan().Rows
-								} else {
-									rows = br.Responses[0].GetScan().Rows
+								for i := range operations {
+									resp := br.Responses[i]
+									if getResp := resp.GetGet(); getResp != nil {
+										if getResp.Value != nil {
+											keys = append(keys, operations[i].Key)
+										}
+										continue
+									}
+									var rows []roachpb.KeyValue
+									if reverse {
+										rows = resp.GetReverseScan().Rows
+									} else {
+										rows = resp.GetScan().Rows
+									}
+									for _, kv := range rows {
+										keys = append(keys, kv.Key)
+									}
 								}
-								for _, kv := range rows {
-									keys = append(keys, kv.Key)
+								operations = nil
+								for _, resp := range br.Responses {
+									if resumeSpan := resp.GetInner().Header().ResumeSpan; resumeSpan != nil {
+										operations = append(operations, *resumeSpan)
+									}
 								}
-								resumeSpan = br.Responses[0].GetInner().Header().ResumeSpan
-								if log.V(1) {
-									t.Logf("page #%d: scan %v -> keys (after) %v resume %v", scan.Header().Span(), numPages, keys, resumeSpan)
-								}
-								if resumeSpan == nil {
+								if len(operations) == 0 {
 									// Done with this pagination.
 									break
 								}
