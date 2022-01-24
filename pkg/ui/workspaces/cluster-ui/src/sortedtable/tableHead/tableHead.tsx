@@ -35,20 +35,18 @@ export const TableHead: React.FC<TableHeadProps> = ({
   const cellContentWrapper = cx("inner-content-wrapper");
   const arrowsClass = cx("sortable__actions");
 
-  function handleSort(picked: boolean, columnTitle: string) {
+  function handleSort(
+    newColumnSelected: boolean,
+    columnTitle: string,
+    prevValue: boolean,
+  ) {
     // If the columnTitle is different than the previous value, initial sort
-    // descending. If the same columnTitle is clicked multiple times consecutively,
-    // first change to ascending, then remove the sort key.
-    const ASCENDING = true;
-    const DESCENDING = false;
+    // descending. If is the same columnTitle the value is updated.
 
-    const direction = picked ? ASCENDING : DESCENDING;
-    const sortElementColumnTitle =
-      picked && sortSetting.ascending ? null : columnTitle;
-
+    const ascending = newColumnSelected ? false : !prevValue;
     onChangeSortSetting({
-      ascending: direction,
-      columnTitle: sortElementColumnTitle,
+      ascending,
+      columnTitle,
     });
   }
 
@@ -58,15 +56,21 @@ export const TableHead: React.FC<TableHeadProps> = ({
         {expandableConfig && <th className={thClass} />}
         {columns.map((c: SortableColumn, idx: number) => {
           const sortable = c.columnTitle !== (null || undefined);
-          const picked = c.name === sortSetting.columnTitle;
+          const newColumnSelected = c.name !== sortSetting.columnTitle;
           const style = { textAlign: c.titleAlign };
-          const cellAction = sortable ? () => handleSort(picked, c.name) : null;
+          const cellAction = sortable
+            ? () => handleSort(newColumnSelected, c.name, sortSetting.ascending)
+            : null;
           const cellClasses = cx(
             "head-wrapper__cell",
             "sorted__cell",
             sortable && "sorted__cell--sortable",
-            sortSetting.ascending && picked && "sorted__cell--ascending",
-            !sortSetting.ascending && picked && "sorted__cell--descending",
+            sortSetting.ascending &&
+              !newColumnSelected &&
+              "sorted__cell--ascending",
+            !sortSetting.ascending &&
+              !newColumnSelected &&
+              "sorted__cell--descending",
             firstCellBordered && idx === 0 && "cell-header",
           );
           const titleClasses = cx("column-title");
