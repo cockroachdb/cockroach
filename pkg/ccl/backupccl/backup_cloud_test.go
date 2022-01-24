@@ -62,7 +62,7 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	const numAccounts = 1000
 
 	ctx := context.Background()
-	tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
@@ -89,7 +89,7 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	const numAccounts = 1000
 
 	ctx := context.Background()
-	tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
@@ -120,7 +120,7 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	const numAccounts = 1000
 
 	ctx := context.Background()
-	tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}

@@ -911,6 +911,18 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
+// ExcludeDataFromBackup returns whether the replica is to be excluded from a
+// backup.
+func (r *Replica) ExcludeDataFromBackup() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.conf.ExcludeDataFromBackup
+}
+
+func (r *Replica) exludeReplicaFromBackupRLocked() bool {
+	return r.mu.conf.ExcludeDataFromBackup
+}
+
 // Version returns the replica version.
 func (r *Replica) Version() roachpb.Version {
 	if r.mu.state.Version == nil {
@@ -1514,8 +1526,9 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 		return nil
 	}
 	return &roachpb.BatchTimestampBeforeGCError{
-		Timestamp: ts,
-		Threshold: threshold,
+		Timestamp:              ts,
+		Threshold:              threshold,
+		DataExcludedFromBackup: r.exludeReplicaFromBackupRLocked(),
 	}
 }
 
