@@ -9,11 +9,12 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
+import moment from "moment";
+import { cockroach } from "src/js/protos";
 import { useDispatch, useSelector } from "react-redux";
 import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
-import { getHotRangesAction } from "../../redux/hotRanges/hotRangesActions";
-import { HotRangesState } from "../../redux/hotRanges/hotRangesReducer";
+import { refreshHotRanges } from "../../redux/apiReducers";
 import { selectHotRanges } from "../../redux/hotRanges/hotRangesSelectors";
 import HotRangesTable from "./hotRangesTable";
 import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
@@ -22,13 +23,23 @@ import classNames from "classnames/bind";
 import styles from "./hotRanges.module.styl";
 
 const cx = classNames.bind(styles);
+const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
+
 const HotRangesPage = () => {
   const dispatch = useDispatch();
-  const hotRanges: HotRangesState = useSelector(selectHotRanges);
+  const hotRanges = useSelector(selectHotRanges);
 
   useEffect(() => {
-    dispatch(getHotRangesAction());
-  }, [dispatch]);
+    if(!hotRanges.valid) {
+      dispatch(refreshHotRanges(new HotRangesRequest()));
+    }
+  }, [dispatch, hotRanges.valid]);
+
+  const formatCurrentDateTime = (datetime: moment.Moment) => {
+    return (
+      datetime.format("MMM DD, YYYY") + " at " + datetime.format("h:mm A") + " (UTC)"
+    );
+  };
 
   return (
     <div className="section">
@@ -37,12 +48,12 @@ const HotRangesPage = () => {
       <Text className={cx("hotranges-description")}>The hot ranges table shows ranges receiving a high number of reads or writes. By default the table is sorted by <br /> ranges with the highest QPS (Queries Per Second). Use this information to... <a href="" target="_blank">Learn more</a></Text>
       <ErrorBoundary>
         <Loading
-          loading={hotRanges.loading}
-          error={hotRanges.error}
+          loading={!hotRanges.data && !hotRanges.lastError}
+          error={hotRanges.lastError}
           render={() => (
             <HotRangesTable
-              hotRangesList={hotRanges.data}
-              lastUpdate={hotRanges.lastUpdate}
+              hotRangesList={hotRanges.data?.ranges}
+              lastUpdate={formatCurrentDateTime(hotRanges.setAt?.utc())}
             />
           )}
         />

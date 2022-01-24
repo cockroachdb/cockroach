@@ -34,7 +34,6 @@ import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 import { timeWindowReducer, TimeWindowState } from "./timewindow";
 import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
-import hotRangesReducer, { HotRangesState } from "./hotRanges/hotRangesReducer";
 import rootSaga from "./sagas";
 
 export interface AdminUIState {
@@ -47,7 +46,6 @@ export interface AdminUIState {
   timewindow: TimeWindowState;
   uiData: UIDataState;
   login: LoginAPIState;
-  hotRanges: HotRangesState;
 }
 
 const history = createHashHistory();
@@ -70,7 +68,6 @@ export function createAdminUIStore(historyInst: History<any>) {
       timewindow: timeWindowReducer,
       uiData: uiDataReducer,
       login: loginReducer,
-      hotRanges: hotRangesReducer,
     }),
     compose(
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(historyInst)),
