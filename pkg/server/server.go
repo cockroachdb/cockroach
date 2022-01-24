@@ -2156,11 +2156,6 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 		return nil
 	}
 
-	// Best effort at disabling the timeseries of the local node.
-	ts.TimeseriesStorageEnabled.Override(ctx, &s.ClusterSettings().SV, false)
-	ts.Resolution10sStorageTTL.Override(ctx, &s.ClusterSettings().SV, 999999*time.Hour)
-	ts.Resolution30mStorageTTL.Override(ctx, &s.ClusterSettings().SV, 999999*time.Hour)
-
 	// Suppress writing of node statuses for the local node (n1). If it wrote one,
 	// and the imported data also contains n1 but with a different set of stores,
 	// we'd effectively clobber the timeseries display for n1 (which relies on the
@@ -2168,6 +2163,24 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 	// fall). An alternative to this is setting a FirstStoreID and FirstNodeID that
 	// is not in use in the data set to import.
 	s.node.suppressNodeStatus.Set(true)
+
+	// Disable writing of new timeseries, as well as roll-ups and deletion.
+	for _, stmt := range []string{
+		"SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true';",
+		"SET CLUSTER SETTING timeseries.storage.enabled = 'false';",
+		"SET CLUSTER SETTING	timeseries.storage.resolution_10s.ttl = '99999h';",
+		"SET CLUSTER SETTING	timeseries.storage.resolution_30m.ttl = '99999h';",
+	} {
+		if _, err := s.sqlServer.internalExecutor.ExecEx(
+			ctx, "tsdump-cfg", nil, /* txn */
+			sessiondata.InternalExecutorOverride{
+				User: security.RootUserName(),
+			},
+			stmt,
+		); err != nil {
+			return errors.Wrap(err, stmt)
+		}
+	}
 
 	if tsImport == "-" {
 		// YOLO mode to look at timeseries after previous import error.
@@ -2260,7 +2273,13 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 
 	fakeStatuses := makeFakeNodeStatuses(storeToNode)
 	if err := checkFakeStatuses(fakeStatuses, storeIDs); err != nil {
-		deferError(errors.Wrapf(err, "consider updating the mapping file %s", knobs.ImportTimeseriesMappingFile))
+		// The checks are pretty strict and in particular make sure that there is at
+		// least one data point for each store. Sometimes stores are down for the
+		// time periods passed to tsdump or decommissioned nodes show up, etc; these
+		// are important to point out but often the data set is actually OK and we
+		// want to be able to view it.
+		deferError(errors.Wrapf(err, "consider updating the mapping file %s or restarting the server with "+
+			"COCKROACH_DEBUG_TS_IMPORT_FILE=- to ignore the error", knobs.ImportTimeseriesMappingFile))
 	}
 
 	// Write the statuses.
