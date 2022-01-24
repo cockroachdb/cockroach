@@ -393,8 +393,14 @@ func (u *sqlSymUnion) storageParams() []tree.StorageParam {
     }
     return nil
 }
+func (u *sqlSymUnion) storageParamKeys() []tree.Name {
+    if params, ok := u.val.([]tree.Name); ok {
+        return params
+    }
+    return nil
+}
 func (u *sqlSymUnion) persistence() tree.Persistence {
- return u.val.(tree.Persistence)
+  return u.val.(tree.Persistence)
 }
 func (u *sqlSymUnion) colType() *types.T {
     if colType, ok := u.val.(*types.T); ok && colType != nil {
@@ -1118,6 +1124,8 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
+%type <str> storage_parameter_key
+%type <tree.NameList> storage_parameter_key_list
 %type <tree.StorageParam> storage_parameter
 %type <[]tree.StorageParam> storage_parameter_list opt_table_with opt_with_storage_parameter_list
 
@@ -2370,6 +2378,12 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableSetStorageParams{
       StorageParams: $3.storageParams(),
+    }
+  }
+| RESET '(' storage_parameter_key_list ')'
+  {
+    $$.val = &tree.AlterTableResetStorageParams{
+      Params: $3.storageParamKeys(),
     }
   }
 
@@ -6592,12 +6606,22 @@ opt_create_table_on_commit:
     return unimplementedWithIssueDetail(sqllex, 46556, "drop")
   }
 
-storage_parameter:
-  name '=' var_value
+storage_parameter_key:
+  name
+| SCONST
+
+storage_parameter_key_list:
+  storage_parameter_key
   {
-    $$.val = tree.StorageParam{Key: tree.Name($1), Value: $3.expr()}
+    $$.val = []tree.Name{tree.Name($1)}
   }
-|  SCONST '=' var_value
+| storage_parameter_key_list ',' storage_parameter_key
+  {
+    $$.val = append($1.storageParamKeys(), tree.Name($3))
+  }
+
+storage_parameter:
+  storage_parameter_key '=' var_value
   {
     $$.val = tree.StorageParam{Key: tree.Name($1), Value: $3.expr()}
   }

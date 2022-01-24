@@ -978,6 +978,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+		case *tree.AlterTableResetStorageParams:
+			if err := paramparse.ResetStorageParameters(
+				params.ctx,
+				params.EvalContext(),
+				t.Params,
+				&paramparse.TableStorageParamObserver{},
+			); err != nil {
+				return err
+			}
+
 		case *tree.AlterTableRenameColumn:
 			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc, t.Column, t.NewName)
 			if err != nil {
