@@ -127,6 +127,7 @@ type Index interface {
 	// The remaining methods operate on the underlying descpb.IndexDescriptor object.
 
 	GetID() descpb.IndexID
+	GetConstraintID() descpb.ConstraintID
 	GetName() string
 	IsPartial() bool
 	IsUnique() bool
@@ -386,6 +387,9 @@ type ConstraintToUpdate interface {
 	// UniqueWithoutIndex returns the underlying unique without index constraint, if
 	// there is one.
 	UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint
+
+	// GetConstraintID returns the ID for the constraint.
+	GetConstraintID() descpb.ConstraintID
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.
