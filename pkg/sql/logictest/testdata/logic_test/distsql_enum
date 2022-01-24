@@ -1,5 +1,4 @@
 # LogicTest: 5node-default-configs !5node-metadata
-# cluster-opt: disable-span-configs
 
 # Regression test for nested tuple enum hydration (#74189)
 statement ok
@@ -66,7 +65,7 @@ ALTER TABLE t2 INJECT STATISTICS '[
   }
 ]'
 
-query T nodeidx=1
+query T nodeidx=1 retry
 EXPLAIN (VEC)
 SELECT x from t1 WHERE EXISTS (SELECT x FROM t2 WHERE t1.x=t2.x AND t2.y='hello')
 ----
