@@ -697,7 +697,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
-	priv := privilege.ReadData
+	priv := privilege.List{privilege.CONNECT}
 	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name:    SystemDatabaseName,
 		ID:      keys.SystemDatabaseID,
