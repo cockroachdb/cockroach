@@ -21,4 +21,5 @@ go_test(
         "//pkg/util/randutil",
         "@com_github_jackc_pgx_v4//:pgx",
     ],
+    visibility = ["//pkg/compose:__subpackages__"],
 )
