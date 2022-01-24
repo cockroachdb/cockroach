@@ -192,7 +192,6 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
-	var droppedIndexes []catalog.Index
 	var addedIndexSpans []roachpb.Span
 	var addedIndexes []descpb.IndexID
 
@@ -275,7 +274,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			if col := m.AsColumn(); col != nil {
 				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
-				// no-op
+				// no-op. Handled in (*schemaChanger).done by queueing an index gc job.
 			} else if c := m.AsConstraint(); c != nil {
 				constraintsToDrop = append(constraintsToDrop, c)
 			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil || m.AsMaterializedViewRefresh() != nil {
@@ -303,13 +302,6 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			return err
 		}
 		version = descs[tableDesc.ID].GetVersion()
-	}
-
-	// Drop indexes not to be removed by `ClearRange`.
-	if len(droppedIndexes) > 0 {
-		if err := sc.truncateIndexes(ctx, version, droppedIndexes); err != nil {
-			return err
-		}
 	}
 
 	// Add and drop columns.
@@ -782,73 +774,6 @@ func (sc *SchemaChanger) getTableVersion(
 		return nil, makeErrTableVersionMismatch(tableDesc.GetVersion(), version)
 	}
 	return tableDesc, nil
-}
-
-// truncateIndexes truncate the KV ranges corresponding to dropped indexes.
-//
-// The indexes are dropped chunk by chunk, each chunk being deleted in
-// its own txn.
-func (sc *SchemaChanger) truncateIndexes(
-	ctx context.Context, version descpb.DescriptorVersion, dropped []catalog.Index,
-) error {
-	log.Infof(ctx, "clearing data for %d indexes", len(dropped))
-
-	alloc := &tree.DatumAlloc{}
-	droppedIndexIDs := make([]uint32, len(dropped))
-	for i, idx := range dropped {
-		droppedIndexIDs[i] = uint32(idx.GetID())
-	}
-	for _, idx := range dropped {
-		if log.V(2) {
-			log.Infof(ctx, "drop index (%d, %d)",
-				sc.descID, sc.mutationID)
-		}
-
-		// Make a new txn just to drop this index.
-		if err := sc.txn(ctx, func(
-			ctx context.Context, txn *kv.Txn, tc *descs.Collection,
-		) error {
-			if fn := sc.execCfg.DistSQLRunTestingKnobs.RunBeforeBackfillChunk; fn != nil {
-				if err := fn(roachpb.Span{}); err != nil {
-					return err
-				}
-			}
-			if fn := sc.execCfg.DistSQLRunTestingKnobs.RunAfterBackfillChunk; fn != nil {
-				defer fn()
-			}
-
-			// Retrieve a lease for this table inside the current txn.
-			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
-			if err != nil {
-				return err
-			}
-			rd := row.MakeDeleter(
-				sc.execCfg.Codec, tableDesc, nil /* requestedCols */, &sc.settings.SV,
-				true /* internal */, sc.execCfg.GetRowMetrics(true /* internal */),
-			)
-			td := tableDeleter{rd: rd, alloc: alloc}
-			if err := td.init(ctx, txn, nil /* *tree.EvalContext */, &sc.settings.SV); err != nil {
-				return err
-			}
-			return td.clearIndex(ctx, idx)
-		}); err != nil {
-			return err
-		}
-
-		// All the data chunks have been removed. Now also removed the
-		// zone configs for the dropped indexes, if any.
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			table, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
-			if err != nil {
-				return err
-			}
-			return RemoveIndexZoneConfigs(ctx, txn, sc.execCfg, table, droppedIndexIDs)
-		}); err != nil {
-			return err
-		}
-	}
-	log.Info(ctx, "finished clearing data for indexes")
-	return nil
 }
 
 // getJobIDForMutationWithDescriptor returns a job id associated with a mutation given

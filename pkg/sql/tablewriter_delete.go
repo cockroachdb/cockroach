@@ -124,24 +124,6 @@ func (td *tableDeleter) deleteIndex(
 	return td.b.Results[0].ResumeSpanAsValue(), nil
 }
 
-func (td *tableDeleter) clearIndex(ctx context.Context, idx catalog.Index) error {
-	sp := td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.GetID())
-
-	// ClearRange cannot be run in a transaction, so create a
-	// non-transactional batch to send the request.
-
-	// TODO(sumeer): this is bypassing admission control, since it is not using
-	// the currently instrumented shared code paths.
-	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    sp.Key,
-			EndKey: sp.EndKey,
-		},
-	})
-	return td.txn.DB().Run(ctx, b)
-}
-
 func (td *tableDeleter) tableDesc() catalog.TableDescriptor {
 	return td.rd.Helper.TableDesc
 }
