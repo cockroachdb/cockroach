@@ -49,6 +49,7 @@ go_test(
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/colconv",

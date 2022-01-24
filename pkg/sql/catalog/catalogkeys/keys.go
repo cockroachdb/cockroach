@@ -36,6 +36,16 @@ var DefaultUserDBs = []string{
 	DefaultDatabaseName, PgDatabaseName,
 }
 
+// MinUserDescriptorID returns the smallest possible non-system descriptor ID
+// after a cluster is bootstrapped.
+func MinUserDescriptorID(idChecker keys.SystemIDChecker) uint32 {
+	id := uint32(keys.MaxSystemConfigDescID + 1)
+	for idChecker.IsSystemID(id) {
+		id++
+	}
+	return id
+}
+
 // MinNonDefaultUserDescriptorID returns the smallest possible user-created
 // descriptor ID after a cluster is bootstrapped.
 func MinNonDefaultUserDescriptorID(idChecker keys.SystemIDChecker) uint32 {

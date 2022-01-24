@@ -8,14 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package catprivilege
+package catprivilege_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -145,7 +146,7 @@ func TestFixPrivileges(t *testing.T) {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
 
-		MaybeFixPrivileges(
+		catprivilege.MaybeFixPrivileges(
 			&desc,
 			descpb.InvalidID,
 			descpb.InvalidID,
@@ -378,7 +379,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
-		modified := MaybeFixUsagePrivForTablesAndDBs(&desc)
+		modified := catprivilege.MaybeFixUsagePrivForTablesAndDBs(&desc)
 
 		if tc.modified != modified {
 			t.Errorf("expected modifed to be %v, was %v", tc.modified, modified)
@@ -485,8 +486,8 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
-		testParentID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(keys.TestingSystemIDChecker()))
-		MaybeFixPrivileges(&desc,
+		testParentID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(bootstrap.BootstrappedSystemIDChecker()))
+		catprivilege.MaybeFixPrivileges(&desc,
 			testParentID,
 			descpb.InvalidID,
 			privilege.Schema,

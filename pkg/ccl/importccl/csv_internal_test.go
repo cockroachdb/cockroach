@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -68,7 +69,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			)`,
 		},
 	}
-	parentID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(keys.TestingSystemIDChecker()))
+	parentID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(bootstrap.BootstrappedSystemIDChecker()))
 	tableID := parentID + 2
 
 	ctx := context.Background()
