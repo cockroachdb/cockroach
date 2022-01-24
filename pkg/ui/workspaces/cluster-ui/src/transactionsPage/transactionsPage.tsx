@@ -214,7 +214,6 @@ export class TransactionsPage extends React.Component<
 
   componentDidUpdate(): void {
     this.updateQueryParams();
-    this.refreshData();
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
@@ -330,54 +329,98 @@ export class TransactionsPage extends React.Component<
   };
 
   render(): React.ReactElement {
+    const {
+      data,
+      resetSQLStats,
+      nodeRegions,
+      isTenant,
+      onColumnsChange,
+      columns: userSelectedColumnsToShow,
+      sortSetting,
+      search,
+    } = this.props;
+    const internal_app_name_prefix = data?.internal_app_name_prefix || "";
+    const statements = data?.statements || [];
+    const { filters } = this.state;
+
+    // If the cluster is a tenant cluster we don't show info
+    // about nodes/regions.
+    const nodes = isTenant
+      ? []
+      : Object.keys(nodeRegions)
+          .map(n => Number(n))
+          .sort();
+    const regions = isTenant
+      ? []
+      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
+    // We apply the search filters and app name filters prior to aggregating across Node IDs
+    // in order to match what's done on the Statements Page.
+    //
+    // TODO(davidh): Once the redux layer for TransactionsPage is added to this repo,
+    // extract this work into the selector
+    const {
+      transactions: filteredTransactions,
+      activeFilters,
+    } = filterTransactions(
+      searchTransactionsData(search, data?.transactions || [], statements),
+      filters,
+      internal_app_name_prefix,
+      statements,
+      nodeRegions,
+      isTenant,
+    );
+
+    const appNames = getTrxAppFilterOptions(
+      data?.transactions || [],
+      internal_app_name_prefix,
+    );
+
     return (
       <div className={cx("table-area")}>
+        <PageConfig>
+          <PageConfigItem>
+            <Search
+              onSubmit={this.onSubmitSearchField as any}
+              onClear={this.onClearSearchField}
+              defaultValue={search}
+              placeholder={"Search Transactions"}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <Filter
+              onSubmitFilters={this.onSubmitFilters}
+              appNames={appNames}
+              regions={regions}
+              nodes={nodes.map(n => "n" + n)}
+              activeFilters={activeFilters}
+              filters={filters}
+              showRegions={regions.length > 1}
+              showNodes={nodes.length > 1}
+            />
+          </PageConfigItem>
+          <PageConfigItem className={commonStyles("separator")}>
+            <TimeScaleDropdown
+              currentScale={this.props.timeScale}
+              setTimeScale={this.changeTimeScale}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <button className={cx("reset-btn")} onClick={this.resetTime}>
+              reset time
+            </button>
+          </PageConfigItem>
+          <PageConfigItem className={commonStyles("separator")}>
+            <ClearStats
+              resetSQLStats={resetSQLStats}
+              tooltipType="transaction"
+            />
+          </PageConfigItem>
+        </PageConfig>
         <Loading
           loading={!this.props?.data}
           error={this.props?.error}
           render={() => {
-            const {
-              data,
-              resetSQLStats,
-              nodeRegions,
-              isTenant,
-              onColumnsChange,
-              columns: userSelectedColumnsToShow,
-              sortSetting,
-              search,
-            } = this.props;
-            const { pagination, filters } = this.state;
-            const { statements, internal_app_name_prefix } = data;
-            const appNames = getTrxAppFilterOptions(
-              data.transactions,
-              internal_app_name_prefix,
-            );
-            // If the cluster is a tenant cluster we don't show info
-            // about nodes/regions.
-            const nodes = isTenant
-              ? []
-              : Object.keys(nodeRegions)
-                  .map(n => Number(n))
-                  .sort();
-            const regions = isTenant
-              ? []
-              : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
-            // We apply the search filters and app name filters prior to aggregating across Node IDs
-            // in order to match what's done on the Statements Page.
-            //
-            // TODO(davidh): Once the redux layer for TransactionsPage is added to this repo,
-            // extract this work into the selector
-            const {
-              transactions: filteredTransactions,
-              activeFilters,
-            } = filterTransactions(
-              searchTransactionsData(search, data.transactions, statements),
-              filters,
-              internal_app_name_prefix,
-              statements,
-              nodeRegions,
-              isTenant,
-            );
+            const { pagination } = this.state;
             const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
               filteredTransactions,
               statements,
@@ -436,48 +479,6 @@ export class TransactionsPage extends React.Component<
 
             return (
               <>
-                <PageConfig>
-                  <PageConfigItem>
-                    <Search
-                      onSubmit={this.onSubmitSearchField as any}
-                      onClear={this.onClearSearchField}
-                      defaultValue={search}
-                      placeholder={"Search Transactions"}
-                    />
-                  </PageConfigItem>
-                  <PageConfigItem>
-                    <Filter
-                      onSubmitFilters={this.onSubmitFilters}
-                      appNames={appNames}
-                      regions={regions}
-                      nodes={nodes.map(n => "n" + n)}
-                      activeFilters={activeFilters}
-                      filters={filters}
-                      showRegions={regions.length > 1}
-                      showNodes={nodes.length > 1}
-                    />
-                  </PageConfigItem>
-                  <PageConfigItem className={commonStyles("separator")}>
-                    <TimeScaleDropdown
-                      currentScale={this.props.timeScale}
-                      setTimeScale={this.changeTimeScale}
-                    />
-                  </PageConfigItem>
-                  <PageConfigItem>
-                    <button
-                      className={cx("reset-btn")}
-                      onClick={this.resetTime}
-                    >
-                      reset time
-                    </button>
-                  </PageConfigItem>
-                  <PageConfigItem className={commonStyles("separator")}>
-                    <ClearStats
-                      resetSQLStats={resetSQLStats}
-                      tooltipType="transaction"
-                    />
-                  </PageConfigItem>
-                </PageConfig>
                 <section className={statisticsClasses.tableContainerClass}>
                   <ColumnsSelector
                     options={tableColumns}
