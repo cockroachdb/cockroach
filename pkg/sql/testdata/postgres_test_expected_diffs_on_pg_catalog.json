@@ -1,10 +1,10 @@
 {
-  "version": "13.3",
+  "version": "14.1",
   "diffSummary": {
-    "TotalTables": 129,
-    "TotalColumns": 1192,
+    "TotalTables": 134,
+    "TotalColumns": 1267,
     "MissingTables": 0,
-    "MissingColumns": 0,
+    "MissingColumns": 2,
     "DatatypeMismatches": 19
   },
   "diffs": {
@@ -143,7 +143,12 @@
         "expectedOid": 23,
         "expectedDataType": "int4"
       }
-    }
+    },
+    "pg_statistic_ext_data": {
+      "stxdexpr": null
+    },
   },
-  "unimplementedTypes": {}
+  "unimplementedTypes": {
+    "12028": "_pg_statistic"
+  }
 }

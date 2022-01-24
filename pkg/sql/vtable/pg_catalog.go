@@ -94,6 +94,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attfdwoptions STRING[],
 	atthasmissing BOOL,
 	attmissingval STRING[],
+	attcompression "char",
   INDEX(attrelid)
 )`
 
@@ -449,7 +450,8 @@ const PGCatalogInherits = `
 CREATE TABLE pg_catalog.pg_inherits (
 	inhrelid OID,
 	inhparent OID,
-	inhseqno INT4
+	inhseqno INT4,
+	inhdetachpending BOOL
 )`
 
 // PGCatalogLanguage describes the schema of the pg_catalog.pg_language table.
@@ -485,7 +487,8 @@ CREATE TABLE pg_catalog.pg_locks (
   pid INT4,
   mode TEXT,
   granted BOOLEAN,
-  fastpath BOOLEAN
+  fastpath BOOLEAN,
+	waitstart TIMESTAMPTZ
 )`
 
 // PGCatalogMatViews describes the schema of the pg_catalog.pg_matviews table.
@@ -572,7 +575,9 @@ CREATE TABLE pg_catalog.pg_prepared_statements (
 	statement TEXT,
 	prepare_time TIMESTAMPTZ,
 	parameter_types REGTYPE[],
-	from_sql boolean
+	from_sql boolean,
+	generic_plans INT,
+	custom_plans INT
 )`
 
 // PGCatalogProc describes the schema of the pg_catalog.pg_proc table.
@@ -610,7 +615,8 @@ CREATE TABLE pg_catalog.pg_proc (
 	proconfig STRING[],
 	proacl STRING[],
 	prokind "char",
-	prosupport REGPROC
+	prosupport REGPROC,
+	prosqlbody STRING
 )`
 
 // PGCatalogRange describes the schema of the pg_catalog.pg_range table.
@@ -622,7 +628,8 @@ CREATE TABLE pg_catalog.pg_range (
 	rngcollation OID,
 	rngsubopc OID,
 	rngcanonical OID,
-	rngsubdiff OID
+	rngsubdiff OID,
+	rngmultitypid OID
 )`
 
 // PGCatalogRewrite describes the schema of the pg_catalog.pg_rewrite table.
@@ -810,6 +817,7 @@ CREATE TABLE pg_catalog.pg_type (
 	typdefaultbin STRING,
 	typdefault STRING,
 	typacl STRING[],
+	typsubscript REGPROC,
   INDEX(oid)
 )`
 
@@ -864,7 +872,8 @@ CREATE TABLE pg_catalog.pg_stat_activity (
 	backend_xmin INTEGER,
 	query TEXT,
 	backend_type STRING,
-	leader_pid INT4
+	leader_pid INT4,
+	query_id INT
 )`
 
 // PGCatalogSecurityLabel describes the schema of the pg_catalog.pg_seclabel
@@ -1129,7 +1138,9 @@ CREATE TABLE pg_catalog.pg_subscription (
 	subconninfo STRING,
 	subdbid OID,
 	subenabled BOOL,
-	subowner OID
+	subowner OID,
+	subbinary BOOL,
+	substream BOOL
 )`
 
 // PgCatalogAmproc is an empty table created by pg_catalog_test
@@ -1250,7 +1261,8 @@ CREATE TABLE pg_catalog.pg_statistic_ext (
 	stxowner OID,
 	stxstattarget INT4,
 	stxkeys INT2VECTOR,
-	stxkind "char"[]
+	stxkind "char"[],
+	stxexprs STRING
 )`
 
 // PgCatalogReplicationOrigin is an empty table created by pg_catalog_test
@@ -1322,7 +1334,8 @@ CREATE TABLE pg_catalog.pg_replication_slots (
 	slot_name NAME,
 	active_pid INT4,
 	slot_type STRING,
-	temporary BOOL
+	temporary BOOL,
+	two_phase BOOL
 )`
 
 //PgCatalogInitPrivs is an empty table in the pg_catalog that is not implemented yet
@@ -1396,7 +1409,14 @@ CREATE TABLE pg_catalog.pg_stat_database (
 	checksum_last_failure TIMESTAMPTZ,
 	blk_read_time FLOAT,
 	blk_write_time FLOAT,
-	stats_reset TIMESTAMPTZ
+	stats_reset TIMESTAMPTZ,
+	idle_in_transaction_time FLOAT,
+	sessions INT,
+	sessions_abandoned INT,
+	sessions_fatal INT,
+	sessions_killed INT,
+	session_time FLOAT,
+	active_time FLOAT
 )`
 
 //PgCatalogStatDatabaseConflicts is an empty table in the pg_catalog that is not implemented yet
@@ -1994,7 +2014,8 @@ CREATE TABLE pg_catalog.pg_stats_ext (
 	statistics_name NAME,
 	statistics_owner NAME,
 	tablename NAME,
-	attnames NAME[]
+	attnames NAME[],
+	exprs STRING[]
 )`
 
 //PgCatalogStatisticExtData is an empty table in the pg_catalog that is not implemented yet
@@ -2004,4 +2025,83 @@ CREATE TABLE pg_catalog.pg_statistic_ext_data (
 	stxdmcv BYTES,
 	stxdndistinct BYTES,
 	stxoid OID
+)`
+
+//PgCatalogStatsExtExprs is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatsExtExprs = `
+CREATE TABLE pg_catalog.pg_stats_ext_exprs (
+	schemaname NAME,
+	tablename NAME,
+	statistics_schemaname NAME,
+	statistics_name NAME,
+	statistics_owner NAME,
+	expr STRING,
+	null_frac FLOAT4,
+	avg_width INT4,
+	n_distinct FLOAT4,
+	most_common_vals STRING[],
+	most_common_freqs FLOAT4[],
+	histogram_bounds STRING[],
+	correlation FLOAT4,
+	most_common_elems STRING[],
+	most_common_elem_freqs FLOAT4[],
+	elem_count_histogram FLOAT4[]
+)`
+
+//PgCatalogStatProgressCopy is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatProgressCopy = `
+CREATE TABLE pg_catalog.pg_stat_progress_copy (
+	pid INT4,
+	datid OID,
+	datname NAME,
+	relid OID,
+	command STRING,
+	type STRING,
+	bytes_processed INT,
+	bytes_total INT,
+	tuples_processed INT,
+	tuples_excluded INT
+)`
+
+//PgCatalogBackendMemoryContexts is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogBackendMemoryContexts = `
+CREATE TABLE pg_catalog.pg_backend_memory_contexts (
+	name STRING,
+	ident STRING,
+	parent STRING,
+	level INT4,
+	total_bytes INT,
+	total_nblocks INT,
+	free_bytes INT,
+	free_chunks INT,
+	used_bytes INT
+)`
+
+//PgCatalogStatWal is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatWal = `
+CREATE TABLE pg_catalog.pg_stat_wal (
+	wal_records INT,
+	wal_fpi INT,
+	wal_bytes DECIMAL,
+	wal_buffers_full INT,
+	wal_write INT,
+	wal_sync INT,
+	wal_write_time FLOAT,
+	wal_sync_time FLOAT,
+	stats_reset TIMESTAMPTZ
+)`
+
+//PgCatalogStatReplicationSlots is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogStatReplicationSlots = `
+CREATE TABLE pg_catalog.pg_stat_replication_slots (
+	slot_name STRING,
+	spill_txns INT,
+	spill_count INT,
+	spill_bytes INT,
+	stream_txns INT,
+	stream_count INT,
+	stream_bytes INT,
+	total_txns INT,
+	total_bytes INT,
+	stats_reset TIMESTAMPTZ
 )`
