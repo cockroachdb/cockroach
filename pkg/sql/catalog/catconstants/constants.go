@@ -245,6 +245,7 @@ const (
 	PgCatalogAuthMembersTableID
 	PgCatalogAvailableExtensionVersionsTableID
 	PgCatalogAvailableExtensionsTableID
+	PgCatalogBackendMemoryContextsTableID
 	PgCatalogCastTableID
 	PgCatalogClassTableID
 	PgCatalogCollationTableID
@@ -316,8 +317,10 @@ const (
 	PgCatalogStatProgressAnalyzeTableID
 	PgCatalogStatProgressBasebackupTableID
 	PgCatalogStatProgressClusterTableID
+	PgCatalogStatProgressCopyTableID
 	PgCatalogStatProgressCreateIndexTableID
 	PgCatalogStatProgressVacuumTableID
+	PgCatalogStatReplicationSlotsTableID
 	PgCatalogStatReplicationTableID
 	PgCatalogStatSlruTableID
 	PgCatalogStatSslTableID
@@ -328,6 +331,7 @@ const (
 	PgCatalogStatUserIndexesTableID
 	PgCatalogStatUserTablesTableID
 	PgCatalogStatWalReceiverTableID
+	PgCatalogStatWalTableID
 	PgCatalogStatXactAllTablesTableID
 	PgCatalogStatXactSysTablesTableID
 	PgCatalogStatXactUserFunctionsTableID
@@ -344,6 +348,7 @@ const (
 	PgCatalogStatisticExtDataTableID
 	PgCatalogStatisticExtTableID
 	PgCatalogStatisticTableID
+	PgCatalogStatsExtExprsTableID
 	PgCatalogStatsExtTableID
 	PgCatalogStatsTableID
 	PgCatalogSubscriptionRelTableID
