@@ -1,0 +1,52 @@
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+----
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t1'
+----
+56
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t2'
+----
+57
+
+# We only expect there to be span config entries for tables t1 and t2.
+translate database=db
+----
+/Table/5{6-7}                              range default
+/Table/5{7-8}                              range default
+
+# Alter table t1 to mark its data ephemeral.
+exec-sql
+ALTER TABLE db.t1 SET EPHEMERAL DATA
+----
+
+translate database=db
+----
+/Table/5{6-7}                              ephemeral_data=true
+/Table/5{7-8}                              range default
+
+# Translating the tables in the database individually should result in the same
+# config as above.
+
+translate database=db table=t1
+----
+/Table/5{6-7}                              ephemeral_data=true
+
+translate database=db table=t2
+----
+/Table/5{7-8}                              range default
+
+# Alter table t1 to unmark its data ephemeral.
+exec-sql
+ALTER TABLE db.t1 SET NOT EPHEMERAL DATA
+----
+
+translate database=db
+----
+/Table/5{6-7}                              range default
+/Table/5{7-8}                              range default

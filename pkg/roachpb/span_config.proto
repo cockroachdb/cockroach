@@ -140,6 +140,14 @@ message SpanConfig {
   // preferred option to least. The first preference that an existing replica of
   // a range matches will take priority for the lease.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+  // EphemeralData specifies if the range has been marked as ephemeral.
+  // Ephemeral data is assumed to have a short GC.TTL, and is therefore handled
+  // specially for certain operations that rely on reading revisions. egs:
+  // BACKUP. Refer to the comment above `TableDescriptor.ephemeral` in
+  // pkg/sql/catalog/descpb/structured.proto.
+  bool ephemeral_data = 10;
+
+  // Next ID: 11
 }
 
 // SpanConfigEntry ties a span to its corresponding config.

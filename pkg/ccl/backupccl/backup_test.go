@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -9190,4 +9191,116 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 		sqlDB.Exec(t, "DROP DATABASE trad_fkdb;")
 		sqlDB.Exec(t, "DROP DATABASE inc_fkdb;")
 	}
+}
+
+func TestEphemeralBackupAndRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, iodir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
+					SpanConfig: &spanconfig.TestingKnobs{
+						SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
+					},
+				},
+			},
+		})
+	defer cleanupFn()
+
+	_, restoreDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, iodir, InitManualReplication,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
+				},
+			},
+		})
+	defer cleanup()
+	restoreDB.Exec(t, `CREATE DATABASE data`)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+
+	sqlDB.Exec(t, `CREATE TABLE data.foo (id INT, INDEX bar(id))`)
+	sqlDB.Exec(t, `INSERT INTO data.foo select * from generate_series(1,10)`)
+
+	checkNumRestoredRows := func(backupDir string, retryAttempt, expectedRows int) error {
+		backupPath := fmt.Sprintf("%s/%d", backupDir, retryAttempt)
+		defer func() {
+			restoreDB.Exec(t, `DROP TABLE IF EXISTS data.foo`)
+		}()
+
+		sqlDB.Exec(t, `BACKUP TABLE data.foo TO $1`, backupPath)
+		restoreDB.Exec(t, `RESTORE TABLE data.foo FROM $1`, backupPath)
+
+		res := restoreDB.QueryStr(t, `SELECT count(*) FROM data.foo`)
+		numRows, err := strconv.Atoi(res[0][0])
+		require.NoError(t, err)
+		if numRows != expectedRows {
+			return errors.Newf("expected %d rows, but found %d", expectedRows, numRows)
+		}
+		return nil
+	}
+
+	// Set table to ephemeral and back it up. The ExportRequest should be a noop
+	// and backup no data.
+	sqlDB.Exec(t, `ALTER TABLE data.foo SET EPHEMERAL DATA`)
+
+	var retryAttempt int
+	testutils.SucceedsSoon(t, func() error {
+		defer func() {
+			retryAttempt++
+		}()
+		return checkNumRestoredRows(LocalFoo, retryAttempt, 0)
+	})
+
+	// Set table to non-ephemeral and backup the table once again. This time the
+	// restored table should have all the rows.
+	sqlDB.Exec(t, `ALTER TABLE foo SET NOT EPHEMERAL DATA`)
+
+	nonEphemeralBackupDir := fmt.Sprintf("%s/nonephemeral", LocalFoo)
+	testutils.SucceedsSoon(t, func() error {
+		defer func() {
+			retryAttempt++
+		}()
+		return checkNumRestoredRows(nonEphemeralBackupDir, retryAttempt, 10)
+	})
+}
+
+func TestEphemeralExportRequestBelowGCThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	var failed atomic.Value
+	failed.Store(false)
+	params := base.TestServerArgs{}
+	localExternalDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	params.ExternalIODir = localExternalDir
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+			_, ok := request.GetArg(roachpb.Export)
+			if !ok {
+				return nil
+			}
+			if failed.Load().(bool) {
+				return nil
+			}
+			failed.Store(true)
+			return roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+				Timestamp:     hlc.Timestamp{},
+				Threshold:     hlc.Timestamp{},
+				EphemeralData: true,
+			})
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	tdb.Exec(t, "BACKUP TABLE foo TO $1", LocalFoo)
 }

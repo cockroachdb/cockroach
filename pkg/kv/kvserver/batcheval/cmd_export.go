@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -109,6 +110,17 @@ func evalExport(
 		evalExportTrace.Value = fmt.Sprintf("evaluating Export on remote node %d", cArgs.EvalCtx.NodeID())
 	}
 	evalExportSpan.RecordStructured(&evalExportTrace)
+
+	// Table's with ephemeral data are expected to be configured with a short GC
+	// TTL. Additionally, backup excludes such ephemeral table's from being
+	// protected from GC when writing its ProtectedTimestamp record. The
+	// ExportRequest is likely to find its target data has been GC'ed at this
+	// point, and so if the range being exported is marked as ephemeral, we do not
+	// want to send back any row data to be backed up.
+	if cArgs.EvalCtx.IsEphemeralData() {
+		log.Infof(ctx, "[%s, %s) marked as ephemeral, returning empty ExportResponse", args.Key, args.EndKey)
+		return result.Result{}, nil
+	}
 
 	if !args.ReturnSST {
 		return result.Result{}, errors.New("ReturnSST is required")

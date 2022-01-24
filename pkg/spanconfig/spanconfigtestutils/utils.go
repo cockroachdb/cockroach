@@ -236,6 +236,9 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 	if !reflect.DeepEqual(conf.LeasePreferences, defaultConf.LeasePreferences) {
 		diffs = append(diffs, fmt.Sprintf("lease_preferences=%v", conf.VoterConstraints))
 	}
+	if conf.EphemeralData != defaultConf.EphemeralData {
+		diffs = append(diffs, fmt.Sprintf("ephemeral_data=%v", conf.EphemeralData))
+	}
 
 	return strings.Join(diffs, " ")
 }

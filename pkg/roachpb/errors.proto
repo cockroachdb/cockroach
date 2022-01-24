@@ -478,6 +478,9 @@ message IntegerOverflowError {
 message BatchTimestampBeforeGCError {
   optional util.hlc.Timestamp Timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
+  // EphemeralData is set to true if the request is targeting a range that has
+  // been marked as ephemeral via `ALTER TABLE ... SET EPHEMERAL DATA.
+  optional bool ephemeral_data = 3 [(gogoproto.nullable) = false];
 }
 
 // An IntentMissingError indicates that a QueryIntent request expected

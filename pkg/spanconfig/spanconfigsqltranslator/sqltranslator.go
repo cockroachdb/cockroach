@@ -222,6 +222,23 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 	return entries, nil
 }
 
+// This method mutates the passed in `entries`.
+func setEphemeralDataForTable(entries *[]roachpb.SpanConfigEntry, desc catalog.TableDescriptor) {
+	for i := range *entries {
+		(*entries)[i].Config.EphemeralData = desc.IsEphemeral()
+	}
+}
+
+// hydrateSpanConfigurationsForTable hydrates fields in a table's span
+// configurations that are not derived from the table's zone configuration.
+//
+// This method mutates the passed in `entries`.
+func hydrateSpanConfigurationsForTable(
+	entries *[]roachpb.SpanConfigEntry, desc catalog.Descriptor,
+) {
+	setEphemeralDataForTable(entries, desc.(catalog.TableDescriptor))
+}
+
 // generateSpanConfigurationsForTable generates the span configurations
 // corresponding to the given tableID. It uses a transactional view of
 // system.zones and system.descriptors to do so.
@@ -279,6 +296,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			})
 		}
 
+		hydrateSpanConfigurationsForTable(&entries, desc)
 		return entries, nil
 
 		// TODO(irfansharif): There's an attack vector here that we haven't
@@ -363,6 +381,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			},
 		)
 	}
+	hydrateSpanConfigurationsForTable(&entries, desc)
 	return entries, nil
 }
 

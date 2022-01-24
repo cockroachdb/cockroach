@@ -909,6 +909,17 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
+// IsEphemeralData returns whether the replica is marked as ephemeral.
+func (r *Replica) IsEphemeralData() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.conf.EphemeralData
+}
+
+func (r *Replica) isEphemeralRLocked() bool {
+	return r.mu.conf.EphemeralData
+}
+
 // Version returns the replica version.
 func (r *Replica) Version() roachpb.Version {
 	if r.mu.state.Version == nil {
@@ -1503,8 +1514,9 @@ func (r *Replica) checkTSAboveGCThresholdRLocked(
 		return nil
 	}
 	return &roachpb.BatchTimestampBeforeGCError{
-		Timestamp: ts,
-		Threshold: threshold,
+		Timestamp:     ts,
+		Threshold:     threshold,
+		EphemeralData: r.isEphemeralRLocked(),
 	}
 }
 
