@@ -995,8 +995,8 @@ other_db       testuser  DROP
 postgres       admin     ALL
 postgres       public    CONNECT
 postgres       root      ALL
-system         admin     GRANT
-system         root      GRANT
+system         admin     CONNECT
+system         root      CONNECT
 test           admin     ALL
 test           public    CONNECT
 test           root      ALL
@@ -1022,8 +1022,8 @@ other_db       testuser  DROP
 postgres       admin     ALL
 postgres       public    CONNECT
 postgres       root      ALL
-system         admin     GRANT
-system         root      GRANT
+system         admin     CONNECT
+system         root      CONNECT
 test           admin     ALL
 test           public    CONNECT
 test           root      ALL

@@ -97,6 +97,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		grantOptionMigration,
 	),
+	migration.NewTenantMigration(
+		"track grant options on users and enable granting/revoking with them",
+		toCV(clusterversion.RemoveIncompatibleDatabasePrivileges),
+		NoPrecondition,
+		runRemoveInvalidDatabasePrivileges,
+	),
 }
 
 func init() {
