@@ -463,12 +463,12 @@ func (scf schemaCodeFixer) fixVtable(
 		}
 
 		first := true
-		for tableName, columns := range unimplementedTables {
+		for tableName, tableInfo := range unimplementedTables {
 			if _, ok := existingTables[tableName]; ok {
 				// Table already implemented.
 				continue
 			}
-			createTable, err := scf.createTableConstant(tableName, columns)
+			createTable, err := scf.createTableConstant(tableName, tableInfo)
 			if err != nil {
 				// We can not implement this table as this uses types not implemented.
 				t.Log(err)
@@ -503,7 +503,7 @@ func getMissingColumnsText(
 	if _, fixable := nilPopulateTables[constName]; !fixable {
 		return ""
 	}
-	columns, found := unimplementedColumns[tableName]
+	tableInfo, found := unimplementedColumns[tableName]
 	if !found {
 		return ""
 	}
@@ -513,8 +513,8 @@ func getMissingColumnsText(
 		// Previous line already had comma.
 		prefix = "\n"
 	}
-	for columnName, columnType := range columns {
-		formatColumn(&sb, prefix, columnName, columnType)
+	for _, columnName := range *tableInfo.Order {
+		formatColumn(&sb, prefix, columnName, tableInfo.Columns[columnName])
 		pgCode.addRowPositions.addMissingColumn(constName, columnName)
 		prefix = ",\n"
 	}
@@ -769,17 +769,17 @@ func (scf schemaCodeFixer) constantName(tableName string, suffix string) string 
 
 // createTableConstant formats the text for vtable constants.
 func (scf schemaCodeFixer) createTableConstant(
-	tableName string, columns PGMetadataColumns,
+	tableName string, tableInfo PGMetadataTableInfo,
 ) (string, error) {
 	var sb strings.Builder
 	constName := scf.constantName(tableName, "")
-	if notImplementedTypes := columns.getUnimplementedTypes(); len(notImplementedTypes) > 0 {
+	if notImplementedTypes := tableInfo.Columns.getUnimplementedTypes(); len(notImplementedTypes) > 0 {
 		return "", fmt.Errorf("not all types are implemented %s: %v", tableName, notImplementedTypes)
 	}
 
 	sb.WriteString("\n//")
 	sb.WriteString(constName)
-	sb.WriteString(" is an empty table in the pg_catalog that is not implemented yet\n")
+	sb.WriteString(fmt.Sprintf(" is an empty table in the %s that is not implemented yet\n", scf.schema.name))
 	sb.WriteString("const ")
 	sb.WriteString(constName)
 	sb.WriteString(" = `\n")
@@ -789,8 +789,8 @@ func (scf schemaCodeFixer) createTableConstant(
 	sb.WriteString(tableName)
 	sb.WriteString(" (\n")
 	prefix := ""
-	for columnName, columnType := range columns {
-		formatColumn(&sb, prefix, columnName, columnType)
+	for _, columnName := range *tableInfo.Order {
+		formatColumn(&sb, prefix, columnName, tableInfo.Columns[columnName])
 		prefix = ",\n"
 	}
 	sb.WriteString("\n)`\n")
@@ -1435,10 +1435,10 @@ func (d *VirtualSchemaDiffTool) Run() {
 		diffs = make(PGMetadataTableDiffs)
 	}
 
-	for pgTable, pgColumns := range pgTables {
+	for pgTable, pgTableInfo := range pgTables {
 		sum.TotalTables++
 		d.TestTable(pgTable, func(t *testing.T) {
-			crdbColumns, ok := crdbTables[pgTable]
+			crdbTableInfo, ok := crdbTables[pgTable]
 			expectedMissingTable := diffs.isExpectedMissingTable(pgTable)
 			if !ok {
 				if !expectedMissingTable {
@@ -1452,9 +1452,10 @@ func (d *VirtualSchemaDiffTool) Run() {
 				return
 			}
 
-			for expColumnName, expColumn := range pgColumns {
+			for _, expColumnName := range *pgTableInfo.Order {
+				expColumn := pgTableInfo.Columns[expColumnName]
 				sum.TotalColumns++
-				gotColumn, ok := crdbColumns[expColumnName]
+				gotColumn, ok := crdbTableInfo.Columns[expColumnName]
 				expectedMissingColumn := diffs.isExpectedMissingColumn(pgTable, expColumnName)
 				if !ok {
 					if !expectedMissingColumn {

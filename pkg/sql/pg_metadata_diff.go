@@ -44,8 +44,7 @@ const GetPGMetadataSQL = `
 	JOIN pg_namespace n ON n.oid = c.relnamespace
 	WHERE n.nspname = $1
 	AND a.attnum > 0
-  AND c.relkind != 'i'
-	ORDER BY 1, 2;
+  AND c.relkind != 'i';
 `
 
 // Summary will keep accountability for any unexpected difference and report it in the log.
@@ -86,8 +85,14 @@ type PGMetadataColumnType struct {
 // PGMetadataColumns maps columns names to datatypes.
 type PGMetadataColumns map[string]*PGMetadataColumnType
 
+// PGMetadataTableInfo represents a table with column mapping and insertion order.
+type PGMetadataTableInfo struct {
+	Order   *[]string         `json:"order"`
+	Columns PGMetadataColumns `json:"columns"`
+}
+
 // PGMetadataTables maps tables with columns.
-type PGMetadataTables map[string]PGMetadataColumns
+type PGMetadataTables map[string]PGMetadataTableInfo
 
 // PGMetadataFile stores the schema gotten from postgres/mysql.
 type PGMetadataFile struct {
@@ -116,15 +121,21 @@ func (d PGMetadataTableDiffs) addColumn(
 	columns[columnName] = column
 }
 
-func (p PGMetadataTables) addColumn(tableName, columnName string, column *PGMetadataColumnType) {
-	columns, ok := p[tableName]
+func (p PGMetadataTables) addColumn(
+	tableName string, columnName string, column *PGMetadataColumnType,
+) {
+	tableInfo, ok := p[tableName]
 
 	if !ok {
-		columns = make(PGMetadataColumns)
-		p[tableName] = columns
+		tableInfo = PGMetadataTableInfo{
+			Order:   &[]string{},
+			Columns: make(PGMetadataColumns),
+		}
+		p[tableName] = tableInfo
 	}
 
-	columns[columnName] = column
+	*tableInfo.Order = append(*tableInfo.Order, columnName)
+	tableInfo.Columns[columnName] = column
 }
 
 // AddColumnMetadata is used to load data from postgres or cockroach pg_catalog schema
@@ -278,7 +289,7 @@ func Save(writer io.Writer, file interface{}) {
 func (d PGMetadataTableDiffs) getUnimplementedTables(source PGMetadataTables) PGMetadataTables {
 	unimplementedTables := make(PGMetadataTables)
 	for tableName := range d {
-		if len(d[tableName]) == 0 && len(source[tableName].getUnimplementedTypes()) == 0 {
+		if len(d[tableName]) == 0 && len(source[tableName].Columns.getUnimplementedTypes()) == 0 {
 			unimplementedTables[tableName] = source[tableName]
 		}
 	}
@@ -295,7 +306,7 @@ func (d PGMetadataTableDiffs) getUnimplementedColumns(target PGMetadataTables) P
 				// dataType mismatch (Not a new column).
 				continue
 			}
-			sourceType, ok := target[tableName][columnName]
+			sourceType, ok := target[tableName].Columns[columnName]
 			if !ok {
 				continue
 			}
@@ -313,12 +324,12 @@ func (d PGMetadataTableDiffs) getUnimplementedColumns(target PGMetadataTables) P
 // removeImplementedColumns removes diff columns that are marked as expected
 // diff (or unimplemented column) but is already implemented in CRDB.
 func (d PGMetadataTableDiffs) removeImplementedColumns(source PGMetadataTables) {
-	for tableName, columns := range source {
+	for tableName, tableInfo := range source {
 		pColumns, exists := d[tableName]
 		if !exists {
 			continue
 		}
-		for columnName := range columns {
+		for _, columnName := range *tableInfo.Order {
 			columnType, exists := pColumns[columnName]
 			if !exists {
 				continue
@@ -347,8 +358,8 @@ func (c PGMetadataColumns) getUnimplementedTypes() map[oid.Oid]string {
 
 func (p PGMetadataTables) getUnimplementedTypes() map[oid.Oid]string {
 	unimplemented := make(map[oid.Oid]string)
-	for _, column := range p {
-		for typeOid, dataType := range column.getUnimplementedTypes() {
+	for _, tableInfo := range p {
+		for typeOid, dataType := range tableInfo.Columns.getUnimplementedTypes() {
 			unimplemented[typeOid] = dataType
 		}
 	}
