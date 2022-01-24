@@ -152,8 +152,23 @@ type Index interface {
 	CollectSecondaryStoredColumnIDs() TableColSet
 	CollectCompositeColumnIDs() TableColSet
 
+	// InvertedColumnID returns the ColumnID of the inverted column of the
+	// inverted index.
+	//
+	// Panics if the index is not inverted.
 	InvertedColumnID() descpb.ColumnID
+
+	// InvertedColumnName returns the name of the inverted column of the inverted
+	// index.
+	//
+	// Panics if the index is not inverted.
 	InvertedColumnName() string
+
+	// InvertedColumnKeyType returns the type of the data element that is encoded
+	// as the inverted index key. This is currently always Bytes.
+	//
+	// Panics if the index is not inverted.
+	InvertedColumnKeyType() *types.T
 
 	NumPrimaryStoredColumns() int
 	NumSecondaryStoredColumns() int

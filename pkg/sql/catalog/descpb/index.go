@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	types "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -111,4 +112,15 @@ func (desc *IndexDescriptor) InvertedColumnName() string {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return desc.KeyColumnNames[len(desc.KeyColumnNames)-1]
+}
+
+// InvertedColumnKeyType returns the type of the data element that is encoded
+// as the inverted index key. This is currently always Bytes.
+//
+// Panics if the index is not inverted.
+func (desc *IndexDescriptor) InvertedColumnKeyType() *types.T {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return types.Bytes
 }

@@ -806,22 +806,25 @@ func newOptTable(
 			}
 		}
 		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
-			// The last column of an inverted index is special: in the
+			// The inverted column of an inverted index is special: in the
 			// descriptors, it looks as if the table column is part of the
 			// index; in fact the key contains values *derived* from that
 			// column. In the catalog, we refer to this key as a separate,
 			// inverted column.
-			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idx.GetKeyColumnID(idx.NumKeyColumns() - 1))
+			invertedColumnID := idx.InvertedColumnID()
+			invertedColumnName := idx.InvertedColumnName()
+			invertedColumnType := idx.InvertedColumnKeyType()
+
+			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(invertedColumnID)
 
 			// Add a inverted column that refers to the inverted index key.
 			invertedCol, invertedColOrd := newColumn()
 
 			// All inverted columns have type bytes.
-			typ := types.Bytes
 			invertedCol.InitInverted(
 				invertedColOrd,
-				tree.Name(string(ot.Column(invertedSourceColOrdinal).ColName())+"_inverted_key"),
-				typ,
+				tree.Name(invertedColumnName+"_inverted_key"),
+				invertedColumnType,
 				false, /* nullable */
 				invertedSourceColOrdinal,
 			)
