@@ -74,6 +74,9 @@ type FamilyID = catid.FamilyID
 // IndexID is a custom type for IndexDescriptor IDs.
 type IndexID = catid.IndexID
 
+// ConstraintID is a custom type for TableDescriptor constraint IDs.
+type ConstraintID = catid.ConstraintID
+
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint64
 

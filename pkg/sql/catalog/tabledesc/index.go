@@ -69,6 +69,11 @@ func (w index) GetID() descpb.IndexID {
 	return w.desc.ID
 }
 
+// GetConstraintID returns the constraint ID.
+func (w index) GetConstraintID() descpb.ConstraintID {
+	return w.desc.ConstraintID
+}
+
 // GetName returns the index name.
 func (w index) GetName() string {
 	return w.desc.Name

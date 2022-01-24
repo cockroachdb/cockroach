@@ -106,17 +106,19 @@ func TestSafeMessage(t *testing.T) {
 				// Add check constraints, unique without index constraints, foreign key
 				// constraints and various mutations.
 				mutable.Checks = append(mutable.Checks, &descpb.TableDescriptor_CheckConstraint{
-					Name:      "check",
-					Expr:      "j > 0",
-					Validity:  descpb.ConstraintValidity_Validated,
-					ColumnIDs: []descpb.ColumnID{2},
+					Name:         "check",
+					Expr:         "j > 0",
+					Validity:     descpb.ConstraintValidity_Validated,
+					ColumnIDs:    []descpb.ColumnID{2},
+					ConstraintID: 1,
 				})
 				mutable.UniqueWithoutIndexConstraints = append(
 					mutable.UniqueWithoutIndexConstraints, descpb.UniqueWithoutIndexConstraint{
-						Name:      "unique",
-						TableID:   112,
-						Validity:  descpb.ConstraintValidity_Validated,
-						ColumnIDs: []descpb.ColumnID{2},
+						Name:         "unique",
+						TableID:      112,
+						Validity:     descpb.ConstraintValidity_Validated,
+						ColumnIDs:    []descpb.ColumnID{2},
+						ConstraintID: 2,
 					},
 				)
 				mutable.InboundFKs = append(mutable.InboundFKs, descpb.ForeignKeyConstraint{
@@ -128,6 +130,7 @@ func TestSafeMessage(t *testing.T) {
 					Validity:            descpb.ConstraintValidity_Validated,
 					OnDelete:            catpb.ForeignKeyAction_CASCADE,
 					Match:               descpb.ForeignKeyReference_PARTIAL,
+					ConstraintID:        3,
 				})
 				mutable.OutboundFKs = append(mutable.OutboundFKs, descpb.ForeignKeyConstraint{
 					Name:                "outbound_fk",
@@ -138,6 +141,7 @@ func TestSafeMessage(t *testing.T) {
 					Validity:            descpb.ConstraintValidity_Validated,
 					OnDelete:            catpb.ForeignKeyAction_SET_DEFAULT,
 					Match:               descpb.ForeignKeyReference_SIMPLE,
+					ConstraintID:        4,
 				})
 
 				mutable.Mutations = append(mutable.Mutations, descpb.DescriptorMutation{
@@ -153,7 +157,8 @@ func TestSafeMessage(t *testing.T) {
 								ReferencedTableID:   2,
 								ReferencedColumnIDs: []descpb.ColumnID{3},
 								Validity:            descpb.ConstraintValidity_Unvalidated, OnDelete: catpb.ForeignKeyAction_SET_NULL,
-								Match: descpb.ForeignKeyReference_FULL,
+								Match:        descpb.ForeignKeyReference_FULL,
+								ConstraintID: 5,
 							},
 						},
 					},
@@ -184,6 +189,7 @@ func TestSafeMessage(t *testing.T) {
 									Validity:            descpb.ConstraintValidity_Unvalidated,
 									ColumnIDs:           []descpb.ColumnID{2},
 									IsNonNullConstraint: true,
+									ConstraintID:        6,
 								},
 								NotNullColumn: 2,
 							},
@@ -225,6 +231,7 @@ func TestSafeMessage(t *testing.T) {
 						JobID:      1234,
 					},
 				)
+				mutable.PrimaryIndex.ConstraintID = 7
 				mutable.PrimaryIndex.StoreColumnIDs = append(mutable.PrimaryIndex.StoreColumnIDs, 5)
 				mutable.PrimaryIndex.StoreColumnNames = append(mutable.PrimaryIndex.StoreColumnNames, "c")
 				mutable.NextColumnID = 6

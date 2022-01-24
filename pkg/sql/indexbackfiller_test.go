@@ -229,10 +229,11 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 			},
 			setupDesc: func(t *testing.T, mut *tabledesc.Mutable) {
 				indexToBackfill := descpb.IndexDescriptor{
-					Name:    "virtual_column_backed_index",
-					ID:      mut.NextIndexID,
-					Unique:  true,
-					Version: descpb.LatestNonPrimaryIndexDescriptorVersion,
+					Name:         "virtual_column_backed_index",
+					ID:           mut.NextIndexID,
+					ConstraintID: mut.NextConstraintID,
+					Unique:       true,
+					Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
 					KeyColumnNames: []string{
 						mut.Columns[2].Name,
 					},
@@ -249,6 +250,7 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 					EncodingType: descpb.SecondaryIndexEncoding,
 				}
 				mut.NextIndexID++
+				mut.NextConstraintID++
 				require.NoError(t, mut.AddIndexMutation(
 					&indexToBackfill, descpb.DescriptorMutation_ADD,
 				))
@@ -306,10 +308,11 @@ INSERT INTO foo VALUES (1), (10), (100);
 					computedColumnNotInPrimaryIndex.Name)
 
 				indexToBackfill := descpb.IndexDescriptor{
-					Name:    "new_primary_index",
-					ID:      mut.NextIndexID,
-					Unique:  true,
-					Version: descpb.LatestNonPrimaryIndexDescriptorVersion,
+					Name:         "new_primary_index",
+					ID:           mut.NextIndexID,
+					ConstraintID: mut.NextConstraintID,
+					Unique:       true,
+					Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
 					KeyColumnNames: []string{
 						mut.Columns[0].Name,
 					},
@@ -332,6 +335,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					EncodingType: descpb.PrimaryIndexEncoding,
 				}
 				mut.NextIndexID++
+				mut.NextConstraintID++
 				require.NoError(t, mut.AddIndexMutation(
 					&indexToBackfill, descpb.DescriptorMutation_ADD,
 				))
