@@ -285,7 +285,6 @@ export class StatementsPage extends React.Component<
 
   componentDidUpdate = (): void => {
     this.updateQueryParams();
-    this.refreshStatements();
     if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
       this.props.refreshStatementDiagnosticsRequests();
     }
@@ -461,15 +460,12 @@ export class StatementsPage extends React.Component<
       );
   };
 
-  renderStatements = (): React.ReactElement => {
+  renderStatements = (regions: string[]): React.ReactElement => {
     const { pagination, filters, activeFilters } = this.state;
     const {
       statements,
-      apps,
-      databases,
       onDiagnosticsReportDownload,
       onStatementClick,
-      resetSQLStats,
       columns: userSelectedColumnsToShow,
       onColumnsChange,
       nodeRegions,
@@ -484,14 +480,6 @@ export class StatementsPage extends React.Component<
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
     // If the cluster is a tenant cluster we don't show info
     // about nodes/regions.
-    const nodes = isTenant
-      ? []
-      : Object.keys(nodeRegions)
-          .map(n => Number(n))
-          .sort();
-    const regions = isTenant
-      ? []
-      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
     populateRegionNodeForStatements(statements, nodeRegions, isTenant);
 
     // Creates a list of all possible columns,
@@ -540,46 +528,6 @@ export class StatementsPage extends React.Component<
 
     return (
       <div>
-        <PageConfig>
-          <PageConfigItem>
-            <Search
-              onSubmit={this.onSubmitSearchField as any}
-              onClear={this.onClearSearchField}
-              defaultValue={search}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Filter
-              onSubmitFilters={this.onSubmitFilters}
-              appNames={apps}
-              dbNames={databases}
-              regions={regions}
-              nodes={nodes.map(n => "n" + n)}
-              activeFilters={activeFilters}
-              filters={filters}
-              showDB={true}
-              showSqlType={true}
-              showScan={true}
-              showRegions={regions.length > 1}
-              showNodes={nodes.length > 1}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <DateRange
-              start={this.props.dateRange[0]}
-              end={this.props.dateRange[1]}
-              onSubmit={this.changeDateRange}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <button className={cx("reset-btn")} onClick={this.resetTime}>
-              reset time
-            </button>
-          </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
-            <ClearStats resetSQLStats={resetSQLStats} tooltipType="statement" />
-          </PageConfigItem>
-        </PageConfig>
         <section className={sortableTableCx("cl-table-container")}>
           <div>
             <ColumnsSelector
@@ -624,13 +572,70 @@ export class StatementsPage extends React.Component<
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
+      apps,
+      databases,
+      search,
+      isTenant,
+      nodeRegions,
+      resetSQLStats,
     } = this.props;
+
+    const nodes = isTenant
+      ? []
+      : Object.keys(nodeRegions)
+          .map(n => Number(n))
+          .sort();
+    const regions = isTenant
+      ? []
+      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
+    const { filters, activeFilters } = this.state;
+
     return (
       <div className={cx("root", "table-area")}>
+        <PageConfig>
+          <PageConfigItem>
+            <Search
+              onSubmit={this.onSubmitSearchField as any}
+              onClear={this.onClearSearchField}
+              defaultValue={search}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <Filter
+              onSubmitFilters={this.onSubmitFilters}
+              appNames={apps}
+              dbNames={databases}
+              regions={regions}
+              nodes={nodes.map(n => "n" + n)}
+              activeFilters={activeFilters}
+              filters={filters}
+              showDB={true}
+              showSqlType={true}
+              showScan={true}
+              showRegions={regions.length > 1}
+              showNodes={nodes.length > 1}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <DateRange
+              start={this.props.dateRange[0]}
+              end={this.props.dateRange[1]}
+              onSubmit={this.changeDateRange}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <button className={cx("reset-btn")} onClick={this.resetTime}>
+              reset time
+            </button>
+          </PageConfigItem>
+          <PageConfigItem className={commonStyles("separator")}>
+            <ClearStats resetSQLStats={resetSQLStats} tooltipType="statement" />
+          </PageConfigItem>
+        </PageConfig>
         <Loading
           loading={isNil(this.props.statements)}
           error={this.props.statementsError}
-          render={this.renderStatements}
+          render={() => this.renderStatements(regions)}
           renderError={() =>
             SQLActivityError({
               statsType: "statements",
