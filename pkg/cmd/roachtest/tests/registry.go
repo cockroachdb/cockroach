@@ -124,6 +124,7 @@ func RegisterTests(r registry.Registry) {
 	registerOverload(r)
 	registerMultiTenantUpgrade(r)
 	registerVersionUpgradePublicSchema(r)
+	registerRemoveInvalidDatabasePrivileges(r)
 }
 
 // RegisterBenchmarks registers all benchmarks to the registry. This powers `roachtest bench`.
