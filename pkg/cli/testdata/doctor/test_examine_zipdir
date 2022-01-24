@@ -4,11 +4,11 @@ debug doctor examine zipdir testdata/doctor/debugzip
 WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.
 Examining 37 descriptors and 42 namespace entries...
   ParentID  52, ParentSchemaID 29: relation "users" (53): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "vehicles" (54): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "rides" (55): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): referenced database ID 52: referenced descriptor not found
+  ParentID  52, ParentSchemaID 29: relation "vehicles" (54): constraint id was missing for constraint: {FOREIGN KEY 0 [city owner_id]  false <nil> <nil> origin_table_id:54 origin_column_ids:2 origin_column_ids:4 referenced_column_ids:2 referenced_column_ids:1 referenced_table_id:53 name:"fk_city_ref_users" validity:Validated on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE constraint_id:0 <nil> <nil>}
+  ParentID  52, ParentSchemaID 29: relation "rides" (55): constraint id was missing for constraint: {FOREIGN KEY 0 [vehicle_city vehicle_id]  false <nil> <nil> origin_table_id:55 origin_column_ids:3 origin_column_ids:5 referenced_column_ids:2 referenced_column_ids:1 referenced_table_id:54 name:"fk_vehicle_city_ref_vehicles" validity:Validated on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE constraint_id:0 <nil> <nil>}
+  ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): constraint id was missing for constraint: {FOREIGN KEY 0 [city ride_id]  false <nil> <nil> origin_table_id:56 origin_column_ids:1 origin_column_ids:2 referenced_column_ids:2 referenced_column_ids:1 referenced_table_id:55 name:"fk_city_ref_rides" validity:Validated on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE constraint_id:0 <nil> <nil>}
   ParentID  52, ParentSchemaID 29: relation "promo_codes" (57): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): referenced database ID 52: referenced descriptor not found
+  ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): constraint id was missing for constraint: {FOREIGN KEY 0 [city user_id]  false <nil> <nil> origin_table_id:58 origin_column_ids:1 origin_column_ids:2 referenced_column_ids:2 referenced_column_ids:1 referenced_table_id:53 name:"fk_city_ref_users" validity:Validated on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE constraint_id:0 <nil> <nil>}
   ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): descriptor not found
 Examining 2 jobs...
 job 587337426984566785: running schema change GC refers to missing table descriptor(s) [59]; existing descriptors that still need to be dropped []; job safe to delete: true.

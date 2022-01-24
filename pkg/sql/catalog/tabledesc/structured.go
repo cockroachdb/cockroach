@@ -97,6 +97,10 @@ type PostDeserializationTableDescriptorChanges struct {
 	// one computed column which also had a DEFAULT expression, which therefore
 	// had to be removed. See issue #72881 for details.
 	RemovedDefaultExprFromComputedColumn bool
+
+	// UpgradedConstraintID indicates that table descriptors had constraint ID
+	// added.
+	UpgradedConstraintIDs bool
 }
 
 // DescriptorType returns the type of this descriptor.
@@ -600,6 +604,9 @@ func (desc *Mutable) initIDs() {
 	if desc.NextMutationID == descpb.InvalidMutationID {
 		desc.NextMutationID = 1
 	}
+	if desc.NextConstraintID == 0 {
+		desc.NextConstraintID = 1
+	}
 }
 
 // MaybeFillColumnID assigns a column ID to the given column if the said column has an ID
@@ -716,6 +723,10 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			}
 			idx.IndexDesc().Name = name
 		}
+		if idx.GetConstraintID() == 0 {
+			idx.IndexDesc().ConstraintID = desc.NextConstraintID
+			desc.NextConstraintID++
+		}
 		return nil
 	})
 	if err != nil {
@@ -735,6 +746,10 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	for _, idx := range desc.AllIndexes() {
 		if !idx.Primary() {
 			maybeUpgradeSecondaryIndexFormatVersion(idx.IndexDesc())
+		}
+		if idx.Primary() && idx.GetConstraintID() == 0 {
+			idx.IndexDesc().ConstraintID = desc.NextConstraintID
+			desc.NextConstraintID++
 		}
 		if idx.GetID() == 0 {
 			idx.IndexDesc().ID = desc.NextIndexID
@@ -1936,6 +1951,7 @@ func (desc *Mutable) AddUniqueWithoutIndexMutation(
 func MakeNotNullCheckConstraint(
 	colName string,
 	colID descpb.ColumnID,
+	constraintID descpb.ConstraintID,
 	inuseNames map[string]struct{},
 	validity descpb.ConstraintValidity,
 ) *descpb.TableDescriptor_CheckConstraint {
@@ -1967,6 +1983,7 @@ func MakeNotNullCheckConstraint(
 		Validity:            validity,
 		ColumnIDs:           []descpb.ColumnID{colID},
 		IsNonNullConstraint: true,
+		ConstraintID:        constraintID,
 	}
 }
 
