@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -4523,7 +4524,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	userID := keys.TestingUserDescID(0)
+	userID := bootstrap.TestingUserDescID(0)
 	// Manually creates rows corresponding to the schema:
 	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
 	addTablePrefix := func(prefix roachpb.Key, id uint32, rowVals ...string) roachpb.Key {
@@ -4728,7 +4729,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				addColFam(tablePrefix(userID, "b"), 1),
 				addColFam(tablePrefix(userID, "c"), 1),
 			},
-			rangeStart: keys.SystemSQLCodec.TablePrefix(keys.TestingUserDescID(0)),
+			rangeStart: keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)),
 			expSplit:   tablePrefix(userID, "b"),
 			expError:   false,
 		},
@@ -5191,7 +5192,7 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 		batch := engine.NewBatch()
 		defer batch.Close()
 		it := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-			UpperBound: keys.TestingUserTableDataMin(),
+			UpperBound: bootstrap.TestingUserTableDataMin(),
 			LowerBound: keys.MaxKey,
 		})
 		defer it.Close()

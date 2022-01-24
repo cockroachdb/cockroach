@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,11 +42,11 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	kvserverbase.MergeQueueEnabled.Override(ctx, &testCtx.store.ClusterSettings().SV, true)
 
 	tableKey := func(offset uint32) []byte {
-		return keys.SystemSQLCodec.TablePrefix(keys.TestingUserDescID(offset))
+		return keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(offset))
 	}
 
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(keys.TestingUserDescID(0)), *zonepb.NewZoneConfig())
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(keys.TestingUserDescID(1)), *zonepb.NewZoneConfig())
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(bootstrap.TestingUserDescID(0)), *zonepb.NewZoneConfig())
+	config.TestingSetZoneConfig(config.SystemTenantObjectID(bootstrap.TestingUserDescID(1)), *zonepb.NewZoneConfig())
 
 	type testCase struct {
 		startKey, endKey []byte

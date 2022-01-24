@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -206,7 +207,7 @@ ORDER BY object_type, object_name`, full)
 		// Create tables with the same ID as data.tableA to ensure that comments
 		// from different tables in the restoring cluster don't appear.
 		tableA := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "data", "tablea")
-		for i := keys.TestingUserDescID(0); i < uint32(tableA.GetID()); i++ {
+		for i := bootstrap.TestingUserDescID(0); i < uint32(tableA.GetID()); i++ {
 			tableName := fmt.Sprintf("foo%d", i)
 			sqlDBRestore.Exec(t, fmt.Sprintf("CREATE TABLE %s ();", tableName))
 			sqlDBRestore.Exec(t, fmt.Sprintf("COMMENT ON TABLE %s IS 'table comment'", tableName))

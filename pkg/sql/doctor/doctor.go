@@ -271,7 +271,7 @@ func descReport(stdout io.Writer, desc catalog.Descriptor, format string, args .
 // timestamp.
 func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceTable) error {
 	idChecker := bootstrap.BootstrappedSystemIDChecker()
-	minUserDescID := keys.MinUserDescriptorID(idChecker)
+	minUserDescID := catalogkeys.MinUserDescriptorID(idChecker)
 	minUserCreatedDescID := catalogkeys.MinNonDefaultUserDescriptorID(idChecker)
 	// Print first transaction, which removes all predefined user descriptors.
 	fmt.Fprintln(out, `BEGIN;`)
