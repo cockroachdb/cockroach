@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -113,7 +113,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	sKey := catalogkeys.NewNameKeyComponents(db.GetID(), keys.RootNamespaceID, tempSchemaName)
 
 	// The temporary schema has not been created yet.
-	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return nil, err
 	}
@@ -184,11 +184,11 @@ func cleanupSessionTempObjects(
 	return cf.Txn(ctx, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
-		dbIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, codec)
+		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
 		if err != nil {
 			return err
 		}
-		for _, id := range dbIDs {
+		for _, dbDesc := range allDbDescs {
 			if err := cleanupSchemaObjects(
 				ctx,
 				settings,
@@ -196,7 +196,7 @@ func cleanupSessionTempObjects(
 				descsCol,
 				codec,
 				ie,
-				id,
+				dbDesc,
 				tempSchemaName,
 			); err != nil {
 				return err
@@ -205,7 +205,7 @@ func cleanupSessionTempObjects(
 			// itself may still exist (eg. a temporary table was created and then
 			// dropped). So we remove the namespace table entry of the temporary
 			// schema.
-			key := catalogkeys.MakeSchemaNameKey(codec, id, tempSchemaName)
+			key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
 			if err := txn.Del(ctx, key); err != nil {
 				return err
 			}
@@ -228,13 +228,9 @@ func cleanupSchemaObjects(
 	descsCol *descs.Collection,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
-	dbID descpb.ID,
+	dbDesc catalog.DatabaseDescriptor,
 	schemaName string,
 ) error {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
-	if err != nil {
-		return err
-	}
 	tbNames, tbIDs, err := descsCol.GetObjectNamesAndIDs(
 		ctx,
 		txn,
@@ -259,7 +255,7 @@ func cleanupSchemaObjects(
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for i, tbName := range tbNames {
-		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tbIDs[i])
+		desc, err := descsCol.MustGetTableDescByID(ctx, txn, tbIDs[i])
 		if err != nil {
 			return err
 		}
@@ -312,12 +308,11 @@ func cleanupSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					// TODO (lucy): Use the descriptor collection to get descriptors here.
-					dTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, d.ID)
+					dTableDesc, err := descsCol.MustGetTableDescByID(ctx, txn, d.ID)
 					if err != nil {
 						return err
 					}
-					db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dTableDesc.GetParentID())
+					db, err := descsCol.MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}
@@ -325,7 +320,7 @@ func cleanupSchemaObjects(
 						ctx,
 						txn,
 						codec,
-						dTableDesc.GetParentID(),
+						db,
 						dTableDesc.GetParentSchemaID(),
 						settings.Version,
 					)
@@ -519,22 +514,23 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	// Only see temporary schemas after some delay as safety
 	// mechanism.
 	waitTimeForCreation := TempObjectWaitInterval.Get(&c.settings.SV)
-	// Build a set of all session IDs with temporary objects.
-	var dbIDs []descpb.ID
+	// Build a set of all databases with temporary objects.
+	var allDbDescs []catalog.DatabaseDescriptor
+	descsCol := c.collectionFactory.NewCollection(nil /* temporarySchemaProvider */)
 	if err := retryFunc(ctx, func() error {
 		var err error
-		dbIDs, err = catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, c.codec)
+		allDbDescs, err = descsCol.GetAllDatabaseDescriptors(ctx, txn)
 		return err
 	}); err != nil {
 		return err
 	}
 
 	sessionIDs := make(map[ClusterWideID]struct{})
-	for _, dbID := range dbIDs {
+	for _, dbDesc := range allDbDescs {
 		var schemaEntries map[descpb.ID]resolver.SchemaEntryForDB
 		if err := retryFunc(ctx, func() error {
 			var err error
-			schemaEntries, err = resolver.GetForDatabase(ctx, txn, c.codec, dbID)
+			schemaEntries, err = resolver.GetForDatabase(ctx, txn, c.codec, dbDesc)
 			return err
 		}); err != nil {
 			return err

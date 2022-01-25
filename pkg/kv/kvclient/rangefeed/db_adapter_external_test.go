@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -132,7 +132,7 @@ func TestDBClientScan(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
 		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (250), (500), (750)")
 
-		fooDesc := catalogkv.TestingGetTableDescriptor(
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
 			db, keys.SystemSQLCodec, "defaultdb", "foo")
 		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
@@ -177,7 +177,7 @@ func TestDBClientScan(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
 		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 100))")
 
-		fooDesc := catalogkv.TestingGetTableDescriptor(
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
 			db, keys.SystemSQLCodec, "defaultdb", "foo")
 		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 

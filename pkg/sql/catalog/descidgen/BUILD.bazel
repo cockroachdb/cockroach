@@ -3,35 +3,18 @@ load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "catalogkv",
-    srcs = [
-        "catalogkv.go",
-        "desc_getter.go",
-        "namespace.go",
-        "test_utils.go",
-    ],
+    srcs = ["catalogkv.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/catalog/catconstants",
-        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/schemadesc",
-        "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/catalog/typedesc",
-        "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlerrors",
-        "//pkg/util/hlc",
         "//pkg/util/log",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -39,4 +22,16 @@ stringer(
     name = "gen-descriptorkind-stringer",
     src = "catalogkv.go",
     typ = "DescriptorKind",
+)
+
+go_library(
+    name = "descidgen",
+    srcs = ["generate_id.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/catalog/descpb",
+    ],
 )

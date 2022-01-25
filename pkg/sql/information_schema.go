@@ -23,10 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -2126,7 +2126,7 @@ func forEachSchema(
 		}
 	}
 
-	userDefinedSchemas, err := catalogkv.GetSchemaDescriptorsFromIDs(ctx, p.txn, p.ExecCfg().Codec, userDefinedSchemaIDs)
+	userDefinedSchemas, err := p.Descriptors().GetSchemaDescriptorsFromIDs(ctx, p.txn, userDefinedSchemaIDs)
 	if err != nil {
 		return err
 	}
@@ -2210,12 +2210,11 @@ func forEachTypeDesc(
 	dbContext catalog.DatabaseDescriptor,
 	fn func(db catalog.DatabaseDescriptor, sc string, typ catalog.TypeDescriptor) error,
 ) error {
-	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbContext)
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
 		dbDesc, err := lCtx.getDatabaseByID(typ.GetParentID())
@@ -2340,18 +2339,18 @@ func getSchemaNames(
 	ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
 	if dbContext != nil {
-		return p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbContext.GetID())
+		return p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbContext)
 	}
 	ret := make(map[descpb.ID]string)
-	dbs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
+	allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
 	if err != nil {
 		return nil, err
 	}
-	for _, db := range dbs {
+	for _, db := range allDbDescs {
 		if db == nil {
 			return nil, catalog.ErrDescriptorNotFound
 		}
-		schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, db.GetID())
+		schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, db)
 		if err != nil {
 			return nil, err
 		}
@@ -2377,12 +2376,12 @@ func forEachTableDescWithTableLookupInternal(
 	allowAdding bool,
 	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
-	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
 	return forEachTableDescWithTableLookupInternalFromDescriptors(
-		ctx, p, dbContext, virtualOpts, allowAdding, descs, fn)
+		ctx, p, dbContext, virtualOpts, allowAdding, all, fn)
 }
 
 func forEachTypeDescWithTableLookupInternalFromDescriptors(
@@ -2390,11 +2389,10 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
 	allowAdding bool,
-	descs []catalog.Descriptor,
+	c nstree.Catalog,
 	fn func(catalog.DatabaseDescriptor, string, catalog.TypeDescriptor, tableLookupFn) error,
 ) error {
-	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
 
 	for _, typID := range lCtx.typIDs {
 		typDesc := lCtx.typDescs[typID]
@@ -2429,11 +2427,10 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
 	allowAdding bool,
-	descs []catalog.Descriptor,
+	c nstree.Catalog,
 	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
-	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
-		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
 
 	if virtualOpts == virtualMany || virtualOpts == virtualCurrentDB {
 		// Virtual descriptors first.

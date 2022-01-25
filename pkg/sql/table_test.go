@@ -20,8 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -400,7 +402,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	}
 	desc.SetPrimaryIndex(descpb.IndexDescriptor{})
 
-	err = catalog.ValidateSelf(desc)
+	err = descbuilder.ValidateSelf(desc)
 	if !testutils.IsError(err, tabledesc.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -421,11 +423,11 @@ CREATE TABLE test.tt (x test.t);
 `); err != nil {
 		t.Fatal(err)
 	}
-	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
 	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 		var typeDesc catalog.TypeDescriptor
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			typeDesc, err = catalogkv.MustGetTypeDescByID(ctx, txn, keys.SystemSQLCodec, id)
+		if err := TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+			typeDesc, err = col.MustGetTypeDescByID(ctx, txn, id)
 			return err
 		}); err != nil {
 			return tree.TypeName{}, nil, err
@@ -525,7 +527,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		if _, err := sqlDB.Exec(create); err != nil {
 			t.Fatal(err)
 		}
-		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 		found := tc.getExpr(desc)
 		if tc.expectedExpr != found {
 			t.Errorf("for column %s, found %s, expected %s", tc.colSQL, found, tc.expectedExpr)
@@ -587,7 +589,7 @@ func TestSerializedUDTsInView(t *testing.T) {
 		if _, err := sqlDB.Exec(create); err != nil {
 			t.Fatal(err)
 		}
-		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "v")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "v")
 		foundViewQuery := desc.GetViewQuery()
 		if tc.expectedExpr != foundViewQuery {
 			t.Errorf("for view %s, found %s, expected %s", tc.viewQuery, foundViewQuery, tc.expectedExpr)

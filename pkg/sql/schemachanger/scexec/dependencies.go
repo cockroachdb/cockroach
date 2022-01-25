@@ -86,8 +86,7 @@ type CatalogChangeBatcher interface {
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 
-	// ValidateAndRun executes the updates after validating them using
-	// catalog.Validate.
+	// ValidateAndRun executes the updates after validating the catalog changes.
 	ValidateAndRun(ctx context.Context) error
 }
 

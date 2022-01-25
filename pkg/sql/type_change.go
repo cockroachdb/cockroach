@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -198,8 +197,8 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 	ctx context.Context,
 ) (catalog.TypeDescriptor, error) {
 	var typeDesc catalog.TypeDescriptor
-	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		typeDesc, err = catalogkv.MustGetTypeDescByID(ctx, txn, t.execCfg.Codec, t.typeID)
+	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+		typeDesc, err = col.MustGetTypeDescByID(ctx, txn, t.typeID)
 		return err
 	}); err != nil {
 		return nil, err

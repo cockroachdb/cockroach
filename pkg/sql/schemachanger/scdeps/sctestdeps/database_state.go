@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -45,7 +45,8 @@ WHERE job_type = 'SCHEMA CHANGE'
 // ReadDescriptorsFromDB reads the set of d
 func ReadDescriptorsFromDB(
 	ctx context.Context, t *testing.T, tdb *sqlutils.SQLRunner,
-) (descriptors nstree.Map) {
+) nstree.MutableCatalog {
+	var cb nstree.MutableCatalog
 	hexDescRows := tdb.QueryStr(t, `
 SELECT encode(descriptor, 'hex'), crdb_internal_mvcc_timestamp 
 FROM system.descriptor 
@@ -64,11 +65,8 @@ ORDER BY id`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		b := catalogkv.NewBuilderWithMVCCTimestamp(descProto, ts)
-		err = b.RunPostDeserializationChanges(ctx, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		b := descbuilder.NewBuilderWithMVCCTimestamp(descProto, ts)
+		b.RunPostDeserializationChanges()
 		desc := b.BuildCreatedMutable()
 		if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
 			continue
@@ -93,15 +91,15 @@ ORDER BY id`)
 			t.TypeDescriptor.ModificationTime = hlc.Timestamp{}
 		}
 
-		descriptors.Upsert(desc)
+		cb.UpsertDescriptorEntry(desc)
 	}
-	return descriptors
+	return cb
 }
 
 // ReadNamespaceFromDB reads the namespace entries from tdb.
-func ReadNamespaceFromDB(t *testing.T, tdb *sqlutils.SQLRunner) map[descpb.NameInfo]descpb.ID {
+func ReadNamespaceFromDB(t *testing.T, tdb *sqlutils.SQLRunner) nstree.MutableCatalog {
 	// Fetch namespace state.
-	namespace := make(map[descpb.NameInfo]descpb.ID)
+	var cb nstree.MutableCatalog
 	nsRows := tdb.QueryStr(t, `
 SELECT "parentID", "parentSchemaID", name, id 
 FROM system.namespace
@@ -129,9 +127,9 @@ ORDER BY id`)
 			ParentSchemaID: descpb.ID(parentSchemaID),
 			Name:           name,
 		}
-		namespace[key] = descpb.ID(id)
+		cb.UpsertNamespaceEntry(key, descpb.ID(id))
 	}
-	return namespace
+	return cb
 }
 
 // ReadCurrentDatabaseFromDB reads the current database from tdb.

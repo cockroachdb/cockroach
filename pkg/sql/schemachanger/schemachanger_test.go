@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -95,7 +95,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					if p.Params.ExecutionPhase < scop.PostCommitPhase {
 						return nil
 					}
-					table := catalogkv.TestingGetTableDescriptorFromSchema(
+					table := desctestutils.TestingGetTableDescriptor(
 						kvDB, keys.SystemSQLCodec, "db", "public", "t")
 					// There are 2 schema changes that should precede job 3.
 					// The declarative schema changer uses the same mutation ID for all
@@ -205,7 +205,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 					if p.Params.ExecutionPhase < scop.PostCommitPhase {
 						return nil
 					}
-					table := catalogkv.TestingGetTableDescriptorFromSchema(
+					table := desctestutils.TestingGetTableDescriptor(
 						kvDB, keys.SystemSQLCodec, "db", "public", "t")
 					mutations := table.AllMutations()
 					if len(mutations) == 0 {
@@ -329,7 +329,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 				if p.Params.ExecutionPhase < scop.PostCommitPhase {
 					return nil
 				}
-				table := catalogkv.TestingGetTableDescriptorFromSchema(
+				table := desctestutils.TestingGetTableDescriptor(
 					kvDB, keys.SystemSQLCodec, "db", "public", "t")
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
@@ -435,7 +435,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 				if p.Params.ExecutionPhase < scop.PostCommitPhase {
 					return nil
 				}
-				table := catalogkv.TestingGetTableDescriptorFromSchema(
+				table := desctestutils.TestingGetTableDescriptor(
 					kvDB, keys.SystemSQLCodec, "db", "public", "t")
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
@@ -465,7 +465,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
-	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
 
 	g := ctxgroup.WithContext(ctx)
 

@@ -91,6 +91,14 @@ func (dt *Map) IterateByID(f EntryIterator) error {
 	return dt.byID.ascend(f)
 }
 
+// IterateByName iterates the descriptors by name, ascending.
+func (dt *Map) IterateByName(f EntryIterator) error {
+	if !dt.initialized() {
+		return nil
+	}
+	return dt.byName.ascend(f)
+}
+
 // Len returns the number of descriptors in the tree.
 func (dt *Map) Len() int {
 	if !dt.initialized() {

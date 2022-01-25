@@ -11,8 +11,6 @@
 package typedesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -53,9 +51,7 @@ func (tdb *typeDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges(
-	_ context.Context, _ catalog.DescGetter,
-) error {
+func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() {
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
 	tdb.changed = catprivilege.MaybeFixPrivileges(
 		&tdb.maybeModified.Privileges,
@@ -64,6 +60,10 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges(
 		privilege.Type,
 		tdb.maybeModified.GetName(),
 	)
+}
+
+// RunPostRestoreChanges implements the catalog.DescriptorBuilder interface.
+func (tdb *typeDescriptorBuilder) RunRestoreChanges(_ func(id descpb.ID) catalog.Descriptor) error {
 	return nil
 }
 

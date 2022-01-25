@@ -16,12 +16,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/errors"
 )
+
+// Validate returns any descriptor validation errors after validating using the
+// descriptor collection for retrieving referenced descriptors and namespace
+// entries, if applicable.
+func (tc *Collection) Validate(
+	ctx context.Context,
+	txn *kv.Txn,
+	telemetry catalog.ValidationTelemetry,
+	targetLevel catalog.ValidationLevel,
+	descriptors ...catalog.Descriptor,
+) (err error) {
+	cbd := &collectionBackedDereferencer{
+		tc:  tc,
+		txn: txn,
+	}
+	return validate.Validate(ctx, cbd, telemetry, targetLevel, descriptors...).CombinedError()
+}
 
 // ValidateUncommittedDescriptors validates all uncommitted descriptors.
 // Validation includes cross-reference checks. Referenced descriptors are
@@ -33,38 +50,25 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
 		return nil
 	}
-
 	descs := tc.uncommitted.getUncommittedDescriptorsForValidation()
 	if len(descs) == 0 {
 		return nil
 	}
-
-	bdg := collectionBatchDescGetter{tc: tc, txn: txn}
-	return errors.CombineErrors(err, catalog.Validate(
-		ctx,
-		bdg,
-		catalog.ValidationWriteTelemetry,
-		catalog.ValidationLevelAllPreTxnCommit,
-		descs...,
-	).CombinedError())
+	return tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, catalog.ValidationLevelAllPreTxnCommit, descs...)
 }
 
-// collectionBatchDescGetter wraps a Collection to implement the
-// catalog.BatchDescGetter interface for validation.
-type collectionBatchDescGetter struct {
+// collectionBackedDereferencer wraps a Collection to implement the
+// validate.ValidationDereferencer interface for validation.
+type collectionBackedDereferencer struct {
 	tc  *Collection
 	txn *kv.Txn
 }
 
-var _ catalog.BatchDescGetter = &collectionBatchDescGetter{}
+var _ validate.ValidationDereferencer = &collectionBackedDereferencer{}
 
-func (c collectionBatchDescGetter) fallback() catalog.BatchDescGetter {
-	return catalogkv.NewOneLevelUncachedDescGetter(c.txn, c.tc.codec())
-}
-
-// GetDescs implements the catalog.BatchDescGetter interface by leveraging the
-// collection's uncommitted descriptors.
-func (c collectionBatchDescGetter) GetDescs(
+// DereferenceDescriptors implements the validate.ValidationDereferencer
+// interface by leveraging the collection's uncommitted descriptors.
+func (c collectionBackedDereferencer) DereferenceDescriptors(
 	ctx context.Context, reqs []descpb.ID,
 ) (ret []catalog.Descriptor, _ error) {
 	ret = make([]catalog.Descriptor, len(reqs))
@@ -83,7 +87,10 @@ func (c collectionBatchDescGetter) GetDescs(
 		}
 	}
 	if len(fallbackReqs) > 0 {
-		fallbackRet, err := c.fallback().GetDescs(ctx, fallbackReqs)
+		// TODO(postamar): actually use the Collection here instead,
+		// either by calling the Collection's methods or by caching the results
+		// of this call in the Collection.
+		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(ctx, c.txn, c.tc.codec(), fallbackReqs)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +101,7 @@ func (c collectionBatchDescGetter) GetDescs(
 	return ret, nil
 }
 
-func (c collectionBatchDescGetter) fastDescLookup(
+func (c collectionBackedDereferencer) fastDescLookup(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
 	leaseCacheEntry := c.tc.leased.cache.GetByID(id)
@@ -104,9 +111,9 @@ func (c collectionBatchDescGetter) fastDescLookup(
 	return c.tc.uncommitted.getByID(id), nil
 }
 
-// GetNamespaceEntries implements the catalog.BatchDescGetter interface by
-// delegating to the fallback catalogkv implementation.
-func (c collectionBatchDescGetter) GetNamespaceEntries(
+// DereferenceDescriptorIDs implements the validate.ValidationDereferencer
+// interface.
+func (c collectionBackedDereferencer) DereferenceDescriptorIDs(
 	ctx context.Context, reqs []descpb.NameInfo,
 ) (ret []descpb.ID, _ error) {
 	ret = make([]descpb.ID, len(reqs))
@@ -125,7 +132,10 @@ func (c collectionBatchDescGetter) GetNamespaceEntries(
 		}
 	}
 	if len(fallbackReqs) > 0 {
-		fallbackRet, err := c.fallback().GetNamespaceEntries(ctx, fallbackReqs)
+		// TODO(postamar): actually use the Collection here instead,
+		// either by calling the Collection's methods or by caching the results
+		// of this call in the Collection.
+		fallbackRet, err := catkv.LookupIDs(ctx, c.txn, c.tc.codec(), fallbackReqs)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +146,7 @@ func (c collectionBatchDescGetter) GetNamespaceEntries(
 	return ret, nil
 }
 
-func (c collectionBatchDescGetter) fastNamespaceLookup(
+func (c collectionBackedDereferencer) fastNamespaceLookup(
 	ctx context.Context, req descpb.NameInfo,
 ) (found bool, id descpb.ID, err error) {
 	// Handle special cases.
@@ -153,24 +163,4 @@ func (c collectionBatchDescGetter) fastNamespaceLookup(
 		return id != descpb.InvalidID, id, err
 	}
 	return false, descpb.InvalidID, nil
-}
-
-// GetDesc implements the catalog.BatchDescGetter interface by delegating to
-// GetDescs.
-func (c collectionBatchDescGetter) GetDesc(
-	ctx context.Context, id descpb.ID,
-) (catalog.Descriptor, error) {
-	descs, err := c.GetDescs(ctx, []descpb.ID{id})
-	if err != nil {
-		return nil, err
-	}
-	return descs[0], nil
-}
-
-// GetNamespaceEntry implements the catalog.BatchDescGetter interface by
-// delegating to GetNamespaceEntries.
-func (c collectionBatchDescGetter) GetNamespaceEntry(
-	ctx context.Context, parentID, parentSchemaID descpb.ID, name string,
-) (descpb.ID, error) {
-	return c.fallback().GetNamespaceEntry(ctx, parentID, parentSchemaID, name)
 }

@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -143,7 +143,7 @@ func (m manifestInfoReader) showBackup(
 	// FKs for which we can't resolve the cross-table references. We can't
 	// display them anyway, because we don't have the referenced table names,
 	// etc.
-	err = maybeUpgradeDescriptorsInBackupManifests(ctx, manifests, true /* skipFKsWithNoMatchingTable */)
+	err = maybeUpgradeDescriptorsInBackupManifests(manifests, true /* skipFKsWithNoMatchingTable */)
 	if err != nil {
 		return err
 	}
@@ -449,7 +449,7 @@ func backupShowerDefault(
 					dataSizeDatum := tree.DNull
 					rowCountDatum := tree.DNull
 
-					desc := catalogkv.NewBuilder(descriptor).BuildExistingMutable()
+					desc := descbuilder.NewBuilder(descriptor).BuildExistingMutable()
 
 					descriptorName := desc.GetName()
 					switch desc := desc.(type) {
@@ -585,7 +585,7 @@ func nullIfZero(i descpb.ID) tree.Datum {
 func showPrivileges(descriptor *descpb.Descriptor) string {
 	var privStringBuilder strings.Builder
 
-	b := catalogkv.NewBuilder(descriptor)
+	b := descbuilder.NewBuilder(descriptor)
 	if b == nil {
 		return ""
 	}

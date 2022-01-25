@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -423,20 +423,19 @@ func (p *planner) resolveTableForZone(
 // responsibility to do this using e.g .resolveTableForZone().
 func resolveZone(
 	ctx context.Context,
-	codec keys.SQLCodec,
 	txn *kv.Txn,
+	col *descs.Collection,
 	zs *tree.ZoneSpecifier,
 	version clusterversion.Handle,
 ) (descpb.ID, error) {
 	errMissingKey := errors.New("missing key")
 	id, err := zonepb.ResolveZoneSpecifier(ctx, zs,
 		func(parentID uint32, schemaID uint32, name string) (uint32, error) {
-			found, id, err := catalogkv.LookupObjectID(ctx, txn, codec,
-				descpb.ID(parentID), descpb.ID(schemaID), name)
+			id, err := col.LookupObjectID(ctx, txn, descpb.ID(parentID), descpb.ID(schemaID), name)
 			if err != nil {
 				return 0, err
 			}
-			if !found {
+			if id == descpb.InvalidID {
 				return 0, errMissingKey
 			}
 			return uint32(id), nil

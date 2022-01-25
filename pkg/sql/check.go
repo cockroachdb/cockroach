@@ -16,10 +16,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -236,15 +234,11 @@ func nonMatchingRowQuery(
 func validateForeignKey(
 	ctx context.Context,
 	srcTable *tabledesc.Mutable,
+	targetTable catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
-	codec keys.SQLCodec,
 ) error {
-	targetTable, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, fk.ReferencedTableID)
-	if err != nil {
-		return err
-	}
 	nCols := len(fk.OriginColumnIDs)
 
 	referencedColumnNames, err := targetTable.NamesForColumnIDs(fk.ReferencedColumnIDs)

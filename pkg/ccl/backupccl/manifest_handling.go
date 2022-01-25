@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -959,7 +959,7 @@ func loadSQLDescsFromBackupsAtTime(
 	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
 		ret := make([]catalog.Descriptor, 0, len(raw))
 		for i := range raw {
-			ret = append(ret, catalogkv.NewBuilder(&raw[i]).BuildExistingMutable())
+			ret = append(ret, descbuilder.NewBuilder(&raw[i]).BuildExistingMutable())
 		}
 		return ret
 	}
@@ -1001,7 +1001,7 @@ func loadSQLDescsFromBackupsAtTime(
 	for _, raw := range byID {
 		// A revision may have been captured before it was in a DB that is
 		// backed up -- if the DB is missing, filter the object.
-		desc := catalogkv.NewBuilder(raw).BuildExistingMutable()
+		desc := descbuilder.NewBuilder(raw).BuildExistingMutable()
 		var isObject bool
 		switch d := desc.(type) {
 		case catalog.TableDescriptor:

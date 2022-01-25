@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -123,7 +123,7 @@ func WriteDescriptors(
 		wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 		for i := range databases {
 			desc := databases[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, desc, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, desc, user, wroteDBs, descCoverage)
 			if err != nil {
 				return err
 			}
@@ -155,7 +155,7 @@ func WriteDescriptors(
 		// Write namespace and descriptor entries for each schema.
 		for i := range schemas {
 			sc := schemas[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, sc, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, sc, user, wroteDBs, descCoverage)
 			if err != nil {
 				return err
 			}
@@ -177,7 +177,7 @@ func WriteDescriptors(
 
 		for i := range tables {
 			table := tables[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, table, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, table, user, wroteDBs, descCoverage)
 			if err != nil {
 				return err
 			}
@@ -208,7 +208,7 @@ func WriteDescriptors(
 		// the system.descriptor table.
 		for i := range types {
 			typ := types[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, codec, txn, typ, user, wroteDBs, descCoverage)
+			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, typ, user, wroteDBs, descCoverage)
 			if err != nil {
 				return err
 			}
@@ -595,7 +595,7 @@ func loadBackupSQLDescs(
 		}
 	}
 
-	if err := maybeUpgradeDescriptors(ctx, sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
+	if err := maybeUpgradeDescriptors(sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
 		mem.Shrink(ctx, sz)
 		return nil, BackupManifest{}, nil, 0, err
 	}
@@ -1324,7 +1324,7 @@ func remapPublicSchemas(
 		// if the database does not have a public schema backed by a descriptor
 		// (meaning they were created before 22.1), we need to create a public
 		// schema descriptor for it.
-		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return err
 		}
@@ -2163,10 +2163,11 @@ func (r *restoreResumer) dropDescriptors(
 	for _, schema := range details.SchemaDescs {
 		ignoredChildDescIDs[schema.ID] = struct{}{}
 	}
-	allDescs, err := descsCol.GetAllDescriptors(ctx, txn)
+	all, err := descsCol.GetAllDescriptors(ctx, txn)
 	if err != nil {
 		return err
 	}
+	allDescs := all.OrderedDescriptors()
 
 	// Delete any schema descriptors that this restore created. Also collect the
 	// descriptors so we can update their parent databases later.
@@ -2369,8 +2370,8 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 
 func getRestoringPrivileges(
 	ctx context.Context,
-	codec keys.SQLCodec,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	desc catalog.Descriptor,
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
@@ -2380,8 +2381,8 @@ func getRestoringPrivileges(
 	case catalog.TableDescriptor:
 		return getRestorePrivilegesForTableOrSchema(
 			ctx,
-			codec,
 			txn,
+			descsCol,
 			desc,
 			user,
 			wroteDBs,
@@ -2391,8 +2392,8 @@ func getRestoringPrivileges(
 	case catalog.SchemaDescriptor:
 		return getRestorePrivilegesForTableOrSchema(
 			ctx,
-			codec,
 			txn,
+			descsCol,
 			desc,
 			user,
 			wroteDBs,
@@ -2419,8 +2420,8 @@ func getRestoringPrivileges(
 
 func getRestorePrivilegesForTableOrSchema(
 	ctx context.Context,
-	codec keys.SQLCodec,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	desc catalog.Descriptor,
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
@@ -2444,7 +2445,7 @@ func getRestorePrivilegesForTableOrSchema(
 			}
 		}
 	} else if descCoverage == tree.RequestedDescriptors {
-		parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, desc.GetParentID())
+		parentDB, err := descsCol.MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 		}

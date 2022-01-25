@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -31,17 +30,16 @@ import (
 // dependencies, like scbuild.Dependencies or scexec.Dependencies, for the
 // purpose of facilitating end-to-end testing of the declarative schema changer.
 type TestState struct {
-	descriptors, syntheticDescriptors nstree.Map
-	namespace                         map[descpb.NameInfo]descpb.ID
-	currentDatabase                   string
-	phase                             scop.Phase
-	sessionData                       sessiondata.SessionData
-	statements                        []string
-	testingKnobs                      *scrun.TestingKnobs
-	jobs                              []jobs.Record
-	jobCounter                        int
-	txnCounter                        int
-	sideEffectLogBuffer               strings.Builder
+	catalog, synthetic  nstree.MutableCatalog
+	currentDatabase     string
+	phase               scop.Phase
+	sessionData         sessiondata.SessionData
+	statements          []string
+	testingKnobs        *scrun.TestingKnobs
+	jobs                []jobs.Record
+	jobCounter          int
+	txnCounter          int
+	sideEffectLogBuffer strings.Builder
 
 	// The below portions fo the Dependencies are stored as interfaces because
 	// we permit users of this package to override the default implementations.
@@ -81,7 +79,7 @@ func (s *TestState) SideEffectLog() string {
 // WithTxn simulates the execution of a transaction.
 func (s *TestState) WithTxn(fn func(s *TestState)) {
 	s.txnCounter++
-	defer s.syntheticDescriptors.Clear()
+	defer s.synthetic.Clear()
 	defer s.LogSideEffectf("commit transaction #%d", s.txnCounter)
 	s.LogSideEffectf("begin transaction #%d", s.txnCounter)
 	fn(s)

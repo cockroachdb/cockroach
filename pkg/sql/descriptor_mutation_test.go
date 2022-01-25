@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -86,7 +86,7 @@ func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 	}
 	mt.tableDesc.Mutations = nil
 	mt.tableDesc.Version++
-	if err := catalog.ValidateSelf(mt.tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(mt.tableDesc); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -146,7 +146,7 @@ func (mt mutationTest) writeMutation(ctx context.Context, m descpb.DescriptorMut
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
 	mt.tableDesc.Version++
-	if err := catalog.ValidateSelf(mt.tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(mt.tableDesc); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -189,7 +189,7 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 	}
 
 	// read table descriptor
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
@@ -251,7 +251,7 @@ CREATE INDEX allidx ON t.test (k, v);
 	}
 
 	// read table descriptor
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
@@ -274,7 +274,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					}
 
 					// read table descriptor
-					mTest.tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
+					mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 						kvDB, keys.SystemSQLCodec, "t", "test")
 
 					initRows := [][]string{{"a", "z", "q"}}
@@ -456,21 +456,21 @@ CREATE INDEX allidx ON t.test (k, v);
 	// Check that a mutation can only be inserted with an explicit mutation state, and direction.
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []descpb.DescriptorMutation{{}}
-	if err := catalog.ValidateSelf(tableDesc); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
+	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Column{Column: &tableDesc.Columns[len(tableDesc.Columns)-1]}}}
 	tableDesc.Columns = tableDesc.Columns[:len(tableDesc.Columns)-1]
-	if err := catalog.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_DELETE_ONLY
-	if err := catalog.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_UNKNOWN
 	tableDesc.Mutations[0].Direction = descpb.DescriptorMutation_DROP
-	if err := catalog.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
 		t.Fatal(err)
 	}
 }
@@ -520,7 +520,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	}
 
 	// read table descriptor
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
@@ -542,7 +542,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 				t.Fatal(err)
 			}
 			// read table descriptor
-			mTest.tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
+			mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 				kvDB, keys.SystemSQLCodec, "t", "test")
 
 			initRows := [][]string{{"a", "z"}, {"b", "y"}}
@@ -646,7 +646,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	index := tableDesc.PublicNonPrimaryIndexes()[len(tableDesc.PublicNonPrimaryIndexes())-1]
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Index{Index: index.IndexDesc()}}}
 	tableDesc.RemovePublicNonPrimaryIndex(index.Ordinal())
-	if err := catalog.ValidateSelf(tableDesc); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
+	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}
 }
@@ -682,7 +682,7 @@ CREATE INDEX allidx ON t.test (k, v);
 	}
 
 	// read table descriptor
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
@@ -718,7 +718,7 @@ CREATE INDEX allidx ON t.test (k, v);
 				}
 
 				// read table descriptor
-				mTest.tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
+				mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 					kvDB, keys.SystemSQLCodec, "t", "test")
 
 				initRows := [][]string{{"a", "z", "q"}, {"b", "y", "r"}}
@@ -894,7 +894,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	}
 
 	// Read table descriptor
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mt := makeMutationTest(t, kvDB, sqlDB, tableDesc)
@@ -1026,7 +1026,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	mt.Exec(t, `ALTER TABLE t.test RENAME COLUMN c TO d`)
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
-	mt.tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	mt.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Make "ufo" live.
 	mt.makeMutationsActive(ctx)
@@ -1052,7 +1052,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
-	mt.tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
+	mt.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Make column "e" live.
@@ -1135,7 +1135,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 	}
 
 	// read table descriptor
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	expected := []struct {
 		name  string
@@ -1211,7 +1211,7 @@ func TestAddingFKs(t *testing.T) {
 	}
 
 	// Step the referencing table back to the ADD state.
-	ordersDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	ordersDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "orders")
 	ordersDesc.State = descpb.DescriptorState_ADD
 	ordersDesc.Version++

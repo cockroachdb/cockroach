@@ -48,8 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -4693,14 +4693,11 @@ value if you rely on the HLC for accuracy.`,
 				}
 
 				// Get the referenced table and index.
-				tableDescIntf, err := ctx.Planner.GetImmutableTableInterfaceByID(
-					ctx.Context,
-					tableID,
-				)
+				tableDescI, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), tableID)
 				if err != nil {
 					return nil, err
 				}
-				tableDesc := tableDescIntf.(catalog.TableDescriptor)
+				tableDesc := tableDescI.(catalog.TableDescriptor)
 				index, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
@@ -5296,8 +5293,11 @@ value if you rely on the HLC for accuracy.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeography(args[2])
-				// TODO(ajwerner): This should be able to use the normal lookup mechanisms.
-				tableDesc, err := catalogkv.MustGetTableDescByID(ctx.Context, ctx.Txn, ctx.Codec, descpb.ID(tableID))
+				// TODO(postamar): give the tree.EvalContext a useful interface
+				// instead of cobbling a descs.Collection in this way.
+				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
+				descsCol := cf.MakeCollection(descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
+				tableDesc, err := descsCol.MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
@@ -5331,7 +5331,11 @@ value if you rely on the HLC for accuracy.`,
 				tableID := int(tree.MustBeDInt(args[0]))
 				indexID := int(tree.MustBeDInt(args[1]))
 				g := tree.MustBeDGeometry(args[2])
-				tableDesc, err := catalogkv.MustGetTableDescByID(ctx.Context, ctx.Txn, ctx.Codec, descpb.ID(tableID))
+				// TODO(postamar): give the tree.EvalContext a useful interface
+				// instead of cobbling a descs.Collection in this way.
+				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
+				descsCol := cf.MakeCollection(descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
+				tableDesc, err := descsCol.MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}

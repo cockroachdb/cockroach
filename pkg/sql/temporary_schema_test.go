@@ -97,6 +97,8 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 			kvDB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 				execCfg := s.ExecutorConfig().(ExecutorConfig)
+				defaultDB, err := descsCol.MustGetDatabaseDescByID(ctx, txn, namesToID["defaultdb"])
+				require.NoError(t, err)
 				err = cleanupSchemaObjects(
 					ctx,
 					execCfg.Settings,
@@ -104,7 +106,7 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 					descsCol,
 					execCfg.Codec,
 					s.InternalExecutor().(*InternalExecutor),
-					namesToID["defaultdb"],
+					defaultDB,
 					tempSchemaName,
 				)
 				require.NoError(t, err)

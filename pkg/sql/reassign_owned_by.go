@@ -109,7 +109,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 func (n *reassignOwnedByNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.CreateReassignOwnedByCounter())
 
-	allDescs, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
+	all, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
 	if err != nil {
 		return err
 	}
@@ -122,8 +122,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		return err
 	}
 
-	lCtx := newInternalLookupCtx(params.ctx, allDescs,
-		currentDbDesc.ImmutableCopy().(catalog.DatabaseDescriptor), nil /* fallback */)
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), currentDbDesc.ImmutableCopy().(catalog.DatabaseDescriptor))
 
 	// Iterate through each object, check for ownership by an old role.
 	for _, oldRole := range n.normalizedOldRoles {

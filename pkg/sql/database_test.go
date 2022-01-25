@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,20 +29,18 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if _, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, keys.SystemDatabaseID); err != nil {
-			return err
-		}
-		if _, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, keys.SystemDatabaseID); err != nil {
+	if err := TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		if _, err := col.MustGetDatabaseDescByID(ctx, txn, keys.SystemDatabaseID); err != nil {
 			return err
 		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
+
 }
 
 func TestDatabaseHasChildSchemas(t *testing.T) {
@@ -62,23 +60,8 @@ CREATE SCHEMA sc;
 		t.Fatal(err)
 	}
 
-	getDB := func() catalog.DatabaseDescriptor {
-		var db catalog.DatabaseDescriptor
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			dbID, err := catalogkv.GetDatabaseID(ctx, txn, keys.SystemSQLCodec, "d", true /* required */)
-			if err != nil {
-				return err
-			}
-			db, err = catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, dbID)
-			return err
-		}); err != nil {
-			t.Fatal(err)
-		}
-		return db
-	}
-
 	// Now get the database descriptor from disk.
-	db := getDB()
+	db := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
 	if db.GetSchemaID("sc") == descpb.InvalidID {
 		t.Fatal("expected to find child schema sc in db")
 	}
@@ -88,7 +71,7 @@ CREATE SCHEMA sc;
 		t.Fatal(err)
 	}
 
-	db = getDB()
+	db = desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
 	if db.GetSchemaID("sc2") == descpb.InvalidID {
 		t.Fatal("expected to find child schema sc2 in db")
 	}

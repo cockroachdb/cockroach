@@ -90,8 +90,8 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 				// test cluster, here the SQLRunner is only used to populate the mocked
 				// catalog state.
 				deps = sctestdeps.NewTestDependencies(
-					sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb)),
-					sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb)),
+					sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
+					sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 					sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
 					sctestdeps.WithSessionData(sctestdeps.ReadSessionDataFromDB(t, tdb, func(
 						sd *sessiondata.SessionData,

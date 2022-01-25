@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -158,10 +158,9 @@ func getSchemaForCreateTable(
 		return nil, err
 	}
 
-	desc, err := catalogkv.GetDescriptorCollidingWithObject(
+	desc, err := params.p.Descriptors().GetDescriptorCollidingWithObject(
 		params.ctx,
 		params.p.txn,
-		params.ExecCfg().Codec,
 		db.GetID(),
 		schema.GetID(),
 		tableName.Table(),
@@ -329,7 +328,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+	id, err := descidgen.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 	if err != nil {
 		return err
 	}
@@ -406,7 +405,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.n.Table.Table()),
 		id,
 		desc,
-		params.EvalContext().Settings,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err

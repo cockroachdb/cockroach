@@ -25,9 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -86,7 +88,7 @@ func TestIndexInterface(t *testing.T) {
 		{0, 1, 2},
 	}
 
-	immutable := catalogkv.TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
+	immutable := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
 	require.NotNil(t, immutable)
 	var tableI = immutable
 	require.NotNil(t, tableI)
@@ -348,7 +350,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 
 	// Mess with the table descriptor to add redundant columns in the secondary
 	// index while still passing validation.
-	mut := catalogkv.TestingGetMutableExistingTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
+	mut := desctestutils.TestingGetMutableExistingTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
 	idx := &mut.Indexes[0]
 	id := idx.KeyColumnIDs[0]
 	name := idx.KeyColumnNames[0]
@@ -357,7 +359,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	idx.StoreColumnNames = append([]string{}, name, name, name, name)
 	idx.KeySuffixColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
 	mut.Version++
-	require.NoError(t, catalog.ValidateSelf(mut))
+	require.NoError(t, validate.Self(mut))
 
 	// Store the corrupted table descriptor.
 	err = db.Put(
@@ -390,7 +392,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	// considered invalid.
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	expected = fmt.Sprintf(`relation "t" (%d): index "sec" has duplicates in KeySuffixColumnIDs: [2 2 2 2]`, mut.GetID())
-	require.EqualError(t, catalog.ValidateSelf(mut), expected)
+	require.EqualError(t, validate.Self(mut), expected)
 
 	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
 	require.NoError(t, err)
@@ -520,14 +522,14 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 		require.NoError(t, err)
 		var descProto descpb.Descriptor
 		require.NoError(t, protoutil.Unmarshal(bytes, &descProto))
-		b := catalogkv.NewBuilderWithMVCCTimestamp(&descProto, hlc.Timestamp{WallTime: 1})
+		b := descbuilder.NewBuilderWithMVCCTimestamp(&descProto, hlc.Timestamp{WallTime: 1})
 		desc := b.BuildImmutable().(catalog.TableDescriptor)
 		test(desc)
 	}
 
 	// Test again but with RunPostDeserializationChanges.
 	for _, name := range []string{`t`, `s`, `v`} {
-		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", name)
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", name)
 		test(desc)
 	}
 

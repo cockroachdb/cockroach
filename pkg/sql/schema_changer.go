@@ -230,7 +230,7 @@ func (e errTableVersionMismatch) Error() string {
 
 // refreshMaterializedView updates the physical data for a materialized view.
 func (sc *SchemaChanger) refreshMaterializedView(
-	ctx context.Context, table *tabledesc.Mutable, refresh catalog.MaterializedViewRefresh,
+	ctx context.Context, table catalog.TableDescriptor, refresh catalog.MaterializedViewRefresh,
 ) error {
 	// If we aren't requested to backfill any data, then return immediately.
 	if !refresh.ShouldBackfill() {
@@ -244,7 +244,7 @@ func (sc *SchemaChanger) refreshMaterializedView(
 	// data only to the new desired indexes. In SchemaChanger.done(), we'll swap
 	// the indexes from the old versions into the new ones.
 	tableToRefresh := refresh.TableWithNewIndexes(table)
-	return sc.backfillQueryIntoTable(ctx, tableToRefresh, table.ViewQuery, refresh.AsOf(), "refreshView")
+	return sc.backfillQueryIntoTable(ctx, tableToRefresh, table.GetViewQuery(), refresh.AsOf(), "refreshView")
 }
 
 func (sc *SchemaChanger) backfillQueryIntoTable(
@@ -2596,9 +2596,9 @@ func calculateSplitAtShards(maxSplit int64, shardBucketCount int32) []int64 {
 // by a later operation. The nextMutationIdx provides the index at which to check for
 // later mutation.
 func isCurrentMutationDiscarded(
-	tableDesc *tabledesc.Mutable, currentMutation catalog.Mutation, nextMutationIdx int,
+	tableDesc catalog.TableDescriptor, currentMutation catalog.Mutation, nextMutationIdx int,
 ) (bool, descpb.MutationID) {
-	if nextMutationIdx+1 > len(tableDesc.Mutations) {
+	if nextMutationIdx+1 > len(tableDesc.AllMutations()) {
 		return false, descpb.InvalidMutationID
 	}
 	// Drops will never get canceled out, since we need clean up.
