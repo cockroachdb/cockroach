@@ -16,7 +16,7 @@ import {
   TimeScale,
   TimeWindow,
   ArrowDirection,
-  TimeScaleCollection,
+  DefaultTimesScaleOptions,
 } from "./timeScaleTypes";
 import TimeFrameControls from "./timeFrameControls";
 import RangeSelect, { RangeOption } from "./rangeSelect";
@@ -31,7 +31,7 @@ export const timeFormat = "h:mmA";
 
 export interface TimeScaleDropdownProps {
   currentScale: TimeScale;
-  options?: TimeScaleCollection;
+  options?: DefaultTimesScaleOptions;
   setTimeScale: (tw: TimeScale) => void;
   adjustTimeScaleOnChange?: (
     curTimeScale: TimeScale,
