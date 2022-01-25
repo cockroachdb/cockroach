@@ -246,7 +246,7 @@ func (s *Store) Send(
 			ris = nil // just to be safe
 		}
 		for _, ri := range ris {
-			t.AppendRangeInfo(ctx, ri.Desc, ri.Lease)
+			t.AppendRangeInfo(ctx, ri)
 		}
 		// We have to write `t` back to `pErr` so that it picks up the changes.
 		pErr = roachpb.NewError(t)
