@@ -251,7 +251,8 @@ const (
 	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
 	// in secondary tenants.
 	EnableProtectedTimestampsForTenant
-
+	// ConstraintIDsForTableDescs adds constraint IDs into table descriptors.
+	ConstraintIDsForTableDescs
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -386,6 +387,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableProtectedTimestampsForTenant,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
+	},
+	{
+		Key:     ConstraintIDsForTableDescs,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
 	},
 
 	// *************************************************
