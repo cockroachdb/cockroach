@@ -38,6 +38,7 @@ type rangefeedFactory func(
 	spans []kvcoord.SpanTimePair,
 	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
 ) error
 
 type rangefeed struct {
