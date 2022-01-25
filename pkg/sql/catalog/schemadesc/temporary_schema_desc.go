@@ -45,6 +45,9 @@ var _ catalog.SchemaDescriptor = temporary{}
 func (p temporary) GetID() descpb.ID       { return p.id }
 func (p temporary) GetName() string        { return p.name }
 func (p temporary) GetParentID() descpb.ID { return p.parentID }
+func (p temporary) GetPrivileges() *descpb.PrivilegeDescriptor {
+	return descpb.NewTemporarySchemaPrivilegeDescriptor()
+}
 
 type temporaryBase struct{}
 
