@@ -251,6 +251,8 @@ const (
 	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
 	// in secondary tenants.
 	EnableProtectedTimestampsForTenant
+	// Rangefeed use 1 stream per node
+	RangefeedUseOneStreamPerNode
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -386,6 +388,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableProtectedTimestampsForTenant,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
+	},
+	{
+		Key:     RangefeedUseOneStreamPerNode,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
 	},
 
 	// *************************************************

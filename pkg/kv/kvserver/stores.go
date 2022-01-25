@@ -199,7 +199,7 @@ func (ls *Stores) Send(
 // the provided stream and returns with an optional error when the rangefeed is
 // complete.
 func (ls *Stores) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
 ) *roachpb.Error {
 	ctx := stream.Context()
 	if args.RangeID == 0 {
