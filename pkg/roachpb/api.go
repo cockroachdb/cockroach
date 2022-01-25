@@ -11,6 +11,7 @@
 package roachpb
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -1693,3 +1694,41 @@ const (
 	// with the SpecificTenantOverrides precedence..
 	AllTenantsOverrides
 )
+
+// RangeFeedEventSink is an interface for sending a single rangefeed event.
+type RangeFeedEventSink interface {
+	Context() context.Context
+	Send(*RangeFeedEvent) error
+}
+
+// GetValue returns rangefeed event value  This method is equivalent to a gogoproto.onlyone extension.
+// It is re-implemented here since RangeFeedEvent could also contain additional fields.
+// TODO(yevgeniy): Remove this method and its uses.
+func (e *RangeFeedEvent) GetValue() interface{} {
+	if e.Val != nil {
+		return e.Val
+	}
+	if e.Checkpoint != nil {
+		return e.Checkpoint
+	}
+	if e.Error != nil {
+		return e.Error
+	}
+	return nil
+}
+
+// SetValue is a reimplementation of gogoprot.onlyone extension.
+// TODO(yevgeniy): Remove it.
+func (e *RangeFeedEvent) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *RangeFeedValue:
+		e.Val = vt
+	case *RangeFeedCheckpoint:
+		e.Checkpoint = vt
+	case *RangeFeedError:
+		e.Error = vt
+	default:
+		return false
+	}
+	return true
+}
