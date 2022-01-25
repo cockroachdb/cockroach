@@ -54,16 +54,19 @@ func EvalAddSSTable(
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 
-	// If requested, rewrite the SST's MVCC timestamps to the request timestamp.
-	// This ensures the writes comply with the timestamp cache and closed
-	// timestamp, i.e. by not writing to timestamps that have already been
-	// observed or closed. If the race detector is enabled, also assert that
-	// the provided SST only contains the expected timestamps.
-	if util.RaceEnabled && !args.SSTTimestamp.IsEmpty() {
-		if err := assertSSTTimestamp(sst, args.SSTTimestamp); err != nil {
+	// Under the race detector, scan the SST contents and make sure it satisfies
+	// the AddSSTable requirements. We do not always perform these checks
+	// otherwise, due to the cost.
+	if util.RaceEnabled {
+		if err := assertSSTContents(sst, args.SSTTimestamp, args.MVCCStats); err != nil {
 			return result.Result{}, err
 		}
 	}
+
+	// If requested, rewrite the SST's MVCC timestamps to the request timestamp.
+	// This ensures the writes comply with the timestamp cache and closed
+	// timestamp, i.e. by not writing to timestamps that have already been
+	// observed or closed.
 	if args.WriteAtRequestTimestamp &&
 		(args.SSTTimestamp.IsEmpty() || h.Timestamp != args.SSTTimestamp) {
 		sst, err = storage.UpdateSSTTimestamps(sst, h.Timestamp)
@@ -128,29 +131,12 @@ func EvalAddSSTable(
 	var stats enginepb.MVCCStats
 	if args.MVCCStats != nil {
 		stats = *args.MVCCStats
-	}
-
-	// Stats are computed on-the-fly when checking for conflicts. If we took the
-	// fast path and race is enabled, assert the stats were correctly computed.
-	verifyFastPath := checkConflicts && util.RaceEnabled
-	if args.MVCCStats == nil || verifyFastPath {
+	} else {
 		log.VEventf(ctx, 2, "computing MVCCStats for SSTable [%s,%s)", start.Key, end.Key)
-
-		computed, err := storage.ComputeStatsForRange(sstIter, start.Key, end.Key, h.Timestamp.WallTime)
+		stats, err = storage.ComputeStatsForRange(sstIter, start.Key, end.Key, h.Timestamp.WallTime)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "computing SSTable MVCC stats")
 		}
-
-		if verifyFastPath {
-			// Update the timestamp to that of the recently computed stats to get the
-			// diff passing.
-			stats.LastUpdateNanos = computed.LastUpdateNanos
-			if !stats.Equal(computed) {
-				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
-					pretty.Diff(stats, computed))
-			}
-		}
-		stats = computed
 	}
 
 	sstIter.SeekGE(end)
@@ -269,13 +255,20 @@ func EvalAddSSTable(
 	}, nil
 }
 
-func assertSSTTimestamp(sst []byte, ts hlc.Timestamp) error {
+// assertSSTContents checks that the SST contains expected inputs:
+//
+// * Only SST set operations (not explicitly verified).
+// * No intents, tombstones, or unversioned values.
+// * If sstTimestamp is set, all MVCC timestamps equal it.
+// * Given MVCC stats match the SST contents.
+func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.MVCCStats) error {
 	iter, err := storage.NewMemSSTIterator(sst, true)
 	if err != nil {
 		return err
 	}
 	defer iter.Close()
 
+	// Check SST KV pairs.
 	iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 	for {
 		ok, err := iter.Valid()
@@ -283,14 +276,34 @@ func assertSSTTimestamp(sst []byte, ts hlc.Timestamp) error {
 			return err
 		}
 		if !ok {
-			return nil
+			break
 		}
 
-		key := iter.UnsafeKey()
-		if key.Timestamp != ts {
-			return errors.AssertionFailedf("incorrect timestamp %s for SST key %s (expected %s)",
-				key.Timestamp, key.Key, ts)
+		key, value := iter.UnsafeKey(), iter.UnsafeValue()
+		if key.Timestamp.IsEmpty() {
+			return errors.AssertionFailedf("SST contains inline value or intent for key %s", key)
+		}
+		if len(value) == 0 {
+			return errors.AssertionFailedf("SST contains tombstone for key %s", key)
+		}
+		if !sstTimestamp.IsEmpty() && key.Timestamp != sstTimestamp {
+			return errors.AssertionFailedf("SST has incorrect timestamp %s for SST key %s (expected %s)",
+				key.Timestamp, key.Key, sstTimestamp)
 		}
 		iter.Next()
 	}
+
+	// Compare statistics with those passed by client.
+	if stats != nil {
+		actual, err := storage.ComputeStatsForRange(iter, keys.MinKey, keys.MaxKey, 0)
+		if err != nil {
+			return errors.Wrap(err, "failed to compare stats: %w")
+		}
+		if !stats.Equal(actual) {
+			errors.AssertionFailedf("SST stats are incorrect: diff(given, actual) = %s",
+				pretty.Diff(stats, actual))
+		}
+	}
+
+	return nil
 }

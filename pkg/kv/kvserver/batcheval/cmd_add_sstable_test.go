@@ -71,17 +71,17 @@ func TestEvalAddSSTable(t *testing.T) {
 
 	// These are run with IngestAsWrites both disabled and enabled.
 	testcases := map[string]struct {
-		data               []mvccKV
-		sst                []mvccKV
-		sstTimestamp       int64 // SSTTimestamp set to given timestamp
-		atReqTS            int64 // WriteAtRequestTimestamp with given timestamp
-		noConflict         bool  // DisallowConflicts
-		noShadow           bool  // DisallowShadowing
-		noShadowBelow      int64 // DisallowShadowingBelow
-		expect             []mvccKV
-		expectErr          interface{} // error type, substring, or true (any error)
-		expectErrUnderRace interface{}
-		expectStatsEst     bool // expect MVCCStats.ContainsEstimates, don't check stats
+		data           []mvccKV
+		sst            []mvccKV
+		sstTimestamp   int64 // SSTTimestamp set to given timestamp
+		atReqTS        int64 // WriteAtRequestTimestamp with given timestamp
+		noConflict     bool  // DisallowConflicts
+		noShadow       bool  // DisallowShadowing
+		noShadowBelow  int64 // DisallowShadowingBelow
+		expect         []mvccKV
+		expectErr      interface{} // error type, substring, or true (any error)
+		expectErrRace  interface{} // error under race detector
+		expectStatsEst bool        // expect MVCCStats.ContainsEstimates, don't check stats
 	}{
 		// Blind writes.
 		"blind writes below existing": {
@@ -110,11 +110,13 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:            []mvccKV{{"a", 1, ""}},
 			expect:         []mvccKV{{"a", 1, ""}},
 			expectStatsEst: true,
+			expectErrRace:  `SST contains tombstone for key "a"/0.000000001,0`,
 		},
 		"blind writes SST inline values": { // unfortunately, for performance
 			sst:            []mvccKV{{"a", 0, "inline"}},
 			expect:         []mvccKV{{"a", 0, "inline"}},
 			expectStatsEst: true,
+			expectErrRace:  `SST contains inline value or intent for key "a"/0,0`,
 		},
 		"blind writes above existing inline values": { // unfortunately, for performance
 			data:           []mvccKV{{"a", 0, "inline"}},
@@ -131,14 +133,16 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectStatsEst: true,
 		},
 		"WriteAtRequestTimestamp rejects tombstones": {
-			atReqTS:   10,
-			sst:       []mvccKV{{"a", 1, ""}},
-			expectErr: "SST values cannot be tombstones",
+			atReqTS:       10,
+			sst:           []mvccKV{{"a", 1, ""}},
+			expectErr:     "SST values cannot be tombstones",
+			expectErrRace: `SST contains tombstone for key "a"/0.000000001,0`,
 		},
 		"WriteAtRequestTimestamp rejects inline values": {
-			atReqTS:   10,
-			sst:       []mvccKV{{"a", 0, "inline"}},
-			expectErr: "inline values or intents are not supported",
+			atReqTS:       10,
+			sst:           []mvccKV{{"a", 0, "inline"}},
+			expectErr:     "inline values or intents are not supported",
+			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
 		},
 		"WriteAtRequestTimestamp writes below and replaces": {
 			atReqTS:        5,
@@ -263,26 +267,30 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
 		"DisallowConflicts allows new SST tombstones": { // unfortunately, for performance
-			noConflict: true,
-			sst:        []mvccKV{{"a", 3, ""}},
-			expect:     []mvccKV{{"a", 3, ""}},
+			noConflict:    true,
+			sst:           []mvccKV{{"a", 3, ""}},
+			expect:        []mvccKV{{"a", 3, ""}},
+			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
 		},
 		"DisallowConflicts rejects SST tombstones when shadowing": {
-			noConflict: true,
-			data:       []mvccKV{{"a", 2, "a2"}},
-			sst:        []mvccKV{{"a", 3, ""}},
-			expectErr:  "SST values cannot be tombstones",
+			noConflict:    true,
+			data:          []mvccKV{{"a", 2, "a2"}},
+			sst:           []mvccKV{{"a", 3, ""}},
+			expectErr:     "SST values cannot be tombstones",
+			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
 		},
 		"DisallowConflicts allows new SST inline values": { // unfortunately, for performance
-			noConflict: true,
-			sst:        []mvccKV{{"a", 0, "inline"}},
-			expect:     []mvccKV{{"a", 0, "inline"}},
+			noConflict:    true,
+			sst:           []mvccKV{{"a", 0, "inline"}},
+			expect:        []mvccKV{{"a", 0, "inline"}},
+			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
 		},
 		"DisallowConflicts rejects SST inline values when shadowing": {
-			noConflict: true,
-			data:       []mvccKV{{"a", 2, "a2"}},
-			sst:        []mvccKV{{"a", 0, ""}},
-			expectErr:  "SST keys must have timestamps",
+			noConflict:    true,
+			data:          []mvccKV{{"a", 2, "a2"}},
+			sst:           []mvccKV{{"a", 0, ""}},
+			expectErr:     "SST keys must have timestamps",
+			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
 		},
 		"DisallowConflicts rejects existing inline values when shadowing": {
 			noConflict: true,
@@ -347,26 +355,30 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:   []mvccKV{{"a", 3, "a3"}},
 		},
 		"DisallowShadowing allows new SST tombstones": { // unfortunately, for performance
-			noShadow: true,
-			sst:      []mvccKV{{"a", 3, ""}},
-			expect:   []mvccKV{{"a", 3, ""}},
+			noShadow:      true,
+			sst:           []mvccKV{{"a", 3, ""}},
+			expect:        []mvccKV{{"a", 3, ""}},
+			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
 		},
 		"DisallowShadowing rejects SST tombstones when shadowing": {
-			noShadow:  true,
-			data:      []mvccKV{{"a", 2, "a2"}},
-			sst:       []mvccKV{{"a", 3, ""}},
-			expectErr: "SST values cannot be tombstones",
+			noShadow:      true,
+			data:          []mvccKV{{"a", 2, "a2"}},
+			sst:           []mvccKV{{"a", 3, ""}},
+			expectErr:     "SST values cannot be tombstones",
+			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
 		},
 		"DisallowShadowing allows new SST inline values": { // unfortunately, for performance
-			noShadow: true,
-			sst:      []mvccKV{{"a", 0, "inline"}},
-			expect:   []mvccKV{{"a", 0, "inline"}},
+			noShadow:      true,
+			sst:           []mvccKV{{"a", 0, "inline"}},
+			expect:        []mvccKV{{"a", 0, "inline"}},
+			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
 		},
 		"DisallowShadowing rejects SST inline values when shadowing": {
-			noShadow:  true,
-			data:      []mvccKV{{"a", 2, "a2"}},
-			sst:       []mvccKV{{"a", 0, "inline"}},
-			expectErr: "SST keys must have timestamps",
+			noShadow:      true,
+			data:          []mvccKV{{"a", 2, "a2"}},
+			sst:           []mvccKV{{"a", 0, "inline"}},
+			expectErr:     "SST keys must have timestamps",
+			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
 		},
 		"DisallowShadowing rejects existing inline values when shadowing": {
 			noShadow:  true,
@@ -465,23 +477,27 @@ func TestEvalAddSSTable(t *testing.T) {
 			noShadowBelow: 5,
 			sst:           []mvccKV{{"a", 3, ""}},
 			expect:        []mvccKV{{"a", 3, ""}},
+			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
 		},
 		"DisallowShadowingBelow rejects SST tombstones when shadowing": {
 			noShadowBelow: 5,
 			data:          []mvccKV{{"a", 2, "a2"}},
 			sst:           []mvccKV{{"a", 3, ""}},
 			expectErr:     "SST values cannot be tombstones",
+			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
 		},
 		"DisallowShadowingBelow allows new SST inline values": { // unfortunately, for performance
 			noShadowBelow: 5,
 			sst:           []mvccKV{{"a", 0, "inline"}},
 			expect:        []mvccKV{{"a", 0, "inline"}},
+			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
 		},
 		"DisallowShadowingBelow rejects SST inline values when shadowing": {
 			noShadowBelow: 5,
 			data:          []mvccKV{{"a", 2, "a2"}},
 			sst:           []mvccKV{{"a", 0, "inline"}},
 			expectErr:     "SST keys must have timestamps",
+			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
 		},
 		"DisallowShadowingBelow rejects existing inline values when shadowing": {
 			noShadowBelow: 5,
@@ -624,13 +640,13 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectStatsEst: true,
 		},
 		"SSTTimestamp doesn't rewrite with incorrect timestamp, but errors under race": {
-			atReqTS:            8,
-			data:               []mvccKV{{"a", 6, "a6"}},
-			sst:                []mvccKV{{"a", 7, "a7"}},
-			sstTimestamp:       8,
-			expect:             []mvccKV{{"a", 7, "a7"}, {"a", 6, "a6"}},
-			expectErrUnderRace: `incorrect timestamp 0.000000007,0 for SST key "a" (expected 0.000000008,0)`,
-			expectStatsEst:     true,
+			atReqTS:        8,
+			data:           []mvccKV{{"a", 6, "a6"}},
+			sst:            []mvccKV{{"a", 7, "a7"}},
+			sstTimestamp:   8,
+			expect:         []mvccKV{{"a", 7, "a7"}, {"a", 6, "a6"}},
+			expectErrRace:  `incorrect timestamp 0.000000007,0 for SST key "a" (expected 0.000000008,0)`,
+			expectStatsEst: true,
 		},
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
@@ -685,8 +701,8 @@ func TestEvalAddSSTable(t *testing.T) {
 				}, resp)
 
 				expectErr := tc.expectErr
-				if expectErr == nil && tc.expectErrUnderRace != nil && util.RaceEnabled {
-					expectErr = tc.expectErrUnderRace
+				if tc.expectErrRace != nil && util.RaceEnabled {
+					expectErr = tc.expectErrRace
 				}
 				if expectErr != nil {
 					require.Error(t, err)
