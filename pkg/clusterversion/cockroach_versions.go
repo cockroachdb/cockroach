@@ -306,6 +306,9 @@ const (
 	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
 	// range tombstones.
 	ExperimentalMVCCRangeTombstones
+	// ChangefeedIdleness is the version where changefeed aggregators forward
+	// idleness-related information alnog with resolved spans to the frontier
+	ChangefeedIdleness
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -497,6 +500,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ExperimentalMVCCRangeTombstones,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 78},
+	},
+	{
+		Key:     ChangefeedIdleness,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
 	},
 
 	// *************************************************
