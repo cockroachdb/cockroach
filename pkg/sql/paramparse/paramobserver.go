@@ -15,11 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -92,12 +94,22 @@ type StorageParamObserver interface {
 }
 
 // TableStorageParamObserver observes storage parameters for tables.
-type TableStorageParamObserver struct{}
+type TableStorageParamObserver struct {
+	tableDesc *tabledesc.Mutable
+}
+
+// NewTableStorageParamObserver returns a new TableStorageParamObserver.
+func NewTableStorageParamObserver(tableDesc *tabledesc.Mutable) *TableStorageParamObserver {
+	return &TableStorageParamObserver{tableDesc: tableDesc}
+}
 
 var _ StorageParamObserver = (*TableStorageParamObserver)(nil)
 
 // runPostChecks implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) runPostChecks() error {
+	if err := tabledesc.ValidateRowLevelTTL(po.tableDesc.GetRowLevelTTL()); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -141,6 +153,45 @@ var tableParams = map[string]tableParam{
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
 			// Operation is a no-op so do nothing.
+			return nil
+		},
+	},
+	`expire_after`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			var d *tree.DInterval
+			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+				d, err = tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), stringVal)
+				if err != nil || d == nil {
+					return pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`value of "expire_after" must be an interval`,
+					)
+				}
+			} else {
+				var ok bool
+				d, ok = datum.(*tree.DInterval)
+				if !ok || d == nil {
+					return pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`value of "expire_after" must be an interval`,
+					)
+				}
+			}
+
+			if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`value of "expire_after" must be at least zero`,
+				)
+			}
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+			}
+			po.tableDesc.RowLevelTTL.DurationExpr = tree.Serialize(d)
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			po.tableDesc.RowLevelTTL = nil
 			return nil
 		},
 	},

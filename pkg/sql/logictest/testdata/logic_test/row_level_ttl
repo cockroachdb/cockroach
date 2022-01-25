@@ -1,0 +1,12 @@
+statement error value of "expire_after" must be an interval
+CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (expire_after = ' xx invalid interval xx')
+
+statement error value of "expire_after" must be at least zero
+CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (expire_after = '-10 minutes')
+
+statement ok
+CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (expire_after = '10 minutes')
+
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (expire_after = '10 minutes'::interval)
