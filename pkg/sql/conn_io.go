@@ -163,6 +163,9 @@ type ExecPortal struct {
 	// TimeReceived is the time at which the exec message was received
 	// from the client. Used to compute the service latency.
 	TimeReceived time.Time
+	// FollowedBySync is true if the next command after this is a Sync. This is
+	// used to enable the 1PC txn fast path in the extended protocol.
+	FollowedBySync bool
 }
 
 // command implements the Command interface.
@@ -440,36 +443,6 @@ func (buf *StmtBuf) CurCmd() (Command, CmdPos, error) {
 		// Wait for the next Command to arrive to the buffer.
 		buf.mu.cond.Wait()
 	}
-}
-
-// isNextCmdSync peeks at the next command, and returns true if it is a Sync
-// message. If there is not another command in the buffer already, then false
-// is returned. The position is reset before returning, so this does not
-// affect the curPos.
-//
-// If the buffer has previously been Close()d, or is closed while this is
-// blocked, io.EOF is returned.
-func (buf *StmtBuf) isNextCmdSync() (bool, error) {
-	buf.mu.Lock()
-	prev := buf.mu.curPos
-	buf.mu.curPos++
-	defer func() {
-		buf.mu.curPos = prev
-		buf.mu.Unlock()
-	}()
-	if buf.mu.closed {
-		return false, io.EOF
-	}
-	curPos := buf.mu.curPos
-	cmdIdx, err := buf.translatePosLocked(curPos)
-	if err != nil {
-		return false, err
-	}
-	if cmdIdx < buf.mu.data.Len() {
-		_, isSync := buf.mu.data.Get(cmdIdx).(Sync)
-		return isSync, nil
-	}
-	return false, nil
 }
 
 // translatePosLocked translates an absolute position of a command (counting

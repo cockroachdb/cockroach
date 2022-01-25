@@ -455,7 +455,18 @@ func (c *conn) serveImpl(
 				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{})
 
 			case pgwirebase.ClientMsgExecute:
-				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived)
+				// To support the 1PC txn fast path, we peek at the next command to
+				// see if it is a Sync. This is because in the extended protocol, an
+				// implicit transaction cannot commit until the Sync is seen. If there's
+				// an error while peeking (for example, there are no bytes in the
+				// buffer), the error is ignored since it will be handled on the next
+				// loop iteration.
+				followedBySync := false
+				if nextMsgType, err := c.rd.Peek(1); err == nil &&
+					pgwirebase.ClientMessageType(nextMsgType[0]) == pgwirebase.ClientMsgSync {
+					followedBySync = true
+				}
+				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived, followedBySync)
 
 			case pgwirebase.ClientMsgParse:
 				return false, isSimpleQuery, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
@@ -1101,7 +1112,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleExecute(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time,
+	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time, followedBySync bool,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
 	portalName, err := buf.GetString()
@@ -1113,9 +1124,10 @@ func (c *conn) handleExecute(
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	return c.stmtBuf.Push(ctx, sql.ExecPortal{
-		Name:         portalName,
-		TimeReceived: timeReceived,
-		Limit:        int(limit),
+		Name:           portalName,
+		TimeReceived:   timeReceived,
+		Limit:          int(limit),
+		FollowedBySync: followedBySync,
 	})
 }
 
