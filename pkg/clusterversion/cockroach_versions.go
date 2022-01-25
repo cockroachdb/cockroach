@@ -269,6 +269,8 @@ const (
 	DontProposeWriteTimestampForLeaseTransfers
 	// TenantSettingsTable adds the system table for tracking tenant usage.
 	TenantSettingsTable
+	// Rangefeed use 1 stream per node
+	RangefeedUseOneStreamPerNode
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -429,7 +431,10 @@ var versionsSingleton = keyedVersions{
 		Key:     TenantSettingsTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
 	},
-
+	{
+		Key:     RangefeedUseOneStreamPerNode,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

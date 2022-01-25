@@ -72,7 +72,7 @@ var RangefeedTBIEnabled = settings.RegisterBoolSetting(
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
 type lockedRangefeedStream struct {
-	wrapped roachpb.Internal_RangeFeedServer
+	wrapped roachpb.RangeFeedEventSink
 	sendMu  syncutil.Mutex
 }
 
@@ -143,15 +143,13 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // complete. The provided ConcurrentRequestLimiter is used to limit the number
 // of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
 ) *roachpb.Error {
 	return r.rangeFeedWithRangeID(r.RangeID, args, stream)
 }
 
 func (r *Replica) rangeFeedWithRangeID(
-	_forStacks roachpb.RangeID,
-	args *roachpb.RangeFeedRequest,
-	stream roachpb.Internal_RangeFeedServer,
+	_forStacks roachpb.RangeID, args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
 ) *roachpb.Error {
 	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
