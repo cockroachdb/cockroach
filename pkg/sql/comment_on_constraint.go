@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -25,7 +26,6 @@ import (
 type commentOnConstraintNode struct {
 	n         *tree.CommentOnConstraint
 	tableDesc catalog.TableDescriptor
-	oid       *tree.DOid
 	commenter scexec.CommentUpdater
 }
 
@@ -34,6 +34,10 @@ type commentOnConstraintNode struct {
 func (p *planner) CommentOnConstraint(
 	ctx context.Context, n *tree.CommentOnConstraint,
 ) (planNode, error) {
+	// Block comments on constraint until cluster is updated.
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ConstraintIDsForTableDescs) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot comment on constraint")
+	}
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
