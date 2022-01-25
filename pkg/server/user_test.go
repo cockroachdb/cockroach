@@ -13,16 +13,62 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+func TestValidRoles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	ctx := context.Background()
+	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
+	_, err := sqlDB.Exec(fmt.Sprintf("CREATE USER %s", fooUser))
+	require.NoError(t, err)
+
+	for name := range roleoption.ByName {
+		// Test user without the role.
+		hasRole, err := s.(*TestServer).status.baseStatusServer.privilegeChecker.hasRoleOption(ctx, fooUser, roleoption.ByName[name])
+		require.NoError(t, err)
+		require.Equal(t, false, hasRole)
+
+		// Skip PASSWORD and DEFAULTSETTINGS options.
+		// Since PASSWORD still resides in system.users and
+		// DEFAULTSETTINGS is stored in system.database_role_settings.
+		if name == "PASSWORD" || name == "DEFAULTSETTINGS" || name == "VALID_UNTIL" {
+			continue
+		}
+		// Add the role and check if the role was added (or in the cases of roles starting
+		// with NO, that the value is not there.
+		_, err = sqlDB.Exec(fmt.Sprintf("ALTER USER %s %s", fooUser, name))
+		require.NoError(t, err)
+
+		hasRole, err = s.(*TestServer).status.baseStatusServer.privilegeChecker.hasRoleOption(ctx, fooUser, roleoption.ByName[name])
+		require.NoError(t, err)
+
+		expectedHasRole := true
+		if strings.HasPrefix(name, "NO") || name == "LOGIN" || name == "SQLLOGIN" {
+			expectedHasRole = false
+		}
+		if name == "NOLOGIN" || name == "NOSQLLOGIN" {
+			expectedHasRole = true
+		}
+		require.Equal(t, expectedHasRole, hasRole)
+	}
+}
 
 func TestSQLRolesAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
