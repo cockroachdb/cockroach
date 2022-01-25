@@ -19,6 +19,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -69,6 +71,29 @@ func maxConcurrentCatchupScans(sv *settings.Values) int {
 	return int(l)
 }
 
+type rangeFeedConfig struct {
+	useMuxRangeFeed bool
+}
+
+// RangeFeedOption configures a RangeFeed.
+type RangeFeedOption interface {
+	set(*rangeFeedConfig)
+}
+
+type optionFunc func(*rangeFeedConfig)
+
+func (o optionFunc) set(c *rangeFeedConfig) { o(c) }
+
+// WithMuxRangeFeed configures range feed to use MuxRangeFeed RPC.
+func WithMuxRangeFeed() RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.useMuxRangeFeed = true
+	})
+}
+
+// A "kill switch" to disable multiplexing rangefeed if severe issues discovered with new implementation.
+var enableMuxRangeFeed = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_MULTIPLEXING_RANGEFEED", true)
+
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
 // RangeFeed to each of the individual ranges. It streams back results on the
 // provided channel.
@@ -88,6 +113,7 @@ func (ds *DistSender) RangeFeed(
 	startAfter hlc.Timestamp, // exclusive
 	withDiff bool,
 	eventCh chan<- RangeFeedMessage,
+	opts ...RangeFeedOption,
 ) error {
 	timedSpans := make([]SpanTimePair, 0, len(spans))
 	for _, sp := range spans {
@@ -96,7 +122,7 @@ func (ds *DistSender) RangeFeed(
 			StartAfter: startAfter,
 		})
 	}
-	return ds.RangeFeedSpans(ctx, timedSpans, withDiff, eventCh)
+	return ds.RangeFeedSpans(ctx, timedSpans, withDiff, eventCh, opts...)
 }
 
 // SpanTimePair is a pair of span along with its starting time. The starting
@@ -110,10 +136,19 @@ type SpanTimePair struct {
 // RangeFeedSpans is similar to RangeFeed but allows specification of different
 // starting time for each span.
 func (ds *DistSender) RangeFeedSpans(
-	ctx context.Context, spans []SpanTimePair, withDiff bool, eventCh chan<- RangeFeedMessage,
+	ctx context.Context,
+	spans []SpanTimePair,
+	withDiff bool,
+	eventCh chan<- RangeFeedMessage,
+	opts ...RangeFeedOption,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("expected at least 1 span, got none")
+	}
+
+	var cfg rangeFeedConfig
+	for _, opt := range opts {
+		opt.set(&cfg)
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
@@ -128,6 +163,16 @@ func (ds *DistSender) RangeFeedSpans(
 		"distSenderCatchupLimit", maxConcurrentCatchupScans(&ds.st.SV))
 
 	g := ctxgroup.WithContext(ctx)
+
+	var eventProducer rangeFeedEventProducerFactory
+	if ds.st.Version.IsActive(ctx, clusterversion.RangefeedUseOneStreamPerNode) &&
+		enableMuxRangeFeed && cfg.useMuxRangeFeed {
+		m := newRangefeedMuxer(g)
+		eventProducer = m.startMuxRangeFeed
+	} else {
+		eventProducer = legacyRangeFeedEventProducer
+	}
+
 	// Goroutine that processes subdivided ranges and creates a rangefeed for
 	// each.
 	rangeCh := make(chan singleRangeInfo, 16)
@@ -137,7 +182,8 @@ func (ds *DistSender) RangeFeedSpans(
 			case sri := <-rangeCh:
 				// Spawn a child goroutine to process this feed.
 				g.GoCtx(func(ctx context.Context) error {
-					return ds.partialRangeFeed(ctx, rr, sri.rs, sri.startAfter, sri.token, withDiff, &catchupSem, rangeCh, eventCh)
+					return ds.partialRangeFeed(ctx, rr, eventProducer, sri.rs, sri.startAfter,
+						sri.token, withDiff, &catchupSem, rangeCh, eventCh)
 				})
 			case <-ctx.Done():
 				return ctx.Err()
@@ -293,6 +339,7 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 func (ds *DistSender) partialRangeFeed(
 	ctx context.Context,
 	rr *rangeFeedRegistry,
+	streamProducerFactory rangeFeedEventProducerFactory,
 	rs roachpb.RSpan,
 	startAfter hlc.Timestamp,
 	token rangecache.EvictionToken,
@@ -334,8 +381,9 @@ func (ds *DistSender) partialRangeFeed(
 		}
 
 		// Establish a RangeFeed for a single Range.
-		maxTS, err := ds.singleRangeFeed(ctx, span, startAfter, withDiff, token.Desc(),
-			catchupSem, eventCh, active.onRangeEvent)
+		maxTS, err := ds.singleRangeFeed(
+			ctx, span, startAfter, withDiff, token.Desc(),
+			catchupSem, eventCh, streamProducerFactory, active.onRangeEvent)
 
 		// Forward the timestamp in case we end up sending it again.
 		startAfter.Forward(maxTS)
@@ -408,6 +456,7 @@ func (ds *DistSender) singleRangeFeed(
 	desc *roachpb.RangeDescriptor,
 	catchupSem *limit.ConcurrentRequestLimiter,
 	eventCh chan<- RangeFeedMessage,
+	streamProducerFactory rangeFeedEventProducerFactory,
 	onRangeEvent onRangeEventCb,
 ) (hlc.Timestamp, error) {
 	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
@@ -432,8 +481,6 @@ func (ds *DistSender) singleRangeFeed(
 		return args.Timestamp, err
 	}
 	replicas.OptimizeReplicaOrder(ds.getNodeID(), latencyFn, ds.locality)
-	// The RangeFeed is not used for system critical traffic so use a DefaultClass
-	// connection regardless of the range.
 	opts := SendOptions{class: connectionClass(&ds.st.SV)}
 	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
 	if err != nil {
@@ -459,11 +506,21 @@ func (ds *DistSender) singleRangeFeed(
 	// cleanup catchup reservation in case of early termination.
 	defer finishCatchupScan()
 
+	var streamCleanup func()
+	maybeCleanupStream := func() {
+		if streamCleanup != nil {
+			streamCleanup()
+			streamCleanup = nil
+		}
+	}
+	defer maybeCleanupStream()
+
 	for {
 		if transport.IsExhausted() {
 			return args.Timestamp, newSendError(
 				fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
 		}
+		maybeCleanupStream()
 
 		args.Replica = transport.NextReplica()
 		client, err := transport.NextInternalClient(ctx)
@@ -473,7 +530,9 @@ func (ds *DistSender) singleRangeFeed(
 		}
 
 		log.VEventf(ctx, 3, "attempting to create a RangeFeed over replica %s", args.Replica)
-		stream, err := client.RangeFeed(ctx, &args)
+
+		var stream roachpb.RangeFeedEventProducer
+		stream, streamCleanup, err = streamProducerFactory(ctx, client, &args)
 		if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 			if grpcutil.IsAuthError(err) {
@@ -525,4 +584,20 @@ func connectionClass(sv *settings.Values) rpc.ConnectionClass {
 		return rpc.RangefeedClass
 	}
 	return rpc.DefaultClass
+}
+
+type rangeFeedEventProducerFactory func(
+	ctx context.Context,
+	client rpc.RestrictedInternalClient,
+	req *roachpb.RangeFeedRequest,
+) (roachpb.RangeFeedEventProducer, func(), error)
+
+// legacyRangeFeedEventProducer is a rangeFeedEventProducerFactory using
+// legacy RangeFeed RPC.
+func legacyRangeFeedEventProducer(
+	ctx context.Context, client rpc.RestrictedInternalClient, req *roachpb.RangeFeedRequest,
+) (producer roachpb.RangeFeedEventProducer, cleanup func(), err error) {
+	cleanup = func() {}
+	producer, err = client.RangeFeed(ctx, req)
+	return producer, cleanup, err
 }
