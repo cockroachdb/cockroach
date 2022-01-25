@@ -2287,6 +2287,10 @@ func newSendError(msg string) error {
 	return sendError{message: msg}
 }
 
+func TestNewSendError(msg string) error {
+	return newSendError(msg)
+}
+
 func (s sendError) Error() string {
 	return "failed to send RPC: " + s.message
 }
