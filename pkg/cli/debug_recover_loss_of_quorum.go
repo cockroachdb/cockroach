@@ -102,21 +102,28 @@ taken ASAP. Those actions should be done at application level.
 recovery operation. To perform recovery one should perform this sequence
 of actions:
 
-0. Stop the cluster
+0. Decommission failed nodes preemptively to eliminate the possibility of
+them coming back online and conflicting with the recovered state. Note that
+if system ranges suffer loss of quorum, it may be impossible to decommission
+nodes. In that case, recovery can proceed, but those nodes must be prevented
+from communicating with the cluster and must be decommissioned once the cluster
+is back online after recovery.
 
-1. Run 'cockroach debug recover collect-info' on every node to collect
+1. Stop the cluster
+
+2. Run 'cockroach debug recover collect-info' on every node to collect
 replication state from all surviving nodes. Outputs of these invocations
 should be collected and made locally available for the next step.
 
-2. Run 'cockroach debug recover make-plan' providing all files generated
+3. Run 'cockroach debug recover make-plan' providing all files generated
 on step 1. Planner will decide which replicas should survive and
 up-replicate.
 
-3. Run 'cockroach debug recover execute-plan' on every node using plan
+4. Run 'cockroach debug recover execute-plan' on every node using plan
 generated on the previous step. Each node will pick relevant portion of
 the plan and update local replicas accordingly to restore quorum.
 
-4. Start the cluster.
+5. Start the cluster.
 
 If it was possible to produce and apply the plan, then cluster should
 become operational again. It is not guaranteed that there's no data loss
@@ -128,7 +135,7 @@ If we have a cluster of 5 nodes 1-5 where we lost nodes 3 and 4. Each node
 has two stores and they are numbered as 1,2 on node 1; 3,4 on node 2 etc.
 Recovery commands to recover unavailable ranges would be:
 
-Stop the cluster.
+Decommission dead nodes and stop the cluster.
 
 [cockroach@node1 ~]$ cockroach debug recover collect-info --store=/mnt/cockroach-data-1 --store=/mnt/cockroach-data-2 >info-node1.json
 [cockroach@node2 ~]$ cockroach debug recover collect-info --store=/mnt/cockroach-data-1 --store=/mnt/cockroach-data-2 >info-node2.json
