@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -941,34 +940,16 @@ func (n *Node) batchInternal(
 		return &br, nil
 	}
 
-	var br *roachpb.BatchResponse
-	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
-		var finishSpan func(context.Context, *roachpb.BatchResponse)
-		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, tenID, args)
-		// NB: wrapped to delay br evaluation to its value when returning.
-		defer func() { finishSpan(ctx, br) }()
-		if log.HasSpanOrEvent(ctx) {
-			log.Eventf(ctx, "node received request: %s", args.Summary())
-		}
-
-		tStart := timeutil.Now()
-		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(ctx, *args)
-		if pErr != nil {
-			br = &roachpb.BatchResponse{}
-			log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
-		}
-		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
-		}
-		n.metrics.callComplete(timeutil.Since(tStart), pErr)
-		br.Error = pErr
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return br, nil
+	return executeBatchRPCInternal(ctx, tenID, args,
+		n.stopper,
+		n.storeCfg.AmbientCtx.Tracer,
+		tracing.BatchMethodName, /* spanMethodName */
+		"node.Node: batch",      /* taskName */
+		"node",                  /* processorName */
+		"stores",                /* senderName */
+		n.stores,                /* sender */
+		n.metrics.callComplete,  /* finishCall */
+	)
 }
 
 // incrementBatchCounters increments counters to track the batch and composite
@@ -1029,94 +1010,6 @@ func (n *Node) Batch(
 		br.Error = roachpb.NewError(err)
 	}
 	return br, nil
-}
-
-// setupSpanForIncomingRPC takes a context and returns a derived context with a
-// new span in it. Depending on the input context, that span might be a root
-// span or a child span. If it is a child span, it might be a child span of a
-// local or a remote span. Note that supporting both the "child of local span"
-// and "child of remote span" cases are important, as this RPC can be called
-// either through the network or directly if the caller is local.
-//
-// It returns the derived context and a cleanup function to be
-// called when servicing the RPC is done. The cleanup function will
-// close the span and serialize any data recorded to that span into
-// the BatchResponse. The cleanup function takes the BatchResponse
-// in which the response is to serialized. The BatchResponse can
-// be nil in case no response is to be returned to the rpc caller.
-func (n *Node) setupSpanForIncomingRPC(
-	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest,
-) (context.Context, func(context.Context, *roachpb.BatchResponse)) {
-	tr := n.storeCfg.AmbientCtx.Tracer
-	var newSpan *tracing.Span
-	parentSpan := tracing.SpanFromContext(ctx)
-	localRequest := grpcutil.IsLocalRequestContext(ctx)
-	// For non-local requests, we'll need to attach the recording to the outgoing
-	// BatchResponse if the request is traced. We ignore whether the request is
-	// traced or not here; if it isn't, the recording will be empty.
-	needRecordingCollection := !localRequest
-	if localRequest {
-		// This is a local request which circumvented gRPC. Start a span now.
-		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, tracing.BatchMethodName, tracing.WithServerSpanKind)
-	} else if parentSpan == nil {
-		var remoteParent tracing.SpanMeta
-		if !ba.TraceInfo.Empty() {
-			remoteParent = tracing.SpanMetaFromProto(ba.TraceInfo)
-		} else {
-			// For backwards compatibility with 21.2, if tracing info was passed as
-			// gRPC metadata, we use it.
-			var err error
-			remoteParent, err = tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
-			if err != nil {
-				log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
-			}
-		}
-
-		ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
-			tracing.WithRemoteParent(remoteParent),
-			tracing.WithServerSpanKind)
-	} else {
-		// It's unexpected to find a span in the context for a non-local request.
-		// Let's create a span for the RPC anyway.
-		ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
-			tracing.WithParent(parentSpan),
-			tracing.WithServerSpanKind)
-	}
-
-	finishSpan := func(ctx context.Context, br *roachpb.BatchResponse) {
-		var rec tracing.Recording
-		// If we don't have a response, there's nothing to attach a trace to.
-		// Nothing more for us to do.
-		needRecordingCollection = needRecordingCollection && br != nil
-
-		if !needRecordingCollection {
-			newSpan.Finish()
-			return
-		}
-
-		rec = newSpan.FinishAndGetRecording(newSpan.RecordingType())
-		if rec != nil {
-			// Decide if the trace for this RPC, if any, will need to be redacted. It
-			// needs to be redacted if the response goes to a tenant. In case the request
-			// is local, then the trace might eventually go to a tenant (and tenID might
-			// be set), but it will go to the tenant only indirectly, through the response
-			// of a parent RPC. In that case, that parent RPC is responsible for the
-			// redaction.
-			//
-			// Tenants get a redacted recording, i.e. with anything
-			// sensitive stripped out of the verbose messages. However,
-			// structured payloads stay untouched.
-			needRedaction := tenID != roachpb.SystemTenantID
-			if needRedaction {
-				if err := redactRecordingForTenant(tenID, rec); err != nil {
-					log.Errorf(ctx, "error redacting trace recording: %s", err)
-					rec = nil
-				}
-			}
-			br.CollectedSpans = append(br.CollectedSpans, rec...)
-		}
-	}
-	return ctx, finishSpan
 }
 
 // RangeLookup implements the roachpb.InternalServer interface.

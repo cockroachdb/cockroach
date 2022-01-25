@@ -23,6 +23,7 @@ go_library(
         "doc.go",
         "drain.go",
         "env_sampler.go",
+        "exec_kv_batch.go",
         "external_storage_builder.go",
         "grpc_gateway.go",
         "grpc_server.go",
