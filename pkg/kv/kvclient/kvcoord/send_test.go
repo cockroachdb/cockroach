@@ -57,6 +57,10 @@ func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFee
 	panic("unimplemented")
 }
 
+func (n Node) RangeFeedStream(server roachpb.Internal_RangeFeedStreamServer) error {
+	panic("unimplemented")
+}
+
 func (n Node) GossipSubscription(
 	_ *roachpb.GossipSubscriptionRequest, _ roachpb.Internal_GossipSubscriptionServer,
 ) error {

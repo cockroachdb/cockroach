@@ -136,6 +136,26 @@ func (mr *MockInternalClientMockRecorder) RangeFeed(arg0, arg1 interface{}, arg2
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockInternalClient)(nil).RangeFeed), varargs...)
 }
 
+// RangeFeedStream mocks base method.
+func (m *MockInternalClient) RangeFeedStream(arg0 context.Context, arg1 ...grpc.CallOption) (Internal_RangeFeedStreamClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RangeFeedStream", varargs...)
+	ret0, _ := ret[0].(Internal_RangeFeedStreamClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RangeFeedStream indicates an expected call of RangeFeedStream.
+func (mr *MockInternalClientMockRecorder) RangeFeedStream(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeedStream", reflect.TypeOf((*MockInternalClient)(nil).RangeFeedStream), varargs...)
+}
+
 // RangeLookup mocks base method.
 func (m *MockInternalClient) RangeLookup(arg0 context.Context, arg1 *RangeLookupRequest, arg2 ...grpc.CallOption) (*RangeLookupResponse, error) {
 	m.ctrl.T.Helper()

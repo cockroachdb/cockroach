@@ -2590,13 +2590,14 @@ message RangeFeedError {
 // RangeFeedEvent is a union of all event types that may be returned on a
 // RangeFeed response stream.
 message RangeFeedEvent {
-  option (gogoproto.onlyone) = true;
-
   RangeFeedValue      val        = 1;
   RangeFeedCheckpoint checkpoint = 2;
   RangeFeedError      error      = 3;
-}
 
+  // Range ID is set when using streaming rangefeed.  It identifies the range
+  // which generated the event.
+  int32 range_id = 4  [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+}
 
 // ResetQuorumRequest makes a range that is unavailable due to lost quorum
 // available again, at the cost of losing all of the data in the range. Any
@@ -2806,7 +2807,10 @@ message JoinNodeResponse {
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
+  // RangeFeed RPC is deprecated.  Use RangeFeedStream instead.
+  // To be removed at version 22.2
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
+  rpc RangeFeedStream    (stream RangeFeedRequest)   returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
   rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
 
