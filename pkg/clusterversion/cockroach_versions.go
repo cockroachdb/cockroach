@@ -312,6 +312,10 @@ const (
 	// RowLevelTTL is the version where we allow row level TTL tables.
 	RowLevelTTL
 
+	// IncrementalBackupSubdir enables backing up new incremental backups to a
+	// dedicated subdirectory, to make it easier to apply a different ttl.
+	IncrementalBackupSubdir
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -514,7 +518,10 @@ var versionsSingleton = keyedVersions{
 		Key:     RowLevelTTL,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 88},
 	},
-
+	{
+		Key:     IncrementalBackupSubdir,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 90},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
